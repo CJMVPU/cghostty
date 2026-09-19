@@ -28,15 +28,12 @@ pub fn open(
     }
 
     var spawn_opts: std.process.SpawnOptions = switch (builtin.os.tag) {
-        .linux, .freebsd => .{ .argv = &.{ "xdg-open", url } },
-        .windows => .{ .argv = &.{ "rundll32", "url.dll,FileProtocolHandler", url } },
         .macos => switch (kind) {
             .text => .{ .argv = &.{ "open", "-t", url } },
             .html, .unknown => .{ .argv = &.{ "open", url } },
             .osc8 => unreachable,
         },
-        .ios => return error.Unimplemented,
-        else => @compileError("unsupported OS"),
+        else => unreachable,
     };
     // Ignore anything from stdout. This must be set before spawning the
     // process.
@@ -45,23 +42,7 @@ pub fn open(
     // before spawning the process.
     spawn_opts.stderr = .pipe;
 
-    const exe = if (comptime build_config.snap) local_env: {
-        // In the snap on Linux the launcher exports LD_LIBRARY_PATH
-        // pointing at the snap's bundled libraries. Leaking this into
-        // child process can can be problematic, so let's drop it from the
-        // env.
-        //
-        // Note that `spawn` copies the passed in `Environ.Map` into a
-        // fresh `Environ` block, so this is safe to release immediately
-        // after spawn.
-        var environ_map = try global.environMap();
-        defer environ_map.deinit();
-        _ = environ_map.orderedRemove("LD_LIBRARY_PATH");
-        spawn_opts.environ_map = &environ_map;
-        break :local_env try std.process.spawn(global.io(), spawn_opts);
-    } else
-        // Non-snap releases don't need to alter the env.
-        try std.process.spawn(global.io(), spawn_opts);
+    const exe = try std.process.spawn(global.io(), spawn_opts);
 
     const thread = try std.Thread.spawn(.{}, openThread, .{ global.io(), exe });
     thread.detach();

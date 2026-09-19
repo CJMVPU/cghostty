@@ -23,7 +23,6 @@ const ArenaAllocator = std.heap.ArenaAllocator;
 const global = @import("global.zig");
 const oni = @import("oniguruma");
 const simd = @import("simd/main.zig");
-const crash = @import("crash/main.zig");
 const unicode = @import("unicode/main.zig");
 const rendererpkg = @import("renderer.zig");
 const termio = @import("termio.zig");
@@ -642,8 +641,8 @@ pub fn init(
         };
         errdefer env.deinit();
 
-        // don't leak GHOSTTY_LOG to any subprocesses
-        _ = env.orderedRemove("GHOSTTY_LOG");
+        // don't leak CGHOSTTY_LOG to any subprocesses
+        _ = env.orderedRemove("CGHOSTTY_LOG");
 
         var buf: [18]u8 = undefined;
         try env.put(
@@ -743,26 +742,6 @@ pub fn init(
     };
 
     if (config.title) |title| {
-        _ = try rt_app.performAction(
-            .{ .surface = self },
-            .set_title,
-            .{ .title = title },
-        );
-    } else if ((comptime builtin.os.tag == .linux) and
-        config.@"_xdg-terminal-exec")
-    xdg: {
-        // For xdg-terminal-exec execution we special-case and set the window
-        // title to the command being executed. This allows window managers
-        // to set custom styling based on the command being executed.
-        const v = command orelse break :xdg;
-        const title = v.string(alloc) catch |err| {
-            log.warn(
-                "error copying command for title, title will not be set err={}",
-                .{err},
-            );
-            break :xdg;
-        };
-        defer alloc.free(title);
         _ = try rt_app.performAction(
             .{ .surface = self },
             .set_title,
@@ -2501,8 +2480,6 @@ pub fn displayUnrealized(self: *Surface) void {
 
 pub fn sizeCallback(self: *Surface, size: apprt.SurfaceSize) !void {
     // Crash metadata in case we crash in here
-    crash.sentry.thread_state = self.crashThreadState();
-    defer crash.sentry.thread_state = null;
 
     const new_screen_size: rendererpkg.ScreenSize = .{
         .width = size.width,
@@ -2572,8 +2549,6 @@ pub fn preeditCallback(self: *Surface, preedit_: ?[]const u8) !void {
     // log.debug("text preeditCallback value={any}", .{preedit_});
 
     // Crash metadata in case we crash in here
-    crash.sentry.thread_state = self.crashThreadState();
-    defer crash.sentry.thread_state = null;
 
     self.renderer_state.mutex.lockUncancelable(global.io());
     defer self.renderer_state.mutex.unlock(global.io());
@@ -2705,8 +2680,6 @@ pub fn keyCallback(
     }
 
     // Crash metadata in case we crash in here
-    crash.sentry.thread_state = self.crashThreadState();
-    defer crash.sentry.thread_state = null;
 
     // Setup our inspector event if we have an inspector.
     var insp_ev: ?inspectorpkg.KeyEvent = if (self.inspector != null) ev: {
@@ -3327,8 +3300,6 @@ fn encodeKeyOpts(self: *const Surface) input.key_encode.Options {
 /// this will filter newlines to '\r'.
 pub fn textCallback(self: *Surface, text: []const u8) !void {
     // Crash metadata in case we crash in here
-    crash.sentry.thread_state = self.crashThreadState();
-    defer crash.sentry.thread_state = null;
 
     try self.completeClipboardPaste(text, true);
 }
@@ -3338,8 +3309,6 @@ pub fn textCallback(self: *Surface, text: []const u8) !void {
 /// is not visible, and also re-render when it becomes visible again.
 pub fn occlusionCallback(self: *Surface, visible: bool) !void {
     // Crash metadata in case we crash in here
-    crash.sentry.thread_state = self.crashThreadState();
-    defer crash.sentry.thread_state = null;
 
     // Avoid duplicate renderer and visibility reports.
     if (self.visible == visible) return;
@@ -3367,8 +3336,6 @@ pub fn occlusionCallback(self: *Surface, visible: bool) !void {
 
 pub fn focusCallback(self: *Surface, focused: bool) !void {
     // Crash metadata in case we crash in here
-    crash.sentry.thread_state = self.crashThreadState();
-    defer crash.sentry.thread_state = null;
 
     // Always update the app focused surface, otherwise we miss
     // the first surface created.
@@ -3455,8 +3422,6 @@ pub fn focusCallback(self: *Surface, focused: bool) !void {
 
 pub fn refreshCallback(self: *Surface) !void {
     // Crash metadata in case we crash in here
-    crash.sentry.thread_state = self.crashThreadState();
-    defer crash.sentry.thread_state = null;
 
     // The point of this callback is to schedule a render, so do that.
     try self.queueRender();
@@ -3492,8 +3457,6 @@ pub fn scrollCallback(
     // log.info("SCROLL: xoff={} yoff={} mods={}", .{ xoff, yoff, scroll_mods });
 
     // Crash metadata in case we crash in here
-    crash.sentry.thread_state = self.crashThreadState();
-    defer crash.sentry.thread_state = null;
 
     // Always show the mouse again if it is hidden
     if (self.mouse.hidden) self.showMouse();
@@ -3666,8 +3629,6 @@ pub fn scrollCallback(
 /// can then update any DPI-sensitive state.
 pub fn contentScaleCallback(self: *Surface, content_scale: apprt.ContentScale) !void {
     // Crash metadata in case we crash in here
-    crash.sentry.thread_state = self.crashThreadState();
-    defer crash.sentry.thread_state = null;
 
     // Calculate the new DPI
     const x_dpi = content_scale.x * font.face.default_dpi;
@@ -3824,8 +3785,6 @@ pub fn mouseButtonCallback(
     mods: input.Mods,
 ) !bool {
     // Crash metadata in case we crash in here
-    crash.sentry.thread_state = self.crashThreadState();
-    defer crash.sentry.thread_state = null;
 
     // log.debug("mouse action={} button={} mods={}", .{ action, button, mods });
 
@@ -4501,8 +4460,6 @@ pub fn mousePressureCallback(
     pressure: f64,
 ) !void {
     // Crash metadata in case we crash in here
-    crash.sentry.thread_state = self.crashThreadState();
-    defer crash.sentry.thread_state = null;
 
     // We don't currently use the pressure value for anything. In the
     // future, we could report this to applications using new mouse
@@ -4565,8 +4522,6 @@ pub fn cursorPosCallback(
     mods: ?input.Mods,
 ) !void {
     // Crash metadata in case we crash in here
-    crash.sentry.thread_state = self.crashThreadState();
-    defer crash.sentry.thread_state = null;
 
     // log.debug("cursor pos x={} y={} mods={?}", .{ pos.x, pos.y, mods });
 
@@ -4754,8 +4709,6 @@ pub fn cursorPosCallback(
 /// changed.
 pub fn colorSchemeCallback(self: *Surface, scheme: apprt.ColorScheme) !void {
     // Crash metadata in case we crash in here
-    crash.sentry.thread_state = self.crashThreadState();
-    defer crash.sentry.thread_state = null;
 
     const new_scheme: configpkg.ConditionalState.Theme = switch (scheme) {
         .light => .light,
@@ -5750,8 +5703,8 @@ fn writeScreenFile(
         global.io(),
         filename,
         switch (builtin.os.tag) {
-            .windows => .{},
-            else => .{ .permissions = .fromMode(0o600) },
+            .macos => .{ .permissions = .fromMode(0o600) },
+            else => unreachable,
         },
     );
     defer file.close(global.io());
@@ -6535,13 +6488,6 @@ fn showDesktopNotification(self: *Surface, title: [:0]const u8, body: [:0]const 
             .body = body,
         },
     );
-}
-
-fn crashThreadState(self: *Surface) crash.sentry.ThreadState {
-    return .{
-        .type = .main,
-        .surface = self,
-    };
 }
 
 /// Tell the surface to present itself to the user. This may involve raising the

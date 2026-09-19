@@ -32,20 +32,6 @@ pub fn ensureLocale() !void {
         return;
     }
 
-    if (builtin.os.tag == .windows) {
-        // Exit early for Windows.
-        //
-        // NOTE: There currently is no official Windows version of Ghostty,
-        // either by way of an official Windows port or through use of
-        // libghostty-internal. As such this function is likely unused on those
-        // platforms, so this serves as a TODO stub to support more robust
-        // locale support on Windows. setlocale on Windows sets an
-        // "implementation-defined native environment" with an empty string, so
-        // we are currently just doing best-effort for now.
-        log.info("TODO: setlocale failed on Windows, implement better fallbacks", .{});
-        return;
-    }
-
     // setlocale failed. This is probably because the LANG env var is
     // invalid. Try to set it without the LANG var set to use the system
     // default.

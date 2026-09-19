@@ -5,13 +5,9 @@ const options = @import("main.zig").options;
 const config = @import("../config.zig");
 const freetype = @import("face/freetype.zig");
 const coretext = @import("face/coretext.zig");
-pub const web_canvas = @import("face/web_canvas.zig");
 
 /// Face implementation for the compile options.
 pub const Face = switch (options.backend) {
-    .freetype,
-    .freetype_windows,
-    .fontconfig_freetype,
     .coretext_freetype,
     => freetype.Face,
 
@@ -19,8 +15,6 @@ pub const Face = switch (options.backend) {
     .coretext_harfbuzz,
     .coretext_noshape,
     => coretext.Face,
-
-    .web_canvas => web_canvas.Face,
 };
 
 /// If a DPI can't be calculated, this DPI is used. This is probably
@@ -58,14 +52,7 @@ pub const DesiredSize = struct {
     }
 
     /// Make this a valid gobject if we're in a GTK environment.
-    pub const getGObjectType = switch (build_config.app_runtime) {
-        .gtk => @import("gobject").ext.defineBoxed(
-            DesiredSize,
-            .{ .name = "GhosttyFontDesiredSize" },
-        ),
-
-        .none => void,
-    };
+    pub const getGObjectType = void;
 };
 
 /// A font variation setting. The best documentation for this I know of

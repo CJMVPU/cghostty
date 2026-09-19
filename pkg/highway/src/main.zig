@@ -8,5 +8,5 @@ pub fn supported_targets() Targets {
 
 test {
     _ = supported_targets();
-    _ = @import("runtime_detect.zig");
+    _ = @import("detect/aarch64_darwin.zig");
 }

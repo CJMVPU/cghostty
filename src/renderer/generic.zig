@@ -35,12 +35,12 @@ const FileType = @import("../file_type.zig").FileType;
 
 const macos = switch (builtin.os.tag) {
     .macos => @import("macos"),
-    else => void,
+    else => unreachable,
 };
 
 const DisplayLink = switch (builtin.os.tag) {
     .macos => *macos.video.DisplayLink,
-    else => void,
+    else => unreachable,
 };
 
 const log = std.log.scoped(.generic_renderer);

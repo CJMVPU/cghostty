@@ -4,11 +4,9 @@ const build_config = @import("build_config.zig");
 const build_options = @import("build_options");
 const cli = @import("cli.zig");
 const internal_os = @import("os/main.zig");
-const fontconfig = @import("fontconfig");
 const glslang = @import("glslang");
 const harfbuzz = @import("harfbuzz");
 const oni = @import("oniguruma");
-const crash = @import("crash/main.zig");
 const renderer = @import("renderer.zig");
 const apprt = @import("apprt.zig");
 const assert = @import("quirks.zig").inlineAssert;
@@ -66,16 +64,7 @@ pub fn init(opts: InitOpts) !void {
         },
         .args = switch (opts) {
             .main, .tool => |m| m.args,
-            // TODO: Using the C API from Windows is unsupported at this time.
-            //
-            // When do we plan on supporting Windows, it's recommended to
-            // ensure that the C API can take a UNICODE_STRING (aka []16, a
-            // WTF-16 string) so that it can just be passed into
-            // std.process.Args.Vector directly.
-            .c => |c| .{ .vector = if (builtin.os.tag == .windows)
-                return error.UnsupportedOSForCApi
-            else
-                c.argv[0..c.argc] },
+            .c => |c| .{ .vector = c.argv[0..c.argc] },
         },
         .tmp_dir_path = null,
         .action = null,
@@ -146,7 +135,7 @@ pub fn init(opts: InitOpts) !void {
     // this. Env vars are useful for logging too because they are
     // easy to set.
     logging: {
-        const v = self.environ.getAlloc(self.alloc, "GHOSTTY_LOG") catch |err| switch (err) {
+        const v = self.environ.getAlloc(self.alloc, "CGHOSTTY_LOG") catch |err| switch (err) {
             error.EnvironmentVariableMissing => break :logging,
             else => return err,
         };
@@ -164,42 +153,19 @@ pub fn init(opts: InitOpts) !void {
     };
 
     // Output some debug information right away
-    std.log.info("ghostty version={s}", .{build_config.version_string});
-    std.log.info("ghostty build optimize={s}", .{build_config.mode_string});
+    std.log.info("cghostty version={s}", .{build_config.version_string});
+    std.log.info("cghostty build optimize={s}", .{build_config.mode_string});
     std.log.info("runtime={}", .{build_config.app_runtime});
     std.log.info("font_backend={}", .{build_config.font_backend});
     if (comptime build_config.font_backend.hasHarfbuzz()) {
         std.log.info("dependency harfbuzz={s}", .{harfbuzz.versionString()});
     }
-    if (comptime build_config.font_backend.hasFontconfig()) {
-        std.log.info("dependency fontconfig={d}", .{fontconfig.version()});
-    }
+
     std.log.info("renderer={}", .{renderer.Renderer});
     std.log.info("libxev default backend={t}", .{xev.backend});
 
     // As early as possible, initialize our resource limits.
     self.rlimits = .init();
-
-    if (build_options.sentry) {
-        // Initialize our crash reporting. The environ map snapshot is
-        // owned by crash.init (it is freed by the init thread).
-        const environ_map = try self.environ.createMap(self.alloc);
-        crash.init(self.alloc, environ_map) catch |err| {
-            std.log.warn(
-                "sentry init failed, no crash capture available err={}",
-                .{err},
-            );
-        };
-    }
-
-    // const sentrylib = @import("sentry");
-    // if (sentrylib.captureEvent(sentrylib.Value.initMessageEvent(
-    //     .info,
-    //     null,
-    //     "hello, world",
-    // ))) |uuid| {
-    //     std.log.warn("uuid={s}", .{uuid.string()});
-    // } else std.log.warn("failed to capture event", .{});
 
     // We need to make sure the process locale is set properly. Locale
     // affects a lot of behaviors in a shell.
@@ -235,7 +201,6 @@ pub fn deinit() void {
     self.resources_dir.deinit(self.alloc);
 
     // Flush our crash logs
-    crash.deinit();
 
     // Release our tmp_dir_path if needed
     if (self.tmp_dir_path) |td| freeTmpDir(self.alloc, td);
@@ -306,8 +271,7 @@ pub fn environMap() !std.process.Environ.Map {
 /// `std.process.Environ.Map` whenever possible.
 pub fn syncEnviron() void {
     switch (builtin.os.tag) {
-        .windows => {},
-        else => {
+        .macos => {
             assert(builtin.link_libc);
             assert(!builtin.is_test);
             const new_environ: std.process.Environ = .{ .block = .{ .slice = std.c.environ[0..env_len: {
@@ -318,6 +282,7 @@ pub fn syncEnviron() void {
             state.?.environ = new_environ;
             state.?.io_impl.environ = .{ .process_environ = new_environ };
         },
+        else => unreachable,
     }
 }
 
@@ -408,7 +373,6 @@ pub const GlobalState = struct {
 
     fn initSignals() void {
         // Only posix systems.
-        if (comptime builtin.os.tag == .windows) return;
 
         const p = std.posix;
 

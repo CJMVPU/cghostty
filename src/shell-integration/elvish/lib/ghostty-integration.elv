@@ -78,10 +78,10 @@
 
   # SSH Integration
   #
-  # Wrap `ssh` with `ghostty +ssh` and translate the shell-integration
+  # Wrap `ssh` with `cghostty +ssh` and translate the shell-integration
   # feature flags into command options.
   fn ssh-integration {|@args|
-    var ghostty = $E:GHOSTTY_BIN_DIR/"ghostty"
+    var ghostty = $E:CGHOSTTY_BIN_DIR/"cghostty"
     var flags = []
     if (not (has-value $features ssh-env)) {
       set flags = (conj $flags --forward-env=false)
@@ -89,7 +89,7 @@
     if (not (has-value $features ssh-terminfo)) {
       set flags = (conj $flags --terminfo=false)
     }
-    $ghostty +ssh $@flags -- $@args
+    $cghostty +ssh $@flags -- $@args
   }
 
   defer {
@@ -111,9 +111,9 @@
     set edit:before-readline = (conj $edit:before-readline $beam~)
     set edit:after-readline  = (conj $edit:after-readline {|_| reset })
   }
-  if (and (has-value $features path) (has-env GHOSTTY_BIN_DIR)) {
-    if (not (has-value $paths $E:GHOSTTY_BIN_DIR)) {
-        set paths = [$@paths $E:GHOSTTY_BIN_DIR]
+  if (and (has-value $features path) (has-env CGHOSTTY_BIN_DIR)) {
+    if (not (has-value $paths $E:CGHOSTTY_BIN_DIR)) {
+        set paths = [$@paths $E:CGHOSTTY_BIN_DIR]
     }
   }
   if (and (has-value $features sudo) (not-eq "" $E:TERMINFO) (has-external sudo)) {

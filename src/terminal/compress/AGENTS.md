@@ -21,11 +21,7 @@ When making tradeoffs, in order:
 ## Testing
 
 - Targeted tests: `zig build test -Dtest-filter=<codec>`
-- Prefer `zig build test-lib-vt -Dtest-filter=<codec>` when practical;
-  this code ships in libghostty-vt.
-- Codecs must keep building for `wasm32-freestanding` (libghostty-vt):
-  no libc, no `src/simd` (Highway) dependencies. Verify with
-  `zig build -Demit-lib-vt -Dtarget=wasm32-freestanding -Doptimize=ReleaseSmall`.
+- These codecs are built and tested as part of the macOS arm64 application.
 - Every codec needs a differential property suite: round-trip identity,
   an independent format walker, wrong-size output rejection, and
   corruption/truncation decoding. Keep a light version in normal unit

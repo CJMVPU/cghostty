@@ -6,7 +6,6 @@ const types = @import("types.zig");
 const unionpkg = @import("union.zig");
 
 pub const allocator = @import("allocator.zig");
-pub const TinyIo = @import("TinyIo.zig");
 pub const Buffer = types.Buffer;
 pub const Enum = enumpkg.Enum;
 pub const Packed = packedpkg.Packed;

@@ -16,7 +16,6 @@ const ArenaAllocator = std.heap.ArenaAllocator;
 const builtin = @import("builtin");
 const global = @import("../global.zig");
 const xev = global.xev;
-const crash = @import("../crash/main.zig");
 const internal_os = @import("../os/main.zig");
 const termio = @import("../termio.zig");
 const renderer = @import("../renderer.zig");
@@ -243,13 +242,6 @@ fn threadMain_(self: *Thread, io: *termio.Termio) !void {
     if (builtin.os.tag.isDarwin()) {
         internal_os.macos.pthread_setname_np(&"io".*);
     }
-
-    // Setup our crash metadata
-    crash.sentry.thread_state = .{
-        .type = .io,
-        .surface = io.surface_mailbox.surface,
-    };
-    defer crash.sentry.thread_state = null;
 
     // Get the mailbox. This must be an SPSC mailbox for threading.
     const mailbox = switch (io.mailbox) {

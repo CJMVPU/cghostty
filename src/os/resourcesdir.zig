@@ -39,17 +39,17 @@ pub const ResourcesDir = struct {
 /// This is highly Ghostty-specific and can likely be generalized at
 /// some point but we can cross that bridge if we ever need to.
 pub fn resourcesDir(alloc: Allocator) !ResourcesDir {
-    // Use the GHOSTTY_RESOURCES_DIR environment variable in release builds.
+    // Use the CGHOSTTY_RESOURCES_DIR environment variable in release builds.
     //
     // In debug builds we try using terminfo detection first instead, since
     // if debug Ghostty is launched by an older version of Ghostty, it
     // would inherit the old, stale resources of older Ghostty instead of the
-    // freshly built ones under zig-out/share/ghostty.
+    // freshly built ones under zig-out/share/cghostty.
     //
     // Note: we ALWAYS want to allocate here because the result is always
     // freed, do not try to use internal_os.getenv or posix getenv.
     if (comptime builtin.mode != .Debug) env: {
-        const dir = global.environ().getAlloc(alloc, "GHOSTTY_RESOURCES_DIR") catch |err| switch (err) {
+        const dir = global.environ().getAlloc(alloc, "CGHOSTTY_RESOURCES_DIR") catch |err| switch (err) {
             error.EnvironmentVariableMissing => break :env,
             else => return err,
         };
@@ -59,11 +59,9 @@ pub fn resourcesDir(alloc: Allocator) !ResourcesDir {
 
     // This is the sentinel value we look for in the path to know
     // we've found the resources directory.
-    const sentinels = switch (comptime builtin.target.os.tag) {
-        .windows => .{"terminfo/ghostty.terminfo"},
+    const sentinels = switch (builtin.os.tag) {
         .macos => .{"terminfo/78/xterm-ghostty"},
-        .freebsd => .{ "site-terminfo/g/ghostty", "site-terminfo/x/xterm-ghostty" },
-        else => .{ "terminfo/g/ghostty", "terminfo/x/xterm-ghostty" },
+        else => unreachable,
     };
 
     // Get the path to our running binary
@@ -88,7 +86,7 @@ pub fn resourcesDir(alloc: Allocator) !ResourcesDir {
                     "Contents/Resources",
                     sentinel,
                 )) |v| {
-                    return .{ .app_path = try std.fs.path.join(alloc, &.{ v, "ghostty" }) };
+                    return .{ .app_path = try std.fs.path.join(alloc, &.{ v, "cghostty" }) };
                 }
             }
         }
@@ -100,10 +98,10 @@ pub fn resourcesDir(alloc: Allocator) !ResourcesDir {
             if (try maybeDir(
                 &dir_buf,
                 dir,
-                if (builtin.target.os.tag == .freebsd) "local/share" else "share",
+                "share",
                 sentinel,
             )) |v| {
-                return .{ .app_path = try std.fs.path.join(alloc, &.{ v, "ghostty" }) };
+                return .{ .app_path = try std.fs.path.join(alloc, &.{ v, "cghostty" }) };
             }
         }
     }
@@ -111,7 +109,7 @@ pub fn resourcesDir(alloc: Allocator) !ResourcesDir {
     // If terminfo detection failed in debug builds (somehow),
     // fallback and use the provided resources dir.
     if (comptime builtin.mode == .Debug) {
-        if (global.environ().getAlloc(alloc, "GHOSTTY_RESOURCES_DIR")) |dir| {
+        if (global.environ().getAlloc(alloc, "CGHOSTTY_RESOURCES_DIR")) |dir| {
             if (dir.len > 0) return .{ .app_path = dir };
         } else |err| switch (err) {
             error.InvalidWtf8, error.EnvironmentVariableMissing => {},

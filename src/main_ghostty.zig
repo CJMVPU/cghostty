@@ -123,7 +123,7 @@ fn logFn(
 ) void {
     // On Mac, we use unified logging. To view this:
     //
-    //   sudo log stream --level debug --predicate 'subsystem=="com.mitchellh.ghostty"'
+    //   sudo log stream --level debug --predicate 'subsystem=="com.cjmvpu.cghostty"'
     //
     // macOS logging is thread safe so no need for locks/mutexes
     macos: {
@@ -202,7 +202,7 @@ pub const std_options: std.Options = .{
     // Our log level is always at least info in every build mode.
     //
     // Note, we don't lower this to debug even with conditional logging
-    // via GHOSTTY_LOG because our debug logs are very expensive to
+    // via CGHOSTTY_LOG because our debug logs are very expensive to
     // calculate and we want to make sure they're optimized out in
     // builds.
     .log_level = switch (builtin.mode) {
@@ -245,7 +245,6 @@ test {
     // Libraries
     _ = @import("tripwire.zig");
     _ = @import("benchmark/main.zig");
-    _ = @import("crash/main.zig");
     _ = @import("datastruct/main.zig");
     _ = @import("inspector/main.zig");
     _ = @import("lib/main.zig");

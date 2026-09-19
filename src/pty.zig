@@ -1,6 +1,5 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const windows = @import("os/main.zig").windows;
 const posix = std.posix;
 const assert = @import("quirks.zig").inlineAssert;
 
@@ -17,9 +16,8 @@ pub const winsize = extern struct {
 };
 
 pub const Pty = switch (builtin.os.tag) {
-    .windows => WindowsPty,
-    .ios => NullPty,
-    else => PosixPty,
+    .macos => PosixPty,
+    else => unreachable,
 };
 
 /// The modes of a pty. Not all of these modes are supported on
@@ -56,52 +54,6 @@ pub const ProcessInfo = enum {
 // TODO: This should be removed. This is only temporary until we have
 // a termio that doesn't use a pty. This isn't used in any user-facing
 // artifacts, this is just a stopgap to get compilation to work on iOS.
-const NullPty = struct {
-    pub const Error = OpenError || GetModeError || SetSizeError || ChildPreExecError;
-
-    pub const Fd = posix.fd_t;
-
-    master: Fd,
-    slave: Fd,
-
-    pub const OpenError = error{};
-
-    pub fn open(size: winsize) OpenError!Pty {
-        _ = size;
-        return .{ .master = 0, .slave = 0 };
-    }
-
-    pub fn deinit(self: *Pty) void {
-        _ = self;
-    }
-
-    pub const GetModeError = error{GetModeFailed};
-
-    pub fn getMode(self: Pty) GetModeError!Mode {
-        _ = self;
-        return .{};
-    }
-
-    pub const SetSizeError = error{};
-
-    pub fn setSize(self: *Pty, size: winsize) SetSizeError!void {
-        _ = self;
-        _ = size;
-    }
-
-    pub const ChildPreExecError = error{};
-
-    pub fn childPreExec(self: Pty) ChildPreExecError!void {
-        _ = self;
-    }
-
-    /// Get information about the process(es) attached to the PTY. Returns
-    /// `null` if there was an error getting the information or the information
-    /// is not available on a particular platform.
-    pub fn getProcessInfo(_: *Pty, comptime info: ProcessInfo) ?ProcessInfo.Type(info) {
-        return null;
-    }
-};
 
 /// Posix PTY creation and management. This is just a thin layer on top
 /// of Posix syscalls. The caller is responsible for detail-oriented handling
@@ -272,20 +224,12 @@ const PosixPty = struct {
         return switch (info) {
             .foreground_pid => {
                 switch (builtin.os.tag) {
-                    .linux => {
-                        const linux = std.os.linux;
-                        var pgrp: i32 = undefined;
-                        const rc = linux.tcgetpgrp(self.master, &pgrp);
-                        switch (rc) {
-                            0 => return @intCast(pgrp), // SUCCESS
-                            else => return null, // Anything else
-                        }
-                    },
-                    else => {
+                    .macos => {
                         const rc = c.tcgetpgrp(self.master);
                         if (rc < 0) return null;
                         return @intCast(rc);
                     },
+                    else => unreachable,
                 }
             },
             .tty_name => {
@@ -309,184 +253,10 @@ const PosixPty = struct {
                             },
                         }
                     },
-                    .linux => {
-                        if (c.ptsname_r(self.master, &self.tty_name_buf, self.tty_name_buf.len) != 0) return null;
-                        const tty_name: [:0]const u8 = std.mem.sliceTo(&self.tty_name_buf, 0);
-                        self.tty_name = tty_name;
-                        return tty_name;
-                    },
-                    else => return null,
+                    else => unreachable,
                 }
             },
         };
-    }
-};
-
-/// Windows PTY creation and management.
-const WindowsPty = struct {
-    pub const Error = OpenError || GetSizeError || SetSizeError;
-
-    pub const Fd = windows.HANDLE;
-
-    // Process-wide counter for pipe names
-    var pipe_name_counter = std.atomic.Value(u32).init(1);
-
-    out_pipe: windows.HANDLE,
-    in_pipe: windows.HANDLE,
-    out_pipe_pty: windows.HANDLE,
-    in_pipe_pty: windows.HANDLE,
-    pseudo_console: windows.HPCON,
-    size: winsize,
-
-    pub const OpenError = error{Unexpected};
-
-    /// Open a new PTY with the given initial size.
-    pub fn open(size: winsize) OpenError!Pty {
-        var pty: Pty = undefined;
-
-        var pipe_path_buf: [128]u8 = undefined;
-        var pipe_path_buf_w: [128]u16 = undefined;
-        const pipe_path = std.fmt.bufPrintZ(
-            &pipe_path_buf,
-            "\\\\.\\pipe\\LOCAL\\ghostty-pty-{d}-{d}",
-            .{
-                windows.GetCurrentProcessId(),
-                pipe_name_counter.fetchAdd(1, .monotonic),
-            },
-        ) catch unreachable;
-
-        const pipe_path_w_len = std.unicode.utf8ToUtf16Le(
-            &pipe_path_buf_w,
-            pipe_path,
-        ) catch unreachable;
-        pipe_path_buf_w[pipe_path_w_len] = 0;
-        const pipe_path_w = pipe_path_buf_w[0..pipe_path_w_len :0];
-
-        const security_attributes = windows.SECURITY_ATTRIBUTES{
-            .nLength = @sizeOf(windows.SECURITY_ATTRIBUTES),
-            .bInheritHandle = windows.FALSE,
-            .lpSecurityDescriptor = null,
-        };
-
-        pty.in_pipe = windows.exp.kernel32.CreateNamedPipeW(
-            pipe_path_w.ptr,
-            windows.PIPE_ACCESS_OUTBOUND |
-                windows.FILE_FLAG_FIRST_PIPE_INSTANCE |
-                windows.FILE_FLAG_OVERLAPPED,
-            windows.PIPE_TYPE_BYTE,
-            1,
-            4096,
-            4096,
-            0,
-            &security_attributes,
-        );
-        if (pty.in_pipe == windows.INVALID_HANDLE_VALUE) {
-            return windows.unexpectedError(windows.GetLastError());
-        }
-        errdefer _ = windows.exp.kernel32.CloseHandle(pty.in_pipe);
-
-        var security_attributes_read = security_attributes;
-        pty.in_pipe_pty = windows.exp.kernel32.CreateFileW(
-            pipe_path_w.ptr,
-            windows.GENERIC_READ,
-            0,
-            &security_attributes_read,
-            windows.OPEN_EXISTING,
-            windows.FILE_ATTRIBUTE_NORMAL,
-            null,
-        );
-        if (pty.in_pipe_pty == windows.INVALID_HANDLE_VALUE) {
-            return windows.unexpectedError(windows.GetLastError());
-        }
-        errdefer _ = windows.exp.kernel32.CloseHandle(pty.in_pipe_pty);
-
-        // The in_pipe needs to be created as a named pipe, since anonymous
-        // pipes created with CreatePipe do not support overlapped operations,
-        // and the IOCP backend of libxev only uses overlapped operations on files.
-        //
-        // It would be ideal to use CreatePipe here, so that our pipe isn't
-        // visible to any other processes.
-
-        // if (windows.exp.kernel32.CreatePipe(&pty.in_pipe_pty, &pty.in_pipe, null, 0) == 0) {
-        //     return windows.unexpectedError(windows.kernel32.GetLastError());
-        // }
-        // errdefer {
-        //     _ = windows.CloseHandle(pty.in_pipe_pty);
-        //     _ = windows.CloseHandle(pty.in_pipe);
-        // }
-
-        if (windows.exp.kernel32.CreatePipe(&pty.out_pipe, &pty.out_pipe_pty, null, 0) == windows.FALSE) {
-            return windows.unexpectedError(windows.GetLastError());
-        }
-        errdefer {
-            _ = windows.exp.kernel32.CloseHandle(pty.out_pipe);
-            _ = windows.exp.kernel32.CloseHandle(pty.out_pipe_pty);
-        }
-
-        const SetHandleInformation = struct {
-            fn f(hObject: windows.HANDLE) !void {
-                if (windows.exp.kernel32.SetHandleInformation(
-                    hObject,
-                    windows.HANDLE_FLAG_INHERIT,
-                    0,
-                ) == windows.FALSE) {
-                    return windows.unexpectedError(windows.GetLastError());
-                }
-            }
-        };
-
-        try SetHandleInformation.f(pty.in_pipe);
-        try SetHandleInformation.f(pty.in_pipe_pty);
-        try SetHandleInformation.f(pty.out_pipe);
-        try SetHandleInformation.f(pty.out_pipe_pty);
-
-        const result = windows.exp.kernel32.CreatePseudoConsole(
-            .{ .X = @intCast(size.ws_col), .Y = @intCast(size.ws_row) },
-            pty.in_pipe_pty,
-            pty.out_pipe_pty,
-            0,
-            &pty.pseudo_console,
-        );
-        if (result != windows.S_OK) return error.Unexpected;
-
-        pty.size = size;
-        return pty;
-    }
-
-    pub fn deinit(self: *Pty) void {
-        _ = windows.exp.kernel32.CloseHandle(self.in_pipe_pty);
-        _ = windows.exp.kernel32.CloseHandle(self.in_pipe);
-        _ = windows.exp.kernel32.CloseHandle(self.out_pipe_pty);
-        _ = windows.exp.kernel32.CloseHandle(self.out_pipe);
-        _ = windows.exp.kernel32.ClosePseudoConsole(self.pseudo_console);
-        self.* = undefined;
-    }
-
-    pub const GetSizeError = error{};
-
-    /// Return the size of the pty.
-    pub fn getSize(self: Pty) GetSizeError!winsize {
-        return self.size;
-    }
-
-    pub const SetSizeError = error{ResizeFailed};
-
-    /// Set the size of the pty.
-    pub fn setSize(self: *Pty, size: winsize) SetSizeError!void {
-        const result = windows.exp.kernel32.ResizePseudoConsole(
-            self.pseudo_console,
-            .{ .X = @intCast(size.ws_col), .Y = @intCast(size.ws_row) },
-        );
-
-        if (result != windows.S_OK) return error.ResizeFailed;
-        self.size = size;
-    }
-
-    /// Get information about the process(es) attached to the PTY. Returns
-    /// `null` if there was an error getting the information or the information
-    /// is not available on a particular platform.
-    pub fn getProcessInfo(_: *WindowsPty, comptime info: ProcessInfo) ?ProcessInfo.Type(info) {
-        return null;
     }
 };
 
@@ -511,9 +281,7 @@ test {
     try testing.expectEqual(ws, try pty.getSize());
 
     switch (builtin.os.tag) {
-        .freebsd => try testing.expect(std.mem.startsWith(u8, pty.getProcessInfo(.tty_name).?, "/dev/")),
-        .linux => try testing.expect(std.mem.startsWith(u8, pty.getProcessInfo(.tty_name).?, "/dev/pts/")),
         .macos => try testing.expect(std.mem.startsWith(u8, pty.getProcessInfo(.tty_name).?, "/dev/")),
-        else => try testing.expect(pty.getProcessInfo(.tty_name) == null),
+        else => unreachable,
     }
 }

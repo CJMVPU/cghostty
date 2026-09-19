@@ -9,10 +9,8 @@ const Key = @import("key.zig").Key;
 /// The full list of entries for the current platform.
 pub const entries: []const Entry = entries: {
     const native_idx = switch (builtin.os.tag) {
-        .ios, .macos => 4, // mac
-        .windows => 3, // win
-        .freebsd, .linux => 2, // xkb
-        else => @compileError("unsupported platform"),
+        .macos => 4,
+        else => unreachable,
     };
 
     var result: [raw_entries.len]Entry = undefined;

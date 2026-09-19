@@ -6,13 +6,12 @@
 //! not allocate memory or decide which terminal pages should be discarded.
 //!
 //! Decommit releases physical pages only. The address range and its memory
-//! accounting (the Linux VMA, the Windows commit charge) stay with the
+//! accounting stay with the
 //! process, so a read after decommit returns zeros or the old contents rather
 //! than faulting, and recommit has nothing to acquire that could fail.
 const std = @import("std");
 const builtin = @import("builtin");
 const assert = @import("../quirks.zig").inlineAssert;
-const windows = @import("../os/windows.zig");
 
 const log = std.log.scoped(.terminal_mem);
 
@@ -30,52 +29,11 @@ pub const DecommitMode = enum {
 /// Return whether this target can reclaim physical memory for `mode` while
 /// retaining the mapping's virtual address range.
 ///
-/// Test builds support both modes because `decommit` simulates reclamation by
-/// clearing the supplied range. Runtime reclamation is intentionally limited
-/// to 64-bit Linux, Darwin, and Windows. Other targets must leave strict
-/// callers' memory resident; zero mode still provides its documented memset
-/// fallback through `decommit` even when this function returns false.
+/// Both modes use macOS retained-mapping reclamation. Tests simulate it by
+/// clearing allocator memory rather than discarding shared pages.
 pub inline fn canReclaim(comptime mode: DecommitMode) bool {
-    // Both modes use the same retained-mapping primitives. Keeping the switch
-    // exhaustive makes additions to DecommitMode choose target support
-    // explicitly rather than inheriting it accidentally.
     return switch (mode) {
-        .zero, .strict => supported: {
-            // Tests never call into the OS because their allocator ranges can
-            // share mappings with unrelated allocations. `decommit` simulates
-            // successful reclamation by zeroing the requested range instead,
-            // so both modes are always available to tests on every target.
-            if (builtin.is_test) break :supported true;
-
-            // Compression currently retains complete page mappings for its
-            // lifetime. Limit the initial runtime support to 64-bit address
-            // spaces where that virtual-memory cost is negligible and where
-            // the retained-mapping behavior has been validated.
-            if (builtin.target.ptrBitWidth() != 64) break :supported false;
-
-            // Linux provides MADV_DONTNEED, which immediately discards pages
-            // from a private anonymous mapping and faults them back as zeroes.
-            // Zig reaches this through the raw syscall path without libc.
-            if (builtin.target.os.tag == .linux) break :supported true;
-
-            // Darwin provides the paired MADV_FREE_REUSABLE/FREE_REUSE
-            // operations used below. Darwin requires libc independently of
-            // this feature, so using its madvise entry point adds no new
-            // dependency to libghostty-vt.
-            if (builtin.target.os.tag.isDarwin()) break :supported true;
-
-            // Windows provides DiscardVirtualMemory, which releases the
-            // physical pages behind a committed range while keeping it
-            // committed, so nothing has to be committed again before reuse.
-            // Page memory is already a VirtualAlloc region (see page.zig)
-            // and kernel32 is linked by every Windows build.
-            if (builtin.target.os.tag == .windows) break :supported true;
-
-            // Other targets have no retained-mapping reclamation contract in
-            // this module. Zero mode can still clear through its memset
-            // fallback, but strict callers must leave their mapping resident.
-            break :supported false;
-        },
+        .zero, .strict => true,
     };
 }
 
@@ -107,22 +65,6 @@ pub fn decommit(
     if (comptime builtin.is_test) {
         @memset(memory[0..dirty_len], 0);
         return true;
-    }
-
-    // DONTNEED immediately reclaims private anonymous pages on Linux and
-    // faults them back as zero-filled pages. We deliberately avoid MADV_FREE:
-    // it does not reduce RSS until memory pressure and does not guarantee that
-    // the next read is zero.
-    if (comptime builtin.os.tag == .linux) {
-        if (std.posix.madvise(
-            memory.ptr,
-            memory.len,
-            std.posix.MADV.DONTNEED,
-        )) |_| return true else |err| {
-            log.warn("madvise(DONTNEED) failed err={}", .{err});
-            if (comptime mode == .strict) return false;
-            // Zero mode falls through to the memset below.
-        }
     }
 
     // FREE_REUSABLE removes the range from the Darwin process footprint while
@@ -165,21 +107,6 @@ pub fn decommit(
     // that write because its caller replaces the entire mapping after
     // recommit. The call reports failure through its return value rather
     // than the thread's last error.
-    if (comptime builtin.os.tag == .windows) {
-        if (comptime mode == .zero) @memset(memory[0..dirty_len], 0);
-
-        const rc = windows.exp.kernel32.DiscardVirtualMemory(
-            memory.ptr,
-            memory.len,
-        );
-        if (rc == windows.ERROR_SUCCESS) return true;
-
-        // Zero mode has already cleared its bytes and strict callers must
-        // leave the still-resident mapping alone, so there is nothing more
-        // to do for either mode.
-        log.warn("DiscardVirtualMemory failed err={d}", .{rc});
-        return false;
-    }
 
     if (comptime mode == .zero) @memset(memory[0..dirty_len], 0);
     return false;

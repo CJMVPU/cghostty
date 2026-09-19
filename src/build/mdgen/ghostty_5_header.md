@@ -1,4 +1,4 @@
-% GHOSTTY(5) Version @@VERSION@@ | Ghostty terminal emulator configuration file
+% CGHOSTTY(5) Version @@VERSION@@ | Ghostty terminal emulator configuration file
 
 # NAME
 
@@ -8,11 +8,11 @@
 
 To configure Ghostty, you must use a configuration file. GUI-based configuration
 is on the roadmap but not yet supported. The configuration file must be placed
-at `$XDG_CONFIG_HOME/ghostty/config.ghostty`, which defaults to `~/.config/ghostty/config.ghostty`
+at `$XDG_CONFIG_HOME/cghostty/config.ghostty`, which defaults to `~/.config/cghostty/config.ghostty`
 if the [XDG environment is not set](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html).
 
 **If you are using macOS, the configuration file can also be placed at
-`$HOME/Library/Application Support/com.mitchellh.ghostty/config.ghostty`.** This is the
+`$HOME/Library/Application Support/com.cjmvpu.cghostty/config.ghostty`.** This is the
 default configuration location for macOS. It will be searched before any of the
 XDG environment locations listed above.
 
@@ -98,18 +98,18 @@ logs sent to `stderr` may be stored by the system and made available for later
 retrieval.
 
 On Linux if Ghostty is launched by the default `systemd` user service, you can use
-`journald` to see Ghostty's logs: `journalctl --user --unit app-com.mitchellh.ghostty.service`.
+`journald` to see Ghostty's logs: `journalctl --user --unit app-com.cjmvpu.cghostty.service`.
 
 On macOS logging to the macOS unified log is available and enabled by default.
 --Use the system `log` CLI to view Ghostty's logs: `sudo log stream --level debug
---predicate 'subsystem=="com.mitchellh.ghostty"'`.
+--predicate 'subsystem=="com.cjmvpu.cghostty"'`.
 
 Ghostty's logging can be configured in two ways. The first is by what
 optimization level Ghostty is compiled with. If Ghostty is compiled with `Debug`
 optimizations debug logs will be output to `stderr`. If Ghostty is compiled with
 any other optimization the debug logs will not be output to `stderr`.
 
-Ghostty also checks the `GHOSTTY_LOG` environment variable. It can be used
+Ghostty also checks the `CGHOSTTY_LOG` environment variable. It can be used
 to control which destinations receive logs. Ghostty currently defines two
 destinations:
 
@@ -118,5 +118,5 @@ destinations:
 
 Combine values with a comma to enable multiple destinations. Prefix a
 destination with `no-` to disable it. Enabling and disabling destinations
-can be done at the same time. Setting `GHOSTTY_LOG` to `true` will enable all
-destinations. Setting `GHOSTTY_LOG` to `false` will disable all destinations.
+can be done at the same time. Setting `CGHOSTTY_LOG` to `true` will enable all
+destinations. Setting `CGHOSTTY_LOG` to `false` will disable all destinations.

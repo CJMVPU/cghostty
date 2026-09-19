@@ -403,7 +403,7 @@ extension Ghostty {
         }
 
         var macosCustomIcon: String {
-            let defaultValue = NSString("~/.config/ghostty/Ghostty.icns").expandingTildeInPath
+            let defaultValue = NSString("~/.config/cghostty/cghostty.icns").expandingTildeInPath
             guard let config = self.config else { return defaultValue }
             var v: UnsafePointer<Int8>?
             let key = "macos-custom-icon"
@@ -626,27 +626,6 @@ extension Ghostty {
             return .milliseconds(v)
         }
 
-        var autoUpdate: AutoUpdate? {
-            guard let config = self.config else { return nil }
-            var v: UnsafePointer<Int8>?
-            let key = "auto-update"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return nil }
-            guard let ptr = v else { return nil }
-            let str = String(cString: ptr)
-            return AutoUpdate(rawValue: str)
-        }
-
-        var autoUpdateChannel: AutoUpdateChannel {
-            let defaultValue = AutoUpdateChannel.stable
-            guard let config = self.config else { return defaultValue }
-            var v: UnsafePointer<Int8>?
-            let key = "auto-update-channel"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return defaultValue }
-            guard let ptr = v else { return defaultValue }
-            let str = String(cString: ptr)
-            return AutoUpdateChannel(rawValue: str) ?? defaultValue
-        }
-
         var autoSecureInput: Bool {
             guard let config = self.config else { return true }
             var v = false
@@ -734,11 +713,6 @@ extension Ghostty {
 // MARK: Configuration Enums
 
 extension Ghostty.Config {
-    enum AutoUpdate: String {
-        case off
-        case check
-        case download
-    }
 
     /// Background blur configuration that maps from the C API values.
     /// Positive values represent blur radius, special negative values

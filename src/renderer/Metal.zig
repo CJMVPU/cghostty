@@ -63,8 +63,8 @@ autorelease_pool: ?*objc.AutoreleasePool = null,
 
 pub fn init(alloc: Allocator, opts: rendererpkg.Options) !Metal {
     comptime switch (builtin.os.tag) {
-        .macos, .ios => {},
-        else => @compileError("unsupported platform for Metal"),
+        .macos => {},
+        else => unreachable,
     };
 
     _ = alloc;
@@ -76,10 +76,9 @@ pub fn init(alloc: Allocator, opts: rendererpkg.Options) !Metal {
     errdefer queue.release();
 
     // Grab metadata about the device.
-    const default_storage_mode: mtl.MTLResourceOptions.StorageMode = switch (comptime builtin.os.tag) {
-        // manage mode is not supported by iOS
-        .ios => .shared,
-        else => if (device.getProperty(bool, "hasUnifiedMemory")) .shared else .managed,
+    const default_storage_mode: mtl.MTLResourceOptions.StorageMode = switch (builtin.os.tag) {
+        .macos => if (device.getProperty(bool, "hasUnifiedMemory")) .shared else .managed,
+        else => unreachable,
     };
     const max_texture_size = queryMaxTextureSize(device);
     log.debug(
@@ -98,7 +97,6 @@ pub fn init(alloc: Allocator, opts: rendererpkg.Options) !Metal {
             .scaleFactor = @floatCast(opts.rt_surface.content_scale.x),
             .view = switch (opts.rt_surface.platform) {
                 .macos => |v| v.nsview,
-                .ios => |v| v.uiview,
             },
         },
 
@@ -119,18 +117,12 @@ pub fn init(alloc: Allocator, opts: rendererpkg.Options) !Metal {
     //
     // On iOS, views are always layer-backed, and `layer`
     // is readonly, so instead we add it as a sublayer.
-    switch (comptime builtin.os.tag) {
+    switch (builtin.os.tag) {
         .macos => {
             info.view.setProperty("layer", layer.layer.value);
             info.view.setProperty("wantsLayer", true);
         },
-
-        .ios => {
-            const view_layer = objc.Object.fromId(info.view.getProperty(?*anyopaque, "layer"));
-            view_layer.msgSend(void, objc.sel("addSublayer:"), .{layer.layer.value});
-        },
-
-        else => @compileError("unsupported target for Metal"),
+        else => unreachable,
     }
 
     // Ensure that if our layer is oversized it
@@ -443,7 +435,7 @@ pub fn warmup() void {
 fn chooseDevice() error{NoMetalDevice}!objc.Object {
     var chosen_device: ?objc.Object = null;
 
-    switch (comptime builtin.os.tag) {
+    switch (builtin.os.tag) {
         .macos => {
             const devices = objc.Object.fromId(mtl.MTLCopyAllDevices());
             defer devices.release();
@@ -460,10 +452,7 @@ fn chooseDevice() error{NoMetalDevice}!objc.Object {
                     device.getProperty(bool, "isLowPower")) break;
             }
         },
-        .ios => {
-            chosen_device = objc.Object.fromId(mtl.MTLCreateSystemDefaultDevice());
-        },
-        else => @compileError("unsupported target for Metal"),
+        else => unreachable,
     }
 
     const device = chosen_device orelse return error.NoMetalDevice;

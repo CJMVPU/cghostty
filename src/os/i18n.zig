@@ -29,10 +29,7 @@ pub fn init(resources_dir: []const u8) InitError!void {
     if (comptime !build_config.i18n) return;
 
     switch (builtin.os.tag) {
-        // i18n is unsupported on Windows
-        .windows => return,
-
-        else => {
+        .macos => {
             // Our resources dir is always nested below the share dir that
             // is standard for translations.
             const share_dir = std.fs.path.dirname(resources_dir) orelse
@@ -48,6 +45,7 @@ pub fn init(resources_dir: []const u8) InitError!void {
             _ = bindtextdomain(build_config.bundle_id, path.ptr) orelse
                 return error.OutOfMemory;
         },
+        else => unreachable,
     }
 }
 

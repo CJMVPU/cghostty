@@ -357,74 +357,17 @@ pub const App = struct {
             else => {},
         }
     }
-
-    /// Send the given IPC to a running Ghostty. Returns `true` if the action was
-    /// able to be performed, `false` otherwise.
-    ///
-    /// Note that this is a static function. Since this is called from a CLI app (or
-    /// some other process that is not Ghostty) there is no full-featured apprt App
-    /// to use.
-    pub fn performIpc(
-        _: Allocator,
-        _: apprt.ipc.Target,
-        comptime action: apprt.ipc.Action.Key,
-        _: apprt.ipc.Action.Value(action),
-    ) (Allocator.Error || apprt.ipc.Errors)!bool {
-        switch (action) {
-            .new_window => return false,
-            .new_tab => return false,
-            .toggle_quick_terminal => return false,
-        }
-    }
 };
 
-/// Platform-specific configuration for libghostty.
+/// The application's native macOS view bridge.
 pub const Platform = union(PlatformTag) {
     macos: MacOS,
-    ios: IOS,
-
-    // If our build target for libghostty is not darwin then we do
-    // not include macos support at all.
-    pub const MacOS = if (builtin.target.os.tag.isDarwin()) struct {
-        /// The view to render the surface on.
-        nsview: objc.Object,
-    } else void;
-
-    pub const IOS = if (builtin.target.os.tag.isDarwin()) struct {
-        /// The view to render the surface on.
-        uiview: objc.Object,
-    } else void;
-
-    // The C ABI compatible version of this union. The tag is expected
-    // to be stored elsewhere.
-    pub const C = extern union {
-        macos: extern struct {
-            nsview: ?*anyopaque,
-        },
-
-        ios: extern struct {
-            uiview: ?*anyopaque,
-        },
-    };
-
-    /// Initialize a Platform a tag and configuration from the C ABI.
+    pub const MacOS = struct { nsview: objc.Object };
+    pub const C = extern union { macos: extern struct { nsview: ?*anyopaque } };
     pub fn init(tag_int: c_int, c_platform: C) !Platform {
-        const tag = std.enums.fromInt(PlatformTag, tag_int) orelse return error.InvalidEnumTag;
-        return switch (tag) {
-            .macos => if (MacOS != void) macos: {
-                const config = c_platform.macos;
-                const nsview = objc.Object.fromId(config.nsview orelse
-                    break :macos error.NSViewMustBeSet);
-                break :macos .{ .macos = .{ .nsview = nsview } };
-            } else error.UnsupportedPlatform,
-
-            .ios => if (IOS != void) ios: {
-                const config = c_platform.ios;
-                const uiview = objc.Object.fromId(config.uiview orelse
-                    break :ios error.UIViewMustBeSet);
-                break :ios .{ .ios = .{ .uiview = uiview } };
-            } else error.UnsupportedPlatform,
-        };
+        _ = std.enums.fromInt(PlatformTag, tag_int) orelse return error.InvalidEnumTag;
+        const nsview = objc.Object.fromId(c_platform.macos.nsview orelse return error.NSViewMustBeSet);
+        return .{ .macos = .{ .nsview = nsview } };
     }
 };
 
@@ -433,7 +376,6 @@ pub const PlatformTag = enum(c_int) {
     // from the C API.
 
     macos = 1,
-    ios = 2,
 };
 
 pub const EnvVar = extern struct {
@@ -1196,7 +1138,7 @@ pub const Surface = struct {
             }
 
             // Remove this so that running `ghostty` within Ghostty works.
-            _ = env.orderedRemove("GHOSTTY_MAC_LAUNCH_SOURCE");
+            _ = env.orderedRemove("CGHOSTTY_MAC_LAUNCH_SOURCE");
 
             // If we were launched from the desktop then we want to
             // remove the LANGUAGE env var so that we don't inherit

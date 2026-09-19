@@ -992,14 +992,7 @@ pub const Action = union(enum) {
     pub const Key = @typeInfo(Action).@"union".tag_type.?;
 
     /// Make this a valid gobject if we're in a GTK environment.
-    pub const getGObjectType = switch (build_config.app_runtime) {
-        .gtk => @import("gobject").ext.defineBoxed(
-            Action,
-            .{ .name = "GhosttyBindingAction" },
-        ),
-
-        .none => void,
-    };
+    pub const getGObjectType = void;
 
     pub const CrashThread = enum {
         main,

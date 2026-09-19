@@ -20,7 +20,7 @@ path: []const u8,
 
 /// Returns the default path for the cache for a given program.
 ///
-/// On all platforms, this is `${XDG_STATE_HOME}/ghostty/ssh_cache`.
+/// On all platforms, this is `${XDG_STATE_HOME}/cghostty/ssh_cache`.
 ///
 /// The returned value is allocated and must be freed by the caller.
 pub fn defaultPath(
@@ -75,10 +75,7 @@ pub fn add(
     const file = std.Io.Dir.createFileAbsolute(global.io(), self.path, .{
         .read = true,
         .truncate = false,
-        .permissions = if (builtin.os.tag != .windows and std.posix.mode_t != u0)
-            .fromMode(0o600)
-        else
-            .default_file,
+        .permissions = .fromMode(0o600),
     }) catch |err| switch (err) {
         error.PathAlreadyExists => blk: {
             const existing_file = try std.Io.Dir.openFileAbsolute(
@@ -97,11 +94,11 @@ pub fn add(
     // Lock
     // Causes a compile failure in the Zig std library on Windows, see:
     // https://github.com/ziglang/zig/issues/18430
-    if (comptime builtin.os.tag != .windows) _ = file.tryLock(
+    _ = file.tryLock(
         global.io(),
         .exclusive,
     ) catch return error.CacheLocked;
-    defer if (comptime builtin.os.tag != .windows) file.unlock(global.io());
+    defer file.unlock(global.io());
 
     var entries = try readEntries(alloc, file);
     defer deinitEntries(alloc, &entries);
@@ -155,11 +152,11 @@ pub fn remove(
     // Lock
     // Causes a compile failure in the Zig std library on Windows, see:
     // https://github.com/ziglang/zig/issues/18430
-    if (comptime builtin.os.tag != .windows) _ = file.tryLock(
+    _ = file.tryLock(
         global.io(),
         .exclusive,
     ) catch return error.CacheLocked;
-    defer if (comptime builtin.os.tag != .windows) file.unlock(global.io());
+    defer file.unlock(global.io());
 
     // Read existing entries
     var entries = try readEntries(alloc, file);
@@ -199,11 +196,11 @@ pub fn prune(
     // Lock
     // Causes a compile failure in the Zig std library on Windows, see:
     // https://github.com/ziglang/zig/issues/18430
-    if (comptime builtin.os.tag != .windows) _ = file.tryLock(
+    _ = file.tryLock(
         global.io(),
         .exclusive,
     ) catch return error.CacheLocked;
-    defer if (comptime builtin.os.tag != .windows) file.unlock(global.io());
+    defer file.unlock(global.io());
 
     // Read existing entries
     var entries = try readEntries(alloc, file);
@@ -260,7 +257,6 @@ pub fn contains(
 
 fn fixupPermissions(file: std.Io.File) !void {
     // Windows does not support chmod
-    if (comptime builtin.os.tag == .windows) return;
 
     // Ensure file has correct permissions (readable/writable by
     // owner only)
@@ -282,10 +278,7 @@ fn writeCacheFile(
 
     var buf: [1024]u8 = undefined;
     var atomic_file = try dir.createFileAtomic(global.io(), cache_basename, .{
-        .permissions = if (builtin.os.tag != .windows and std.posix.mode_t != u0)
-            .fromMode(0o600)
-        else
-            .default_file,
+        .permissions = .fromMode(0o600),
         .replace = true,
     });
     defer atomic_file.deinit(global.io());
@@ -457,7 +450,7 @@ test "disk cache default path" {
     const testing = std.testing;
     const alloc = std.testing.allocator;
 
-    const path = try DiskCache.defaultPath(alloc, "ghostty");
+    const path = try DiskCache.defaultPath(alloc, "cghostty");
     defer alloc.free(path);
     try testing.expect(path.len > 0);
 }

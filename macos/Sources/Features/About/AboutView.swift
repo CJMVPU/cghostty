@@ -3,13 +3,13 @@ import SwiftUI
 struct AboutView: View {
     @Environment(\.openURL) var openURL
 
-    private let githubURL = URL(string: "https://github.com/ghostty-org/ghostty")
-    private let docsURL = URL(string: "https://ghostty.org/docs")
+    private let githubURL = URL(string: "https://github.com/CJMVPU/cghostty")
+    private let docsURL = URL(string: "https://github.com/CJMVPU/cghostty#readme")
 
     /// Read the commit from the bundle.
     private var build: String? { Bundle.main.infoDictionary?["CFBundleVersion"] as? String }
     private var commit: String? { Bundle.main.infoDictionary?["GhosttyCommit"] as? String }
-    private var version: String? { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String }
+    private var version: String? { (Bundle.main.infoDictionary?["CGhosttyVersion"] as? String) ?? (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) }
 
     private enum VersionConfig {
         case stable(version: String)
@@ -33,8 +33,7 @@ struct AboutView: View {
         var url: URL? {
             switch self {
             case .stable(let version):
-                let slug = version.replacingOccurrences(of: ".", with: "-")
-                return URL(string: "https://ghostty.org/docs/install/release-notes/\(slug)")
+                return URL(string: "https://github.com/CJMVPU/cghostty/releases/tag/v\(version)")
             default:
                 return nil
             }
@@ -78,10 +77,10 @@ struct AboutView: View {
 
             VStack(alignment: .center, spacing: 32) {
                 VStack(alignment: .center, spacing: 8) {
-                    Text("Ghostty")
+                    Text("cghostty")
                         .bold()
                         .font(.title)
-                    Text("Fast, native, feature-rich terminal \nemulator pushing modern features.")
+                    Text("A native terminal for Apple Silicon.\nBuilt on the Ghostty terminal engine.")
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                         .font(.caption)

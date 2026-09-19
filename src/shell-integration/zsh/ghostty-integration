@@ -26,8 +26,8 @@
 # ghostty-integration won't automatically run. Zsh users who want integration with
 # Ghostty in all shells should add the following lines to their .zshrc:
 #
-#   if [[ -n $GHOSTTY_RESOURCES_DIR ]]; then
-#     source "$GHOSTTY_RESOURCES_DIR"/shell-integration/zsh/ghostty-integration
+#   if [[ -n $CGHOSTTY_RESOURCES_DIR ]]; then
+#     source "$CGHOSTTY_RESOURCES_DIR"/shell-integration/zsh/ghostty-integration
 #   fi
 #
 # Implementation note: We can assume that alias expansion is disabled in this
@@ -280,9 +280,9 @@ _ghostty_deferred_init() {
     "${functions[_ghostty_zle_line_init]}
 
     # Add Ghostty binary to PATH if the path feature is enabled
-    if [[ "$GHOSTTY_SHELL_FEATURES" == *"path"* ]] && [[ -n "$GHOSTTY_BIN_DIR" ]]; then
-      if [[ ":$PATH:" != *":$GHOSTTY_BIN_DIR:"* ]]; then
-        builtin export PATH="$PATH:$GHOSTTY_BIN_DIR"
+    if [[ "$GHOSTTY_SHELL_FEATURES" == *"path"* ]] && [[ -n "$CGHOSTTY_BIN_DIR" ]]; then
+      if [[ ":$PATH:" != *":$CGHOSTTY_BIN_DIR:"* ]]; then
+        builtin export PATH="$PATH:$CGHOSTTY_BIN_DIR"
       fi
     fi
 
@@ -312,14 +312,14 @@ _ghostty_deferred_init() {
 
     # SSH Integration
     #
-    # Wrap `ssh` with `ghostty +ssh` and translate the shell-integration
+    # Wrap `ssh` with `cghostty +ssh` and translate the shell-integration
     # feature flags into command options.
     if [[ "$GHOSTTY_SHELL_FEATURES" == *ssh-* ]]; then
       function ssh() {
         local flags=()
         [[ "$GHOSTTY_SHELL_FEATURES" != *ssh-env* ]] && flags+=(--forward-env=false)
         [[ "$GHOSTTY_SHELL_FEATURES" != *ssh-terminfo* ]] && flags+=(--terminfo=false)
-        "$GHOSTTY_BIN_DIR/ghostty" +ssh $flags -- "$@"
+        "$CGHOSTTY_BIN_DIR/cghostty" +ssh $flags -- "$@"
       }
     fi
 

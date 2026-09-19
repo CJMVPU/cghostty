@@ -64,13 +64,13 @@ pub fn expand(
 
 fn isExecutable(perms: std.Io.File.Permissions) bool {
     return switch (builtin.os.tag) {
-        .windows => true,
-        else => posix: {
+        .macos => posix: {
             break :posix switch (std.posix.mode_t) {
                 u0 => true,
                 else => perms.toMode() & 0o0111 != 0,
             };
         },
+        else => unreachable,
     };
 }
 
@@ -78,7 +78,7 @@ fn isExecutable(perms: std.Io.File.Permissions) bool {
 test "expand: hostname" {
     var environ_map = try testing.environ.createMap(testing.allocator);
     defer environ_map.deinit();
-    const executable = if (builtin.os.tag == .windows) "hostname.exe" else "uname";
+    const executable = "uname";
     const path = (try expand(testing.io, testing.allocator, &environ_map, executable)).?;
     defer testing.allocator.free(path);
     try testing.expect(path.len > executable.len);

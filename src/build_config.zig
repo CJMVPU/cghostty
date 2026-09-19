@@ -36,8 +36,6 @@ pub const artifact = Artifact.detect();
 /// comments in BuildConfig for details on each.
 const config = BuildConfig.fromOptions();
 pub const exe_entrypoint = config.exe_entrypoint;
-pub const flatpak = options.flatpak;
-pub const snap = options.snap;
 pub const app_runtime: apprt.Runtime = config.app_runtime;
 pub const font_backend: font.Backend = config.font_backend;
 pub const renderer: rendererpkg.Backend = config.renderer;
@@ -55,7 +53,7 @@ pub const i18n: bool = config.i18n;
 /// There are many places that don't use this variable so simply swapping
 /// this variable is NOT ENOUGH to change the bundle ID. I just wanted to
 /// avoid it in Zig coe as much as possible.
-pub const bundle_id = "com.mitchellh.ghostty";
+pub const bundle_id = if (builtin.mode == .Debug) "com.cjmvpu.cghostty.debug" else "com.cjmvpu.cghostty";
 
 /// True if we should have "slow" runtime safety checks. The initial motivation
 /// for this was terminal page/pagelist integrity checks. These were VERY
@@ -77,16 +75,7 @@ pub const Artifact = enum {
     /// Embeddable library
     lib,
 
-    /// The WASM-targeted module.
-    wasm_module,
-
     pub fn detect() Artifact {
-        if (builtin.target.cpu.arch.isWasm()) {
-            assert(builtin.output_mode == .Obj);
-            assert(builtin.link_mode == .Static);
-            return .wasm_module;
-        }
-
         return switch (builtin.output_mode) {
             .Exe => .exe,
             .Lib => .lib,

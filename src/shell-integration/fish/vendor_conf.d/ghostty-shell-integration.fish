@@ -90,8 +90,8 @@ function __ghostty_setup --on-event fish_prompt -d "Setup ghostty integration"
     end
 
     # Add Ghostty binary to PATH if the path feature is enabled
-    if contains path $features; and test -n "$GHOSTTY_BIN_DIR"
-        fish_add_path --global --path --append "$GHOSTTY_BIN_DIR"
+    if contains path $features; and test -n "$CGHOSTTY_BIN_DIR"
+        fish_add_path --global --path --append "$CGHOSTTY_BIN_DIR"
     end
 
     # When using sudo shell integration feature, ensure $TERMINFO is set
@@ -121,7 +121,7 @@ function __ghostty_setup --on-event fish_prompt -d "Setup ghostty integration"
 
     # SSH Integration
     #
-    # Wrap `ssh` with `ghostty +ssh` and translate the shell-integration
+    # Wrap `ssh` with `cghostty +ssh` and translate the shell-integration
     # feature flags into command options.
     set -l features (string split ',' -- "$GHOSTTY_SHELL_FEATURES")
     if contains ssh-env $features; or contains ssh-terminfo $features
@@ -130,7 +130,7 @@ function __ghostty_setup --on-event fish_prompt -d "Setup ghostty integration"
             set -l flags
             contains ssh-env $features; or set -a flags --forward-env=false
             contains ssh-terminfo $features; or set -a flags --terminfo=false
-            "$GHOSTTY_BIN_DIR/ghostty" +ssh $flags -- $argv
+            "$CGHOSTTY_BIN_DIR/cghostty" +ssh $flags -- $argv
         end
     end
 

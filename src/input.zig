@@ -40,7 +40,7 @@ pub const Trigger = Binding.Trigger;
 // in theory for XKB too on Linux but we don't need it right now.
 pub const Keymap = switch (builtin.os.tag) {
     .macos => @import("input/KeymapDarwin.zig"),
-    else => @import("input/KeymapNoop.zig"),
+    else => unreachable,
 };
 
 test {

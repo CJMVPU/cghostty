@@ -29,7 +29,7 @@ pub const Location = enum {
         return switch (self) {
             .user => user: {
                 const subdir = std.fs.path.join(arena_alloc, &.{
-                    "ghostty", "themes",
+                    "cghostty", "themes",
                 }) catch return error.OutOfMemory;
 
                 break :user internal_os.xdg.config(
@@ -42,8 +42,8 @@ pub const Location = enum {
                     // error set since some platforms don't support some
                     // error types.
                     const Error = @TypeOf(err) || switch (builtin.os.tag) {
-                        .ios => error{BufferTooSmall},
-                        else => error{},
+                        .macos => error{},
+                        else => unreachable,
                     };
 
                     switch (@as(Error, err)) {

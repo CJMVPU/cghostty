@@ -3,10 +3,10 @@
 //! The Zig standard library implementation processes one byte per table
 //! lookup (as of Zig 0.16), which is more than an order of magnitude slower
 //! than the dedicated CRC32C instructions available on aarch64 (CRC
-//! extension) and x86_64 (SSE4.2). This module selects the best backend at
+//! extension). This module selects the best backend at
 //! compile time.
 //!
-//! Targets without a dedicated instruction, such as WebAssembly, use a
+//! Builds without the CRC target feature use a
 //! custom implementation that is faster than Zig's stdlib.
 //!
 //! The resulting value is identical across all backends: this is the
@@ -18,7 +18,6 @@ const builtin = @import("builtin");
 
 const Backend = enum {
     aarch64_crc,
-    x86_64_sse42,
     software,
 };
 
@@ -30,15 +29,6 @@ const backend: Backend = backend: {
             builtin.cpu.features,
             .crc,
         )) break :backend .aarch64_crc,
-
-        // The self-hosted x86_64 backend cannot encode the CRC32
-        // instruction forms used below, so that combination falls back to
-        // the portable implementation.
-        .x86_64 => if (builtin.zig_backend == .stage2_llvm and
-            std.Target.x86.featureSetHas(
-                builtin.cpu.features,
-                .sse4_2,
-            )) break :backend .x86_64_sse42,
 
         else => {},
     }
@@ -55,7 +45,7 @@ pub const Crc32c = struct {
 
     pub fn update(self: *Crc32c, bytes: []const u8) void {
         self.crc = switch (comptime backend) {
-            .aarch64_crc, .x86_64_sse42 => updateHardware(self.crc, bytes),
+            .aarch64_crc => updateHardware(self.crc, bytes),
             .software => Software.update(self.crc, bytes),
         };
     }
@@ -116,25 +106,6 @@ inline fn step(comptime T: type, crc: u32, value: T) u32 {
                 : [crc] "r" (crc),
                   [value] "r" (value),
             ),
-            else => comptime unreachable,
-        },
-
-        .x86_64_sse42 => switch (T) {
-            u8 => asm ("crc32b %[value], %[out]"
-                : [out] "=r" (-> u32),
-                : [value] "r" (value),
-                  [crc_in] "0" (crc),
-            ),
-            u32 => asm ("crc32l %[value], %[out]"
-                : [out] "=r" (-> u32),
-                : [value] "r" (value),
-                  [crc_in] "0" (crc),
-            ),
-            u64 => @truncate(asm ("crc32q %[value], %[out]"
-                : [out] "=r" (-> u64),
-                : [value] "r" (value),
-                  [crc_in] "0" (@as(u64, crc)),
-            )),
             else => comptime unreachable,
         },
 

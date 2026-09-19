@@ -16,7 +16,7 @@ pub fn defaultXdgPath(alloc: Allocator) ![]const u8 {
         global.io(),
         alloc,
         &environ_map,
-        .{ .subdir = "ghostty/config.ghostty" },
+        .{ .subdir = "cghostty/config.ghostty" },
     );
 }
 
@@ -29,7 +29,7 @@ pub fn legacyDefaultXdgPath(alloc: Allocator) ![]const u8 {
         global.io(),
         alloc,
         &environ_map,
-        .{ .subdir = "ghostty/config" },
+        .{ .subdir = "cghostty/config" },
     );
 }
 
@@ -123,9 +123,7 @@ pub fn preferredDefaultFilePath(alloc: Allocator) ![]const u8 {
             app_support_file.close(global.io());
             return app_support_path;
         },
-
-        // All other platforms use XDG only
-        else => return try preferredXdgPath(alloc),
+        else => unreachable,
     }
 }
 

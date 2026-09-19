@@ -593,31 +593,3 @@ pub const Mailbox = struct {
         return result;
     }
 };
-
-// Wasm API.
-pub const Wasm = if (!builtin.target.isWasm()) struct {} else struct {
-    const wasm = @import("os/wasm.zig");
-    const alloc = wasm.alloc;
-
-    // export fn app_new(config: *Config) ?*App {
-    //     return app_new_(config) catch |err| { log.err("error initializing app err={}", .{err});
-    //         return null;
-    //     };
-    // }
-    //
-    // fn app_new_(config: *Config) !*App {
-    //     const app = try App.create(alloc, config);
-    //     errdefer app.destroy();
-    //
-    //     const result = try alloc.create(App);
-    //     result.* = app;
-    //     return result;
-    // }
-    //
-    // export fn app_free(ptr: ?*App) void {
-    //     if (ptr) |v| {
-    //         v.destroy();
-    //         alloc.destroy(v);
-    //     }
-    // }
-};

@@ -237,16 +237,8 @@ fn prettyPrint(alloc: Allocator, keybinds: Config.Keybinds) !u8 {
     defer writer.writeAll(vaxis.ctlseqs.unicode_reset) catch {};
 
     const winsize: vaxis.Winsize = switch (builtin.os.tag) {
-        // We use some default, it doesn't really matter for what
-        // we're doing because we don't do any wrapping.
-        .windows => .{
-            .rows = 24,
-            .cols = 120,
-            .x_pixel = 1024,
-            .y_pixel = 768,
-        },
-
-        else => try tty.getWinsize(),
+        .macos => try tty.getWinsize(),
+        else => unreachable,
     };
     try vx.resize(alloc, writer, winsize);
 

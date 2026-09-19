@@ -7,7 +7,6 @@ const ArenaAllocator = std.heap.ArenaAllocator;
 const assert = @import("../quirks.zig").inlineAssert;
 const testing = std.testing;
 const posix = std.posix;
-const windows = @import("../os/windows.zig");
 const fastmem = @import("../fastmem.zig");
 const color = @import("color.zig");
 const hyperlink = @import("hyperlink.zig");
@@ -31,10 +30,7 @@ const log = std.log.scoped(.page);
 /// require page-aligned, zeroed memory obtained directly from the OS
 /// (not the Zig allocator) because the allocation fast-path is
 /// performance-critical and the OS guarantees zeroed pages.
-const PageAlloc = switch (builtin.os.tag) {
-    .windows => AllocWindows,
-    else => AllocPosix,
-};
+const PageAlloc = AllocPosix;
 
 /// Allocate page-aligned, zeroed backing memory using mmap with
 /// MAP_PRIVATE | MAP_ANONYMOUS which guarantees zeroed pages.
@@ -52,32 +48,6 @@ const AllocPosix = struct {
 
     pub fn free(mem: []align(std.heap.page_size_min) u8) void {
         posix.munmap(mem);
-    }
-};
-
-/// Allocate page-aligned, zeroed backing memory using VirtualAlloc with
-/// MEM_COMMIT | MEM_RESERVE which guarantees zeroed pages.
-const AllocWindows = struct {
-    pub fn alloc(n: usize) error{OutOfMemory}![]align(std.heap.page_size_min) u8 {
-        const addr = windows.exp.kernel32.VirtualAlloc(
-            null,
-            n,
-            windows.MEM_COMMIT | windows.MEM_RESERVE,
-            windows.PAGE_READWRITE,
-        ) orelse return error.OutOfMemory;
-
-        return @as(
-            [*]align(std.heap.page_size_min) u8,
-            @ptrCast(@alignCast(addr)),
-        )[0..n];
-    }
-
-    pub fn free(mem: []align(std.heap.page_size_min) u8) void {
-        _ = windows.exp.kernel32.VirtualFree(
-            @ptrCast(@alignCast(mem.ptr)),
-            0,
-            windows.MEM_RELEASE,
-        );
     }
 };
 

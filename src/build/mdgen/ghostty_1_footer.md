@@ -1,18 +1,14 @@
 # FILES
 
-_\$XDG_CONFIG_HOME/ghostty/config.ghostty_
+_\$XDG_CONFIG_HOME/cghostty/config.ghostty_
 
 : Location of the default configuration file.
 
-_\$HOME/Library/Application Support/com.mitchellh.ghostty/config.ghostty_
+_\$HOME/Library/Application Support/com.cjmvpu.cghostty/config.ghostty_
 
 : **On macOS**, location of the default configuration file. This location takes
 precedence over the XDG environment locations.
 
-_\$LOCALAPPDATA/ghostty/config.ghostty_
-
-: **On Windows**, if _\$XDG_CONFIG_HOME_ is not set, _\$LOCALAPPDATA_ will be searched
-for configuration files.
 
 # ENVIRONMENT
 
@@ -20,7 +16,7 @@ for configuration files.
 
 : Defaults to `xterm-ghostty`. Can be configured with the `term` configuration option.
 
-**GHOSTTY_RESOURCES_DIR**
+**CGHOSTTY_RESOURCES_DIR**
 
 : Where the Ghostty resources can be found.
 
@@ -28,18 +24,15 @@ for configuration files.
 
 : Default location for configuration files.
 
-**$HOME/Library/Application Support/com.mitchellh.ghostty**
+**$HOME/Library/Application Support/com.cjmvpu.cghostty**
 
 : **MACOS ONLY** default location for configuration files. This location takes
 precedence over the XDG environment locations.
 
-**LOCALAPPDATA**
 
-: **WINDOWS ONLY:** alternate location to search for configuration files.
+**CGHOSTTY_LOG**
 
-**GHOSTTY_LOG**
-
-: The `GHOSTTY_LOG` environment variable can be used to control which
+: The `CGHOSTTY_LOG` environment variable can be used to control which
 destinations receive logs. Ghostty currently defines two destinations:
 
 : - `stderr` - logging to `stderr`.
@@ -47,12 +40,12 @@ destinations receive logs. Ghostty currently defines two destinations:
 
 : Combine values with a comma to enable multiple destinations. Prefix a
 destination with `no-` to disable it. Enabling and disabling destinations
-can be done at the same time. Setting `GHOSTTY_LOG` to `true` will enable all
-destinations. Setting `GHOSTTY_LOG` to `false` will disable all destinations.
+can be done at the same time. Setting `CGHOSTTY_LOG` to `true` will enable all
+destinations. Setting `CGHOSTTY_LOG` to `false` will disable all destinations.
 
 # BUGS
 
-See GitHub issues: <https://github.com/ghostty-org/ghostty/issues>
+See GitHub issues: <https://github.com/CJMVPU/cghostty/issues>
 
 # AUTHOR
 
@@ -61,4 +54,4 @@ Ghostty contributors <https://github.com/ghostty-org/ghostty/graphs/contributors
 
 # SEE ALSO
 
-**ghostty(5)**
+**cghostty(5)**

@@ -722,14 +722,7 @@ pub const InitialSize = extern struct {
     height: u32,
 
     /// Make this a valid gobject if we're in a GTK environment.
-    pub const getGObjectType = switch (build_config.app_runtime) {
-        .gtk => @import("gobject").ext.defineBoxed(
-            InitialSize,
-            .{ .name = "GhosttyApprtInitialSize" },
-        ),
-
-        .none => void,
-    };
+    pub const getGObjectType = void;
 };
 
 pub const CellSize = extern struct {

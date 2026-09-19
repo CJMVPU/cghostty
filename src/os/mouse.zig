@@ -7,7 +7,6 @@ const log = std.log.scoped(.os);
 /// The system-configured double-click interval if its available.
 pub fn clickInterval() ?u32 {
     return switch (builtin.os.tag) {
-        // On macOS, we can ask the system.
         .macos => macos: {
             const NSEvent = objc.getClass("NSEvent") orelse {
                 log.err("NSEvent class not found. Can't get click interval.", .{});
@@ -19,7 +18,6 @@ pub fn clickInterval() ?u32 {
             const ms = @as(u32, @intFromFloat(@ceil(interval * 1000)));
             break :macos ms;
         },
-
-        else => null,
+        else => unreachable,
     };
 }

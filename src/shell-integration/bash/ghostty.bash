@@ -80,9 +80,9 @@ if [ -n "$GHOSTTY_BASH_INJECT" ]; then
 fi
 
 # Add Ghostty binary to PATH if the path feature is enabled
-if [[ "$GHOSTTY_SHELL_FEATURES" == *"path"* && -n "$GHOSTTY_BIN_DIR" ]]; then
-  if [[ ":$PATH:" != *":$GHOSTTY_BIN_DIR:"* ]]; then
-    export PATH="$PATH:$GHOSTTY_BIN_DIR"
+if [[ "$GHOSTTY_SHELL_FEATURES" == *"path"* && -n "$CGHOSTTY_BIN_DIR" ]]; then
+  if [[ ":$PATH:" != *":$CGHOSTTY_BIN_DIR:"* ]]; then
+    export PATH="$PATH:$CGHOSTTY_BIN_DIR"
   fi
 fi
 
@@ -116,7 +116,7 @@ fi
 
 # SSH Integration
 #
-# Wrap `ssh` with `ghostty +ssh` and translate the shell-integration
+# Wrap `ssh` with `cghostty +ssh` and translate the shell-integration
 # feature flags into command options.
 if [[ "$GHOSTTY_SHELL_FEATURES" == *ssh-* ]]; then
   function ssh() {
@@ -124,7 +124,7 @@ if [[ "$GHOSTTY_SHELL_FEATURES" == *ssh-* ]]; then
     flags=()
     [[ "$GHOSTTY_SHELL_FEATURES" != *ssh-env* ]] && flags+=(--forward-env=false)
     [[ "$GHOSTTY_SHELL_FEATURES" != *ssh-terminfo* ]] && flags+=(--terminfo=false)
-    "$GHOSTTY_BIN_DIR/ghostty" +ssh "${flags[@]}" -- "$@"
+    "$CGHOSTTY_BIN_DIR/cghostty" +ssh "${flags[@]}" -- "$@"
   }
 fi
 

@@ -18,7 +18,6 @@ const xev = global.xev;
 const renderer = @import("../renderer.zig");
 const apprt = @import("../apprt.zig");
 const internal_os = @import("../os/main.zig");
-const windows = internal_os.windows;
 const configpkg = @import("../config.zig");
 const ProcessInfo = @import("../pty.zig").ProcessInfo;
 const compat_file = @import("../lib/compat/file.zig");

@@ -14,7 +14,6 @@ const xev = global.xev;
 const apprt = @import("../apprt.zig");
 const build_config = @import("../build_config.zig");
 const configpkg = @import("../config.zig");
-const crash = @import("../crash/main.zig");
 const fastmem = @import("../fastmem.zig");
 const internal_os = @import("../os/main.zig");
 const renderer = @import("../renderer.zig");
@@ -26,7 +25,6 @@ const ptypkg = @import("../pty.zig");
 const Pty = ptypkg.Pty;
 const EnvMap = std.process.Environ.Map;
 const PasswdEntry = internal_os.passwd.Entry;
-const windows = internal_os.windows;
 const ProcessInfo = @import("../pty.zig").ProcessInfo;
 const compat_fd = @import("../lib/compat/fd.zig");
 
@@ -34,12 +32,6 @@ const log = std.log.scoped(.io_exec);
 
 /// The termios poll rate in milliseconds.
 const TERMIOS_POLL_MS = 200;
-
-/// If we build with flatpak support then we have to keep track of
-/// a potential execution on the host.
-const FlatpakHostCommand = if (!build_config.flatpak) struct {
-    pub const Completion = struct {};
-} else internal_os.FlatpakHostCommand;
 
 /// The subprocess state for our exec backend.
 subprocess: Subprocess,
@@ -113,7 +105,6 @@ pub fn threadEnter(
         // traditional process watching (its implemented
         // as a special case in os/flatpak.zig) since the
         // command is on the host.
-        .flatpak => null,
     } else return error.ProcessNotStarted;
     errdefer if (process) |*p| p.deinit();
 
@@ -139,7 +130,7 @@ pub fn threadEnter(
     // Start our read thread
     const read_thread = try std.Thread.spawn(
         .{},
-        if (builtin.os.tag == .windows) ReadThread.threadMainWindows else ReadThread.threadMainPosix,
+        ReadThread.threadMainPosix,
         .{ pty_fds.read, io, pipe[0] },
     );
     read_thread.setName(global.io(), "io-reader") catch {};
@@ -162,26 +153,12 @@ pub fn threadEnter(
         termio.Termio.ThreadData,
         td,
         processExit,
-    ) else if (comptime build_config.flatpak) flatpak: {
-        switch (self.subprocess.process orelse break :flatpak) {
-            // If we're in flatpak and we have a flatpak command
-            // then we can run the special flatpak logic for watching.
-            .flatpak => |*c| c.waitXev(
-                td.loop,
-                &td.backend.exec.flatpak_wait_c,
-                termio.Termio.ThreadData,
-                td,
-                flatpakExit,
-            ),
-
-            .fork_exec => {},
-        }
-    }
+    );
 
     // Start our termios timer. We don't support this on Windows.
     // Fundamentally, we could support this on Windows so we're just
     // waiting for someone to implement it.
-    if (comptime builtin.os.tag != .windows) {
+    {
         termios_timer.run(
             td.loop,
             &td.backend.exec.termios_timer_c,
@@ -216,16 +193,6 @@ pub fn threadExit(self: *Exec, td: *termio.Termio.ThreadData) void {
         ),
     }
 
-    if (comptime builtin.os.tag == .windows) {
-        // Interrupt the blocking read so the thread can see the quit message
-        if (windows.exp.kernel32.CancelIoEx(exec.read_thread_fd, null) == windows.FALSE) {
-            switch (windows.GetLastError()) {
-                .NOT_FOUND => {},
-                else => |err| log.warn("error interrupting read thread err={}", .{err}),
-            }
-        }
-    }
-
     exec.read_thread.join();
 }
 
@@ -240,7 +207,6 @@ pub fn focusGained(
     const execdata = &td.backend.exec;
 
     // Windows has no termios, so there is nothing to poll.
-    if (comptime builtin.os.tag == .windows) return;
 
     if (!focused) {
         // Flag the timer to end on the next iteration. This is
@@ -304,16 +270,6 @@ fn processExit(
     return .disarm;
 }
 
-fn flatpakExit(
-    td_: ?*termio.Termio.ThreadData,
-    _: *xev.Loop,
-    _: *FlatpakHostCommand.Completion,
-    r: FlatpakHostCommand.WaitError!u8,
-) void {
-    const exit_code = r catch unreachable;
-    processExitCommon(td_.?, exit_code);
-}
-
 fn termiosTimer(
     td_: ?*termio.Termio.ThreadData,
     _: *xev.Loop,
@@ -326,9 +282,6 @@ fn termiosTimer(
     // timer on windows but we want this assertion to fire if
     // we ever do start the timer on windows.
     // TODO: support on windows
-    if (comptime builtin.os.tag == .windows) {
-        @panic("termios timer not implemented on Windows");
-    }
 
     _ = r catch |err| switch (err) {
         // This is sent when our timer is canceled. That's fine.
@@ -530,7 +483,6 @@ pub const ThreadData = struct {
 
     // The completion specific to Flatpak process waiting. If
     // we aren't compiling with Flatpak support this is zero-sized.
-    flatpak_wait_c: FlatpakHostCommand.Completion = .{},
 
     /// Reader thread state
     read_thread: std.Thread,
@@ -599,9 +551,6 @@ const Subprocess = struct {
     const Process = union(enum) {
         /// Standard POSIX fork/exec
         fork_exec: Command,
-
-        /// Flatpak DBus command
-        flatpak: FlatpakHostCommand,
     };
 
     const ArgsFormatter = struct {
@@ -631,7 +580,7 @@ const Subprocess = struct {
         // If we have a resources dir then set our env var
         if (cfg.resources_dir) |dir| {
             log.info("found Ghostty resources dir: {s}", .{dir});
-            try env.put("GHOSTTY_RESOURCES_DIR", dir);
+            try env.put("CGHOSTTY_RESOURCES_DIR", dir);
         }
 
         // Set our TERM var. This is a bit complicated because we want to use
@@ -665,11 +614,6 @@ const Subprocess = struct {
         // Add our binary to the path if we can find it.
         ghostty_path: {
             // Skip this for flatpak since host cannot reach them
-            if ((comptime build_config.flatpak) and
-                internal_os.isFlatpak())
-            {
-                break :ghostty_path;
-            }
 
             var exe_buf: [std.fs.max_path_bytes]u8 = undefined;
             const exe_bin_path = exe_buf[0 .. std.process.executablePath(
@@ -685,7 +629,7 @@ const Subprocess = struct {
             // We always set this so that if the shell overwrites the path
             // scripts still have a way to find the Ghostty binary when
             // running in Ghostty.
-            try env.put("GHOSTTY_BIN_DIR", exe_dir);
+            try env.put("CGHOSTTY_BIN_DIR", exe_dir);
 
             // Append if we have a path. We want to append so that ghostty is
             // the last priority in the path. If we don't have a path set
@@ -747,7 +691,7 @@ const Subprocess = struct {
 
         // Set environment variables used by some programs (such as neovim) to detect
         // which terminal emulator and version they're running under.
-        try env.put("TERM_PROGRAM", "ghostty");
+        try env.put("TERM_PROGRAM", "cghostty");
         try env.put("TERM_PROGRAM_VERSION", build_config.version_string);
 
         // VTE_VERSION is set by gnome-terminal and other VTE-based terminals.
@@ -759,8 +703,8 @@ const Subprocess = struct {
         const shell_command: configpkg.Command = shell: {
             const default_shell_command: configpkg.Command =
                 cfg.command orelse .{ .shell = switch (builtin.os.tag) {
-                    .windows => "cmd.exe",
-                    else => "sh",
+                    .macos => "sh",
+                    else => unreachable,
                 } };
 
             // Always set up shell features (GHOSTTY_SHELL_FEATURES). These are
@@ -838,8 +782,8 @@ const Subprocess = struct {
                 // The comptime here is important to ensure the full slice
                 // is put into the binary data and not the stack.
                 break :oom comptime switch (builtin.os.tag) {
-                    .windows => &.{"cmd.exe"},
-                    else => &.{"/bin/sh"},
+                    .macos => &.{"/bin/sh"},
+                    else => unreachable,
                 };
             },
 
@@ -910,7 +854,7 @@ const Subprocess = struct {
         });
         self.pty = pty;
         errdefer if (!in_child) {
-            if (comptime builtin.os.tag != .windows) {
+            {
                 _ = posix.system.close(pty.slave);
             }
 
@@ -921,7 +865,7 @@ const Subprocess = struct {
         // Cleanup we only run in our parent when we successfully start
         // the process.
         defer if (!in_child and self.process != null) {
-            if (comptime builtin.os.tag != .windows) {
+            {
                 // Once our subcommand is started we can close the slave
                 // side. This prevents the slave fd from being leaked to
                 // future children.
@@ -941,39 +885,6 @@ const Subprocess = struct {
         // This is important because our cwd can be set by the shell (OSC 7)
         // and we don't want to break new windows.
         const cwd: ?[:0]const u8 = if (self.cwd) |proposed| cwd: {
-            if ((comptime build_config.flatpak) and internal_os.isFlatpak()) {
-                // Flatpak sandboxing prevents access to certain reserved paths
-                // regardless of configured permissions. Perform a test spawn
-                // to get around this problem
-                //
-                // https://docs.flatpak.org/en/latest/sandbox-permissions.html#reserved-paths
-                log.info("flatpak detected, will use host command to verify cwd access", .{});
-                const dev_null = try std.Io.Dir.cwd().openFile(
-                    global.io(),
-                    "/dev/null",
-                    .{ .mode = .read_write },
-                );
-                defer dev_null.close(global.io());
-                var cmd: internal_os.FlatpakHostCommand = .{
-                    .argv = &[_][]const u8{
-                        "/bin/sh",
-                        "-c",
-                        ":",
-                    },
-                    .cwd = proposed,
-                    .stdin = dev_null.handle,
-                    .stdout = dev_null.handle,
-                    .stderr = dev_null.handle,
-                };
-                _ = cmd.spawn(alloc) catch |err| {
-                    log.warn("cannot spawn command at cwd, ignoring: {}", .{err});
-                    break :cwd null;
-                };
-                _ = try cmd.wait();
-
-                break :cwd proposed;
-            }
-
             if (std.Io.Dir.cwd().access(global.io(), proposed, .{})) {
                 break :cwd proposed;
             } else |err| {
@@ -983,35 +894,6 @@ const Subprocess = struct {
         } else null;
 
         // In flatpak, we use the HostCommand to execute our shell.
-        if (internal_os.isFlatpak()) flatpak: {
-            if (comptime !build_config.flatpak) {
-                log.warn("flatpak detected, but flatpak support not built-in", .{});
-                break :flatpak;
-            }
-
-            // Flatpak command must have a stable pointer.
-            self.process = .{ .flatpak = .{
-                .argv = self.args,
-                .cwd = cwd,
-                .env = if (self.env) |*env| env else null,
-                .stdin = pty.slave,
-                .stdout = pty.slave,
-                .stderr = pty.slave,
-            } };
-            var cmd = &self.process.?.flatpak;
-            const pid = try cmd.spawn(alloc);
-            errdefer killCommandFlatpak(cmd);
-
-            log.info("started subcommand on host via flatpak API path={s} pid={}", .{
-                self.args[0],
-                pid,
-            });
-
-            return .{
-                .read = pty.master,
-                .write = pty.master,
-            };
-        }
 
         // Build our subcommand
         var cmd: Command = .{
@@ -1019,22 +901,20 @@ const Subprocess = struct {
             .args = self.args,
             .env = if (self.env) |*env| env else null,
             .cwd = cwd,
-            .stdin = if (builtin.os.tag == .windows) null else .{
+            .stdin = .{
                 .handle = pty.slave,
                 .flags = .{ .nonblocking = false },
             },
-            .stdout = if (builtin.os.tag == .windows) null else .{
+            .stdout = .{
                 .handle = pty.slave,
                 .flags = .{ .nonblocking = false },
             },
-            .stderr = if (builtin.os.tag == .windows) null else .{
+            .stderr = .{
                 .handle = pty.slave,
                 .flags = .{ .nonblocking = false },
             },
-            .pseudo_console = if (builtin.os.tag == .windows) pty.pseudo_console else {},
-            .os_pre_exec = switch (comptime builtin.os.tag) {
-                .windows => null,
-                else => f: {
+            .os_pre_exec = switch (builtin.os.tag) {
+                .macos => f: {
                     const f = struct {
                         fn callback(cmd: *Command) ?u8 {
                             const sp = cmd.getData(Subprocess) orelse unreachable;
@@ -1047,6 +927,7 @@ const Subprocess = struct {
                     };
                     break :f f.callback;
                 },
+                else => unreachable,
             },
             .rt_pre_exec = if (comptime @hasDecl(apprt.runtime, "pre_exec")) apprt.runtime.pre_exec.preExec else null,
             .rt_pre_exec_info = self.rt_pre_exec_info,
@@ -1077,15 +958,11 @@ const Subprocess = struct {
 
         self.process = .{ .fork_exec = cmd };
         return switch (builtin.os.tag) {
-            .windows => .{
-                .read = pty.out_pipe,
-                .write = pty.in_pipe,
-            },
-
-            else => .{
+            .macos => .{
                 .read = pty.master,
                 .write = pty.master,
             },
+            else => unreachable,
         };
     }
 
@@ -1114,13 +991,6 @@ const Subprocess = struct {
                 // DO NOT call cmd.wait
                 killCommand(cmd) catch |err|
                     log.err("error sending SIGHUP to command, may hang: {}", .{err});
-            },
-
-            .flatpak => |*cmd| if (comptime build_config.flatpak) {
-                killCommandFlatpak(cmd) catch |err|
-                    log.err("error sending SIGHUP to command, may hang: {}", .{err});
-                _ = cmd.wait() catch |err|
-                    log.err("error waiting for command to exit: {}", .{err});
             },
         }
 
@@ -1156,15 +1026,8 @@ const Subprocess = struct {
     fn killCommand(command: *Command) !void {
         if (command.pid) |pid| {
             switch (builtin.os.tag) {
-                .windows => {
-                    if (windows.exp.kernel32.TerminateProcess(pid, 0) == windows.FALSE) {
-                        return windows.unexpectedError(windows.GetLastError());
-                    }
-
-                    _ = try command.wait(false);
-                },
-
-                else => try killPid(pid),
+                .macos => try killPid(pid),
+                else => unreachable,
             }
         }
     }
@@ -1248,10 +1111,6 @@ const Subprocess = struct {
 
     /// Kill the underlying process started via Flatpak host command.
     /// This sends a signal via the Flatpak API.
-    fn killCommandFlatpak(command: *FlatpakHostCommand) !void {
-        try command.signal(c.SIGHUP, true);
-    }
-
     /// Get information about the process(es) running within the subprocess.
     /// Returns `null` if there was an error getting the information or the
     /// information is not available on a particular platform.
@@ -1415,13 +1274,6 @@ pub const ReadThread = struct {
             internal_os.macos.pthread_setname_np(&"io-reader".*);
             setQosClass();
         }
-
-        // Setup our crash metadata
-        crash.sentry.thread_state = .{
-            .type = .io,
-            .surface = io.surface_mailbox.surface,
-        };
-        defer crash.sentry.thread_state = null;
 
         // Set the fd to non-blocking so the gather stage can drain it
         // in a tight loop and fall back to poll for readiness. The
@@ -1769,56 +1621,6 @@ pub const ReadThread = struct {
         }
         return true;
     }
-
-    fn threadMainWindows(fd: posix.fd_t, io: *termio.Termio, quit: posix.fd_t) void {
-        // Always close our end of the pipe when we exit.
-        defer _ = posix.system.close(quit);
-
-        // Setup our crash metadata
-        crash.sentry.thread_state = .{
-            .type = .io,
-            .surface = io.surface_mailbox.surface,
-        };
-        defer crash.sentry.thread_state = null;
-
-        var buf: [1024]u8 = undefined;
-        while (true) {
-            while (true) {
-                var n: windows.DWORD = 0;
-                if (windows.exp.kernel32.ReadFile(fd, &buf, buf.len, &n, null) == windows.FALSE) {
-                    const err = windows.GetLastError();
-                    switch (err) {
-                        // Check for a quit signal
-                        .OPERATION_ABORTED => break,
-
-                        else => {
-                            log.err("io reader error err={}", .{err});
-                            unreachable;
-                        },
-                    }
-                }
-
-                @call(.always_inline, termio.Termio.processOutput, .{ io, buf[0..n] });
-
-                // See threadMainPosix: hand the renderer state mutex
-                // off if the renderer is waiting, since this loop
-                // would otherwise starve it under heavy output.
-                io.renderer_state.yieldToDemand(global.io());
-            }
-
-            var quit_bytes: windows.DWORD = 0;
-            if (windows.exp.kernel32.PeekNamedPipe(quit, null, 0, null, &quit_bytes, null) == windows.FALSE) {
-                const err = windows.GetLastError();
-                log.err("quit pipe reader error err={}", .{err});
-                unreachable;
-            }
-
-            if (quit_bytes > 0) {
-                log.info("read thread got quit signal", .{});
-                return;
-            }
-        }
-    }
 };
 
 /// Builds the argv array for the process we should exec for the
@@ -1970,48 +1772,14 @@ fn execCommand(
             var args: std.ArrayList([:0]const u8) = try .initCapacity(alloc, 4);
             defer args.deinit(alloc);
 
-            if (comptime builtin.os.tag == .windows) {
-                // On Windows we run the shell value directly rather than
-                // wrapping in `cmd.exe /C <shell>`. An intermediate cmd
-                // process is wasteful for the common case (`wsl ~`,
-                // `pwsh -NoLogo`, etc.) and has visible side effects
-                // (extra process in the tree, per-process cmd AutoRun
-                // state not reaching the user's actual shell).
-                //
-                // Values with arguments are split on whitespace. This
-                // does not honor Windows CLI quoting rules; users who
-                // need quoted arguments should use the direct command
-                // form, which takes an argv array as-is.
-                //
-                // Note we don't free any of the memory below since it is
-                // allocated in the arena.
-                if (std.mem.indexOfAny(u8, v, " \t") == null) {
-                    // No arguments. If the shell is literally "cmd.exe"
-                    // (the default), resolve via %COMSPEC% which is the
-                    // documented path to the current command processor.
-                    // Other values are passed as-is and resolved by
-                    // `internal_os.path.expand` in Command.startWindows.
-                    const argv0 = if (std.ascii.eqlIgnoreCase(v, "cmd.exe"))
-                        global.environ().getAlloc(alloc, "COMSPEC") catch
-                            try alloc.dupe(u8, v)
-                    else
-                        try alloc.dupe(u8, v);
-                    try args.append(alloc, try alloc.dupeZ(u8, argv0));
-                } else {
-                    var it = std.mem.tokenizeAny(u8, v, " \t");
-                    while (it.next()) |tok| {
-                        try args.append(alloc, try alloc.dupeZ(u8, tok));
-                    }
-                }
-                break :shell try args.toOwnedSlice(alloc);
-            } else {
+            {
                 // We run our shell wrapped in `/bin/sh` so that we don't have
                 // to parse the command line ourselves if it has arguments.
                 // Additionally, some environments (NixOS, I found) use /bin/sh
                 // to setup some environment variables that are important to
                 // have set.
                 try args.append(alloc, "/bin/sh");
-                if (internal_os.isFlatpak()) try args.append(alloc, "-l");
+
                 try args.append(alloc, "-c");
             }
 
@@ -2114,8 +1882,6 @@ test "execCommand darwin: direct command" {
 }
 
 test "execCommand: shell command, empty passwd" {
-    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
-
     const testing = std.testing;
     var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
@@ -2140,8 +1906,6 @@ test "execCommand: shell command, empty passwd" {
 }
 
 test "execCommand: shell command, error passwd" {
-    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
-
     const testing = std.testing;
     var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
@@ -2166,8 +1930,6 @@ test "execCommand: shell command, error passwd" {
 }
 
 test "execCommand: direct command, error passwd" {
-    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
-
     const testing = std.testing;
     var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
@@ -2192,8 +1954,6 @@ test "execCommand: direct command, error passwd" {
 }
 
 test "execCommand: direct command, config freed" {
-    if (comptime builtin.os.tag == .windows) return error.SkipZigTest;
-
     const testing = std.testing;
     var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
@@ -2221,85 +1981,4 @@ test "execCommand: direct command, config freed" {
     try testing.expectEqual(2, result.len);
     try testing.expectEqualStrings(result[0], "foo");
     try testing.expectEqualStrings(result[1], "bar baz");
-}
-
-test "execCommand windows: bare cmd.exe resolves via COMSPEC" {
-    if (comptime builtin.os.tag != .windows) return error.SkipZigTest;
-
-    const testing = std.testing;
-    var arena = ArenaAllocator.init(testing.allocator);
-    defer arena.deinit();
-    const alloc = arena.allocator();
-
-    const result = try execCommand(alloc, .{ .shell = "cmd.exe" }, struct {
-        fn get(_: Allocator) !PasswdEntry {
-            return .{};
-        }
-    });
-
-    try testing.expectEqual(1, result.len);
-
-    // Expect COMSPEC if available, otherwise the documented fallback.
-    const expected = testing.environ.getAlloc(alloc, "COMSPEC") catch
-        try alloc.dupe(u8, "C:\\Windows\\System32\\cmd.exe");
-    try testing.expectEqualStrings(expected, result[0]);
-}
-
-test "execCommand windows: bare non-cmd shell is passed through" {
-    if (comptime builtin.os.tag != .windows) return error.SkipZigTest;
-
-    const testing = std.testing;
-    var arena = ArenaAllocator.init(testing.allocator);
-    defer arena.deinit();
-    const alloc = arena.allocator();
-
-    const result = try execCommand(alloc, .{ .shell = "pwsh.exe" }, struct {
-        fn get(_: Allocator) !PasswdEntry {
-            return .{};
-        }
-    });
-
-    try testing.expectEqual(1, result.len);
-    try testing.expectEqualStrings("pwsh.exe", result[0]);
-}
-
-test "execCommand windows: shell with args is split on whitespace" {
-    if (comptime builtin.os.tag != .windows) return error.SkipZigTest;
-
-    const testing = std.testing;
-    var arena = ArenaAllocator.init(testing.allocator);
-    defer arena.deinit();
-    const alloc = arena.allocator();
-
-    const result = try execCommand(alloc, .{ .shell = "wsl ~" }, struct {
-        fn get(_: Allocator) !PasswdEntry {
-            return .{};
-        }
-    });
-
-    try testing.expectEqual(2, result.len);
-    try testing.expectEqualStrings("wsl", result[0]);
-    try testing.expectEqualStrings("~", result[1]);
-}
-
-test "execCommand windows: direct command is passed through unchanged" {
-    if (comptime builtin.os.tag != .windows) return error.SkipZigTest;
-
-    const testing = std.testing;
-    var arena = ArenaAllocator.init(testing.allocator);
-    defer arena.deinit();
-    const alloc = arena.allocator();
-
-    const result = try execCommand(alloc, .{ .direct = &.{
-        "C:\\tools\\foo.exe",
-        "arg with spaces",
-    } }, struct {
-        fn get(_: Allocator) !PasswdEntry {
-            return .{};
-        }
-    });
-
-    try testing.expectEqual(2, result.len);
-    try testing.expectEqualStrings("C:\\tools\\foo.exe", result[0]);
-    try testing.expectEqualStrings("arg with spaces", result[1]);
 }

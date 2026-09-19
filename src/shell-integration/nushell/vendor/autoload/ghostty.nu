@@ -4,7 +4,7 @@ export module ghostty {
     $feature in ($env.GHOSTTY_SHELL_FEATURES | default "" | split row ',')
   }
 
-  # Wrap `ssh` with `ghostty +ssh` and translate the shell-integration
+  # Wrap `ssh` with `cghostty +ssh` and translate the shell-integration
   # feature flags into command options.
   @complete external
   export def --wrapped ssh [...args] {
@@ -13,7 +13,7 @@ export module ghostty {
       return
     }
 
-    let ghostty = ($env.GHOSTTY_BIN_DIR? | default "") | path join "ghostty"
+    let ghostty = ($env.CGHOSTTY_BIN_DIR? | default "") | path join "cghostty"
     mut flags = []
     if not (has_feature "ssh-env") {
       $flags = ($flags ++ ["--forward-env=false"])

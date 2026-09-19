@@ -405,8 +405,8 @@ test "url regex" {
             .expect = "~/Documents/notes.md",
         },
         .{
-            .input = "~/.config/ghostty/config",
-            .expect = "~/.config/ghostty/config",
+            .input = "~/.config/cghostty/config",
+            .expect = "~/.config/cghostty/config",
         },
         .{
             .input = "directory: ~/src/ghostty-org/ghostty",
@@ -430,8 +430,8 @@ test "url regex" {
             .expect = ".foo/bar/$VAR",
         },
         .{
-            .input = ".config/ghostty/config",
-            .expect = ".config/ghostty/config",
+            .input = ".config/cghostty/config",
+            .expect = ".config/cghostty/config",
         },
         .{
             .input = "loaded from .local/share/ghostty/state.db now",

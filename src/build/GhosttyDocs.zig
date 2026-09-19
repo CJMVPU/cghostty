@@ -19,8 +19,8 @@ pub fn init(
         name: []const u8,
         section: []const u8,
     }{
-        .{ .name = "ghostty", .section = "1" },
-        .{ .name = "ghostty", .section = "5" },
+        .{ .name = "cghostty", .section = "1" },
+        .{ .name = "cghostty", .section = "5" },
     };
 
     inline for (manpages) |manpage| {
@@ -40,7 +40,7 @@ pub fn init(
             var copy = deps.config.*;
             copy.exe_entrypoint = @field(
                 Config.ExeEntrypoint,
-                "mdgen_" ++ manpage.name ++ "_" ++ manpage.section,
+                "mdgen_ghostty_" ++ manpage.section,
             );
             break :config copy;
         };
@@ -54,7 +54,7 @@ pub fn init(
 
         try steps.append(b.allocator, &b.addInstallFile(
             markdown_output,
-            "share/ghostty/doc/" ++ manpage.name ++ "." ++ manpage.section ++ ".md",
+            "share/cghostty/doc/" ++ manpage.name ++ "." ++ manpage.section ++ ".md",
         ).step);
 
         const generate_html = b.addSystemCommand(&.{"pandoc"});
@@ -69,7 +69,7 @@ pub fn init(
 
         try steps.append(b.allocator, &b.addInstallFile(
             generate_html.captureStdOut(.{}),
-            "share/ghostty/doc/" ++ manpage.name ++ "." ++ manpage.section ++ ".html",
+            "share/cghostty/doc/" ++ manpage.name ++ "." ++ manpage.section ++ ".html",
         ).step);
 
         const generate_manpage = b.addSystemCommand(&.{"pandoc"});

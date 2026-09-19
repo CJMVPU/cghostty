@@ -82,7 +82,7 @@ const ThemeListElement = struct {
 ///
 /// The first directory is the `themes` subdirectory of your Ghostty
 /// configuration directory. This is `$XDG_CONFIG_HOME/ghostty/themes` or
-/// `~/.config/ghostty/themes`.
+/// `~/.config/cghostty/themes`.
 ///
 /// The second directory is the `themes` subdirectory of the Ghostty resources
 /// directory. Ghostty ships with a multitude of themes that will be installed
@@ -92,7 +92,7 @@ const ThemeListElement = struct {
 /// directory). If you're running Ghostty from the source, this is the
 /// `zig-out/share/ghostty/themes` directory.
 ///
-/// You can also set the `GHOSTTY_RESOURCES_DIR` environment variable to point
+/// You can also set the `CGHOSTTY_RESOURCES_DIR` environment variable to point
 /// to the resources directory.
 ///
 /// Flags:

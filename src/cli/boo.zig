@@ -179,8 +179,8 @@ pub fn run(gpa: Allocator) !u8 {
 
     // Disable on non-desktop systems.
     switch (builtin.os.tag) {
-        .windows, .macos, .linux, .freebsd => {},
-        else => return 1,
+        .macos => {},
+        else => unreachable,
     }
 
     var opts: Options = .{};

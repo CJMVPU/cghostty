@@ -12,13 +12,8 @@ const Error = error{
 /// is generally an expensive process so the value should be cached.
 pub inline fn home(io: std.Io, environ_map: *const std.process.Environ.Map, buf: []u8) !?[]const u8 {
     return switch (builtin.os.tag) {
-        .linux, .freebsd, .macos => try homeUnix(io, environ_map, buf),
-        .windows => homeWindows(environ_map, buf) catch return error.BufferTooSmall,
-
-        // iOS doesn't have a user-writable home directory
-        .ios => null,
-
-        else => @compileError("unimplemented"),
+        .macos => try homeUnix(io, environ_map, buf),
+        else => unreachable,
     };
 }
 
@@ -76,13 +71,6 @@ fn homeUnix(io: std.Io, environ_map: *const std.process.Environ.Map, buf: []u8) 
     return null;
 }
 
-fn homeWindows(environ_map: *const std.process.Environ.Map, buf: []u8) !?[]const u8 {
-    var writer: std.Io.Writer = .fixed(buf);
-    _ = try writer.write(environ_map.get("HOMEDRIVE") orelse return null);
-    _ = try writer.write(environ_map.get("HOMEPATH") orelse return null);
-    return writer.buffered();
-}
-
 fn trimSpace(input: []const u8) []const u8 {
     return std.mem.trim(u8, input, " \n\t");
 }
@@ -104,15 +92,8 @@ pub fn expandHome(
     buf: []u8,
 ) ExpandError![]const u8 {
     return switch (builtin.os.tag) {
-        .linux, .freebsd, .macos => try expandHomeUnix(io, environ_map, path, buf),
-
-        // `~/` is not an idiom generally used on Windows
-        .windows => return path,
-
-        // iOS doesn't have a user-writable home directory
-        .ios => return path,
-
-        else => @compileError("unimplemented"),
+        .macos => try expandHomeUnix(io, environ_map, path, buf),
+        else => unreachable,
     };
 }
 
@@ -137,8 +118,6 @@ fn expandHomeUnix(
 }
 
 test "expandHomeUnix" {
-    if (builtin.os.tag == .windows) return error.SkipZigTest;
-
     const testing = std.testing;
     const io = testing.io;
     const allocator = testing.allocator;

@@ -57,7 +57,6 @@ class BaseTerminalController: NSWindowController,
     @Published var commandPaletteIsShowing: Bool = false
 
     /// Set if the terminal view should show the update overlay.
-    @Published var updateOverlayIsVisible: Bool = false
 
     /// True when any surface in this controller currently has an active bell.
     @Published private(set) var bell: Bool = false
@@ -1135,16 +1134,6 @@ class BaseTerminalController: NSWindowController,
     }
 
     func fullscreenDidChange() {
-        guard let fullscreenStyle else { return }
-
-        // When we enter fullscreen, we want to show the update overlay so that it
-        // is easily visible. For native fullscreen this is visible by showing the
-        // menubar but we don't want to rely on that.
-        if fullscreenStyle.isFullscreen {
-            updateOverlayIsVisible = true
-        } else {
-            updateOverlayIsVisible = defaultUpdateOverlayVisibility()
-        }
 
         // Always resync our appearance
         syncAppearance()
@@ -1168,27 +1157,6 @@ class BaseTerminalController: NSWindowController,
             fullscreenStyle?.delegate = self
         }
 
-        // Set our update overlay state
-        updateOverlayIsVisible = defaultUpdateOverlayVisibility()
-    }
-
-    func defaultUpdateOverlayVisibility() -> Bool {
-        guard let window else { return true }
-
-        // No titlebar we always show the update overlay because it can't support
-        // updates in the titlebar
-        guard window.styleMask.contains(.titled) else {
-            return true
-        }
-
-        // If it's a non terminal window we can't trust it has an update accessory,
-        // so we always want to show the overlay.
-        guard let window = window as? TerminalWindow else {
-            return true
-        }
-
-        // Show the overlay if the window isn't.
-        return !window.supportsUpdateAccessory
     }
 
     // MARK: NSWindowDelegate
@@ -1736,6 +1704,6 @@ extension BaseTerminalController {
 
 extension Notification.Name {
     /// Terminal window aggregate bell state changed.
-    static let terminalWindowBellDidChangeNotification = Notification.Name("com.mitchellh.ghostty.terminalWindowBellDidChange")
+    static let terminalWindowBellDidChangeNotification = Notification.Name("com.cjmvpu.cghostty.terminalWindowBellDidChange")
     static let terminalWindowHasBellKey = terminalWindowBellDidChangeNotification.rawValue + ".hasBell"
 }

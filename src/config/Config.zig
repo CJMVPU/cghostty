@@ -70,11 +70,9 @@ pub const compatibility = std.StaticStringMap(
 
     // Ghostty 1.2 renamed all our adw options to gtk because we now have
     // a hard dependency on libadwaita.
-    .{ "adw-toolbar-style", cli.compatibilityRenamed(Config, "gtk-toolbar-style") },
 
     // Ghostty 1.2 removed the `hidden` value from `gtk-tabs-location` and
     // moved it to `window-show-tab-bar`.
-    .{ "gtk-tabs-location", compatGtkTabsLocation },
 
     // Ghostty 1.2 lets you set `cell-foreground` and `cell-background`
     // to match the cell foreground and background colors, respectively.
@@ -89,7 +87,6 @@ pub const compatibility = std.StaticStringMap(
 
     // Ghostty 1.2 removed the "desktop" option and renamed it to "detect".
     // The semantics also changed slightly but this is the correct mapping.
-    .{ "gtk-single-instance", compatGtkSingleInstance },
 
     // Ghostty 1.3 rename the "window" option to "new-window".
     // See: https://github.com/ghostty-org/ghostty/pull/9764
@@ -106,31 +103,11 @@ pub const compatibility = std.StaticStringMap(
     .{ "copy-on-select", compatCopyOnSelect },
 });
 
-/// Set Ghostty's graphical user interface language to a language other than the
-/// system default language. For example:
-///
-///     language = de
-///
-/// will force the strings in Ghostty's graphical user interface to be in German
-/// rather than the system default.
-///
-/// This will not affect the language used by programs run _within_ Ghostty.
-/// Those will continue to use the default system language. There are also many
-/// non-GUI elements in Ghostty that are not translated - this setting will have
-/// no effect on those.
-///
-/// Warning: This setting cannot be reloaded at runtime. To change the language
-/// you must fully restart Ghostty.
-///
-/// GTK only.
-/// Available since 1.3.0.
-language: ?[:0]const u8 = null,
-
 /// The font families to use.
 ///
 /// You can generate the list of valid values using the CLI:
 ///
-///     ghostty +list-fonts
+///     cghostty +list-fonts
 ///
 /// This configuration can be repeated multiple times to specify preferred
 /// fallback fonts when the requested codepoint is not available in the primary
@@ -269,10 +246,8 @@ language: ?[:0]const u8 = null,
 /// text-specific scaling factors, which are often managed by your desktop
 /// environment (e.g. the GNOME display scale and large text settings).
 @"font-size": f32 = switch (builtin.os.tag) {
-    // On macOS we default a little bigger since this tends to look better. This
-    // is purely subjective but this is easy to modify.
     .macos => 13,
-    else => 12,
+    else => unreachable,
 },
 
 /// A repeatable configuration to set one or more font variations values for
@@ -561,7 +536,7 @@ language: ?[:0]const u8 = null,
 ///
 /// The first directory is the `themes` subdirectory of your Ghostty
 /// configuration directory. This is `$XDG_CONFIG_HOME/ghostty/themes` or
-/// `~/.config/ghostty/themes`.
+/// `~/.config/cghostty/themes`.
 ///
 /// The second directory is the `themes` subdirectory of the Ghostty resources
 /// directory. Ghostty ships with a multitude of themes that will be installed
@@ -570,7 +545,7 @@ language: ?[:0]const u8 = null,
 /// list is in the `share/ghostty/themes` directory (wherever you installed the
 /// Ghostty "share" directory.
 ///
-/// To see a list of available themes, run `ghostty +list-themes`.
+/// To see a list of available themes, run `cghostty +list-themes`.
 ///
 /// A theme file is simply another Ghostty configuration file. They share
 /// the same syntax and same configuration options. A theme can set any valid
@@ -1291,7 +1266,7 @@ command: ?Command = null,
 /// will result in `foo=baz` being passed to the launched commands.
 ///
 /// These environment variables will override any existing environment
-/// variables set by Ghostty. For example, if you set `GHOSTTY_RESOURCES_DIR`
+/// variables set by Ghostty. For example, if you set `CGHOSTTY_RESOURCES_DIR`
 /// then the value you set here will override the value Ghostty typically
 /// automatically injects.
 ///
@@ -1540,36 +1515,6 @@ fullscreen: Fullscreen = .false,
 /// to get the new title.
 title: ?[:0]const u8 = null,
 
-/// The setting that will change the application class value.
-///
-/// This controls the class field of the `WM_CLASS` X11 property (when running
-/// under X11), the Wayland application ID (when running under Wayland), and the
-/// bus name that Ghostty uses to connect to DBus.
-///
-/// Note that changing this value between invocations will create new, separate
-/// instances, of Ghostty when running with `gtk-single-instance=true`. See that
-/// option for more details.
-///
-/// Changing this value may break launching Ghostty from `.desktop` files, via
-/// DBus activation, or systemd user services as the system is expecting Ghostty
-/// to connect to DBus using the default `class` when it is launched.
-///
-/// The class name must follow the requirements defined [in the GTK
-/// documentation](https://docs.gtk.org/gio/type_func.Application.id_is_valid.html).
-///
-/// The default is `com.mitchellh.ghostty`.
-///
-/// This only affects GTK builds.
-class: ?[:0]const u8 = null,
-
-/// This controls the instance name field of the `WM_CLASS` X11 property when
-/// running under X11. It has no effect otherwise.
-///
-/// The default is `ghostty`.
-///
-/// This only affects GTK builds.
-@"x11-instance-name": ?[:0]const u8 = null,
-
 /// The directory to change to after starting the command.
 ///
 /// This setting is secondary to the `window-inherit-working-directory`
@@ -1594,7 +1539,7 @@ class: ?[:0]const u8 = null,
 
 /// Key bindings. The format is `trigger=action`. Duplicate triggers will
 /// overwrite previously set values. The list of actions is available in
-/// the documentation or using the `ghostty +list-actions` command.
+/// the documentation or using the `cghostty +list-actions` command.
 ///
 /// Trigger: `+`-separated list of keys and modifiers. Example: `ctrl+a`,
 /// `ctrl+shift+b`, `up`.
@@ -1725,7 +1670,7 @@ class: ?[:0]const u8 = null,
 ///     e.g. `text:\x15` sends Ctrl-U.
 ///
 ///   * All other actions can be found in the documentation or by using the
-///     `ghostty +list-actions` command.
+///     `cghostty +list-actions` command.
 ///
 /// Some notes for the action:
 ///
@@ -2541,8 +2486,8 @@ keybind: Keybinds = .{},
 ///
 /// The default value is `primary` on Linux and `none` otherwise.
 @"copy-on-select": CopyOnSelect = switch (builtin.os.tag) {
-    .linux => .primary,
-    else => .none,
+    .macos => .none,
+    else => unreachable,
 },
 
 /// The action to take when the user right-clicks on the terminal surface.
@@ -2634,7 +2579,7 @@ keybind: Keybinds = .{},
 /// On Linux, if this is `true`, Ghostty can delay quitting fully until a
 /// configurable amount of time has passed after the last window is closed.
 /// See the documentation of `quit-after-last-window-closed-delay`.
-@"quit-after-last-window-closed": bool = builtin.os.tag == .linux,
+@"quit-after-last-window-closed": bool = false,
 
 /// Controls how long Ghostty will stay running after the last open surface has
 /// been closed. This only has an effect if `quit-after-last-window-closed` is
@@ -2774,44 +2719,6 @@ keybind: Keybinds = .{},
 /// Available since: 1.2.0
 @"quick-terminal-size": QuickTerminalSize = .{},
 
-/// The layer of the quick terminal window. The higher the layer,
-/// the more windows the quick terminal may conceal.
-///
-/// Valid values are:
-///
-///  * `overlay`
-///
-///    The quick terminal appears in front of all windows.
-///
-///  * `top` (default)
-///
-///    The quick terminal appears in front of normal windows but behind
-///    fullscreen overlays like lock screens.
-///
-///  * `bottom`
-///
-///    The quick terminal appears behind normal windows but in front of
-///    wallpapers and other windows in the background layer.
-///
-///  * `background`
-///
-///    The quick terminal appears behind all windows.
-///
-/// GTK Wayland only.
-///
-/// Available since: 1.2.0
-@"gtk-quick-terminal-layer": QuickTerminalLayer = .top,
-/// The namespace for the quick terminal window.
-///
-/// This is an identifier that is used by the Wayland compositor and/or
-/// scripts to determine the type of layer surfaces and to possibly apply
-/// unique effects.
-///
-/// GTK Wayland only.
-///
-/// Available since: 1.2.0
-@"gtk-quick-terminal-namespace": [:0]const u8 = "ghostty-quick-terminal",
-
 /// The screen where the quick terminal should show up.
 ///
 /// Valid values are:
@@ -2856,9 +2763,8 @@ keybind: Keybinds = .{},
 /// quick terminal open until the user has completed their task.
 /// This default may change in the future.
 @"quick-terminal-autohide": bool = switch (builtin.os.tag) {
-    .linux => false,
     .macos => true,
-    else => false,
+    else => unreachable,
 },
 
 /// This configuration option determines the behavior of the quick terminal
@@ -3559,7 +3465,7 @@ keybind: Keybinds = .{},
 /// The absolute path to the custom icon file.
 /// Supported formats include PNG, JPEG, and ICNS.
 ///
-/// Defaults to `~/.config/ghostty/Ghostty.icns`
+/// Defaults to `~/.config/cghostty/Ghostty.icns`
 @"macos-custom-icon": ?[:0]const u8 = null,
 
 /// The material to use for the frame of the macOS app icon.
@@ -3618,201 +3524,6 @@ keybind: Keybinds = .{},
 ///
 /// Available since: 1.2.0
 @"macos-shortcuts": MacShortcuts = .ask,
-
-/// Put every surface (tab, split, window) into a transient `systemd` scope.
-///
-/// This allows per-surface resource management. For example, if a shell program
-/// is using too much memory, only that shell will be killed by the oom monitor
-/// instead of the entire Ghostty process. Similarly, if a shell program is
-/// using too much CPU, only that surface will be CPU-throttled.
-///
-/// This will cause startup times to be slower (a hundred milliseconds or so),
-/// so the default value is "single-instance." In single-instance mode, only
-/// one instance of Ghostty is running (see gtk-single-instance) so the startup
-/// time is a one-time cost. Additionally, single instance Ghostty is much
-/// more likely to have many windows, tabs, etc. so cgroup isolation is a
-/// big benefit.
-///
-/// This feature requires `systemd`. If `systemd` is unavailable, cgroup
-/// initialization will fail. By default, this will not prevent Ghostty from
-/// working (see `linux-cgroup-hard-fail`).
-///
-/// Changing this value and reloading the config will not affect existing
-/// surfaces.
-///
-/// Valid values are:
-///
-///   * `never` - Never use cgroups.
-///   * `always` - Always use cgroups.
-///   * `single-instance` - Enable cgroups only for Ghostty instances launched
-///     as single-instance applications (see gtk-single-instance).
-@"linux-cgroup": LinuxCgroup = if (builtin.os.tag == .linux)
-    .@"single-instance"
-else
-    .never,
-
-/// Memory limit for any individual terminal process (tab, split, window,
-/// etc.) in bytes. If this is unset then no memory limit will be set.
-///
-/// Note that this sets the `MemoryHigh` setting on the transient `systemd`
-/// scope, which is a soft limit. You should configure something like
-/// `systemd-oom` to handle killing processes that have too much memory
-/// pressure.
-///
-/// Changing this value and reloading the config will not affect existing
-/// surfaces.
-///
-/// See the `systemd.resource-control` manual page for more information:
-/// https://www.freedesktop.org/software/systemd/man/latest/systemd.resource-control.html
-@"linux-cgroup-memory-limit": ?u64 = null,
-
-/// Number of processes limit for any individual terminal process (tab, split,
-/// window, etc.). If this is unset then no limit will be set.
-///
-/// Note that this sets the `TasksMax` setting on the transient `systemd` scope,
-/// which is a hard limit.
-///
-/// Changing this value and reloading the config will not affect existing
-/// surfaces.
-///
-/// See the `systemd.resource-control` manual page for more information:
-/// https://www.freedesktop.org/software/systemd/man/latest/systemd.resource-control.html
-@"linux-cgroup-processes-limit": ?u64 = null,
-
-/// If this is false, then creating a transient `systemd` scope (for
-/// `linux-cgroup`) will be allowed to fail and the failure is ignored. This is
-/// useful if you view cgroup isolation as a "nice to have" and not a critical
-/// resource management feature, because surface creation will not fail if
-/// `systemd` APIs fail.
-///
-/// If this is true, then any transient `systemd` scope creation failure will
-/// cause surface creation to fail.
-///
-/// Changing this value and reloading the config will not affect existing
-/// surfaces.
-@"linux-cgroup-hard-fail": bool = false,
-
-/// Enable or disable GTK's OpenGL debugging logs. The default is `true` for
-/// debug builds, `false` for all others.
-///
-/// Available since: 1.1.0
-@"gtk-opengl-debug": bool = builtin.mode == .Debug,
-
-/// If `true`, the Ghostty GTK application will run in single-instance mode:
-/// each new `ghostty` process launched will result in a new window if there is
-/// already a running process.
-///
-/// If `false`, each new ghostty process will launch a separate application.
-///
-/// If `detect`, Ghostty will assume true (single instance) unless one of
-/// the following scenarios is found:
-///
-/// 1. TERM_PROGRAM environment variable is a non-empty value. In this
-/// case, we assume Ghostty is being launched from a graphical terminal
-/// session and you want a dedicated instance.
-///
-/// 2. Any CLI arguments exist. In this case, we assume you are passing
-/// custom Ghostty configuration. Single instance mode inherits the
-/// configuration from when it was launched, so we must disable single
-/// instance to load the new configuration.
-///
-/// If either of these scenarios is producing a false positive, you can
-/// set this configuration explicitly to the behavior you want.
-///
-/// The pre-1.2 option `desktop` has been deprecated. Please replace
-/// this with `detect`.
-///
-/// The default value is `detect`.
-///
-/// Note that debug builds of Ghostty have a separate single-instance ID
-/// so you can test single instance without conflicting with release builds.
-@"gtk-single-instance": GtkSingleInstance = .default,
-
-/// When enabled, the full GTK titlebar is displayed instead of your window
-/// manager's simple titlebar. The behavior of this option will vary with your
-/// window manager.
-///
-/// This option does nothing when `window-decoration` is none or when running
-/// under macOS.
-@"gtk-titlebar": bool = true,
-
-/// Determines the side of the screen that the GTK tab bar will stick to.
-/// Top, bottom, and hidden are supported. The default is top.
-///
-/// When `hidden` is set, a tab button displaying the number of tabs will appear
-/// in the title bar. It has the ability to open a tab overview for displaying
-/// tabs. Alternatively, you can use the `toggle_tab_overview` action in a
-/// keybind if your window doesn't have a title bar, or you can switch tabs
-/// with keybinds.
-@"gtk-tabs-location": GtkTabsLocation = .top,
-
-/// If this is `true`, the titlebar will be hidden when the window is maximized,
-/// and shown when the titlebar is unmaximized. GTK only.
-///
-/// Available since: 1.1.0
-@"gtk-titlebar-hide-when-maximized": bool = false,
-
-/// Determines the appearance of the top and bottom bars tab bar.
-///
-/// Valid values are:
-///
-///  * `flat` - Top and bottom bars are flat with the terminal window.
-///  * `raised` - Top and bottom bars cast a shadow on the terminal area.
-///  * `raised-border` - Similar to `raised` but the shadow is replaced with a
-///    more subtle border.
-@"gtk-toolbar-style": GtkToolbarStyle = .raised,
-
-/// The style of the GTK titlebar. Available values are `native` and `tabs`.
-///
-/// The `native` titlebar style is a traditional titlebar with a title, a few
-/// buttons and window controls. A separate tab bar will show up below the
-/// titlebar if you have multiple tabs open in the window.
-///
-/// The `tabs` titlebar merges the tab bar and the traditional titlebar.
-/// This frees up vertical space on your screen if you use multiple tabs. One
-/// limitation of the `tabs` titlebar is that you cannot drag the titlebar
-/// by the titles any longer (as they are tab titles now). Other areas of the
-/// `tabs` title bar can be used to drag the window around.
-///
-/// The default style is `native`.
-@"gtk-titlebar-style": GtkTitlebarStyle = .native,
-
-/// If `true` (default), then the Ghostty GTK tabs will be "wide." Wide tabs
-/// are the new typical Gnome style where tabs fill their available space.
-/// If you set this to `false` then tabs will only take up space they need,
-/// which is the old style.
-@"gtk-wide-tabs": bool = true,
-
-/// If `true` (default), then two-finger horizontal scrolling on a touchpad
-/// will switch between tabs. Scrolling left goes to the next tab and
-/// scrolling right goes to the previous tab. Set this to `false` to
-/// disable this behavior.
-///
-/// Available since 1.4.0.
-@"gtk-horizontal-tab-scroll": bool = true,
-
-/// Custom CSS files to be loaded.
-///
-/// GTK CSS documentation can be found at the following links:
-///
-///   * https://docs.gtk.org/gtk4/css-overview.html - An overview of GTK CSS.
-///   * https://docs.gtk.org/gtk4/css-properties.html - A comprehensive list
-///     of supported CSS properties.
-///
-/// Launch Ghostty with `env GTK_DEBUG=interactive ghostty` to tweak Ghostty's
-/// CSS in real time using the GTK Inspector. Errors in your CSS files would
-/// also be reported in the terminal you started Ghostty from. See
-/// https://developer.gnome.org/documentation/tools/inspector.html for more
-/// information about the GTK Inspector.
-///
-/// This configuration can be repeated multiple times to load multiple files.
-/// Prepend a ? character to the file path to suppress errors if the file does
-/// not exist. If you want to include a file that begins with a literal ?
-/// character, surround the file path in double quotes (").
-/// The file size limit for a single stylesheet is 5MiB.
-///
-/// Available since: 1.1.0
-@"gtk-custom-css": RepeatablePath = .{},
 
 /// If `true` (default), applications running in the terminal can show desktop
 /// notifications using certain escape sequences such as OSC 9 or OSC 777.
@@ -3891,53 +3602,6 @@ term: []const u8 = "xterm-ghostty",
 /// Available since: 1.2.0
 @"async-backend": AsyncBackend = .auto,
 
-/// Control the auto-update functionality of Ghostty. This is only supported
-/// on macOS currently, since Linux builds are distributed via package
-/// managers that are not centrally controlled by Ghostty.
-///
-/// Checking or downloading an update does not send any information to
-/// the project beyond standard network information mandated by the
-/// underlying protocols. To put it another way: Ghostty doesn't explicitly
-/// add any tracking to the update process. The update process works by
-/// downloading information about the latest version and comparing it
-/// client-side to the current version.
-///
-/// Valid values are:
-///
-///  * `off` - Disable auto-updates.
-///  * `check` - Check for updates and notify the user if an update is
-///    available, but do not automatically download or install the update.
-///  * `download` - Check for updates, automatically download the update,
-///    notify the user, but do not automatically install the update.
-///
-/// If unset, we defer to Sparkle's default behavior, which respects the
-/// preference stored in the standard user defaults (`defaults(1)`).
-///
-/// Changing this value at runtime works after a small delay.
-@"auto-update": ?AutoUpdate = null,
-
-/// The release channel to use for auto-updates.
-///
-/// The default value of this matches the release channel of the currently
-/// running Ghostty version. If you download a pre-release version of Ghostty
-/// then this will be set to `tip` and you will receive pre-release updates.
-/// If you download a stable version of Ghostty then this will be set to
-/// `stable` and you will receive stable updates.
-///
-/// Valid values are:
-///
-///  * `stable` - Stable, tagged releases such as "1.0.0".
-///  * `tip` - Pre-release versions generated from each commit to the
-///    main branch. This is the version that was in use during private
-///    beta testing by thousands of people. It is generally stable but
-///    will likely have more bugs than the stable channel.
-///
-/// Changing this configuration requires a full restart of
-/// Ghostty to take effect.
-///
-/// This only works on macOS since only macOS has an auto-update feature.
-@"auto-update-channel": ?build_config.ReleaseChannel = null,
-
 /// This is set by the CLI parser for deinit.
 _arena: ?ArenaAllocator = null,
 
@@ -3957,9 +3621,6 @@ _conditional_set: std.EnumSet(conditional.Key) = .{},
 /// without reopening the files. This is used in very specific cases such
 /// as loadTheme which has more details on why.
 _replay_steps: std.ArrayList(Replay.Step) = .empty,
-
-/// Set to true if Ghostty was executed as xdg-terminal-exec on Linux.
-@"_xdg-terminal-exec": bool = false,
 
 pub fn deinit(self: *Config) void {
     if (self._arena) |arena| arena.deinit();
@@ -4084,7 +3745,7 @@ test "handle bom in config files" {
         try cfg.loadReader(
             alloc,
             &reader,
-            "/home/ghostty/.config/ghostty/config.ghostty",
+            "/home/ghostty/.config/cghostty/config.ghostty",
         );
         try cfg.finalize();
 
@@ -4103,7 +3764,7 @@ test "handle bom in config files" {
         try cfg.loadReader(
             alloc,
             &reader,
-            "/home/ghostty/.config/ghostty/config.ghostty",
+            "/home/ghostty/.config/cghostty/config.ghostty",
         );
         try cfg.finalize();
 
@@ -4240,14 +3901,8 @@ pub fn loadDefaultFiles(self: *Config, alloc: Allocator) !void {
 /// Load and parse the CLI args.
 pub fn loadCliArgs(self: *Config, alloc_gpa: Allocator) !void {
     switch (builtin.os.tag) {
-        .windows => {},
-
-        // Fast-path if we are Linux/BSD and have no args.
-        .linux, .freebsd => if (global.args().vector.len <= 1) return,
-
-        // Everything else we have to at least try because it may
-        // not use std.os.argv.
-        else => {},
+        .macos => {},
+        else => unreachable,
     }
 
     // On Linux, we have a special case where if the executing
@@ -4261,31 +3916,6 @@ pub fn loadCliArgs(self: *Config, alloc_gpa: Allocator) !void {
     //     styling, etc. based on the command.
     //
     // See: https://github.com/Vladimir-csp/xdg-terminal-exec
-    if ((comptime builtin.os.tag == .linux) or (comptime builtin.os.tag == .freebsd)) {
-        if (internal_os.xdg.parseTerminalExec(global.args().vector)) |args| {
-            const arena_alloc = self._arena.?.allocator();
-
-            // First, we add an artificial "-e" so that if we
-            // replay the inputs to rebuild the config (i.e. if
-            // a theme is set) then we will get the same behavior.
-            try self._replay_steps.append(arena_alloc, .@"-e");
-
-            // Next, take all remaining args and use that to build up
-            // a command to execute.
-            var builder: std.ArrayList([:0]const u8) = .empty;
-            errdefer builder.deinit(arena_alloc);
-            for (args) |arg_raw| {
-                const arg = std.mem.sliceTo(arg_raw, 0);
-                const copy = try arena_alloc.dupeZ(u8, arg);
-                try self._replay_steps.append(arena_alloc, .{ .arg = copy });
-                try builder.append(arena_alloc, copy);
-            }
-
-            self.@"_xdg-terminal-exec" = true;
-            self.@"initial-command" = .{ .direct = try builder.toOwnedSlice(arena_alloc) };
-            return;
-        }
-    }
 
     // We set config-default-files to true here because this
     // should always be reset so we can detect if it is set
@@ -4733,9 +4363,7 @@ pub fn finalize(self: *Config) !void {
     // If we are missing either a command or home directory, we need
     // to look up defaults which is kind of expensive. We only do this
     // on desktop.
-    if ((comptime !builtin.target.cpu.arch.isWasm()) and
-        (comptime !builtin.is_test))
-    {
+    if (comptime !builtin.is_test) {
         if (self.command == null or wd == .home) command: {
             // First look up the command using the SHELL env var if needed.
             // We don't do this in flatpak because SHELL in Flatpak is always
@@ -4744,7 +4372,6 @@ pub fn finalize(self: *Config) !void {
                 log.info("shell src=config value={}", .{cmd})
             else shell_env: {
                 // Flatpak always gets its shell from outside the sandbox
-                if (internal_os.isFlatpak()) break :shell_env;
 
                 // If we were launched from the desktop, our SHELL env var
                 // will represent our SHELL at login time. We only want to
@@ -4767,25 +4394,7 @@ pub fn finalize(self: *Config) !void {
             }
 
             switch (builtin.os.tag) {
-                .windows => {
-                    if (self.command == null) {
-                        log.warn("no default shell found, will default to using cmd", .{});
-                        self.command = .{ .shell = "cmd.exe" };
-                    }
-
-                    if (wd == .home) {
-                        var environ_map = try global.environMap();
-                        defer environ_map.deinit();
-                        var buf: [std.fs.max_path_bytes]u8 = undefined;
-                        if (try internal_os.home(global.io(), &environ_map, &buf)) |home| {
-                            wd = .{ .path = try alloc.dupe(u8, home) };
-                        } else {
-                            wd = .inherit;
-                        }
-                    }
-                },
-
-                else => {
+                .macos => {
                     // We need the passwd entry for the remainder
                     const pw = try internal_os.passwd.get(alloc);
                     if (self.command == null) {
@@ -4808,28 +4417,12 @@ pub fn finalize(self: *Config) !void {
                         log.warn("no default shell found, will default to using sh", .{});
                     }
                 },
+                else => unreachable,
             }
         }
     }
     try wd.finalize(alloc);
     self.@"working-directory" = wd;
-
-    // Apprt-specific defaults
-    switch (build_config.app_runtime) {
-        .none => {},
-        .gtk => {
-            switch (self.@"gtk-single-instance") {
-                .true, .false => {},
-
-                // For detection, we assume single instance unless we're
-                // in a CLI environment, then we disable single instance.
-                .detect => self.@"gtk-single-instance" = if (probable_cli)
-                    .false
-                else
-                    .true,
-            }
-        },
-    }
 
     // Default our click interval
     if (self.@"click-repeat-interval" == 0 and
@@ -4870,9 +4463,6 @@ pub fn finalize(self: *Config) !void {
 
     // We can't set this as a struct default because our config is
     // loaded in environments where a build config isn't available.
-    if (self.@"auto-update-channel" == null) {
-        self.@"auto-update-channel" = build_config.release_channel;
-    }
 
     self.@"faint-opacity" = std.math.clamp(self.@"faint-opacity", 0.0, 1.0);
 
@@ -4921,7 +4511,6 @@ pub fn parseManuallyHook(
 
         // See "command" docs for the implied configurations and why.
         self.@"initial-command" = .{ .direct = command.items };
-        self.@"gtk-single-instance" = .false;
         self.@"quit-after-last-window-closed" = true;
         self.@"quit-after-last-window-closed-delay" = null;
         if (self.@"shell-integration" != .none) {
@@ -4940,40 +4529,6 @@ pub fn parseManuallyHook(
 
     // If we didn't find a special case, continue parsing normally
     return true;
-}
-
-fn compatGtkTabsLocation(
-    self: *Config,
-    alloc: Allocator,
-    key: []const u8,
-    value: ?[]const u8,
-) bool {
-    _ = alloc;
-    assert(std.mem.eql(u8, key, "gtk-tabs-location"));
-
-    if (std.mem.eql(u8, value orelse "", "hidden")) {
-        self.@"window-show-tab-bar" = .never;
-        return true;
-    }
-
-    return false;
-}
-
-fn compatGtkSingleInstance(
-    self: *Config,
-    alloc: Allocator,
-    key: []const u8,
-    value: ?[]const u8,
-) bool {
-    _ = alloc;
-    assert(std.mem.eql(u8, key, "gtk-single-instance"));
-
-    if (std.mem.eql(u8, value orelse "", "desktop")) {
-        self.@"gtk-single-instance" = .detect;
-        return true;
-    }
-
-    return false;
 }
 
 fn compatCursorInvertFgBg(
@@ -5066,8 +4621,8 @@ fn compatCopyOnSelect(
 
     if (std.mem.eql(u8, value orelse "", "true")) {
         self.@"copy-on-select" = switch (builtin.os.tag) {
-            .linux, .freebsd => .primary,
-            else => .clipboard,
+            .macos => .clipboard,
+            else => unreachable,
         };
         return true;
     }
@@ -5277,18 +4832,8 @@ pub const ChangeIterator = struct {
 /// as possible because magic sucks, but each place is well documented.
 fn probableCliEnvironment() bool {
     switch (builtin.os.tag) {
-        // Windows has its own problems, just ignore it for now since
-        // its not a real supported target and GTK via WSL2 assuming
-        // single instance is probably fine.
-        .windows => return false,
-
-        // On macOS, we don't want to detect `open` calls as CLI envs.
-        // Our desktop detection on macOS is very accurate due to how
-        // processes are launched on macOS, so if we detect we're launched
-        // from the app bundle then we're not in a CLI environment.
         .macos => if (internal_os.launchedFromDesktop()) return false,
-
-        else => {},
+        else => unreachable,
     }
 
     // If we have TERM_PROGRAM set to a non-empty value, we assume a graphical
@@ -8861,14 +8406,7 @@ pub const RepeatableCommand = struct {
         try self.value.ensureUnusedCapacity(alloc, inputpkg.command.defaults.len);
         try self.value_c.ensureUnusedCapacity(alloc, inputpkg.command.defaults.len);
         for (inputpkg.command.defaults) |cmd| {
-            // Translation is currently a GTK-only feature. In particular,
-            // translating these shared strings for the embedded runtime gives
-            // the macOS app a localized command palette in an otherwise
-            // unlocalized UI.
-            const localized = if (comptime build_config.app_runtime == .gtk)
-                cmd.translated()
-            else
-                cmd;
+            const localized = cmd;
             self.value.appendAssumeCapacity(localized);
             self.value_c.appendAssumeCapacity(try localized.cval(alloc));
         }
@@ -9236,43 +8774,6 @@ pub const MacShortcuts = enum {
     ask,
 };
 
-/// See gtk-single-instance
-pub const GtkSingleInstance = enum {
-    false,
-    true,
-    detect,
-
-    pub const default: GtkSingleInstance = .detect;
-};
-
-/// See gtk-tabs-location
-pub const GtkTabsLocation = enum {
-    top,
-    bottom,
-};
-
-/// See gtk-toolbar-style
-pub const GtkToolbarStyle = enum {
-    flat,
-    raised,
-    @"raised-border",
-};
-
-/// See gtk-titlebar-style
-pub const GtkTitlebarStyle = enum(c_int) {
-    native,
-    tabs,
-
-    pub const getGObjectType = switch (build_config.app_runtime) {
-        .gtk => @import("gobject").ext.defineEnum(
-            GtkTitlebarStyle,
-            .{ .name = "GhosttyGtkTitlebarStyle" },
-        ),
-
-        .none => void,
-    };
-};
-
 /// See app-notifications
 pub const AppNotifications = packed struct {
     @"clipboard-copy": bool = true,
@@ -9466,13 +8967,6 @@ pub const QuickTerminalPosition = enum {
 };
 
 /// See quick-terminal-layer
-pub const QuickTerminalLayer = enum {
-    overlay,
-    top,
-    bottom,
-    background,
-};
-
 /// See quick-terminal-size
 pub const QuickTerminalSize = struct {
     primary: ?Size = null,
@@ -9843,25 +9337,11 @@ pub const FreetypeLoadFlags = packed struct {
     light: bool = true,
 };
 
-/// See linux-cgroup
-pub const LinuxCgroup = enum {
-    never,
-    always,
-    @"single-instance",
-};
-
 /// See async-backend
 pub const AsyncBackend = enum {
     auto,
     epoll,
     io_uring,
-};
-
-/// See auto-updates
-pub const AutoUpdate = enum {
-    off,
-    check,
-    download,
 };
 
 /// See background-blur
@@ -9985,14 +9465,7 @@ pub const WindowDecoration = enum(c_int) {
     none,
 
     /// Make this a valid gobject if we're in a GTK environment.
-    pub const getGObjectType = switch (build_config.app_runtime) {
-        .gtk => @import("gobject").ext.defineEnum(
-            WindowDecoration,
-            .{ .name = "GhosttyConfigWindowDecoration" },
-        ),
-
-        .none => void,
-    };
+    pub const getGObjectType = void;
 
     pub fn parseCLI(input_: ?[]const u8) !WindowDecoration {
         const input = input_ orelse return .auto;
@@ -10057,12 +9530,7 @@ pub const Theme = struct {
         // actually valid for setting a light/dark mode pair but I anticipate
         // it'll be a common typo.
         //
-        // On Windows, a colon at index 1 is a drive letter (e.g. C:\...)
-        // and should not trigger light/dark pair parsing.
-        const has_colon = if (comptime builtin.os.tag == .windows)
-            if (std.mem.indexOf(u8, input, ":")) |idx| idx != 1 else false
-        else
-            std.mem.indexOf(u8, input, ":") != null;
+        const has_colon = std.mem.indexOf(u8, input, ":") != null;
         if (std.mem.indexOf(u8, input, ",") != null or
             std.mem.indexOf(u8, input, "=") != null or
             has_colon)
@@ -11188,27 +10656,6 @@ test "compatibility: scrollback-limit renamed to bytes" {
         std.math.maxInt(usize),
         cfg.@"scrollback-limit-bytes".value,
     );
-}
-
-test "compatibility: gtk-single-instance desktop" {
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    {
-        var cfg = try Config.default(alloc);
-        defer cfg.deinit();
-        var it: TestIterator = .{ .data = &.{
-            "--gtk-single-instance=desktop",
-        } };
-        try cfg.loadIter(alloc, &it);
-
-        // We need to test this BEFORE finalize, because finalize will
-        // convert our detect to a real value.
-        try testing.expectEqual(
-            GtkSingleInstance.detect,
-            cfg.@"gtk-single-instance",
-        );
-    }
 }
 
 test "compatibility: removed cursor-invert-fg-bg" {

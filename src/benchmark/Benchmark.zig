@@ -140,10 +140,8 @@ test Benchmark {
     //     try testing.expect(result.duration > 0);
     //     ^
     switch (builtin.os.tag) {
-        .freebsd,
-        .windows,
-        => return error.SkipZigTest,
-        else => {},
+        .macos => {},
+        else => unreachable,
     }
 
     const testing = std.testing;

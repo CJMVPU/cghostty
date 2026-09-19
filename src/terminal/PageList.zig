@@ -30,7 +30,7 @@ const Row = pagepkg.Row;
 
 const log = std.log.scoped(.page_list);
 const native_freestanding = builtin.os.tag == .freestanding and
-    !builtin.target.cpu.arch.isWasm();
+    !false;
 
 /// The number of pages we preheat the page pool with. For operating systems
 /// that support it, pages are demand-paged (see PagePool) so this only
@@ -330,14 +330,10 @@ const std_size = Page.layout(std_capacity).total_size;
 ///
 /// Test builds use the native pool even on wasm so that pool memory goes
 /// through the testing allocator and participates in leak detection.
-const wasm_page_pool = builtin.target.cpu.arch.isWasm() and !builtin.is_test;
-
 /// The memory pool we use for page memory buffers. We use a separate pool
 /// so we can allocate these with a page allocator. We have to use a page
 /// allocator because we need memory that is zero-initialized and page-aligned.
-const PagePool = if (wasm_page_pool)
-    datastruct.WasmPagePool([std_size]u8)
-else untouched: {
+const PagePool = untouched: {
     // Untouched pools never read/write to the items so that we can
     // use demand-paging on operating systems that support it. This makes
     // it so that an idle item in the pool costs no physical memory,
@@ -948,15 +944,6 @@ fn releasePages(pool: *MemoryPool, list: List) void {
 fn releasePoolPage(pool: *MemoryPool, page: *const Page) void {
     const item: *align(std.heap.page_size_min) [std_size]u8 =
         @ptrCast(@alignCast(page.memory.ptr));
-
-    // The wasm pool's items are shared by every pool in the module and
-    // never return to the allocator, so they go back to the free list
-    // zeroed for reuse (mirroring destroyNodeExt).
-    if (comptime wasm_page_pool) {
-        _ = terminal_mem.decommit(.zero, item, page.memory.len);
-        pool.pages.destroy(item);
-        return;
-    }
 
     pool.pages.release(item);
 }

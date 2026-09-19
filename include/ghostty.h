@@ -69,7 +69,6 @@ typedef void* ghostty_inspector_t;
 typedef enum {
   GHOSTTY_PLATFORM_INVALID,
   GHOSTTY_PLATFORM_MACOS,
-  GHOSTTY_PLATFORM_IOS,
 } ghostty_platform_e;
 
 typedef enum {
@@ -490,13 +489,9 @@ typedef struct {
   void* nsview;
 } ghostty_platform_macos_s;
 
-typedef struct {
-  void* uiview;
-} ghostty_platform_ios_s;
 
 typedef union {
   ghostty_platform_macos_s macos;
-  ghostty_platform_ios_s ios;
 } ghostty_platform_u;
 
 typedef enum {
@@ -1092,38 +1087,6 @@ typedef struct {
   ghostty_runtime_write_clipboard_cb write_clipboard_cb;
   ghostty_runtime_close_surface_cb close_surface_cb;
 } ghostty_runtime_config_s;
-
-// apprt.ipc.Target.Key
-typedef enum {
-  GHOSTTY_IPC_TARGET_CLASS,
-  GHOSTTY_IPC_TARGET_DETECT,
-} ghostty_ipc_target_tag_e;
-
-typedef union {
-  char *klass;
-} ghostty_ipc_target_u;
-
-typedef struct {
-  ghostty_ipc_target_tag_e tag;
-  ghostty_ipc_target_u target;
-} chostty_ipc_target_s;
-
-// apprt.ipc.Action.NewWindow
-typedef struct {
-  // This should be a null terminated list of strings.
-  const char **arguments;
-} ghostty_ipc_action_new_window_s;
-
-typedef union {
-  ghostty_ipc_action_new_window_s new_window;
-} ghostty_ipc_action_u;
-
-// apprt.ipc.Action.Key
-typedef enum {
-  GHOSTTY_IPC_ACTION_NEW_WINDOW,
-  GHOSTTY_IPC_ACTION_NEW_TAB,
-  GHOSTTY_IPC_ACTION_TOGGLE_QUICK_TERMINAL,
-} ghostty_ipc_action_tag_e;
 
 //-------------------------------------------------------------------
 // Published API

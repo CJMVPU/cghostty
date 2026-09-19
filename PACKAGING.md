@@ -1,177 +1,25 @@
-# Packaging Ghostty for Distribution
+# cghostty 打包与发布
 
-Ghostty relies on downstream package maintainers to distribute Ghostty to
-end-users. This document provides guidance to package maintainers on how to
-package Ghostty for distribution.
-
-> [!IMPORTANT]
->
-> This document is only accurate for the Ghostty source alongside it.
-> **Do not use this document for older or newer versions of Ghostty!** If
-> you are reading this document in a different version of Ghostty, please
-> find the `PACKAGING.md` file alongside that version.
-
-## Source Tarballs
-
-Source tarballs with stable checksums are available for tagged releases
-at `release.files.ghostty.org` in the following URL format where
-`VERSION` is the version number with no prefix such as `1.0.0`:
-
-```
-https://release.files.ghostty.org/VERSION/ghostty-VERSION.tar.gz
-https://release.files.ghostty.org/VERSION/ghostty-VERSION.tar.gz.minisig
-```
-
-Signature files are signed with
-[minisign](https://jedisct1.github.io/minisign/)
-using the following public key:
-
-```
-RWQlAjJC23149WL2sEpT/l0QKy7hMIFhYdQOFy0Z7z7PbneUgvlsnYcV
-```
-
-**Tip source tarballs** are available on the
-[GitHub releases page](https://github.com/ghostty-org/ghostty/releases/tag/tip).
-Use the `ghostty-source.tar.gz` asset and _not the GitHub auto-generated
-source tarball_. These tarballs are generated for every commit to
-the `main` branch and are not associated with a specific version.
-
-> [!WARNING]
->
-> Source tarballs are _not the same_ as a Git checkout. Source tarballs
-> contain some preprocessed files that allow building Ghostty with less
-> dependencies. If you are building Ghostty from a Git checkout, the
-> steps below are the same but they may require additional dependencies
-> not listed here. See the `README.md` for more information on building
-> from a Git checkout.
->
-> For everyone except Ghostty developers, please use the source tarballs.
-> We generate tip source tarballs for users following the development
-> branch.
-
-## Zig Version
-
-[Zig](https://ziglang.org) is required to build Ghostty. Prior to Zig 1.0,
-Zig releases often have breaking changes. Ghostty requires specific Zig versions
-depending on the Ghostty version in order to build. To make things easier for
-package maintainers, Ghostty always uses some _released_ version of Zig.
-
-To find the version of Zig required to build Ghostty, check the `required_zig`
-constant in `build.zig`. You don't need to know Zig to extract this information.
-This version will always be an official released version of Zig.
-
-For example, at the time of writing this document, Ghostty requires Zig 0.14.0.
-
-## Building Ghostty
-
-The following is a standard example of how to build Ghostty _for system
-packages_. This is not the recommended way to build Ghostty for your
-own system. For that, see the primary README.
-
-1. First, we fetch our dependencies from the internet into a cached directory.
-   This is the only step that requires internet access:
+仅生成 macOS Apple Silicon 应用和 ZIP。项目版本为 `build.zig.zon` 的 `.version`；发布标签使用 `v<语义版本>`，例如 `v0.1.0`。本地发布构建示例：
 
 ```sh
-ZIG_GLOBAL_CACHE_DIR=/tmp/offline-cache ./nix/build-support/fetch-zig-cache.sh
+nu macos/build.nu --configuration ReleaseLocal --version 0.1.0
+python3 scripts/check-scope.py --app macos/build/ReleaseLocal/cghostty.app
+bash macos/package.sh
 ```
 
-2. Next, we build Ghostty. This step requires no internet access:
+打包脚本验证 Bundle ID、主程序 arm64 架构和完整签名，然后输出 `artifacts/cghostty-0.1.0-macos-arm64.zip` 及 `.sha256`。`CFBundleShortVersionString` 保留 macOS 要求的三段数字，完整语义版本保存在 `CGhosttyVersion`，并用于“关于”、`+version` 和 ZIP 名称，例如 `cghostty-0.1.0-dev-macos-arm64.zip`。
+
+默认包使用 ad-hoc 签名，适合本机构建验证。面向其他用户分发时，先在自己的钥匙串配置 Developer ID 证书与 notarytool profile，再使用：
 
 ```sh
-DESTDIR=/tmp/ghostty \
-zig build \
-  --prefix /usr \
-  --system /tmp/offline-cache/p \
-  -Doptimize=ReleaseFast \
-  -Dcpu=baseline
+export CGHOSTTY_SIGN_IDENTITY='Developer ID Application: YOUR NAME (YOUR TEAM ID)'
+export CGHOSTTY_NOTARY_PROFILE='YOUR_KEYCHAIN_PROFILE'
+bash macos/package.sh
 ```
 
-The build options are covered in the next section, but this will build
-and install Ghostty to `/tmp/ghostty` with the prefix `/usr` (i.e. the
-binary will be at `/tmp/ghostty/usr/bin/ghostty`). This style is common
-for system packages which separate a build and install step, since the
-install step can then be done with a `mv` or `cp` command (from `/tmp/ghostty`
-to wherever the package manager expects it).
+脚本依次签署 Dock 插件和应用、校验签名、提交公证、等待结果、装订票据并重新打包。证书、Team ID 和公证凭据不写入源码。
 
-### Build Options
+`.github/workflows/macos.yml` 在 main、PR 和手动运行时执行测试与打包；推送 `v*` 标签时以标签版本构建，并在**当前仓库**创建草稿 Release。CI 默认没有 Developer ID / 公证凭据，草稿说明会标注 ad-hoc 状态。核验后由仓库所有者发布草稿；工作流不会自动公开 Release。
 
-Ghostty uses the Zig build system. You can see all available build options by
-running `zig build --help`. The following are options that are particularly
-relevant to package maintainers:
-
-- `--prefix`: The installation prefix. Combine with the `DESTDIR` environment
-  variable to install to a temporary directory for packaging.
-
-- `--system`: The path to the offline cache directory. This disables
-  any package fetching from the internet. This flag also triggers all
-  dependencies to be dynamically linked by default. This flag also makes
-  the binary a PIE (Position Independent Executable) by default (override
-  with `-Dpie`).
-
-- `-Doptimize=ReleaseFast`: Build with optimizations enabled and safety checks
-  disabled. This is the recommended build mode for distribution. I'd prefer
-  a safe build but terminal emulators are performance-sensitive and the
-  safe build is currently too slow. I plan to improve this in the future.
-  Other build modes are available: `Debug`, `ReleaseSafe`, and `ReleaseSmall`.
-
-- `-Dcpu=baseline`: Build for the "baseline" CPU of the target architecture.
-  This avoids building for newer CPU features that may not be available on
-  all target machines.
-
-- `-Dtarget=$arch-$os-$abi`: Build for a specific target triple. This is
-  often necessary for system packages to specify a specific minimum Linux
-  version, glibc, etc. Run `zig targets` to a get a full list of available
-  targets.
-
-## WebAssembly (libghostty-vt)
-
-libghostty-vt can be built for WebAssembly for use in browsers and other
-wasm runtimes:
-
-```sh
-zig build -Demit-lib-vt -Dtarget=wasm32-freestanding -Doptimize=ReleaseSmall
-```
-
-This produces `zig-out/bin/ghostty-vt.wasm`.
-
-Some notes for packaging the wasm module:
-
-- The build enables the `simd128` feature by default. Every browser engine
-  has supported it for years (Chrome 91, Firefox 89, Safari 16.4) and it is
-  a large performance win for VT parsing. If you target an unusual runtime
-  without SIMD support, opt out with `-Dcpu=generic`.
-
-- Optional feature areas can be compiled out with `-Dvt-features` to
-  significantly reduce binary size. The flag takes comma-separated
-  modifications applied to the default all-enabled feature set,
-  `-Dcpu`-style: `+feature` (or bare `feature`) enables, `-feature`
-  disables, and the special name `all` refers to every feature. Hyphens
-  and underscores are interchangeable in feature names. For example, a
-  read-only terminal viewer only needs the render state API:
-
-  ```sh
-  zig build -Demit-lib-vt -Dtarget=wasm32-freestanding \
-    -Doptimize=ReleaseSmall -Dvt-features=-all,+render-state
-  ```
-
-  This roughly halves the compressed module size versus the default
-  build. An interactive terminal typically wants
-  `-Dvt-features=-all,+render-state,+input-encode,+selection,+color`.
-  Disabled features drop both their C API exports and any escape
-  sequence handling (the sequences are still consumed and safely
-  ignored). See the `Features` struct in `src/terminal/build_options.zig`
-  for the full list of features and what each one covers.
-
-- `ReleaseSmall` is the recommended optimization mode for the web. Running
-  the result through [Binaryen's](https://github.com/WebAssembly/binaryen)
-  `wasm-opt -O3` shrinks it by roughly a further 10% without hurting
-  performance.
-
-- `ReleaseFast` measures 10-20% faster than `ReleaseSmall` on escape-heavy
-  terminal workloads, but the artifact is dominated by DWARF debug info.
-  If you want the speed, strip it: `wasm-opt -O3 --strip-dwarf` reduces a
-  ReleaseFast build from over 5MB to roughly 1.1MB (versus roughly 0.8MB
-  for ReleaseSmall). When invoking `wasm-opt`, pass the feature flags for
-  what the module uses, e.g. `--enable-simd --enable-bulk-memory
---enable-sign-ext --enable-nontrapping-float-to-int --enable-multivalue
---enable-reference-types`.
+应用内“检查更新”打开本仓库 Releases 页面。已删除上游 Sparkle feed、公钥、自动下载更新逻辑及 Sentry 崩溃上传。不会向 Ghostty 上游发布仓库推送产物。

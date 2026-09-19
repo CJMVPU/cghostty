@@ -3,7 +3,6 @@
 const GhosttyFrameData = @This();
 
 const std = @import("std");
-const DistResource = @import("GhosttyDist.zig").Resource;
 
 /// The output path for the compressed framedata zig file
 output: std.Build.LazyPath,
@@ -13,7 +12,7 @@ pub fn init(b: *std.Build) !GhosttyFrameData {
 
     // Generate the Zig source file that embeds the compressed data
     const wf = b.addWriteFiles();
-    _ = wf.addCopyFile(dist.framedata.path(b), "framedata.compressed");
+    _ = wf.addCopyFile(dist.framedata, "framedata.compressed");
     const zig_file = wf.add("framedata.zig",
         \\//! This file is auto-generated. Do not edit.
         \\
@@ -34,7 +33,7 @@ pub fn addImport(self: *const GhosttyFrameData, step: *std.Build.Step.Compile) v
 
 /// Creates the framedata resources that can be prebuilt for our dist build.
 pub fn distResources(b: *std.Build) struct {
-    framedata: DistResource,
+    framedata: std.Build.LazyPath,
 } {
     const exe = b.addExecutable(.{
         .name = "framegen",
@@ -67,9 +66,6 @@ pub fn distResources(b: *std.Build) struct {
     const compressed_file = run.addOutputFileArg("framedata.compressed");
 
     return .{
-        .framedata = .{
-            .dist = "src/build/framegen/framedata.compressed",
-            .generated = compressed_file,
-        },
+        .framedata = compressed_file,
     };
 }

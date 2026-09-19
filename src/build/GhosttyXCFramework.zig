@@ -15,9 +15,6 @@ pub fn init(
     deps: *const SharedDeps,
     target: Target,
 ) !GhosttyXCFramework {
-    // Universal macOS build
-    const macos_universal = try GhosttyLib.initMacOSUniversal(b, deps);
-
     // Native macOS build
     const macos_native = try GhosttyLib.initStatic(b, &try deps.retarget(
         b,
@@ -40,14 +37,6 @@ pub fn init(
         .name = "GhosttyKit",
         .out_path = "macos/GhosttyKit.xcframework",
         .libraries = switch (target) {
-            .universal => &.{
-                .{
-                    .library = macos_universal.output,
-                    .headers = headers,
-                    .dsym = macos_universal.dsym,
-                },
-            },
-
             .native => &.{.{
                 .library = macos_native.output,
                 .headers = headers,
