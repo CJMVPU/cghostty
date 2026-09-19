@@ -14,15 +14,15 @@
       "layers": [
         {
           "glass": false,
-          "image-name": "Prompt.svg",
-          "name": "Prompt"
+          "image-name": "TerminalGhost-v4.png",
+          "name": "Terminal Ghost"
         }
       ],
       "lighting": "individual",
-      "name": "Terminal",
+      "name": "cghostty",
       "shadow": {
         "kind": "layer-color",
-        "opacity": 0.2
+        "opacity": 0
       },
       "specular": false,
       "translucency": {

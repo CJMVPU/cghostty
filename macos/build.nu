@@ -11,6 +11,9 @@ def main [
     if (^uname -s | str trim) != "Darwin" or (^uname -m | str trim) != "arm64" {
         error make {msg: "cghostty builds require an Apple Silicon Mac (arm64)."}
     }
+    if ((^sw_vers -productVersion | str trim | split row "." | first | into int) < 27) {
+        error make {msg: "cghostty requires macOS 27 or newer to build and run."}
+    }
     if $configuration not-in [Debug ReleaseLocal Release] {
         error make {msg: "Configuration must be Debug, ReleaseLocal, or Release."}
     }

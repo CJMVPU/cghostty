@@ -10,13 +10,13 @@ const Pipeline = @import("Pipeline.zig");
 const Sampler = @import("Sampler.zig");
 const Texture = @import("Texture.zig");
 const Target = @import("Target.zig");
+const Frame = @import("Frame.zig");
 
 const log = std.log.scoped(.metal);
 
 /// Options for beginning a render pass.
 pub const Options = struct {
-    /// MTLCommandBuffer
-    command_buffer: objc.Object,
+    commands: *Frame.Commands,
     /// Color attachments for this render pass.
     attachments: []const Attachment,
 
@@ -39,7 +39,7 @@ pub const Step = struct {
     buffers: []const ?objc.Object = &.{},
     textures: []const ?Texture = &.{},
     /// Set of samplers to use for this step. The index maps to an index
-    /// of a fragment texture, set via setFragmentSamplerState(_:index:).
+    /// of a fragment texture in the Metal 4 argument table.
     samplers: []const ?Sampler = &.{},
     draw: Draw,
 
@@ -51,8 +51,9 @@ pub const Step = struct {
     };
 };
 
-/// MTLRenderCommandEncoder
+/// MTL4RenderCommandEncoder
 encoder: objc.Object,
+commands: *Frame.Commands,
 
 /// Begin a render pass.
 pub fn begin(
@@ -60,12 +61,7 @@ pub fn begin(
 ) Self {
     // Create a pass descriptor
     const desc = desc: {
-        const MTLRenderPassDescriptor = objc.getClass("MTLRenderPassDescriptor").?;
-        const desc = MTLRenderPassDescriptor.msgSend(
-            objc.Object,
-            objc.sel("renderPassDescriptor"),
-            .{},
-        );
+        const desc = Frame.object("MTL4RenderPassDescriptor");
 
         // Set our color attachment to be our drawable surface.
         const attachments = objc.Object.fromId(
@@ -92,10 +88,12 @@ pub fn begin(
                 "storeAction",
                 @intFromEnum(mtl.MTLStoreAction.store),
             );
-            attachment.setProperty("texture", switch (at.target) {
-                .texture => |t| t.texture.value,
-                .target => |t| t.texture.value,
-            });
+            const texture = switch (at.target) {
+                .texture => |t| t.texture,
+                .target => |t| t.texture,
+            };
+            opts.commands.retainResource(texture, true);
+            attachment.setProperty("texture", texture.value);
             if (at.clear_color) |c| attachment.setProperty(
                 "clearColor",
                 mtl.MTLClearColor{
@@ -110,14 +108,16 @@ pub fn begin(
         break :desc desc;
     };
 
-    // MTLRenderCommandEncoder
-    const encoder = opts.command_buffer.msgSend(
+    defer desc.release();
+    const encoder = opts.commands.buffer.msgSend(
         objc.Object,
         objc.sel("renderCommandEncoderWithDescriptor:"),
         .{desc.value},
     );
 
-    return .{ .encoder = encoder };
+    // Make earlier queue writes visible before this render pass consumes them.
+    encoder.msgSend(void, "barrierAfterQueueStages:beforeStages:visibilityOptions:", .{ @as(c_ulong, 0x7fffffffffffffff), @as(c_ulong, 3), @as(c_ulong, 1) });
+    return .{ .encoder = encoder, .commands = opts.commands };
 }
 
 /// Add a step to this render pass.
@@ -131,83 +131,23 @@ pub fn step(self: *const Self, s: Step) void {
         .{s.pipeline.state.value},
     );
 
-    if (s.buffers.len > 0) {
-        // We reserve index 0 for the vertex buffer, this isn't very
-        // flexible but it lines up with the API we have for OpenGL.
-        if (s.buffers[0]) |buf| {
-            self.encoder.msgSend(
-                void,
-                objc.sel("setVertexBuffer:offset:atIndex:"),
-                .{ buf.value, @as(c_ulong, 0), @as(c_ulong, 0) },
-            );
-            self.encoder.msgSend(
-                void,
-                objc.sel("setFragmentBuffer:offset:atIndex:"),
-                .{ buf.value, @as(c_ulong, 0), @as(c_ulong, 0) },
-            );
-        }
-
-        // Set the rest of the buffers starting at index 2, this is
-        // so that we can use index 1 for the uniforms if present.
-        //
-        // Also, we set buffers (and textures) for both stages.
-        //
-        // Again, not very flexible, but it's consistent and predictable,
-        // and we need to treat the uniforms as special because of OpenGL.
-        //
-        // TODO: Maybe in the future add info to the pipeline struct which
-        //       allows it to define a mapping between provided buffers and
-        //       what index they get set at for the vertex / fragment stage.
-        for (s.buffers[1..], 2..) |b, i| if (b) |buf| {
-            self.encoder.msgSend(
-                void,
-                objc.sel("setVertexBuffer:offset:atIndex:"),
-                .{ buf.value, @as(c_ulong, 0), @as(c_ulong, i) },
-            );
-            self.encoder.msgSend(
-                void,
-                objc.sel("setFragmentBuffer:offset:atIndex:"),
-                .{ buf.value, @as(c_ulong, 0), @as(c_ulong, i) },
-            );
-        };
-    }
-
-    // Set the uniforms as buffer index 1 if present.
-    if (s.uniforms) |buf| {
-        self.encoder.msgSend(
-            void,
-            objc.sel("setVertexBuffer:offset:atIndex:"),
-            .{ buf.value, @as(c_ulong, 0), @as(c_ulong, 1) },
-        );
-        self.encoder.msgSend(
-            void,
-            objc.sel("setFragmentBuffer:offset:atIndex:"),
-            .{ buf.value, @as(c_ulong, 0), @as(c_ulong, 1) },
-        );
-    }
-
-    // Set textures.
-    for (s.textures, 0..) |t, i| if (t) |tex| {
-        self.encoder.msgSend(
-            void,
-            objc.sel("setVertexTexture:atIndex:"),
-            .{ tex.texture.value, @as(c_ulong, i) },
-        );
-        self.encoder.msgSend(
-            void,
-            objc.sel("setFragmentTexture:atIndex:"),
-            .{ tex.texture.value, @as(c_ulong, i) },
-        );
+    const table = self.commands.arguments;
+    self.commands.retainResource(s.pipeline.state, false);
+    for (s.buffers, 0..) |buffer, i| if (buffer) |buf| {
+        self.bindBuffer(buf, if (i == 0) 0 else i + 1);
     };
-
-    // Set samplers.
-    for (s.samplers, 0..) |samp, i| if (samp) |sampler| {
-        self.encoder.msgSend(
-            void,
-            objc.sel("setFragmentSamplerState:atIndex:"),
-            .{ sampler.sampler.value, @as(c_ulong, i) },
-        );
+    if (s.uniforms) |buf| self.bindBuffer(buf, 1);
+    for (s.textures, 0..) |texture, i| if (texture) |tex| {
+        self.commands.retainResource(tex.texture, true);
+        const resource = tex.texture.getProperty(ResourceID, "gpuResourceID");
+        table.msgSend(void, "setTexture:atIndex:", .{ resource, @as(c_ulong, i) });
     };
+    for (s.samplers, 0..) |sampler, i| if (sampler) |samp| {
+        self.commands.retainResource(samp.sampler, false);
+        const resource = samp.sampler.getProperty(ResourceID, "gpuResourceID");
+        table.msgSend(void, "setSamplerState:atIndex:", .{ resource, @as(c_ulong, i) });
+    };
+    self.encoder.msgSend(void, "setArgumentTable:atStages:", .{ table, @as(c_ulong, 3) });
 
     // Draw!
     self.encoder.msgSend(
@@ -226,4 +166,11 @@ pub fn step(self: *const Self, s: Step) void {
 /// This struct can no longer be used after calling this.
 pub fn complete(self: *const Self) void {
     self.encoder.msgSend(void, objc.sel("endEncoding"), .{});
+}
+
+const ResourceID = extern struct { value: u64 };
+fn bindBuffer(self: *const Self, buffer: objc.Object, index: usize) void {
+    self.commands.retainResource(buffer, true);
+    const address = buffer.getProperty(u64, "gpuAddress");
+    self.commands.arguments.msgSend(void, "setAddress:atIndex:", .{ address, @as(c_ulong, index) });
 }

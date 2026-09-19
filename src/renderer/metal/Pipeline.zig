@@ -44,7 +44,7 @@ state: objc.Object,
 pub fn init(comptime VertexAttributes: ?type, opts: Options) !Self {
     // Create our descriptor
     const desc = init: {
-        const Class = objc.getClass("MTLRenderPipelineDescriptor").?;
+        const Class = objc.getClass("MTL4RenderPipelineDescriptor").?;
         const id_alloc = Class.msgSend(objc.Object, objc.sel("alloc"), .{});
         const id_init = id_alloc.msgSend(objc.Object, objc.sel("init"), .{});
         break :init id_init;
@@ -60,11 +60,11 @@ pub fn init(comptime VertexAttributes: ?type, opts: Options) !Self {
         );
         defer str.release();
 
-        const ptr = opts.vertex_library.msgSend(?*anyopaque, objc.sel("newFunctionWithName:"), .{str});
-        const func_vert = objc.Object.fromId(ptr.?);
-        defer func_vert.msgSend(void, objc.sel("release"), .{});
-
-        desc.setProperty("vertexFunction", func_vert);
+        const function = @import("Frame.zig").object("MTL4LibraryFunctionDescriptor");
+        defer function.release();
+        function.setProperty("name", str);
+        function.setProperty("library", opts.vertex_library);
+        desc.setProperty("vertexFunctionDescriptor", function);
     }
     {
         const str = try macos.foundation.String.createWithBytes(
@@ -74,11 +74,11 @@ pub fn init(comptime VertexAttributes: ?type, opts: Options) !Self {
         );
         defer str.release();
 
-        const ptr = opts.fragment_library.msgSend(?*anyopaque, objc.sel("newFunctionWithName:"), .{str});
-        const func_frag = objc.Object.fromId(ptr.?);
-        defer func_frag.msgSend(void, objc.sel("release"), .{});
-
-        desc.setProperty("fragmentFunction", func_frag);
+        const function = @import("Frame.zig").object("MTL4LibraryFunctionDescriptor");
+        defer function.release();
+        function.setProperty("name", str);
+        function.setProperty("library", opts.fragment_library);
+        desc.setProperty("fragmentFunctionDescriptor", function);
     }
 
     // If we have vertex attributes, create and add a vertex descriptor.
@@ -122,7 +122,7 @@ pub fn init(comptime VertexAttributes: ?type, opts: Options) !Self {
 
         attachment.setProperty("pixelFormat", @intFromEnum(at.pixel_format));
 
-        attachment.setProperty("blendingEnabled", at.blending_enabled);
+        attachment.setProperty("blendingState", @as(c_long, if (at.blending_enabled) 1 else 0));
         // We always use premultiplied alpha blending for now.
         if (at.blending_enabled) {
             attachment.setProperty("rgbBlendOperation", @intFromEnum(mtl.MTLBlendOperation.add));
@@ -136,10 +136,15 @@ pub fn init(comptime VertexAttributes: ?type, opts: Options) !Self {
 
     // Make our state
     var err: ?*anyopaque = null;
-    const pipeline_state = opts.device.msgSend(
+    const compiler_desc = @import("Frame.zig").object("MTL4CompilerDescriptor");
+    defer compiler_desc.release();
+    const compiler_ptr = opts.device.msgSend(?*anyopaque, "newCompilerWithDescriptor:error:", .{ compiler_desc, &err }) orelse return error.MetalFailed;
+    const compiler = objc.Object.fromId(compiler_ptr);
+    defer compiler.release();
+    const pipeline_state = compiler.msgSend(
         objc.Object,
-        objc.sel("newRenderPipelineStateWithDescriptor:error:"),
-        .{ desc, &err },
+        objc.sel("newRenderPipelineStateWithDescriptor:compilerTaskOptions:error:"),
+        .{ desc, @as(?*anyopaque, null), &err },
     );
     try checkError(err);
     errdefer pipeline_state.release();

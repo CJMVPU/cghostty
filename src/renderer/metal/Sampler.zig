@@ -41,6 +41,8 @@ pub fn init(
     };
     defer desc.release();
 
+    desc.setProperty("supportArgumentBuffers", true);
+
     // Properties
     desc.setProperty("minFilter", opts.min_filter);
     desc.setProperty("magFilter", opts.mag_filter);

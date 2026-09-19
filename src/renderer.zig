@@ -2,17 +2,15 @@
 //! taking the internal screen state and turning into some output format,
 //! usually for a screen.
 //!
-//! The renderer is closely tied to the windowing system which usually
-//! has to prepare the window for the given renderer using system-specific
-//! APIs. The renderers in this package assume that the renderer is already
-//! setup (OpenGL has a context, Vulkan has a surface, etc.)
+//! The Metal renderer presents frames through an IOSurface-backed layer
+//! attached to the native macOS view supplied by the application runtime.
 
 const build_config = @import("build_config.zig");
 
 const cursor = @import("renderer/cursor.zig");
 const message = @import("renderer/message.zig");
 const size = @import("renderer/size.zig");
-pub const shadertoy = @import("renderer/shadertoy.zig");
+pub const SmoothCursor = @import("renderer/SmoothCursor.zig");
 pub const Backend = @import("renderer/backend.zig").Backend;
 pub const GenericRenderer = @import("renderer/generic.zig").Renderer;
 pub const Metal = @import("renderer/Metal.zig");
@@ -37,9 +35,7 @@ pub const Renderer = switch (build_config.renderer) {
     .metal => GenericRenderer(Metal),
 };
 
-/// The health status of a renderer. These must be shared across all
-/// renderers even if some states aren't reachable so that our API users
-/// can use the same enum for all renderers.
+/// Renderer health reported through the internal C bridge.
 pub const Health = enum(c_int) {
     healthy,
     unhealthy,
@@ -55,7 +51,7 @@ test {
 
     _ = cursor;
     _ = message;
-    _ = shadertoy;
+    _ = SmoothCursor;
     _ = size;
     _ = Thread;
     _ = State;

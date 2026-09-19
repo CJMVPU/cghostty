@@ -17,6 +17,11 @@ const pipeline_descs: []const struct { [:0]const u8, PipelineDescription } =
             .fragment_fn = "bg_color_fragment",
             .blending_enabled = false,
         } },
+        .{ "smooth_cursor", .{
+            .vertex_fn = "smooth_cursor_vertex",
+            .fragment_fn = "smooth_cursor_fragment",
+            .blending_enabled = true,
+        } },
         .{ "cell_bg", .{
             .vertex_fn = "full_screen_vertex",
             .fragment_fn = "cell_bg_fragment",
@@ -96,11 +101,6 @@ pub const Shaders = struct {
     /// Collection of available render pipelines.
     pipelines: PipelineCollection,
 
-    /// Custom shaders to run against the final drawable texture. This
-    /// can be used to apply a lot of effects. Each shader is run in sequence
-    /// against the output of the previous shader.
-    post_pipelines: []const Pipeline,
-
     /// Set to true when deinited, if you try to deinit a defunct set
     /// of shaders it will just be ignored, to prevent double-free.
     defunct: bool = false,
@@ -108,19 +108,13 @@ pub const Shaders = struct {
     pub const uninit: Shaders = .{
         .library = undefined,
         .pipelines = undefined,
-        .post_pipelines = &.{},
         .defunct = true,
     };
 
     /// Initialize our shader set.
-    ///
-    /// "post_shaders" is an optional list of postprocess shaders to run
-    /// against the final drawable texture. This is an array of shader source
-    /// code, not file paths.
     pub fn init(
-        alloc: Allocator,
+        _: Allocator,
         device: objc.Object,
-        post_shaders: []const [:0]const u8,
         pixel_format: mtl.MTLPixelFormat,
     ) !Shaders {
         const library = try initLibrary(device);
@@ -145,32 +139,13 @@ pub const Shaders = struct {
             initialized_pipelines += 1;
         }
 
-        const post_pipelines: []const Pipeline = initPostPipelines(
-            alloc,
-            device,
-            library,
-            post_shaders,
-            pixel_format,
-        ) catch |err| err: {
-            // If an error happens while building postprocess shaders we
-            // want to just not use any postprocess shaders since we don't
-            // want to block Ghostty from working.
-            log.warn("error initializing postprocess shaders err={}", .{err});
-            break :err &.{};
-        };
-        errdefer if (post_pipelines.len > 0) {
-            for (post_pipelines) |pipeline| pipeline.deinit();
-            alloc.free(post_pipelines);
-        };
-
         return .{
             .library = library,
             .pipelines = pipelines,
-            .post_pipelines = post_pipelines,
         };
     }
 
-    pub fn deinit(self: *Shaders, alloc: Allocator) void {
+    pub fn deinit(self: *Shaders, _: Allocator) void {
         if (self.defunct) return;
         self.defunct = true;
 
@@ -179,14 +154,6 @@ pub const Shaders = struct {
             @field(self.pipelines, pipeline[0]).deinit();
         }
         self.library.msgSend(void, objc.sel("release"), .{});
-
-        // Release our postprocess shaders
-        if (self.post_pipelines.len > 0) {
-            for (self.post_pipelines) |pipeline| {
-                pipeline.deinit();
-            }
-            alloc.free(self.post_pipelines);
-        }
     }
 };
 
@@ -230,8 +197,6 @@ pub const Uniforms = extern struct {
     bg_color: [4]u8 align(4),
 
     /// Various booleans.
-    ///
-    /// TODO: Maybe put these in a packed struct, like for OpenGL.
     bools: extern struct {
         /// Whether the cursor is 2 cells wide.
         cursor_wide: bool align(1),
@@ -253,6 +218,14 @@ pub const Uniforms = extern struct {
         /// (thickness) to gamma-incorrect blending.
         use_linear_correction: bool align(1) = false,
     },
+
+    smooth_front: [2]f32 align(8) = .{ 0, 0 },
+    smooth_rear: [2]f32 align(8) = .{ 0, 0 },
+    smooth_target: [2]f32 align(8) = .{ 0, 0 },
+    smooth_half_size: [2]f32 align(8) = .{ 0, 0 },
+    smooth_color: [4]u8 align(4) = .{ 0, 0, 0, 0 },
+    smooth_effect: f32 align(4) = 0,
+    smooth_block: u32 align(4) = 0,
 
     const PaddingExtend = packed struct(u8) {
         left: bool = false,
@@ -357,90 +330,6 @@ fn initLibrary(device: objc.Object) !objc.Object {
     log.debug("shader library loaded time={}us", .{start.untilNow(global.io(), .awake).toMicroseconds()});
 
     return library;
-}
-
-/// Initialize our custom shader pipelines.
-///
-/// The shaders argument is a set of shader source code, not file paths.
-fn initPostPipelines(
-    alloc: Allocator,
-    device: objc.Object,
-    library: objc.Object,
-    shaders: []const [:0]const u8,
-    pixel_format: mtl.MTLPixelFormat,
-) ![]const Pipeline {
-    // If we have no shaders, do nothing.
-    if (shaders.len == 0) return &.{};
-
-    // Keeps track of how many shaders we successfully wrote.
-    var i: usize = 0;
-
-    // Initialize our result set. If any error happens, we undo everything.
-    var pipelines = try alloc.alloc(Pipeline, shaders.len);
-    errdefer {
-        for (pipelines[0..i]) |pipeline| {
-            pipeline.deinit();
-        }
-        alloc.free(pipelines);
-    }
-
-    // Build each shader. Note we don't use "0.." to build our index
-    // because we need to keep track of our length to clean up above.
-    for (shaders) |source| {
-        pipelines[i] = try initPostPipeline(
-            device,
-            library,
-            source,
-            pixel_format,
-        );
-        i += 1;
-    }
-
-    return pipelines;
-}
-
-/// Initialize a single custom shader pipeline from shader source.
-fn initPostPipeline(
-    device: objc.Object,
-    library: objc.Object,
-    data: [:0]const u8,
-    pixel_format: mtl.MTLPixelFormat,
-) !Pipeline {
-    // Create our library which has the shader source
-    const post_library = library: {
-        const source = try macos.foundation.String.createWithBytes(
-            data,
-            .utf8,
-            false,
-        );
-        defer source.release();
-
-        var err: ?*anyopaque = null;
-        const post_library = device.msgSend(
-            objc.Object,
-            objc.sel("newLibraryWithSource:options:error:"),
-            .{ source, @as(?*anyopaque, null), &err },
-        );
-        try checkError(err);
-        errdefer post_library.msgSend(void, objc.sel("release"), .{});
-
-        break :library post_library;
-    };
-    defer post_library.msgSend(void, objc.sel("release"), .{});
-
-    return try Pipeline.init(null, .{
-        .device = device,
-        .vertex_fn = "full_screen_vertex",
-        .fragment_fn = "main0",
-        .vertex_library = library,
-        .fragment_library = post_library,
-        .attachments = &.{
-            .{
-                .pixel_format = pixel_format,
-                .blending_enabled = false,
-            },
-        },
-    });
 }
 
 fn checkError(err_: ?*anyopaque) !void {

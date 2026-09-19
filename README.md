@@ -1,12 +1,12 @@
 # cghostty
 
-cghostty 是基于 [Ghostty](https://github.com/ghostty-org/ghostty) 的个人终端应用分支，交付范围为 **macOS 13+ / Apple Silicon（arm64）**。
+cghostty 是基于 [Ghostty](https://github.com/ghostty-org/ghostty) 的个人终端应用分支，交付范围为 **macOS 27+ / Apple Silicon（arm64）**。
 
-保留 Swift / AppKit / SwiftUI 原生界面、Zig 终端核心、Metal 渲染、CoreText 字体、PTY 子进程、shell 集成、主题、分屏、标签页、快速终端和 AppleScript。Linux、Windows、BSD、iOS、WASM、Intel Mac、独立终端库 SDK 及其示例不属于本项目。
+保留 Swift / AppKit / SwiftUI 原生界面、Zig 终端核心、Metal 4 命令体系与 MSL 4.1 渲染、CoreText 字体、PTY 子进程、shell 集成、主题、分屏、标签页、快速终端和 AppleScript。Linux、Windows、BSD、iOS、WASM、Intel Mac、独立终端库 SDK 及其示例不属于本项目。
 
 ## 本地构建
 
-需要 Apple Silicon Mac、Xcode（含 Metal Toolchain）、Zig **0.16.0**、Nushell 和 gettext。当前工程包含 Icon Composer 图标；本分支使用 Xcode 27 验证，CI 使用 macOS 26 runner 提供的 Xcode。
+需要运行 macOS 27+ 的 Apple Silicon Mac、Xcode 27+（含 Metal Toolchain）、Zig **0.16.0**、Nushell 和 gettext。当前工程包含 Icon Composer 图标；本分支使用 Xcode 27 验证，CI 使用 GitHub 的 `xcode-27` arm64 预览 runner，并检查其操作系统至少为 macOS 27。
 
 ```sh
 brew install nushell gettext
@@ -25,6 +25,25 @@ bash macos/package.sh
 ```
 
 应用输出到 `macos/build/ReleaseLocal/cghostty.app`，ZIP 和 SHA-256 校验文件输出到 `artifacts/`。构建默认采用本地 ad-hoc 签名；Developer ID 签名及公证见 [PACKAGING.md](PACKAGING.md)。
+
+## 原生平滑光标
+
+默认启用 `cursor-effect = smooth`，通过原生 MSL 绘制双端伸缩光标。
+单次移动沿用原 smooth cursor 的距离分档和曲线：前端 24–180ms，后端延迟 20/40/60ms。
+连续移动从当前显示的两个端点接续，按本次输入步长计时并消耗剩余尾端延迟，避免按住方向键时拖尾不断拉长；停止后结束动画刷新。系统开启“减少动态效果”时停用动画。
+
+```ini
+cursor-effect = smooth
+cursor-style = block
+cursor-style-blink = true
+cursor-opacity = 1
+shell-integration-features = no-cursor
+window-vsync = true
+```
+
+设为 `cursor-effect = none` 可关闭效果。支持不透明的方块、细线和下划线光标。Vim insert 模式保留细线形状并继续动画，细线按字符格宽度计时。尺寸变化时重置动画；失焦、隐藏、空心或锁形光标使用正常光标。
+旧 `custom-shader`、`custom-shader-animation` 配置需删除；不再加载 GLSL 或外部 MSL 文件。
+本轮不含 CRT。动画使用真实字形与单元格颜色，不从最终画面猜测并恢复背景。
 
 ## 独立身份
 

@@ -24,6 +24,13 @@ struct Uniforms {
   bool use_display_p3;
   bool use_linear_blending;
   bool use_linear_correction;
+  float2 smooth_front;
+  float2 smooth_rear;
+  float2 smooth_target;
+  float2 smooth_half_size;
+  uchar4 smooth_color;
+  float smooth_effect;
+  uint smooth_block;
 };
 
 //-------------------------------------------------------------------
@@ -545,6 +552,38 @@ struct CellTextVertexIn {
   uint8_t bools [[attribute(6)]];
 };
 
+// Coverage of the convex hull of two native-sized cursor rectangles.
+float smooth_cursor_coverage(float2 p, constant Uniforms& u) {
+  float2 segment = u.smooth_front - u.smooth_rear;
+  float2 q = p - (u.smooth_front + u.smooth_rear) * 0.5;
+  float2 bounds = u.smooth_half_size + abs(segment) * 0.5;
+  float2 edges = abs(q) - bounds;
+  float distance = max(edges.x, edges.y);
+  float len = length(segment);
+  if (len > 0.0001) {
+    float2 normal = float2(-segment.y, segment.x) / len;
+    distance = max(distance, abs(dot(q, normal)) - dot(abs(normal), u.smooth_half_size));
+  }
+  float coverage = 1 - smoothstep(-0.65, 0.65, distance);
+  float2 local = p - u.smooth_target;
+  float native = all(local >= -u.smooth_half_size) && all(local < u.smooth_half_size) ? 1.0 : 0.0;
+  return mix(native, coverage, u.smooth_effect);
+}
+
+struct SmoothCursorVertexOut { float4 position [[position]]; };
+vertex SmoothCursorVertexOut smooth_cursor_vertex(uint vid [[vertex_id]], constant Uniforms& u [[buffer(1)]]) {
+  // One triangle bounds both the moving silhouette and the native handoff.
+  float2 lo = min(min(u.smooth_front, u.smooth_rear), u.smooth_target) - u.smooth_half_size - 1;
+  float2 hi = max(max(u.smooth_front, u.smooth_rear), u.smooth_target) + u.smooth_half_size + 1;
+  float2 uv = float2((vid << 1) & 2, vid & 2);
+  return { u.projection_matrix * float4(lo + uv * (hi - lo), 0, 1) };
+}
+fragment float4 smooth_cursor_fragment(SmoothCursorVertexOut in [[stage_in]], constant Uniforms& u [[buffer(1)]]) {
+  float4 color = load_color(u.smooth_color, u.use_display_p3, true);
+  if (!u.use_linear_blending) color = unlinearize(color);
+  return color * smooth_cursor_coverage(in.position.xy, u);
+}
+
 struct CellTextVertexOut {
   float4 position [[position]];
   uint8_t atlas [[flat]];
@@ -664,13 +703,18 @@ vertex CellTextVertexOut cell_text_vertex(
 
   // If this cell is the cursor cell, but we're not processing
   // the cursor glyph itself, then we need to change the color.
-  if ((in.bools & IS_CURSOR_GLYPH) == 0 && is_cursor_pos) {
+  if (uniforms.smooth_effect == 0 && (in.bools & IS_CURSOR_GLYPH) == 0 && is_cursor_pos) {
     out.color = load_color(
       uniforms.cursor_color,
       uniforms.use_display_p3,
       true
     );
   }
+
+  // The animated cursor is drawn separately. Suppress the
+  // static cursor glyph without changing the underlying cell data.
+  if (uniforms.smooth_effect > 0 && (in.bools & IS_CURSOR_GLYPH) != 0)
+    out.position = float4(-2, -2, 0, 1);
 
   return out;
 }
@@ -692,6 +736,11 @@ fragment float4 cell_text_fragment(
     case ATLAS_GRAYSCALE: {
       // Our input color is always linear.
       float4 color = in.color;
+      if (uniforms.smooth_effect > 0 && uniforms.smooth_block != 0) {
+        float coverage = smooth_cursor_coverage(in.position.xy, uniforms);
+        float4 cursor_text = load_color(uniforms.cursor_color, uniforms.use_display_p3, true);
+        color = mix(color, cursor_text, coverage);
+      }
 
       // If we're not doing linear blending, then we need to
       // re-apply the gamma encoding to our color manually.
@@ -850,4 +899,3 @@ fragment float4 image_fragment(
 
   return rgba;
 }
-

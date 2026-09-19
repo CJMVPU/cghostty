@@ -62,6 +62,8 @@ const c = @import("posix_c");
 pub const compatibility = std.StaticStringMap(
     cli.CompatibilityHandler(Config),
 ).initComptime(&.{
+    .{ "custom-shader", compatRemovedShader },
+    .{ "custom-shader-animation", compatRemovedShader },
     // Ghostty 1.1 introduced background-blur support for Linux which
     // doesn't support a specific radius value. The renaming is to let
     // one field be used for both platforms (macOS retained the ability
@@ -359,10 +361,8 @@ pub const compatibility = std.StaticStringMap(
 /// What color space to use when performing alpha blending.
 ///
 /// This affects the appearance of text and of any images with transparency.
-/// Additionally, custom shaders will receive colors in the configured space.
 ///
-/// On macOS the default is `native`, on all other platforms the default is
-/// `linear-corrected`.
+/// The default is `native`.
 ///
 /// Valid values:
 ///
@@ -535,15 +535,12 @@ pub const compatibility = std.StaticStringMap(
 /// include path separators unless it is an absolute pathname.
 ///
 /// The first directory is the `themes` subdirectory of your Ghostty
-/// configuration directory. This is `$XDG_CONFIG_HOME/ghostty/themes` or
+/// configuration directory. This is `$XDG_CONFIG_HOME/cghostty/themes` or
 /// `~/.config/cghostty/themes`.
 ///
 /// The second directory is the `themes` subdirectory of the Ghostty resources
-/// directory. Ghostty ships with a multitude of themes that will be installed
-/// into this directory. On macOS, this list is in the
-/// `Ghostty.app/Contents/Resources/ghostty/themes` directory. On Linux, this
-/// list is in the `share/ghostty/themes` directory (wherever you installed the
-/// Ghostty "share" directory.
+/// directory. Bundled themes are installed in
+/// `cghostty.app/Contents/Resources/cghostty/themes`.
 ///
 /// To see a list of available themes, run `cghostty +list-themes`.
 ///
@@ -1759,41 +1756,6 @@ title: ?[:0]const u8 = null,
 /// you can find these permissions in System Preferences -> Privacy & Security
 /// -> Accessibility.
 ///
-/// Since Ghostty 1.4.0, global shortcuts on Linux are primarily supported
-/// through the [`vicinae-hotkey-v1`](https://github.com/vicinaehq/vicinae-wayland-protocols/tree/main/staging/vicinae-hotkey)
-/// protocol, available out-of-the-box with the following Wayland compositors
-/// and desktop environments:
-///
-///   - Hyprland since version 0.56.0
-///
-/// On X11 or when your Wayland compositor/desktop environment does not
-/// support `vicinae-hotkey-v1`, the much more widely-used
-/// [XDG Global Shortcuts](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.GlobalShortcuts.html)
-/// protocol is used instead.
-///
-/// Note: XDG Global Shortcuts rely on a functional XDG Desktop Portal
-/// implementation **that is designed to be used with your desktop environment
-/// or compositor**. Please make sure that you have the correct one installed.
-///
-/// Desktop environments that are known to support the XDG Global Shortcuts
-/// protocol include:
-///
-///  - KDE Plasma since [5.27](https://kde.org/announcements/plasma/5/5.27.0/#wayland)
-///    with `xdg-desktop-portal-kde` installed
-///
-///  - GNOME since [48](https://release.gnome.org/48/#and-thats-not-all) with
-///    `xdg-desktop-portal-gnome` installed
-///
-///  - Hyprland before version 0.56.0, with `xdg-desktop-portal-hyprland`
-///    installed. **Some manual configuration is required.** Consult the steps
-///    outlined on the [Hyprland Wiki](https://wiki.hypr.land/Configuring/Basics/Binds/#dbus-global-shortcuts)
-///    to set up D-Bus-based global shortcuts correctly.
-///
-/// Desktop environments and compositors that don't implement either protocol
-/// do not support global shortcuts, like wlroots-based compositors e.g. Sway
-/// (see [upstream issue](https://github.com/emersion/xdg-desktop-portal-wlr/issues/240))
-/// and COSMIC.
-///
 /// ## Chained Actions
 ///
 /// A keybind can have multiple actions by using the `chain` keyword for
@@ -2550,8 +2512,9 @@ keybind: Keybinds = .{},
 @"config-file": RepeatablePath = .{},
 
 /// When this is true, the default configuration file paths will be loaded.
-/// The default configuration file paths are currently only the XDG
-/// config path ($XDG_CONFIG_HOME/ghostty/config.ghostty).
+/// These include `$XDG_CONFIG_HOME/cghostty/config.ghostty` and
+/// `$HOME/Library/Application Support/$CFBundleIdentifier/config.ghostty`.
+/// The Application Support configuration is loaded after the XDG configuration.
 ///
 /// If this is false, the default configuration paths will not be loaded.
 /// This is targeted directly at using Ghostty from the CLI in a way
@@ -2959,144 +2922,13 @@ keybind: Keybinds = .{},
 /// need KAM, you don't need it.
 @"vt-kam-allowed": bool = false,
 
-/// Custom shaders to run after the default shaders. This is a file path
-/// to a GLSL-syntax shader for all platforms.
-///
-/// Warning: Invalid shaders can cause Ghostty to become unusable such as by
-/// causing the window to be completely black. If this happens, you can
-/// unset this configuration to disable the shader.
-///
-/// Custom shader support is based on and compatible with the Shadertoy shaders.
-/// Shaders should specify a `mainImage` function and the available uniforms
-/// largely match Shadertoy, with some caveats and Ghostty-specific extensions.
-///
-/// The uniform values available to shaders are as follows:
-///
-///  * `sampler2D iChannel0` - Input texture.
-///
-///    A texture containing the current terminal screen. If multiple custom
-///    shaders are specified, the output of previous shaders is written to
-///    this texture, to allow combining multiple effects.
-///
-///  * `vec3 iResolution` - Output texture size, `[width, height, 1]` (in px).
-///
-///  * `float iTime` - Time in seconds since first frame was rendered.
-///
-///  * `float iTimeDelta` - Time in seconds since previous frame was rendered.
-///
-///  * `float iFrameRate` - Average framerate. (NOT CURRENTLY SUPPORTED)
-///
-///  * `int iFrame` - Number of frames that have been rendered so far.
-///
-///  * `float iChannelTime[4]` - Current time for video or sound input. (N/A)
-///
-///  * `vec3 iChannelResolution[4]` - Resolutions of the 4 input samplers.
-///
-///    Currently only `iChannel0` exists, and `iChannelResolution[0]` is
-///    identical to `iResolution`.
-///
-///  * `vec4 iMouse` - Mouse input info. (NOT CURRENTLY SUPPORTED)
-///
-///  * `vec4 iDate` - Date/time info. (NOT CURRENTLY SUPPORTED)
-///
-///  * `float iSampleRate` - Sample rate for audio. (N/A)
-///
-/// Ghostty-specific extensions:
-///
-///  * `vec4 iCurrentCursor` - Info about the terminal cursor.
-///
-///    - `iCurrentCursor.xy` is the -X, +Y corner of the current cursor.
-///    - `iCurrentCursor.zw` is the width and height of the current cursor.
-///
-///  * `vec4 iPreviousCursor` - Info about the previous terminal cursor.
-///
-///  * `vec4 iCurrentCursorColor` - Color of the terminal cursor.
-///
-///  * `vec4 iPreviousCursorColor` - Color of the previous terminal cursor.
-///
-///  * `vec4 iCurrentCursorStyle` - Style of the terminal cursor
-///
-///    Macros simplified use are defined for the various cursor styles:
-///
-///    - `CURSORSTYLE_BLOCK` or `0`
-///    - `CURSORSTYLE_BLOCK_HOLLOW` or `1`
-///    - `CURSORSTYLE_BAR` or `2`
-///    - `CURSORSTYLE_UNDERLINE` or `3`
-///    - `CURSORSTYLE_LOCK` or `4`
-///
-///  * `vec4 iPreviousCursorStyle` - Style of the previous terminal cursor
-///
-///  * `vec4 iCursorVisible` - Visibility of the terminal cursor.
-///
-///  * `float iTimeCursorChange` - Timestamp of terminal cursor change.
-///
-///    When the terminal cursor changes position or color, this is set to
-///    the same time as the `iTime` uniform, allowing you to compute the
-///    time since the change by subtracting this from `iTime`.
-///
-///  * `float iTimeFocus` - Timestamp when the surface last gained iFocus.
-///
-///    When the surface gains focus, this is set to the current value of
-///    `iTime`, similar to how `iTimeCursorChange` works. This allows you
-///    to compute the time since focus was gained or lost by calculating
-///    `iTime - iTimeFocus`. Use this to create animations that restart
-///    when the terminal regains focus.
-///
-///  * `int iFocus` - Current focus state of the surface.
-///
-///    Set to 1.0 when the surface is focused, 0.0 when unfocused. This
-///    allows shaders to detect unfocused state and avoid animation artifacts
-///    from large time deltas caused by infrequent "deceptive frames"
-///    (e.g., modifier key presses, link hover events in unfocused split panes).
-///    Check `iFocus > 0` to determine if the surface is currently focused.
-///
-///  * `vec3 iPalette[256]` - The 256-color terminal palette.
-///
-///    RGB values for all 256 colors in the terminal palette, normalized
-///    to [0.0, 1.0]. Index 0-15 are the ANSI colors, 16-231 are the 6x6x6
-///    color cube, and 232-255 are the grayscale colors.
-///
-///  * `vec3 iBackgroundColor` - Terminal background color (RGB).
-///
-///  * `vec3 iForegroundColor` - Terminal foreground color (RGB).
-///
-///  * `vec3 iCursorColor` - Terminal cursor color (RGB).
-///
-///  * `vec3 iCursorText` - Terminal cursor text color (RGB).
-///
-///  * `vec3 iSelectionBackgroundColor` - Selection background color (RGB).
-///
-///  * `vec3 iSelectionForegroundColor` - Selection foreground color (RGB).
-///
-/// If the shader fails to compile, the shader will be ignored. Any errors
-/// related to shader compilation will not show up as configuration errors
-/// and only show up in the log, since shader compilation happens after
-/// configuration loading on the dedicated render thread.  For interactive
-/// development, use [shadertoy.com](https://shadertoy.com).
-///
-/// This can be repeated multiple times to load multiple shaders. The shaders
-/// will be run in the order they are specified.
-///
-/// This can be changed at runtime and will affect all open terminals.
-@"custom-shader": RepeatablePath = .{},
-
-/// If `true` (default), the focused terminal surface will run an animation
-/// loop when custom shaders are used. This uses slightly more CPU (generally
-/// less than 10%) but allows the shader to animate. This only runs if there
-/// are custom shaders and the terminal is focused.
-///
-/// If this is set to `false`, the terminal and custom shader will only render
-/// when the terminal is updated. This is more efficient but the shader will
-/// not animate.
-///
-/// This can also be set to `always`, which will always run the animation
-/// loop regardless of whether the terminal is focused or not. The animation
-/// loop will still only run when custom shaders are used. Note that this
-/// will use more CPU per terminal surface and can become quite expensive
-/// depending on the shader and your terminal usage.
-///
-/// This can be changed at runtime and will affect all open terminals.
-@"custom-shader-animation": CustomShaderAnimation = .true,
+/// Native cursor effect. `smooth` uses a solid, dual-end stretch with
+/// distance-based timing. Interrupted moves continue from the displayed
+/// endpoints without repeatedly delaying the rear. Opaque block, bar, and
+/// underline cursors animate. A size change resets motion; hidden, unfocused,
+/// hollow, and lock cursors use the normal cursor.
+/// Set to `none` to disable. No external shader files are loaded.
+@"cursor-effect": enum { none, smooth } = .smooth,
 
 /// Bell features to enable if bell support is available in your runtime. Not
 /// all features are available on all runtimes. The format of this is a list of
@@ -3819,10 +3651,10 @@ fn writeConfigTemplate(path: []const u8) !void {
 }
 
 /// Load configurations from the default configuration files. The default
-/// configuration file is at `$XDG_CONFIG_HOME/ghostty/config.ghostty`.
+/// configuration file is at `$XDG_CONFIG_HOME/cghostty/config.ghostty`.
 ///
-/// On macOS, `$HOME/Library/Application Support/$CFBundleIdentifier/`
-/// is also loaded.
+/// `$HOME/Library/Application Support/$CFBundleIdentifier/` is loaded
+/// afterwards, so its settings take precedence.
 ///
 /// The legacy `config` file (without extension) is first loaded,
 /// then `config.ghostty`.
@@ -4531,6 +4363,14 @@ pub fn parseManuallyHook(
     return true;
 }
 
+fn compatRemovedShader(self: *Config, alloc: Allocator, key: []const u8, _: ?[]const u8) bool {
+    self._diagnostics.append(alloc, .{
+        .key = alloc.dupeZ(u8, key) catch return false,
+        .message = "GLSL shaders are no longer supported; remove this setting and use cursor-effect = smooth (or none).",
+    }) catch return false;
+    return true;
+}
+
 fn compatCursorInvertFgBg(
     self: *Config,
     alloc: Allocator,
@@ -4975,15 +4815,6 @@ const Replay = struct {
 /// c_int because it needs to be extern compatible
 /// If this is changed, you must also update ghostty.h
 pub const ConfirmCloseSurface = enum(c_int) {
-    false,
-    true,
-    always,
-};
-
-/// Valid values for custom-shader-animation
-/// c_int because it needs to be extern compatible
-/// If this is changed, you must also update ghostty.h
-pub const CustomShaderAnimation = enum(c_int) {
     false,
     true,
     always,
@@ -10743,4 +10574,16 @@ test "compatibility: window new-window" {
             cfg.@"macos-dock-drop-behavior",
         );
     }
+}
+
+test "config native cursor effect and removed GLSL diagnostics" {
+    const alloc = std.testing.allocator;
+    var config = try Config.default(alloc);
+    defer config.deinit();
+    try std.testing.expect(config.@"cursor-effect" == .smooth);
+    var iter: TestIterator = .{ .data = &.{ "--cursor-effect=none", "--custom-shader=obsolete.glsl" } };
+    try config.loadIter(alloc, &iter);
+    try std.testing.expect(config.@"cursor-effect" == .none);
+    try std.testing.expectEqual(@as(usize, 1), config._diagnostics.list.items.len);
+    try std.testing.expect(std.mem.indexOf(u8, config._diagnostics.list.items[0].message, "cursor-effect = smooth") != null);
 }

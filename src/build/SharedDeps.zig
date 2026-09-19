@@ -30,8 +30,7 @@ uucode_tables: std.Build.LazyPath,
 ///
 /// Sharing one instance is also a hard requirement (not just an
 /// optimization) for Zig 0.16's strict module model. `SharedDeps.add` runs
-/// many times across different (target, optimize) tuples (macos-aarch64,
-/// macos-x86_64, ios-aarch64, Debug + ReleaseFast, etc.), and on each
+/// for the macOS arm64 artifacts in Debug and ReleaseFast modes. On each
 /// call we have to wire uucode into both the step's root module and into
 /// vaxis_mod (because vaxis's `Parser.zig` does `@import("uucode")` and
 /// we pass `external_uucode = true` to vaxis's build.zig so vaxis doesn't
@@ -312,49 +311,6 @@ pub fn add(
         }
     }
 
-    // Glslang
-    if (b.lazyDependency("glslang", .{
-        .target = target,
-        .optimize = optimize,
-    })) |glslang_dep| {
-        step.root_module.addImport("glslang", glslang_dep.module("glslang"));
-        if (b.systemIntegrationOption("glslang", .{})) {
-            step.root_module.linkSystemLibrary("glslang", dynamic_link_opts);
-            step.root_module.linkSystemLibrary(
-                "glslang-default-resource-limits",
-                dynamic_link_opts,
-            );
-        } else {
-            step.root_module.linkLibrary(glslang_dep.artifact("glslang"));
-            try static_libs.append(
-                b.allocator,
-                glslang_dep.artifact("glslang").getEmittedBin(),
-            );
-        }
-    }
-
-    // Spirv-cross
-    if (b.lazyDependency("spirv_cross", .{
-        .target = target,
-        .optimize = optimize,
-    })) |spirv_cross_dep| {
-        step.root_module.addImport(
-            "spirv_cross",
-            spirv_cross_dep.module("spirv_cross"),
-        );
-        if (b.systemIntegrationOption("spirv-cross", .{})) {
-            step.root_module.linkSystemLibrary("spirv-cross-c-shared", dynamic_link_opts);
-        } else {
-            step.root_module.linkLibrary(spirv_cross_dep.artifact("spirv_cross"));
-            try static_libs.append(
-                b.allocator,
-                spirv_cross_dep.artifact("spirv_cross").getEmittedBin(),
-            );
-        }
-    }
-
-    // Sentry
-
     // Simd
     if (self.config.simd) try addSimd(
         b,
@@ -362,7 +318,6 @@ pub fn add(
         &static_libs,
     );
 
-    // Wasm we do manually since it is such a different build.
     // nothings/stb headers
     try translate_c.addImportToModule(b, "stb_c", step.root_module, .{
         .source = .{ .includes = .{ .files = &.{
@@ -377,26 +332,13 @@ pub fn add(
     // C files
     step.root_module.link_libc = true;
     step.root_module.addIncludePath(b.path("src/stb"));
-    // Disable ubsan for MSVC: Zig's ubsan runtime cannot be bundled
-    // on Windows (LNK4229), leaving __ubsan_handle_* unresolved when
-    // the static archive is consumed by an external linker.
     step.root_module.addCSourceFiles(.{
         .files = &.{"src/stb/stb.c"},
-        .flags = if (step.rootModuleTarget().abi == .msvc)
-            &.{ "-fno-sanitize=undefined", "-fno-sanitize-trap=undefined" }
-        else
-            &.{},
+        .flags = &.{},
     });
 
-    // libcpp is required for various dependencies. On MSVC, we must
-    // not use linkLibCpp because Zig unconditionally passes -nostdinc++
-    // and then adds its bundled libc++/libc++abi include paths, which
-    // conflict with MSVC's own C++ runtime headers. The MSVC SDK
-    // include directories (already added via linkLibC above) contain
-    // both C and C++ headers, so linkLibCpp is not needed.
-    if (step.rootModuleTarget().abi != .msvc) {
-        step.root_module.link_libcpp = true;
-    }
+    // libc++ is required for the app's C++ dependencies.
+    step.root_module.link_libcpp = true;
 
     // We always require the system SDK so that our system headers are available.
     // This makes things like `os/log.h` available for cross-compiling.
@@ -496,11 +438,9 @@ pub fn add(
         .target = target,
         .optimize = optimize,
         .freetype = true,
-        .@"backend-metal" = target.result.os.tag.isDarwin(),
-        .@"backend-osx" = target.result.os.tag == .macos,
-        // OpenGL3 backend should only be built on non-Apple targets.
-        // Apple platforms use Metal (and macOS may also use the OSX backend).
-        .@"backend-opengl3" = !target.result.os.tag.isDarwin(),
+        .@"backend-metal" = true,
+        .@"backend-osx" = true,
+        .@"backend-opengl3" = false,
     })) |dep| {
         step.root_module.addImport("dcimgui", dep.module("dcimgui"));
         step.root_module.linkLibrary(dep.artifact("dcimgui"));

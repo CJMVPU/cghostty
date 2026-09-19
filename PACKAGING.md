@@ -23,3 +23,5 @@ bash macos/package.sh
 `.github/workflows/macos.yml` 在 main、PR 和手动运行时执行测试与打包；推送 `v*` 标签时以标签版本构建，并在**当前仓库**创建草稿 Release。CI 默认没有 Developer ID / 公证凭据，草稿说明会标注 ad-hoc 状态。核验后由仓库所有者发布草稿；工作流不会自动公开 Release。
 
 应用内“检查更新”打开本仓库 Releases 页面。已删除上游 Sparkle feed、公钥、自动下载更新逻辑及 Sentry 崩溃上传。不会向 Ghostty 上游发布仓库推送产物。
+
+应用最低系统版本为 macOS 27，包内所有可执行产物仅含 arm64。打包前使用 `scripts/check-scope.py --app` 检查系统版本、原生光标配置和已移除的 GLSL 入口。

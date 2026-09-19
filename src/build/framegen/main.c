@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
     const char *frames_dir = argv[1];
     const char *output_file = argv[2];
 
-    // Use opendir/readdir instead of scandir for Windows compatibility
+    // Collect frame filenames before sorting them below.
     DIR *dir = opendir(frames_dir);
     if (!dir) {
         fprintf(stderr, "Failed to scan directory %s: %s\n", frames_dir, strerror(errno));

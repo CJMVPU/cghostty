@@ -8,7 +8,7 @@ const RunStep = std.Build.Step.Run;
 const LazyPath = std.Build.LazyPath;
 
 pub const Options = struct {
-    /// The name of the xcframework to create.
+    /// The name of the Metal library to create.
     name: []const u8,
 
     /// The OS being targeted
@@ -36,7 +36,7 @@ pub fn create(b: *std.Build, opts: Options) ?*MetallibStep {
     const min_version = if (opts.target.query.os_version_min) |v|
         b.fmt("{f}", .{v.semver})
     else switch (opts.target.result.os.tag) {
-        .macos => "10.14",
+        .macos => "27.0",
         else => unreachable,
     };
 
@@ -46,7 +46,7 @@ pub fn create(b: *std.Build, opts: Options) ?*MetallibStep {
     );
     run_ir.addArgs(&.{ "/usr/bin/xcrun", "--toolchain", "Metal", "-sdk", sdk, "metal", "-o" });
     const output_ir = run_ir.addOutputFileArg(b.fmt("{s}.ir", .{opts.name}));
-    run_ir.addArgs(&.{"-c"});
+    run_ir.addArgs(&.{ "-c", "-std=metal4.1" });
     for (opts.sources) |source| run_ir.addFileArg(source);
     if (platform_version_arg) |arg| {
         run_ir.addArgs(&.{b.fmt(

@@ -60,8 +60,6 @@
         .zlib = .{ .path = "./pkg/zlib", .lazy = true },
 
         // Shader translation
-        .glslang = .{ .path = "./pkg/glslang", .lazy = true },
-        .spirv_cross = .{ .path = "./pkg/spirv-cross", .lazy = true },
 
         // Fonts
         .jetbrains_mono = .{

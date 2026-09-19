@@ -18,7 +18,7 @@ A file for [guiding coding agents](https://agents.md/).
 
 ## Scope and Structure
 
-- Only macOS 13+ on Apple Silicon arm64 is supported.
+- Only macOS 27+ on Apple Silicon arm64 is supported.
 - Core: `src/`; native app: `macos/`.
 - Internal `GhosttyKit.xcframework` bridges the app; no standalone library SDK.
 - App build: `nu macos/build.nu`; tests: `nu macos/build.nu --action test`.

@@ -19,6 +19,9 @@ def check(condition, message):
 
 for name in ('src/apprt/gtk', 'src/apprt/gtk.zig', 'src/main_wasm.zig',
              'src/lib_vt.zig', 'src/terminal/c', 'include/ghostty',
+             'src/renderer/Dmabuf.zig', 'src/renderer/shaders/glsl',
+             'test/wasm-alloc.mjs', 'pkg/glslang', 'pkg/spirv-cross',
+             'src/renderer/shadertoy.zig',
              'src/build/GhosttyLibVt.zig', 'src/build/webgen', 'example',
              'flatpak', 'snap', 'nix', 'dist', 'test/windows', 'test/fuzz-libghostty'):
     check(not (ROOT / name).exists(), f'Out-of-scope source returned: {name}')
@@ -31,10 +34,15 @@ project_configs = objects[objects[project['rootObject']]['buildConfigurationList
 for ref in project_configs:
     settings = objects[ref]['buildSettings']
     check(settings['ARCHS'] == 'arm64', 'Xcode project enables another architecture')
+for obj in objects.values():
+    target = obj.get('buildSettings', {}).get('MACOSX_DEPLOYMENT_TARGET')
+    if target is not None:
+        check(target == '27.0', 'All Xcode targets, including tests and plugins, must require macOS 27')
 app_configs = [obj for obj in objects.values() if obj.get('buildSettings', {}).get('PRODUCT_NAME') == 'cghostty']
 check(len(app_configs) == 3, 'Expected Debug, ReleaseLocal, and Release app configurations')
 for obj in app_configs:
     settings = obj['buildSettings']
+    check(settings['MACOSX_DEPLOYMENT_TARGET'] == '27.0', 'App deployment target must be macOS 27')
     expected = 'com.cjmvpu.cghostty' + ('.debug' if obj['name'] == 'Debug' else '')
     check(settings['PRODUCT_BUNDLE_IDENTIFIER'] == expected, 'App bundle identity mismatch')
     check(settings['EXECUTABLE_NAME'] == 'cghostty', 'App executable identity mismatch')
@@ -63,6 +71,7 @@ if args.app:
         info = plistlib.load(source)
     check(info['CFBundleIdentifier'] == 'com.cjmvpu.cghostty', 'Release app bundle ID mismatch')
     check(info['CFBundleExecutable'] == 'cghostty', 'Executable name mismatch')
+    check(info['LSMinimumSystemVersion'] == '27.0', 'App must require macOS 27')
     check('SUFeedURL' not in info and 'SUPublicEDKey' not in info, 'Upstream updater metadata remains')
     executables = [app / 'Contents/MacOS/cghostty', app / 'Contents/PlugIns/DockTilePlugin.plugin/Contents/MacOS/DockTilePlugin']
     for binary in executables:
@@ -78,6 +87,8 @@ if args.app:
     keys = {line.split('=', 1)[0].strip() for line in defaults.splitlines() if '=' in line}
     check(not any(key.startswith(('gtk-', 'linux-cgroup', 'auto-update')) for key in keys),
           'Removed platform/updater configuration is still exposed')
+    check('cursor-effect' in keys, 'Native cursor effect is missing')
+    check(not {'custom-shader', 'custom-shader-animation'} & keys, 'GLSL configuration remains')
     check(not {'class', 'language', 'x11-instance-name'} & keys, 'GTK-only configuration remains')
     help_text = subprocess.check_output([str(executables[0]), '+help'], text=True)
     check('+new-window' not in help_text and '+new-tab' not in help_text and '+toggle-quick-terminal' not in help_text,

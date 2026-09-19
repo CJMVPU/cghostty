@@ -13,7 +13,6 @@ const font = @import("../font/main.zig");
 const configpkg = @import("../config.zig");
 const rendererpkg = @import("../renderer.zig");
 const Renderer = rendererpkg.GenericRenderer(Metal);
-const shadertoy = @import("shadertoy.zig");
 
 const mtl = @import("metal/api.zig");
 const IOSurfaceLayer = @import("metal/IOSurfaceLayer.zig");
@@ -21,6 +20,7 @@ const IOSurfaceLayer = @import("metal/IOSurfaceLayer.zig");
 pub const GraphicsAPI = Metal;
 pub const Target = @import("metal/Target.zig");
 pub const Frame = @import("metal/Frame.zig");
+pub const Commands = Frame.Commands;
 pub const RenderPass = @import("metal/RenderPass.zig");
 pub const Pipeline = @import("metal/Pipeline.zig");
 const bufferpkg = @import("metal/buffer.zig");
@@ -28,10 +28,6 @@ pub const Buffer = bufferpkg.Buffer;
 pub const Sampler = @import("metal/Sampler.zig");
 pub const Texture = @import("metal/Texture.zig");
 pub const shaders = @import("metal/shaders.zig");
-
-pub const custom_shader_target: shadertoy.Target = .msl;
-// The fragCoord for Metal shaders is +Y = down.
-pub const custom_shader_y_is_down = true;
 
 /// Triple buffering.
 pub const swap_chain_count = 3;
@@ -42,7 +38,7 @@ layer: IOSurfaceLayer,
 
 /// MTLDevice
 device: objc.Object,
-/// MTLCommandQueue
+/// MTL4CommandQueue
 queue: objc.Object,
 
 /// Alpha blending mode
@@ -69,10 +65,10 @@ pub fn init(alloc: Allocator, opts: rendererpkg.Options) !Metal {
 
     _ = alloc;
 
-    // Choose our MTLDevice and create a MTLCommandQueue for that device.
+    // Choose our MTLDevice and create a MTL4CommandQueue for that device.
     const device = try chooseDevice();
     errdefer device.release();
-    const queue = device.msgSend(objc.Object, objc.sel("newCommandQueue"), .{});
+    const queue = device.msgSend(objc.Object, objc.sel("newMTL4CommandQueue"), .{});
     errdefer queue.release();
 
     // Grab metadata about the device.
@@ -111,12 +107,9 @@ pub fn init(alloc: Allocator, opts: rendererpkg.Options) !Metal {
 
     // Add our layer to the view.
     //
-    // On macOS we do this by making the view "layer-hosting"
+    // Make the NSView "layer-hosting"
     // by assigning it to the view's `layer` property BEFORE
     // setting `wantsLayer` to `true`.
-    //
-    // On iOS, views are always layer-backed, and `layer`
-    // is readonly, so instead we add it as a sublayer.
     switch (builtin.os.tag) {
         .macos => {
             info.view.setProperty("layer", layer.layer.value);
@@ -187,12 +180,10 @@ pub fn drawFrameEnd(self: *Metal) void {
 pub fn initShaders(
     self: *const Metal,
     alloc: Allocator,
-    custom_shaders: []const [:0]const u8,
 ) !shaders.Shaders {
     return try shaders.Shaders.init(
         alloc,
         self.device,
-        custom_shaders,
         // Using an `*_srgb` pixel format makes Metal gamma encode
         // the pixels written to it *after* blending, which means
         // we get linear alpha blending rather than gamma-incorrect
@@ -202,6 +193,12 @@ pub fn initShaders(
         else
             mtl.MTLPixelFormat.bgra8unorm,
     );
+}
+
+/// Read the live macOS accessibility preference; no animated effect when set.
+pub fn reduceMotion(_: *const Metal) bool {
+    const workspace = objc.getClass("NSWorkspace").?.msgSend(objc.Object, "sharedWorkspace", .{});
+    return workspace.getProperty(bool, "accessibilityDisplayShouldReduceMotion");
 }
 
 /// Get the current size of the runtime surface.
@@ -268,46 +265,6 @@ pub const fgBufferOptions = bufferOptions;
 pub const bgBufferOptions = bufferOptions;
 pub const imageBufferOptions = bufferOptions;
 pub const bgImageBufferOptions = bufferOptions;
-
-/// Returns the options to use when constructing textures.
-pub inline fn textureOptions(self: Metal) Texture.Options {
-    return .{
-        .device = self.device,
-        // Using an `*_srgb` pixel format makes Metal gamma encode the pixels
-        // written to it *after* blending, which means we get linear alpha
-        // blending rather than gamma-incorrect blending.
-        .pixel_format = if (self.blending.isLinear())
-            .bgra8unorm_srgb
-        else
-            .bgra8unorm,
-        .resource_options = .{
-            // Indicate that the CPU writes to this resource but never reads it.
-            .cpu_cache_mode = .write_combined,
-            .storage_mode = self.default_storage_mode,
-        },
-        .usage = .{
-            // textureOptions is currently only used for custom shaders,
-            // which require both the shader read (for when multiple shaders
-            // are chained) and render target (for the final output) usage.
-            // Disabling either of these will lead to metal validation
-            // errors in Xcode.
-            .shader_read = true,
-            .render_target = true,
-        },
-    };
-}
-
-pub inline fn samplerOptions(self: Metal) Sampler.Options {
-    return .{
-        .device = self.device,
-
-        // These parameters match Shadertoy behaviors.
-        .min_filter = .linear,
-        .mag_filter = .linear,
-        .s_address_mode = .clamp_to_edge,
-        .t_address_mode = .clamp_to_edge,
-    };
-}
 
 /// Pixel format for image texture options.
 pub const ImageTextureFormat = enum {
@@ -390,8 +347,9 @@ pub inline fn beginFrame(
     renderer: *Renderer,
     /// The target is presented via the provided renderer's API when completed.
     target: *Target,
+    commands: *Frame.Commands,
 ) !Frame {
-    return try Frame.begin(.{ .queue = self.queue }, renderer, target);
+    return try Frame.begin(.{ .queue = self.queue, .commands = commands }, renderer, target);
 }
 
 /// Warm up the Metal device machinery. The first Metal device query in
@@ -407,7 +365,7 @@ pub fn warmup() void {
     // Create and release a command queue. The first command queue
     // created for a device pays additional one-time driver setup
     // costs; subsequent creations are much cheaper.
-    const queue = device.msgSend(objc.Object, objc.sel("newCommandQueue"), .{});
+    const queue = device.msgSend(objc.Object, objc.sel("newMTL4CommandQueue"), .{});
     queue.release();
 
     // Build and discard our shader pipelines for both pixel formats we
@@ -421,7 +379,6 @@ pub fn warmup() void {
         if (shaders.Shaders.init(
             std.heap.c_allocator,
             device,
-            &.{},
             format,
         )) |s| {
             var s_mut = s;

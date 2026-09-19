@@ -1,131 +1,136 @@
-//! Wrapper for handling render passes.
+//! Metal 4 submissions. Each swap-chain slot owns reusable encoding storage.
 const Self = @This();
-
 const std = @import("std");
-const Allocator = std.mem.Allocator;
 const objc = @import("objc");
-
-const mtl = @import("api.zig");
-const Renderer = @import("../generic.zig").Renderer(Metal);
+const global = @import("../../global.zig");
 const Metal = @import("../Metal.zig");
+const Renderer = @import("../generic.zig").Renderer(Metal);
 const Target = @import("Target.zig");
 const RenderPass = @import("RenderPass.zig");
-
 const Health = @import("../../renderer.zig").Health;
-
 const log = std.log.scoped(.metal);
 
-/// Options for beginning a frame.
-pub const Options = struct {
-    /// MTLCommandQueue
-    queue: objc.Object,
-};
-
-/// MTLCommandBuffer
-buffer: objc.Object,
-
-block: CompletionBlock.Context,
-
-/// Begin encoding a frame.
-pub fn begin(
-    opts: Options,
-    /// Once the frame has been completed, the `frameCompleted` method
-    /// on the renderer is called with the health status of the frame.
-    renderer: *Renderer,
-    /// The target is presented via the provided renderer's API when completed.
-    target: *Target,
-) !Self {
-    const buffer = opts.queue.msgSend(
-        objc.Object,
-        objc.sel("commandBuffer"),
-        .{},
-    );
-
-    // Create our block to register for completion updates.
-    // The block is deallocated by the objC runtime on success.
-    const block = CompletionBlock.init(
-        .{
-            .renderer = renderer,
-            .target = target,
-            .sync = false,
-        },
-        &bufferCompleted,
-    );
-
-    return .{ .buffer = buffer, .block = block };
+pub fn object(class: [:0]const u8) objc.Object {
+    return objc.getClass(class).?.msgSend(objc.Object, "new", .{});
 }
 
-/// This is the block type used for the addCompletedHandler callback.
-const CompletionBlock = objc.Block(struct {
-    renderer: *Renderer,
-    target: *Target,
-    sync: bool,
-}, .{
-    objc.c.id, // MTLCommandBuffer
-}, void);
+pub const Commands = struct {
+    buffer: objc.Object,
+    allocator: objc.Object,
+    arguments: objc.Object,
+    residency: objc.Object,
+    /// Metal 4 doesn't retain resources referenced by GPU addresses.
+    retained: objc.Object,
+    health: Health = .healthy,
+    completed: std.Io.Semaphore = .{ .permits = 0 },
 
-fn bufferCompleted(
-    block: *const CompletionBlock.Context,
-    buffer_id: objc.c.id,
-) callconv(.c) void {
-    const buffer = objc.Object.fromId(buffer_id);
-
-    // Get our command buffer status to pass back to the generic renderer.
-    const status = buffer.getProperty(mtl.MTLCommandBufferStatus, "status");
-    const health: Health = switch (status) {
-        .@"error" => .unhealthy,
-        else => .healthy,
-    };
-
-    // If the frame is healthy, present it.
-    if (health == .healthy) {
-        block.renderer.api.present(
-            block.target.*,
-            block.sync,
-        ) catch |err| {
-            log.err("Failed to present render target: err={}", .{err});
+    pub fn init(device: objc.Object) !Commands {
+        const buffer = device.msgSend(?*anyopaque, "newCommandBuffer", .{}) orelse return error.MetalFailed;
+        errdefer objc.Object.fromId(buffer).release();
+        const allocator = device.msgSend(?*anyopaque, "newCommandAllocator", .{}) orelse return error.MetalFailed;
+        errdefer objc.Object.fromId(allocator).release();
+        const desc = object("MTL4ArgumentTableDescriptor");
+        defer desc.release();
+        desc.setProperty("maxBufferBindCount", @as(c_ulong, 4));
+        desc.setProperty("maxTextureBindCount", @as(c_ulong, 4));
+        desc.setProperty("maxSamplerStateBindCount", @as(c_ulong, 4));
+        const arguments = device.msgSend(?*anyopaque, "newArgumentTableWithDescriptor:error:", .{ desc, @as(?*anyopaque, null) }) orelse return error.MetalFailed;
+        errdefer objc.Object.fromId(arguments).release();
+        const residency_desc = object("MTLResidencySetDescriptor");
+        defer residency_desc.release();
+        const residency = device.msgSend(?*anyopaque, "newResidencySetWithDescriptor:error:", .{ residency_desc, @as(?*anyopaque, null) }) orelse return error.MetalFailed;
+        return .{
+            .buffer = objc.Object.fromId(buffer),
+            .allocator = objc.Object.fromId(allocator),
+            .arguments = objc.Object.fromId(arguments),
+            .residency = objc.Object.fromId(residency),
+            .retained = object("NSMutableSet"),
         };
     }
 
+    pub fn deinit(self: *Commands) void {
+        self.buffer.release();
+        self.allocator.release();
+        self.arguments.release();
+        self.residency.release();
+        self.retained.release();
+    }
+
+    pub fn retainResource(self: *const Commands, resource: objc.Object, allocation: bool) void {
+        self.retained.msgSend(void, "addObject:", .{resource});
+        if (allocation) self.residency.msgSend(void, "addAllocation:", .{resource});
+    }
+};
+
+pub const Options = struct { queue: objc.Object, commands: *Commands };
+queue: objc.Object,
+commands: *Commands,
+block: CompletionBlock.Context,
+
+pub fn begin(opts: Options, renderer: *Renderer, target: *Target) !Self {
+    const c = opts.commands;
+    // The swap-chain semaphore guarantees this slot is no longer in flight.
+    c.allocator.msgSend(void, "reset", .{});
+    c.residency.msgSend(void, "removeAllAllocations", .{});
+    c.retained.msgSend(void, "removeAllObjects", .{});
+    c.buffer.msgSend(void, "beginCommandBufferWithAllocator:", .{c.allocator});
+    return .{
+        .queue = opts.queue,
+        .commands = c,
+        .block = CompletionBlock.init(.{ .renderer = renderer, .target = target, .commands = c, .sync = false }, &bufferCompleted),
+    };
+}
+
+const CompletionBlock = objc.Block(struct {
+    renderer: *Renderer,
+    target: *Target,
+    commands: *Commands,
+    sync: bool,
+}, .{objc.c.id}, void);
+
+fn bufferCompleted(block: *const CompletionBlock.Context, feedback_id: objc.c.id) callconv(.c) void {
+    const feedback = objc.Object.fromId(feedback_id);
+    const err = feedback.getProperty(?*anyopaque, "error");
+    const health: Health = if (err == null) .healthy else .unhealthy;
+    if (block.sync) {
+        block.commands.health = health;
+        block.commands.completed.post(global.io());
+        return;
+    }
+    if (health == .healthy) {
+        block.renderer.api.present(block.target.*, block.sync) catch |failure| {
+            log.err("Failed to present render target: {}", .{failure});
+        };
+    } else {
+        const description = objc.Object.fromId(err.?).getProperty(objc.Object, "localizedDescription");
+        const message = description.msgSend([*:0]const u8, "UTF8String", .{});
+        log.err("Metal 4 submission failed: {s}", .{message});
+    }
     block.renderer.frameCompleted(health);
 }
 
-/// Add a render pass to this frame with the provided attachments.
-/// Returns a RenderPass which allows render steps to be added.
-pub inline fn renderPass(
-    self: *const Self,
-    attachments: []const RenderPass.Options.Attachment,
-) RenderPass {
-    return RenderPass.begin(.{
-        .attachments = attachments,
-        .command_buffer = self.buffer,
-    });
+pub fn renderPass(self: *const Self, attachments: []const RenderPass.Options.Attachment) RenderPass {
+    return RenderPass.begin(.{ .attachments = attachments, .commands = self.commands });
 }
 
-/// Complete this frame and present the target.
-///
-/// If `sync` is true, this will block until the frame is presented.
-pub inline fn complete(self: *Self, sync: bool) void {
-    // If we don't need to complete synchronously,
-    // we add our block as a completion handler.
-    //
-    // It will be copied when we add the handler, and then the
-    // copy will be deallocated by the objc runtime on success.
-    if (!sync) {
-        self.buffer.msgSend(
-            void,
-            objc.sel("addCompletedHandler:"),
-            .{&self.block},
-        );
-    }
-
-    self.buffer.msgSend(void, objc.sel("commit"), .{});
-
-    // If we need to complete synchronously, we wait until
-    // the buffer is completed and invoke the block directly.
+pub fn complete(self: *Self, sync: bool) void {
+    self.block.sync = sync;
+    const c = self.commands;
+    c.residency.msgSend(void, "commit", .{});
+    c.buffer.msgSend(void, "useResidencySet:", .{c.residency});
+    c.buffer.msgSend(void, "endCommandBuffer", .{});
+    const options = object("MTL4CommitOptions");
+    defer options.release();
+    options.msgSend(void, "addFeedbackHandler:", .{&self.block});
+    const buffers = [_]objc.c.id{c.buffer.value};
+    self.queue.msgSend(void, "commit:count:options:", .{ &buffers, @as(c_ulong, 1), options });
     if (sync) {
-        self.buffer.msgSend(void, "waitUntilCompleted", .{});
-        self.block.sync = true;
-        CompletionBlock.invoke(&self.block, .{self.buffer.value});
+        c.completed.waitUncancelable(global.io());
+        // Core Animation's synchronous display callback must present on its
+        // caller, never on the Metal feedback queue while the caller waits.
+        if (c.health == .healthy) self.block.renderer.api.present(self.block.target.*, true) catch |err| {
+            log.err("Failed to present synchronous frame: {}", .{err});
+        };
+        self.block.renderer.frameCompleted(c.health);
     }
 }

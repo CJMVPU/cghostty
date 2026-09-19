@@ -1,6 +1,6 @@
 # cghostty 开发
 
-仅支持 Apple Silicon macOS。工具安装和首次构建见 README。
+仅支持 macOS 27+、Apple Silicon，使用 Xcode 27+ 与 MSL 4.1。工具安装和首次构建见 README。
 
 ## 构建与验证
 
@@ -38,3 +38,10 @@ Xcode scheme 和 Swift 模块仍为 `Ghostty`，C 桥接模块为 `GhosttyKit`�
 ## 构建服务
 
 Metal 编译通过 `xcrun --toolchain Metal` 调用安装的工具链。缺失时先执行 `xcodebuild -downloadComponent MetalToolchain`。无需 Linux 容器、Nix、Flatpak、Snap、独立 CMake SDK 或网站数据生成环境。
+
+## 渲染与光标回归
+
+`zig build test -Dtest-filter=renderer -Dtest-filter=config` 覆盖光标距离分档、曲线单调性、中断时两个端点连续、尾端收拢和配置迁移提示。
+Metal 4 每个在途帧独占可复用的命令缓冲区、分配器、参数表与 residency set，GPU 完成后才允许重用。
+开启 `MTL_DEBUG_LAYER=1` 运行应用可检查 Metal API；交互验收需覆盖单步、快速输入、连续导航、斜向移动、中文宽字符、选区、失焦和缩放。
+CI 使用 GitHub `xcode-27` arm64 预览镜像，并在运行测试前验证系统为 macOS 27+。

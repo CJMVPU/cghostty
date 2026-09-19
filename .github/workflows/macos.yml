@@ -12,12 +12,14 @@ concurrency:
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 jobs:
   build:
-    runs-on: macos-26
+    # Xcode 27 arm64 preview image; the setup step verifies macOS 27+.
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Apple Silicon tools
         run: |
           test "$(uname -m)" = arm64
+          test "$(sw_vers -productVersion | cut -d. -f1)" -ge 27
           brew install nushell gettext
           echo "$(brew --prefix gettext)/bin" >> "$GITHUB_PATH"
           bash scripts/install-zig.sh "$RUNNER_TEMP/cghostty-tools"
@@ -35,6 +37,7 @@ jobs:
         run: python3 scripts/check-scope.py
       - name: Core regression tests
         run: |
+          zig build test -Dtest-filter=renderer
           zig build test -Dtest-filter=config
           zig build test -Dtest-filter=Command
           zig build test -Dtest-filter=Terminal
@@ -58,7 +61,8 @@ jobs:
   release:
     if: startsWith(github.ref, 'refs/tags/')
     needs: build
-    runs-on: macos-26
+    # Xcode 27 arm64 preview image; the setup step verifies macOS 27+.
+    runs-on: xcode-27
     permissions:
       contents: write
     steps:

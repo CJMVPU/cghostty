@@ -42,7 +42,7 @@ wakeup_c: xev.Completion = .{},
 stop: xev.Async,
 stop_c: xev.Completion = .{},
 
-/// The timer used for animations (custom shaders, Kitty graphics).
+/// The timer used for animations (smooth cursor, Kitty graphics).
 /// Normal rendering is driven by wakeup messages instead.
 render_h: xev.Timer,
 render_c: xev.Completion = .{},
@@ -214,9 +214,7 @@ fn threadMain_(self: *Thread) !void {
     if (has_loop) try self.renderer.loopEnter(self);
     defer if (has_loop) self.renderer.loopExit();
 
-    // Run our thread start/end callbacks. This is important because some
-    // renderers have to do per-thread setup. For example, OpenGL has to set
-    // some thread-local state since that is how it works.
+    // Run the renderer's thread setup and cleanup callbacks.
     try self.renderer.threadEnter(self.surface);
     defer self.renderer.threadExit();
 
@@ -239,7 +237,7 @@ fn threadMain_(self: *Thread) !void {
     );
 
     // Arm the animation timer in case the renderer already needs
-    // animation wakes (e.g. custom shaders loaded at startup).
+    // animation wakes (e.g. an active Kitty image).
     self.armAnimationTimer();
 
     // Run
@@ -336,7 +334,7 @@ fn drainMailbox(self: *Thread) !void {
                 // Set it on the renderer
                 try self.renderer.setFocus(v);
 
-                // Focus gates custom shader animation, so re-arm
+                // Focus gates smooth cursor animation, so re-arm
                 // the animation timer for the new state.
                 self.armAnimationTimer();
 
@@ -400,7 +398,7 @@ fn drainMailbox(self: *Thread) !void {
                 try self.renderer.changeConfig(config.impl);
 
                 // The config affects what animation wakes the
-                // renderer needs (custom shaders, animation mode).
+                // renderer needs (smooth cursor, animation mode).
                 self.armAnimationTimer();
             },
 
@@ -630,7 +628,7 @@ fn animationTimerCallback(
             {},
         ),
 
-        // A redraw alone suffices (custom shader time uniform).
+        // A redraw alone suffices (smooth cursor motion).
         // Draw calls don't update from the terminal state so they
         // are much cheaper than a frame update.
         .draw => {

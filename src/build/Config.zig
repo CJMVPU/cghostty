@@ -66,7 +66,7 @@ pub fn init(b: *std.Build, version: []const u8) !Config {
         };
         @field(config, &field) = b.option(bool, "emit-" ++ name, "Build/install " ++ name) orelse @field(config, &field);
     }
-    for ([_][]const u8{ "freetype", "harfbuzz", "libpng", "zlib", "oniguruma", "glslang", "spirv-cross", "simdutf", "libintl" }) |dep| {
+    for ([_][]const u8{ "freetype", "harfbuzz", "libpng", "zlib", "oniguruma", "simdutf", "libintl" }) |dep| {
         _ = b.systemIntegrationOption(dep, .{ .default = false });
     }
     return config;
@@ -112,7 +112,7 @@ pub fn omitFramePointer(_: *const Config) bool {
     return false;
 }
 pub fn osVersionMin(_: std.Target.Os.Tag) ?std.Target.Query.OsVersion {
-    return .{ .semver = .{ .major = 13, .minor = 0, .patch = 0 } };
+    return .{ .semver = .{ .major = 27, .minor = 0, .patch = 0 } };
 }
 pub fn genericMacOSTarget(
     b: *std.Build,

@@ -41,6 +41,7 @@ pub const Key = enum {
 /// Must be initialized by resizing before calling any operations.
 pub const Contents = struct {
     size: renderer.GridSize = .{ .rows = 0, .columns = 0 },
+    cursor_style: ?renderer.CursorStyle = null,
 
     /// Flat array containing cell background colors for the terminal grid.
     ///
@@ -138,6 +139,7 @@ pub const Contents = struct {
         v: ?shaderpkg.CellText,
         cursor_style: ?renderer.CursorStyle,
     ) void {
+        self.cursor_style = if (v != null) cursor_style else null;
         if (self.size.rows == 0) return;
         self.fg_rows[0].clearRetainingCapacity();
         self.fg_rows[self.size.rows + 1].clearRetainingCapacity();
