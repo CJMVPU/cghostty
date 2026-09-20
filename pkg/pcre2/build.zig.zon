@@ -7,7 +7,6 @@
         .pcre2 = .{
             .url = "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.48/pcre2-10.48.tar.gz",
             .hash = "pcre2-10.48.0-IZ6r69wnegD6fc08FgRTKVcmyp4Ux2aVefaVvsRndgEl",
-            .lazy = true,
         },
         .apple_sdk = .{ .path = "../apple-sdk" },
         .translate_c = .{ .path = "../translate-c" },

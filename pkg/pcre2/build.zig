@@ -11,13 +11,15 @@ pub fn build(b: *std.Build) !void {
     });
 
     // Use upstream's build; compile only the UTF-8 library, without JIT.
-    const upstream = b.lazyDependency("pcre2", .{
+    // Consumers request the re-exported artifact during graph construction.
+    // Resolve this required source before publishing the wrapper dependency.
+    const upstream = b.dependency("pcre2", .{
         .target = target,
         .optimize = optimize,
         .linkage = .static,
         .@"code-unit-width" = .@"8",
         .support_jit = false,
-    }) orelse return;
+    });
     const lib = upstream.artifact("pcre2-8");
     try @import("apple_sdk").addPaths(b, lib);
     b.installArtifact(lib);
