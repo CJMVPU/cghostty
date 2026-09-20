@@ -22,16 +22,7 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         case .native: "Terminal"
         case .hidden: "TerminalHiddenTitlebar"
         case .transparent: "TerminalTransparentTitlebar"
-        case .tabs:
-#if compiler(>=6.2)
-            if #available(macOS 26.0, *) {
-                "TerminalTabsTitlebarTahoe"
-            } else {
-                "TerminalTabsTitlebarVentura"
-            }
-#else
-            "TerminalTabsTitlebarVentura"
-#endif
+        case .tabs: "TerminalTabsTitlebarTahoe"
         }
 
         return nib
@@ -139,7 +130,7 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         fatalError("init(coder:) is not supported for this view")
     }
 
-    deinit {
+    isolated deinit {
         // Remove all of our notificationcenter subscriptions
         let center = NotificationCenter.default
         center.removeObserver(self)
@@ -1547,16 +1538,14 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         // find a better workaround. For now, this improves things dramatically.
         //
         // Reproduction: titlebar tabs, create two tabs, "move tab left"
-        if #available(macOS 26, *) {
-            if window is TitlebarTabsTahoeTerminalWindow {
-                tabGroup.removeWindow(selectedWindow)
-                targetWindow.addTabbedWindowSafely(selectedWindow, ordered: action.amount < 0 ? .below : .above)
-                DispatchQueue.main.async {
-                    selectedWindow.makeKey()
-                }
-
-                return
+        if window is TitlebarTabsTahoeTerminalWindow {
+            tabGroup.removeWindow(selectedWindow)
+            targetWindow.addTabbedWindowSafely(selectedWindow, ordered: action.amount < 0 ? .below : .above)
+            DispatchQueue.main.async {
+                selectedWindow.makeKey()
             }
+
+            return
         }
 
         // Begin a group of window operations to minimize visual updates

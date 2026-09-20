@@ -3,8 +3,8 @@ import AppIntents
 import GhosttyKit
 
 struct CloseTerminalIntent: AppIntent {
-    static var title: LocalizedStringResource = "Close Terminal"
-    static var description = IntentDescription("Close an existing terminal.")
+    static let title: LocalizedStringResource = "Close Terminal"
+    static let description = IntentDescription("Close an existing terminal.")
 
     @Parameter(
         title: "Terminal",
@@ -12,10 +12,7 @@ struct CloseTerminalIntent: AppIntent {
     )
     var terminal: TerminalEntity
 
-#if compiler(>=6.2)
-    @available(macOS 26.0, *)
-    static var supportedModes: IntentModes = .background
-#endif
+    static let supportedModes: IntentModes = .background
 
     @MainActor
     func perform() async throws -> some IntentResult {

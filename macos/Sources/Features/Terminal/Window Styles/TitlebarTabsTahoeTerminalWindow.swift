@@ -12,7 +12,7 @@ class TitlebarTabsTahoeTerminalWindow: TransparentTitlebarTerminalWindow, NSTool
     /// Titlebar tabs can't support the update accessory because of the way we layout
     /// the native tabs back into the menu bar.
 
-    deinit {
+    isolated deinit {
         tabBarObserver = nil
     }
 
@@ -36,8 +36,12 @@ class TitlebarTabsTahoeTerminalWindow: TransparentTitlebarTerminalWindow, NSTool
         }
     }
 
-    override func awakeFromNib() {
+    nonisolated override func awakeFromNib() {
         super.awakeFromNib()
+        MainActor.assumeIsolated { configureAfterLoading() }
+    }
+
+    private func configureAfterLoading() {
 
         // We must hide the title since we're going to be moving tabs into
         // the titlebar which have their own title.
@@ -216,7 +220,7 @@ class TitlebarTabsTahoeTerminalWindow: TransparentTitlebarTerminalWindow, NSTool
             guard let self else { return }
 
             // Remove the observer so we can call setup again.
-            self.tabBarObserver = nil
+            MainActor.assumeIsolated { self.tabBarObserver = nil }
 
             // Wait a tick to let the new tab bars appear and then set them up.
             DispatchQueue.main.async {

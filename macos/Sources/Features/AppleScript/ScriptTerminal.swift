@@ -178,7 +178,15 @@ final class ScriptTerminal: NSObject {
     /// Without an object specifier, returned terminal objects can't be reliably
     /// referenced in follow-up script statements because AppleScript cannot
     /// express where the object came from (`application.terminals[id]`).
-    override var objectSpecifier: NSScriptObjectSpecifier? {
+    nonisolated override var objectSpecifier: NSScriptObjectSpecifier? {
+        // Cocoa scripting requests object paths on the application thread.
+        // This synchronous ObjC return never leaves the application thread.
+        nonisolated(unsafe) var result: NSScriptObjectSpecifier?
+        MainActor.assumeIsolated { result = mainActorObjectSpecifier }
+        return result
+    }
+
+    private var mainActorObjectSpecifier: NSScriptObjectSpecifier? {
         guard NSApp.isAppleScriptEnabled else { return nil }
         guard let appClassDescription = NSApplication.shared.classDescription as? NSScriptClassDescription else {
             return nil

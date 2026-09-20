@@ -8,25 +8,38 @@ import AppKit
 @MainActor
 @objc(GhosttyScriptKeyEventCommand)
 final class ScriptKeyEventCommand: NSScriptCommand {
-    override func performDefaultImplementation() -> Any? {
-        guard NSApp.validateScript(command: self) else { return nil }
+    nonisolated override init(commandDescription: NSScriptCommandDescription) {
+        super.init(commandDescription: commandDescription)
+    }
+
+    nonisolated override func performDefaultImplementation() -> Any? {
+        // Cocoa scripting dispatches application commands on the main thread.
+        // NSScriptCommand predates actor annotations; this reference stays synchronous.
+        nonisolated(unsafe) let command = self
+        MainActor.assumeIsolated { command.performOnMainActor() }
+        return nil
+    }
+
+    @MainActor
+    private func performOnMainActor() {
+        guard NSApp.validateScript(command: self) else { return }
 
         guard let terminal = evaluatedArguments?["terminal"] as? ScriptTerminal else {
             scriptErrorNumber = errAEParamMissed
             scriptErrorString = "Missing terminal target."
-            return nil
+            return
         }
 
         guard let surfaceView = terminal.surfaceView else {
             scriptErrorNumber = errAEEventFailed
             scriptErrorString = "Terminal surface is no longer available."
-            return nil
+            return
         }
 
         guard let surface = surfaceView.surfaceModel else {
             scriptErrorNumber = errAEEventFailed
             scriptErrorString = "Terminal surface model is not available."
-            return nil
+            return
         }
 
         let keyEvent: Ghostty.Input.KeyEvent
@@ -39,24 +52,24 @@ final class ScriptKeyEventCommand: NSScriptCommand {
         } catch ArgumentError.missingKey {
             scriptErrorNumber = errAEParamMissed
             scriptErrorString = "Missing key name."
-            return nil
+            return
         } catch let ArgumentError.unknownKey(keyName) {
             scriptErrorNumber = errAECoercionFail
             scriptErrorString = "Unknown key name: \(keyName)"
-            return nil
+            return
         } catch let ArgumentError.unknownModifiers(modsString) {
             scriptErrorNumber = errAECoercionFail
             scriptErrorString = "Unknown modifier in: \(modsString)"
-            return nil
+            return
         } catch {
             scriptErrorNumber = errAEEventFailed
             scriptErrorString = "Invalid key event."
-            return nil
+            return
         }
 
         surface.sendKeyEvent(keyEvent)
 
-        return nil
+        return
     }
 }
 

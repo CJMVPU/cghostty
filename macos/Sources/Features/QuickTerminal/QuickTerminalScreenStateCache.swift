@@ -29,7 +29,7 @@ class QuickTerminalScreenStateCache {
             object: nil)
     }
 
-    deinit {
+    isolated deinit {
         NotificationCenter.default.removeObserver(self)
     }
 

@@ -84,7 +84,7 @@ pub const Stream = struct {
 
             cimgui.c.ImGui_SameLineEx(0, cimgui.c.ImGui_GetStyle().*.ItemInnerSpacing.x);
             if (cimgui.c.ImGui_Button("Filter")) {
-                cimgui.c.ImGui_OpenPopup(
+                _ = cimgui.c.ImGui_OpenPopup(
                     popup_filter,
                     cimgui.c.ImGuiPopupFlags_None,
                 );

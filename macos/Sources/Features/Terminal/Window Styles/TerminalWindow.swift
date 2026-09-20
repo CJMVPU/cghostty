@@ -73,7 +73,11 @@ class TerminalWindow: NSWindow {
         }
     }
 
-    override func awakeFromNib() {
+    nonisolated override func awakeFromNib() {
+        MainActor.assumeIsolated { configureAfterLoading() }
+    }
+
+    private func configureAfterLoading() {
         // Notify that this terminal window has loaded
         NotificationCenter.default.post(name: Self.terminalDidAwake, object: self)
 
@@ -85,7 +89,9 @@ class TerminalWindow: NSWindow {
             queue: .main
         ) { [weak self] n in
             guard let self, let menu = n.object as? NSMenu else { return }
-            self.configureTabContextMenuIfNeeded(menu)
+            // This observer is registered on OperationQueue.main.
+            nonisolated(unsafe) let observedMenu = menu
+            MainActor.assumeIsolated { self.configureTabContextMenuIfNeeded(observedMenu) }
         }
 
         // This is required so that window restoration properly creates our tabs
@@ -460,7 +466,7 @@ class TerminalWindow: NSWindow {
         //
         // AppKit will relayout the frame when the font changes, that's
         // why we need this hack in the first place.
-        guard #available(macOS 26.0, *), titlebarFont != nil else {
+        guard titlebarFont != nil else {
             return
         }
 
@@ -612,7 +618,7 @@ class TerminalWindow: NSWindow {
         standardWindowButton(.zoomButton)?.isHidden = true
     }
 
-    deinit {
+    isolated deinit {
         if let observer = tabMenuObserver {
             NotificationCenter.default.removeObserver(observer)
         }
@@ -668,13 +674,9 @@ extension TerminalWindow {
         @Published var hasToolbar: Bool = false
         @Published var isMainWindow: Bool = true
 
-        /// Calculates the top padding based on toolbar visibility and macOS version
+        /// Calculates the top padding based on toolbar visibility
         fileprivate var accessoryTopPadding: CGFloat {
-            if #available(macOS 26.0, *) {
-                return hasToolbar ? 10 : 5
-            } else {
-                return hasToolbar ? 9 : 4
-            }
+            return hasToolbar ? 10 : 5
         }
     }
 

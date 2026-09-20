@@ -75,8 +75,8 @@ fn buildLib(b: *std.Build, options: anytype) !*std.Build.Step.Compile {
             .style = .{ .cmake = upstream.path("src/config.h.cmake.in") },
         }, .{
             .PACKAGE = "oniguruma",
-            .PACKAGE_VERSION = "6.9.9",
-            .VERSION = "6.9.9",
+            .PACKAGE_VERSION = @import("build.zig.zon").version,
+            .VERSION = @import("build.zig.zon").version,
             .HAVE_ALLOCA = true,
             .HAVE_ALLOCA_H = !is_windows,
             .USE_CRNL_AS_LINE_TERMINATOR = is_windows,

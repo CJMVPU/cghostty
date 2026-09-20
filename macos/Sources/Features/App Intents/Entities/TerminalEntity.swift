@@ -33,8 +33,7 @@ struct TerminalEntity: AppEntity {
         TypeDisplayRepresentation(name: "Terminal")
     }
 
-    @MainActor
-    var displayRepresentation: DisplayRepresentation {
+    nonisolated var displayRepresentation: DisplayRepresentation {
         var rep = DisplayRepresentation(title: "\(title)")
         if let screenshot,
            let data = screenshot.tiffRepresentation {
@@ -55,7 +54,7 @@ struct TerminalEntity: AppEntity {
         surfaceView?.surfaceModel
     }
 
-    static var defaultQuery = TerminalQuery()
+    static let defaultQuery = TerminalQuery()
 
     @MainActor
     init(_ view: Ghostty.SurfaceView) {
@@ -102,7 +101,6 @@ struct TerminalEntity: AppEntity {
                 }
             })
             .replaceError(with: view.title)
-            .values
         let pwdValues = view.$pwd.dropFirst()
             .setFailureType(to: Error.self)
             .timeout(waitTimeout, scheduler: DispatchQueue.main, customError: { EntityTimeoutError() })
@@ -112,12 +110,13 @@ struct TerminalEntity: AppEntity {
                 }
             })
             .replaceError(with: view.pwd)
-            .values
-        async let title = titleValues.first(where: { _ in true })
-        async let pwd = pwdValues.first(where: { _ in true })
-
-        self.title = await title ?? ""
-        self.workingDirectory = await pwd ?? ""
+        // Subscribe to both updates together without sending Combine's non-Sendable
+        // publishers into child tasks. Each publisher keeps its own timeout fallback.
+        for await (title, pwd) in Publishers.Zip(titleValues, pwdValues).values {
+            self.title = title
+            self.workingDirectory = pwd ?? ""
+            break
+        }
 
         // Wait for the title and pwd then get latest pid and screenshots.
         // This should gave SurfaceView enough time to layout in the window and we can get the most recent process's PID
@@ -140,9 +139,9 @@ extension TerminalEntity {
         case normal
         case quick
 
-        static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "Terminal Kind")
+        static let typeDisplayRepresentation = TypeDisplayRepresentation(name: "Terminal Kind")
 
-        static var caseDisplayRepresentations: [Self: DisplayRepresentation] = [
+        static let caseDisplayRepresentations: [Self: DisplayRepresentation] = [
             .normal: .init(title: "Normal"),
             .quick: .init(title: "Quick")
         ]

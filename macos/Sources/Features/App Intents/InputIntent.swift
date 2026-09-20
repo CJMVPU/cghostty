@@ -3,7 +3,7 @@ import AppIntents
 
 /// App intent to input text in a terminal.
 struct InputTextIntent: AppIntent {
-    static var title: LocalizedStringResource = "Input Text to Terminal"
+    static let title: LocalizedStringResource = "Input Text to Terminal"
 
     @Parameter(
         title: "Text",
@@ -24,10 +24,7 @@ struct InputTextIntent: AppIntent {
     )
     var terminal: TerminalEntity
 
-#if compiler(>=6.2)
-    @available(macOS 26.0, *)
-    static var supportedModes: IntentModes = [.background, .foreground]
-#endif
+    static let supportedModes: IntentModes = [.background, .foreground]
 
     @MainActor
     func perform() async throws -> some IntentResult {
@@ -46,8 +43,8 @@ struct InputTextIntent: AppIntent {
 
 /// App intent to trigger a keyboard event.
 struct KeyEventIntent: AppIntent {
-    static var title: LocalizedStringResource = "Send Keyboard Event to Terminal"
-    static var description = IntentDescription("Simulate a keyboard event. This will not handle text encoding; use the 'Input Text' action for that.")
+    static let title: LocalizedStringResource = "Send Keyboard Event to Terminal"
+    static let description = IntentDescription("Simulate a keyboard event. This will not handle text encoding; use the 'Input Text' action for that.")
 
     @Parameter(
         title: "Key",
@@ -76,10 +73,7 @@ struct KeyEventIntent: AppIntent {
     )
     var terminal: TerminalEntity
 
-#if compiler(>=6.2)
-    @available(macOS 26.0, *)
-    static var supportedModes: IntentModes = [.background, .foreground]
-#endif
+    static let supportedModes: IntentModes = [.background, .foreground]
 
     @MainActor
     func perform() async throws -> some IntentResult {
@@ -111,7 +105,7 @@ struct KeyEventIntent: AppIntent {
 
 /// App intent to trigger a mouse button event.
 struct MouseButtonIntent: AppIntent {
-    static var title: LocalizedStringResource = "Send Mouse Button Event to Terminal"
+    static let title: LocalizedStringResource = "Send Mouse Button Event to Terminal"
 
     @Parameter(
         title: "Button",
@@ -140,10 +134,7 @@ struct MouseButtonIntent: AppIntent {
     )
     var terminal: TerminalEntity
 
-#if compiler(>=6.2)
-    @available(macOS 26.0, *)
-    static var supportedModes: IntentModes = [.background, .foreground]
-#endif
+    static let supportedModes: IntentModes = [.background, .foreground]
 
     @MainActor
     func perform() async throws -> some IntentResult {
@@ -173,8 +164,8 @@ struct MouseButtonIntent: AppIntent {
 
 /// App intent to send a mouse position event.
 struct MousePosIntent: AppIntent {
-    static var title: LocalizedStringResource = "Send Mouse Position Event to Terminal"
-    static var description = IntentDescription("Send a mouse position event to the terminal. This reports the cursor position for mouse tracking.")
+    static let title: LocalizedStringResource = "Send Mouse Position Event to Terminal"
+    static let description = IntentDescription("Send a mouse position event to the terminal. This reports the cursor position for mouse tracking.")
 
     @Parameter(
         title: "X Position",
@@ -203,10 +194,7 @@ struct MousePosIntent: AppIntent {
     )
     var terminal: TerminalEntity
 
-#if compiler(>=6.2)
-    @available(macOS 26.0, *)
-    static var supportedModes: IntentModes = [.background, .foreground]
-#endif
+    static let supportedModes: IntentModes = [.background, .foreground]
 
     @MainActor
     func perform() async throws -> some IntentResult {
@@ -236,8 +224,8 @@ struct MousePosIntent: AppIntent {
 
 /// App intent to send a mouse scroll event.
 struct MouseScrollIntent: AppIntent {
-    static var title: LocalizedStringResource = "Send Mouse Scroll Event to Terminal"
-    static var description = IntentDescription("Send a mouse scroll event to the terminal with configurable precision and momentum.")
+    static let title: LocalizedStringResource = "Send Mouse Scroll Event to Terminal"
+    static let description = IntentDescription("Send a mouse scroll event to the terminal with configurable precision and momentum.")
 
     @Parameter(
         title: "X Scroll Delta",
@@ -273,10 +261,7 @@ struct MouseScrollIntent: AppIntent {
     )
     var terminal: TerminalEntity
 
-#if compiler(>=6.2)
-    @available(macOS 26.0, *)
-    static var supportedModes: IntentModes = [.background, .foreground]
-#endif
+    static let supportedModes: IntentModes = [.background, .foreground]
 
     @MainActor
     func perform() async throws -> some IntentResult {
@@ -307,9 +292,9 @@ enum KeyEventMods: String, AppEnum, CaseIterable {
     case option
     case command
 
-    static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "Modifier Key")
+    static let typeDisplayRepresentation = TypeDisplayRepresentation(name: "Modifier Key")
 
-    static var caseDisplayRepresentations: [KeyEventMods: DisplayRepresentation] = [
+    static let caseDisplayRepresentations: [KeyEventMods: DisplayRepresentation] = [
         .shift: "Shift",
         .control: "Control",
         .option: "Option",

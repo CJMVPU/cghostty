@@ -3,12 +3,9 @@ import AppIntents
 import GhosttyKit
 
 /// App intent that allows creating a new terminal window or tab.
-///
-/// This requires macOS 15 or greater because we use features of macOS 15 here.
-@available(macOS 15.0, *)
 struct NewTerminalIntent: AppIntent {
-    static var title: LocalizedStringResource = "New Terminal"
-    static var description = IntentDescription("Create a new terminal.")
+    static let title: LocalizedStringResource = "New Terminal"
+    static let description = IntentDescription("Create a new terminal.")
 
     @Parameter(
         title: "Location",
@@ -45,7 +42,7 @@ struct NewTerminalIntent: AppIntent {
 
     // Performing in the background can avoid opening multiple windows at the same time
     // using `foreground` will cause `perform` and `AppDelegate.applicationDidBecomeActive(_:)`/`AppDelegate.applicationShouldHandleReopen(_:hasVisibleWindows:)` running at the 'same' time
-    static var supportedModes: IntentModes = .background
+    static let supportedModes: IntentModes = .background
 
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<TerminalEntity?> {
@@ -139,7 +136,7 @@ struct NewTerminalIntent: AppIntent {
 
 // MARK: NewTerminalLocation
 
-enum NewTerminalLocation: String {
+nonisolated enum NewTerminalLocation: String {
     case tab
     case window
     case splitLeft = "split:left"
@@ -147,7 +144,7 @@ enum NewTerminalLocation: String {
     case splitUp = "split:up"
     case splitDown = "split:down"
 
-    var splitDirection: SplitTree<Ghostty.SurfaceView>.NewDirection? {
+    @MainActor var splitDirection: SplitTree<Ghostty.SurfaceView>.NewDirection? {
         switch self {
         case .splitLeft: return .left
         case .splitRight: return .right
@@ -159,9 +156,9 @@ enum NewTerminalLocation: String {
 }
 
 extension NewTerminalLocation: AppEnum {
-    static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "Terminal Location")
+    static let typeDisplayRepresentation = TypeDisplayRepresentation(name: "Terminal Location")
 
-    static var caseDisplayRepresentations: [Self: DisplayRepresentation] = [
+    static let caseDisplayRepresentations: [Self: DisplayRepresentation] = [
         .tab: .init(title: "Tab"),
         .window: .init(title: "Window"),
         .splitLeft: .init(title: "Split Left"),

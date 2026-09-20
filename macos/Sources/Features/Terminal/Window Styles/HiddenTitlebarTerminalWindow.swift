@@ -3,8 +3,12 @@ import AppKit
 class HiddenTitlebarTerminalWindow: TerminalWindow {
     // No titlebar, we don't support accessories.
 
-    override func awakeFromNib() {
+    nonisolated override func awakeFromNib() {
         super.awakeFromNib()
+        MainActor.assumeIsolated { configureAfterLoading() }
+    }
+
+    private func configureAfterLoading() {
 
         // Setup our initial style
         reapplyHiddenStyle()
@@ -17,7 +21,7 @@ class HiddenTitlebarTerminalWindow: TerminalWindow {
             object: nil)
     }
 
-    deinit {
+    isolated deinit {
         NotificationCenter.default.removeObserver(self)
     }
 
@@ -76,8 +80,7 @@ class HiddenTitlebarTerminalWindow: TerminalWindow {
         // Linked issue: https://github.com/ghostty-org/ghostty/issues/13390
         // Reference: https://developer.apple.com/forums/thread/798392?answerId=856013022#856013022
         // Note: hiding `NSTitlebarBackgroundView` won't work here, because it later uses the pocket view from the `SurfaceScrollView`.
-        if #available(macOS 27, *),
-           let themeFrame = contentView?.superview,
+        if let themeFrame = contentView?.superview,
            let scrollPocket = themeFrame.firstDescendant(withClassName: "NSScrollPocket") {
             scrollPocket.isHidden = true
         }

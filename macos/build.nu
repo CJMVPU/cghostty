@@ -6,6 +6,7 @@ def main [
     --configuration: string = "Debug"
     --action: string = "build"
     --version: string = ""
+    --result-bundle: string = ""
     --skip-core
 ] {
     if (^uname -s | str trim) != "Darwin" or (^uname -m | str trim) != "arm64" {
@@ -19,6 +20,9 @@ def main [
     }
     if $action not-in [build test clean] {
         error make {msg: "Action must be build, test, or clean."}
+    }
+    if $result_bundle != "" and $action != "test" {
+        error make {msg: "--result-bundle is only supported with --action test."}
     }
     let root = ($env.FILE_PWD | path dirname)
     let project = ($env.FILE_PWD | path join "Ghostty.xcodeproj")
@@ -36,11 +40,14 @@ def main [
         if $env.LAST_EXIT_CODE != 0 { exit $env.LAST_EXIT_CODE }
     }
     let skip_testing = if $action == "test" { [-skip-testing GhosttyUITests] } else { [] }
+    let result_args = if $result_bundle == "" { [] } else {
+        [-resultBundlePath ($result_bundle | path expand)]
+    }
     (^env -i $"HOME=($env.HOME)" "PATH=/usr/bin:/bin:/usr/sbin:/sbin"
         xcodebuild -project $project -scheme Ghostty -configuration $configuration
         -destination "platform=macOS,arch=arm64"
         -derivedDataPath ($build_dir | path join "DerivedData")
         $"SYMROOT=($build_dir)" "ARCHS=arm64" "ONLY_ACTIVE_ARCH=YES"
-        $"MARKETING_VERSION=($marketing_version)" $"CGHOSTTY_VERSION=($app_version)" ...$skip_testing $action)
+        $"MARKETING_VERSION=($marketing_version)" $"CGHOSTTY_VERSION=($app_version)" ...$skip_testing ...$result_args $action)
     if $env.LAST_EXIT_CODE != 0 { exit $env.LAST_EXIT_CODE }
 }

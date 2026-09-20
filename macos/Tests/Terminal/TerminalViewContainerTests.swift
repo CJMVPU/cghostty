@@ -45,19 +45,15 @@ class MockConfig: Ghostty.Config {
     }
 }
 
+@MainActor
 struct TerminalViewContainerTests {
-    @Test func glassAvailability() async throws {
-        let view = await MockTerminalViewContainer {
+    @Test func glassIsAttachedSynchronously() {
+        let view = MockTerminalViewContainer {
             EmptyView()
         }
 
         let config = MockConfig(backgroundBlur: .macosGlassRegular, backgroundColor: .clear, backgroundOpacity: 1)
-        await view.ghosttyConfigDidChange(config, preferredBackgroundColor: nil)
-        try await Task.sleep(nanoseconds: UInt64(1e8)) // wait for the view to be setup if needed
-        if #available(macOS 26.0, *) {
-            #expect(view.glassEffectView != nil)
-        } else {
-            #expect(view.glassEffectView == nil)
-        }
+        view.ghosttyConfigDidChange(config, preferredBackgroundColor: nil)
+        #expect(view.glassEffectView != nil)
     }
 }

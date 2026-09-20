@@ -337,7 +337,7 @@ extension Ghostty {
         var body: some View {
             GeometryReader { geo in
                 HStack(spacing: 4) {
-                    BackportSelectionTextField(
+                    SelectionTextField(
                         "Search",
                         text: $searchState.needle.text,
                         selection: $searchState.needle.selection
@@ -365,7 +365,7 @@ extension Ghostty {
                                 .padding(.trailing, 8)
                         }
                     }
-                    .onChange(of: searchState.needle.text) { _ in
+                    .onChange(of: searchState.needle.text) { _, _ in
                         searchState.writePasteboardNeedle()
                     }
                     .onReceive(
@@ -387,8 +387,8 @@ extension Ghostty {
                             Ghostty.moveFocus(to: surfaceView)
                         }
                     }
-                    .backport.onKeyPress(.return) { modifiers in
-                        if modifiers.contains(.shift) {
+                    .onKeyPress(.return, phases: .down) { keyPress in
+                        if keyPress.modifiers.contains(.shift) {
                             _ = surfaceView.navigateSearchToPrevious()
                             return .handled
                         }
@@ -461,11 +461,7 @@ extension Ghostty {
         }
 
         private var clipShape: some Shape {
-            if #available(macOS 26.0, *) {
-                return ConcentricRectangle(corners: .concentric(minimum: 8), isUniform: true)
-            } else {
-                return RoundedRectangle(cornerRadius: 8)
-            }
+            return ConcentricRectangle(corners: .concentric(minimum: 8), isUniform: true)
         }
 
         enum Corner {
@@ -523,7 +519,7 @@ extension Ghostty {
                     .onHover { hovering in
                         isHovered = hovering
                     }
-                    .backport.pointerStyle(.link)
+                    .pointerStyle(.link)
             }
 
             private func backgroundColor(isPressed: Bool) -> Color {
@@ -722,7 +718,7 @@ extension Ghostty {
             Group {
                 if !keyTables.isEmpty || !keySequence.isEmpty {
                     content
-                        .backport.pointerStyle(!keyTables.isEmpty ? .link : nil)
+                        .pointerStyle(!keyTables.isEmpty ? .link : nil)
                 }
             }
             .transition(.move(edge: position.transitionEdge).combined(with: .opacity))
@@ -810,7 +806,7 @@ extension Ghostty {
                     .shadow(color: .black.opacity(0.2), radius: 8, y: 2)
             }
             .contentShape(Capsule())
-            .backport.pointerStyle(.link)
+            .pointerStyle(.link)
             .popover(isPresented: $isShowingPopover, arrowEdge: position.popoverEdge) {
                 VStack(alignment: .leading, spacing: 8) {
                     if !keyTables.isEmpty {
@@ -886,7 +882,7 @@ extension Ghostty {
                                 .opacity(dotOpacity(for: index))
                         }
                     }
-                    .onChange(of: context.date.timeIntervalSinceReferenceDate) { newValue in
+                    .onChange(of: context.date.timeIntervalSinceReferenceDate) { _, newValue in
                         animationPhase = newValue
                     }
                 }
@@ -959,7 +955,7 @@ extension Ghostty {
             .allowsHitTesting(false)
             .opacity(highlighted ? 1.0 : 0.0)
             .animation(.easeOut(duration: 0.4), value: highlighted)
-            .onChange(of: highlighted) { newValue in
+            .onChange(of: highlighted) { _, newValue in
                 if newValue {
                     withAnimation(.easeInOut(duration: 0.4).repeatForever(autoreverses: true)) {
                         borderPulse = true
@@ -1002,7 +998,7 @@ extension Ghostty {
                     .onTapGesture {
                         showingPopover = true
                     }
-                    .backport.pointerStyle(.link)
+                    .pointerStyle(.link)
                     .popover(isPresented: $showingPopover, arrowEdge: .bottom) {
                         ReadonlyPopoverView(onDisable: onDisable, isPresented: $showingPopover)
                     }

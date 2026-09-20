@@ -215,7 +215,15 @@ final class ScriptWindow: NSObject {
     /// Without this, Cocoa can return data but cannot reliably build object
     /// references for later script statements. This specifier encodes:
     /// `application -> scriptWindows[id]`.
-    override var objectSpecifier: NSScriptObjectSpecifier? {
+    nonisolated override var objectSpecifier: NSScriptObjectSpecifier? {
+        // Cocoa scripting requests object paths on the application thread.
+        // This synchronous ObjC return never leaves the application thread.
+        nonisolated(unsafe) var result: NSScriptObjectSpecifier?
+        MainActor.assumeIsolated { result = mainActorObjectSpecifier }
+        return result
+    }
+
+    private var mainActorObjectSpecifier: NSScriptObjectSpecifier? {
         guard NSApp.isAppleScriptEnabled else { return nil }
         guard let appClassDescription = NSApplication.shared.classDescription as? NSScriptClassDescription else {
             return nil

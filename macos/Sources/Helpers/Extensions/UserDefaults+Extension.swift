@@ -1,6 +1,6 @@
 import Foundation
 
-extension UserDefaults {
+nonisolated extension UserDefaults {
     static var ghosttySuite: String? {
         #if DEBUG
         ProcessInfo.processInfo.environment["GHOSTTY_USER_DEFAULTS_SUITE"]

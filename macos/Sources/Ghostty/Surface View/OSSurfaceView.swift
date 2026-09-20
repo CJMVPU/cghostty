@@ -78,7 +78,7 @@ extension Ghostty {
             fatalError("init(coder:) is not supported for this view")
         }
 
-        deinit {
+        isolated deinit {
             NotificationCenter.default
                 .removeObserver(self)
         }

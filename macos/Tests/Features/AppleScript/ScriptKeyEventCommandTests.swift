@@ -70,10 +70,11 @@ struct ScriptKeyEventCommandTests {
         try #expect(parse("a", modifiers: string).mods == expected)
     }
 
-    @Test(arguments: [nil, 42, NSNull()] as [Any?])
-    func missingOrNonStringKeyThrows(directParameter: Any?) {
-        #expect(throws: ScriptKeyEventCommand.ArgumentError.missingKey) {
-            try parse(directParameter)
+    @Test func missingOrNonStringKeyThrows() {
+        for directParameter in [nil, 42, NSNull()] as [Any?] {
+            #expect(throws: ScriptKeyEventCommand.ArgumentError.missingKey) {
+                try parse(directParameter)
+            }
         }
     }
 

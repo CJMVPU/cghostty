@@ -1,8 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 [[ "$(uname -s)" == Darwin && "$(uname -m)" == arm64 ]] || { echo 'Apple Silicon macOS is required.' >&2; exit 1; }
-zig_version=0.16.0
-zig_sha=b23d70deaa879b5c2d486ed3316f7eaa53e84acf6fc9cc747de152450d401489
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+zig_version="$(python3 "$script_dir/check-versions.py" --zig-version)"
+zig_sha="$(python3 "$script_dir/check-versions.py" --zig-sha256)"
 zig_dir="${1:-$PWD/.tools}"
 mkdir -p "$zig_dir"
 zig_dir="$(cd "$zig_dir" && pwd)"

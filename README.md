@@ -2,16 +2,16 @@
 
 cghostty 是基于 [Ghostty](https://github.com/ghostty-org/ghostty) 的个人终端应用分支，交付范围为 **macOS 27+ / Apple Silicon（arm64）**。
 
-保留 Swift / AppKit / SwiftUI 原生界面、Zig 终端核心、Metal 4 命令体系与 MSL 4.1 渲染、CoreText 字体、PTY 子进程、shell 集成、主题、分屏、标签页、快速终端和 AppleScript。Linux、Windows、BSD、iOS、WASM、Intel Mac、独立终端库 SDK 及其示例不属于本项目。
+保留 Swift 6 / AppKit / SwiftUI 原生界面、Zig 终端核心、Metal 4 命令体系与 MSL 4.1 渲染、CoreText 字体、PTY 子进程、shell 集成、主题、分屏、标签页、快速终端和 AppleScript。所有原生构建配置启用完整并发检查与 Swift warnings-as-errors。Linux、Windows、BSD、iOS、WASM、Intel Mac、独立终端库 SDK 及其示例不属于本项目。
 
 ## 本地构建
 
 需要运行 macOS 27+ 的 Apple Silicon Mac、Xcode 27+（含 Metal Toolchain）、Zig **0.16.0**、Nushell 和 gettext。当前工程包含 Icon Composer 图标；本分支使用 Xcode 27 验证，CI 使用 GitHub 的 `xcode-27` arm64 预览 runner，并检查其操作系统至少为 macOS 27。
 
 ```sh
-brew install nushell gettext
-bash scripts/install-zig.sh
-export PATH="$PWD/.tools/zig-aarch64-macos-0.16.0:$(brew --prefix gettext)/bin:$PATH"
+brew install nushell gettext swiftlint
+zig_bin="$(bash scripts/install-zig.sh)"
+export PATH="$zig_bin:$(brew --prefix gettext)/bin:$PATH"
 xcodebuild -downloadComponent MetalToolchain
 nu macos/build.nu
 open macos/build/Debug/cghostty.app

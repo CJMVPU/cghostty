@@ -58,7 +58,7 @@ extension Ghostty {
 // MARK: Swift Types for C Types
 
 extension Ghostty {
-    class AllocatedString {
+    nonisolated final class AllocatedString {
         private let cString: ghostty_string_s
 
         init(_ c: ghostty_string_s) {
@@ -326,8 +326,8 @@ extension Notification.Name {
     static let ghosttyMaximizeDidToggle = Notification.Name("com.cjmvpu.cghostty.maximizeDidToggle")
 
     /// Notification sent when scrollbar updates
-    static let ghosttyDidUpdateScrollbar = Notification.Name("com.cjmvpu.cghostty.didUpdateScrollbar")
-    static let ScrollbarKey = ghosttyDidUpdateScrollbar.rawValue + ".scrollbar"
+    nonisolated static let ghosttyDidUpdateScrollbar = Notification.Name("com.cjmvpu.cghostty.didUpdateScrollbar")
+    nonisolated static let ScrollbarKey = ghosttyDidUpdateScrollbar.rawValue + ".scrollbar"
 
     /// Focus the search field
     static let ghosttySearchFocus = Notification.Name("com.cjmvpu.cghostty.searchFocus")

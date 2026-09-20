@@ -2,7 +2,7 @@ import AppKit
 import System
 
 /// The icon style for the Ghostty App.
-enum AppIcon: Equatable, Codable, Sendable {
+nonisolated enum AppIcon: Equatable, Codable, Sendable {
     case official
     case blueprint
     case chalkboard
@@ -17,7 +17,7 @@ enum AppIcon: Equatable, Codable, Sendable {
     case customStyle(_ icon: ColorizedGhosttyIcon)
 
 #if !DOCK_TILE_PLUGIN
-    init?(config: Ghostty.Config) {
+    @MainActor init?(config: Ghostty.Config) {
         switch config.macosIcon {
         case .official:
             return nil
@@ -57,7 +57,7 @@ enum AppIcon: Equatable, Codable, Sendable {
     }
 #endif
 
-    func image(in bundle: Bundle) -> NSImage? {
+    nonisolated func image(in bundle: Bundle) -> NSImage? {
         switch self {
         case .official:
             return nil

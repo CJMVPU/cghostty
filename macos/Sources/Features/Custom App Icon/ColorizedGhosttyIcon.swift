@@ -1,6 +1,6 @@
 import Cocoa
 
-struct ColorizedGhosttyIcon {
+nonisolated struct ColorizedGhosttyIcon {
     /// The colors that make up the gradient of the screen.
     let screenColors: [NSColor]
 
@@ -56,7 +56,7 @@ struct ColorizedGhosttyIcon {
 
 // MARK: Codable
 
-extension ColorizedGhosttyIcon: Codable {
+nonisolated extension ColorizedGhosttyIcon: Codable {
     private enum CodingKeys: String, CodingKey {
         case version
         case screenColors
@@ -106,7 +106,7 @@ extension ColorizedGhosttyIcon: Codable {
 
 // MARK: Equatable
 
-extension ColorizedGhosttyIcon: Equatable {
+nonisolated extension ColorizedGhosttyIcon: Equatable {
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.frame == rhs.frame &&
             lhs.screenColors.compactMap(\.hexString) == rhs.screenColors.compactMap(\.hexString) &&

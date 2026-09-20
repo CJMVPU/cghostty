@@ -81,7 +81,7 @@ struct NSScreenExtensionTests {
 }
 
 /// Mock NSScreen class for testing coordinate conversion
-private class MockNSScreen: NSScreen {
+nonisolated private class MockNSScreen: NSScreen {
     private let mockVisibleFrame: NSRect
 
     init(visibleFrame: NSRect) {

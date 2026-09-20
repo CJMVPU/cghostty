@@ -10,11 +10,9 @@
 //! ideal since we should do the same detection that gettext's configure
 //! script does, but its quite a bit of work to do that.
 //!
-//! UPGRADING: If you need to upgrade gettext, then the only thing to
-//! really watch out for is the xlocale.h include we added manually
-//! at the end of config.h. The comment there notes why. When we upgrade
-//! we should audit our config.h and make sure we add that back (if we
-//! have to).
+//! UPGRADING: See README.md for regenerating the configuration and gnulib
+//! headers. Preserve the xlocale.h include added at the end of config.h,
+//! and verify both Debug and Release links against the generated headers.
 
 const std = @import("std");
 
@@ -40,6 +38,7 @@ pub fn build(b: *std.Build) !void {
             .linkage = .static,
         });
         lib.root_module.addIncludePath(b.path(""));
+        lib.root_module.addIncludePath(b.path("gnulib"));
 
         if (target.result.os.tag.isDarwin()) {
             const apple_sdk = @import("apple_sdk");
@@ -95,6 +94,8 @@ const srcs: []const []const u8 = &.{
     "gnulib-lib/setlocale-lock.c",
     "gnulib-lib/setlocale_null.c",
     "gnulib-lib/setlocale_null-unlocked.c",
+    // Out-of-line definitions for gnulib string.h helpers, including streq.
+    "gnulib-lib/string.c",
 
     // Not needed for macOS, but we might need them for other platforms.
     // If we expand this to support other platforms, we should uncomment

@@ -1,6 +1,6 @@
 import Cocoa
 
-extension NSImage {
+nonisolated extension NSImage {
     /// Combine multiple images with the given blend modes. This is useful given a set
     /// of layers to create a final rasterized image.
     static func combine(images: [NSImage], blendingModes: [CGBlendMode]) -> NSImage? {

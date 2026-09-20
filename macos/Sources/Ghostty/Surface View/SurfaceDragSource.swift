@@ -105,7 +105,7 @@ extension Ghostty {
         /// Whether the current drag was cancelled by pressing escape.
         private var dragCancelledByEscape: Bool = false
 
-        deinit {
+        isolated deinit {
             if let escapeMonitor {
                 NSEvent.removeMonitor(escapeMonitor)
             }

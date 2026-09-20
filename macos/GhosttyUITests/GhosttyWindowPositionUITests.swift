@@ -283,6 +283,7 @@ final class GhosttyWindowPositionUITests: GhosttyCustomConfigCase {
 
     /// Opens a new window, records its frame, closes it, opens another,
     /// and verifies the frame is restored consistently.
+    @MainActor
     private func runRestoreTest(titlebarStyle: String) throws {
         try updateConfig(
             """

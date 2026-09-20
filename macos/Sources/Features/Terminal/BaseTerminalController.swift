@@ -228,7 +228,7 @@ class BaseTerminalController: NSWindowController,
         ) { [weak self] event in self?.localEventHandler(event) }
     }
 
-    deinit {
+    isolated deinit {
         NotificationCenter.default.removeObserver(self)
         undoManager?.removeAllActions(withTarget: self)
         if let eventMonitor {

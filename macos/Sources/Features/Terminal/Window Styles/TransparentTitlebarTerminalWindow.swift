@@ -13,15 +13,19 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
     private var tabGroupWindowsObservation: NSKeyValueObservation?
     private var tabBarVisibleObservation: NSKeyValueObservation?
 
-    deinit {
+    isolated deinit {
         tabGroupWindowsObservation?.invalidate()
         tabBarVisibleObservation?.invalidate()
     }
 
     // MARK: NSWindow
 
-    override func awakeFromNib() {
+    nonisolated override func awakeFromNib() {
         super.awakeFromNib()
+        MainActor.assumeIsolated { configureAfterLoading() }
+    }
+
+    private func configureAfterLoading() {
 
         // Setup all the KVO we will use, see the docs for the respective functions
         // to learn why we need KVO.
@@ -44,18 +48,6 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
         }
     }
 
-    override func update() {
-        super.update()
-
-        // On macOS 13 to 15, we need to hide the NSVisualEffectView in order to allow our
-        // titlebar to be truly transparent.
-        if #unavailable(macOS 26) {
-            if !effectViewIsHidden {
-                hideEffectView()
-            }
-        }
-    }
-
     // MARK: Appearance
 
     override func syncAppearance(_ surfaceConfig: Ghostty.SurfaceView.DerivedConfig) {
@@ -72,15 +64,6 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
         // references changed (e.g. tabGroup is new).
         setupKVO()
 
-        if #available(macOS 26.0, *) {
-            syncAppearanceTahoe(surfaceConfig)
-        } else {
-            syncAppearanceVentura(surfaceConfig)
-        }
-    }
-
-    @available(macOS 26.0, *)
-    private func syncAppearanceTahoe(_ surfaceConfig: Ghostty.SurfaceView.DerivedConfig) {
         // When we have transparency, we need to set the titlebar background to match the
         // window background but with opacity. The window background is set using the
         // "preferred background color" property.
@@ -104,21 +87,6 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
         // In all cases, we have to hide the background view since this has multiple subviews
         // that force a background color.
         titlebarBackgroundView?.isHidden = true
-    }
-
-    @available(macOS 13.0, *)
-    private func syncAppearanceVentura(_ surfaceConfig: Ghostty.SurfaceView.DerivedConfig) {
-        guard let titlebarContainer else { return }
-
-        // Setup the titlebar background color to match ours
-        titlebarContainer.wantsLayer = true
-        titlebarContainer.layer?.backgroundColor = preferredBackgroundColor?.cgColor
-
-        // See the docs for the function that sets this to true on why
-        effectViewIsHidden = false
-
-        // Necessary to not draw the border around the title
-        titlebarAppearsTransparent = true
     }
 
     // MARK: View Finders
@@ -177,9 +145,11 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
             // It's cheap enough to always redraw this so we should just do it
             // unconditionally.
 
-            guard let self else { return }
-            guard let lastSurfaceConfig else { return }
-            self.syncAppearance(lastSurfaceConfig)
+            // AppKit tab-group mutations deliver KVO on the main thread.
+            MainActor.assumeIsolated {
+                guard let self, let lastSurfaceConfig = self.lastSurfaceConfig else { return }
+                self.syncAppearance(lastSurfaceConfig)
+            }
         }
     }
 
@@ -195,33 +165,11 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
             \.isTabBarVisible,
              options: [.new]
         ) { [weak self] _, _ in
-            guard let self else { return }
-            guard let lastSurfaceConfig else { return }
-            self.syncAppearance(lastSurfaceConfig)
+            // AppKit tab-group mutations deliver KVO on the main thread.
+            MainActor.assumeIsolated {
+                guard let self, let lastSurfaceConfig = self.lastSurfaceConfig else { return }
+                self.syncAppearance(lastSurfaceConfig)
+            }
         }
-    }
-
-    // MARK: macOS 13 to 15
-
-    // We only need to set this once, but need to do it after the window has been created in order
-    // to determine if the theme is using a very dark background, in which case we don't want to
-    // remove the effect view if the default tab bar is being used since the effect created in
-    // `updateTabsForVeryDarkBackgrounds` creates a confusing visual design.
-    private var effectViewIsHidden = false
-
-    private func hideEffectView() {
-        guard !effectViewIsHidden else { return }
-
-        // By hiding the visual effect view, we allow the window's (or titlebar's in this case)
-        // background color to show through. If we were to set `titlebarAppearsTransparent` to true
-        // the selected tab would look fine, but the unselected ones and new tab button backgrounds
-        // would be an opaque color. When the titlebar isn't transparent, however, the system applies
-        // a compositing effect to the unselected tab backgrounds, which makes them blend with the
-        // titlebar's/window's background.
-        if let effectView = titlebarContainer?.descendants(withClassName: "NSVisualEffectView").first {
-            effectView.isHidden = true
-        }
-
-        effectViewIsHidden = true
     }
 }

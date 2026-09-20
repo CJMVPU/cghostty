@@ -6,8 +6,12 @@ class QuickTerminalWindow: NSPanel {
     override var canBecomeKey: Bool { return true }
     override var canBecomeMain: Bool { return true }
 
-    override func awakeFromNib() {
+    nonisolated override func awakeFromNib() {
         super.awakeFromNib()
+        MainActor.assumeIsolated { configureAfterLoading() }
+    }
+
+    private func configureAfterLoading() {
 
         // Note: almost all of this stuff can be done in the nib/xib directly
         // but I prefer to do it programmatically because the properties we

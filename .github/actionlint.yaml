@@ -1,0 +1,6 @@
+# Public preview label documented by actions/runner-images, not yet in
+# actionlint's built-in hosted runner list. This extends label validation only.
+# https://github.com/actions/runner-images/issues/14404
+self-hosted-runner:
+  labels:
+    - xcode-27

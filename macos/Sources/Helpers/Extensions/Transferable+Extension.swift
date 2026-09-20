@@ -1,4 +1,5 @@
 import AppKit
+import Synchronization
 import CoreTransferable
 import UniformTypeIdentifiers
 
@@ -22,7 +23,7 @@ extension Transferable {
     }
 }
 
-private final class TransferableDataProvider: NSObject, NSPasteboardItemDataProvider {
+nonisolated private final class TransferableDataProvider: NSObject, NSPasteboardItemDataProvider {
     private let itemProvider: NSItemProvider
 
     init(itemProvider: NSItemProvider) {
@@ -41,9 +42,9 @@ private final class TransferableDataProvider: NSObject, NSPasteboardItemDataProv
         // calls this method on a background thread during drag operations.
         let semaphore = DispatchSemaphore(value: 0)
 
-        var result: Data?
+        let result = Mutex<Data?>(nil)
         itemProvider.loadDataRepresentation(forTypeIdentifier: type.rawValue) { data, _ in
-            result = data
+            result.withLock { $0 = data }
             semaphore.signal()
         }
 
@@ -51,7 +52,7 @@ private final class TransferableDataProvider: NSObject, NSPasteboardItemDataProv
         semaphore.wait()
 
         // Set it. I honestly don't know what happens here if this fails.
-        if let data = result {
+        if let data = result.withLock({ $0 }) {
             item.setData(data, forType: type)
         }
     }

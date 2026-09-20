@@ -3,7 +3,6 @@ import Cocoa
 
 // MARK: AppEntity
 
-@available(macOS 14.0, *)
 struct CommandEntity: AppEntity {
     let id: ID
 
@@ -38,7 +37,7 @@ struct CommandEntity: AppEntity {
         )
     }
 
-    static var defaultQuery = CommandQuery()
+    static let defaultQuery = CommandQuery()
 
     init(_ command: Ghostty.Command, for terminal: TerminalEntity) {
         self.id = .init(terminalId: terminal.id, actionKey: command.actionKey)
@@ -49,7 +48,6 @@ struct CommandEntity: AppEntity {
     }
 }
 
-@available(macOS 14.0, *)
 extension CommandEntity.ID: RawRepresentable {
     var rawValue: String {
         return "\(terminalId):\(actionKey)"
@@ -69,7 +67,6 @@ extension CommandEntity.ID: RawRepresentable {
 }
 
 // Required by AppEntity
-@available(macOS 14.0, *)
 extension CommandEntity.ID: EntityIdentifierConvertible {
     static func entityIdentifier(for entityIdentifierString: String) -> CommandEntity.ID? {
         .init(rawValue: entityIdentifierString)
@@ -82,7 +79,6 @@ extension CommandEntity.ID: EntityIdentifierConvertible {
 
 // MARK: EntityQuery
 
-@available(macOS 14.0, *)
 struct CommandQuery: EntityQuery {
     // Inject our terminal parameter from our command palette intent.
     @IntentParameterDependency<CommandPaletteIntent>(\.$terminal)

@@ -7,7 +7,7 @@ import GhosttyKit
 
 extension Ghostty {
     /// The NSView implementation for a terminal surface.
-    class SurfaceView: OSSurfaceView, Codable, Identifiable {
+    class SurfaceView: OSSurfaceView, Codable, Identifiable, Sendable {
         // The current title of the surface as defined by the pty. This can be
         // changed with escape codes.
         @Published private(set) var title: String = "" {
@@ -29,8 +29,10 @@ extension Ghostty {
                 // If we have a new progress report, start a timer to remove it after 15 seconds
                 if progressReport != nil {
                     progressReportTimer = Timer.scheduledTimer(withTimeInterval: 15.0, repeats: false) { [weak self] _ in
-                        self?.progressReport = nil
-                        self?.progressReportTimer = nil
+                        MainActor.assumeIsolated {
+                            self?.progressReport = nil
+                            self?.progressReportTimer = nil
+                        }
                     }
                 }
             }
@@ -294,8 +296,10 @@ extension Ghostty {
 
             // Set a timer to show the ghost emoji after 500ms if no title is set
             titleFallbackTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { [weak self] _ in
-                if let self = self, self.title.isEmpty {
-                    self.title = "👻"
+                MainActor.assumeIsolated {
+                    if let self, self.title.isEmpty {
+                        self.title = "👻"
+                    }
                 }
             }
 
@@ -405,7 +409,7 @@ extension Ghostty {
             fatalError("init(coder:) is not supported for this view")
         }
 
-        deinit {
+        isolated deinit {
             // Resolve clipboard callback state while surfaceModel is still
             // alive. The request's weak SurfaceView reference is already nil
             // during deinit, so didSet passes this instance explicitly.
@@ -631,12 +635,14 @@ extension Ghostty {
                 withTimeInterval: 0.075,
                 repeats: false
             ) { [weak self] _ in
-                // Set the title if it wasn't manually set.
-                guard self?.titleFromTerminal == nil else {
-                    self?.titleFromTerminal = title
-                    return
+                MainActor.assumeIsolated {
+                    // Set the title if it wasn't manually set.
+                    guard self?.titleFromTerminal == nil else {
+                        self?.titleFromTerminal = title
+                        return
+                    }
+                    self?.title = title
                 }
-                self?.title = title
             }
         }
 
@@ -2426,7 +2432,7 @@ class CachedValue<T> {
         self.fetch = fetch
     }
 
-    deinit {
+    isolated deinit {
         lock.lock()
         expiryTask?.cancel()
         lock.unlock()

@@ -4,6 +4,40 @@
 
 本轮将交付基线提高为 macOS 27+、arm64、Metal 4 命令 API 与 MSL 4.1。此记录替代此前 macOS 13 部署目标的验证记录。
 
+## Swift 6 迁移（2026-09-20）
+
+- 使用 Xcode 27 的 Apple Swift 6.4 编译器，将主应用、Dock 插件、单元测试、UI 测试的全部 **12 个构建配置**统一为 Swift 6 语言模式、完整并发检查与 Swift warnings-as-errors。主应用和单元测试默认 MainActor；UI 测试保留 XCTest 生命周期的非隔离声明，界面操作显式 MainActor。
+- UI 定时器、通知/KVO、窗口加载和资源析构明确主线程归属；系统后台通知回调排入主队列。核心 `wakeup_cb` 明确为非隔离 Sendable 回调，后台唤醒后仍在主线程 tick。Cocoa scripting 的同步入口与返回值采用局部桥接和主线程运行时断言。
+- App Intents 元数据改为不可变值；输入枚举、颜色与图标编码保持非隔离。终端详情用 Zip 同时订阅标题和路径，保留各自超时回退；拖放异步结果以 Mutex 保护。同步菜单测试移除无效 await 和旧字符串 selector；分屏参数化案例保留全部输入组合。
+- 原生单元测试 **236 项通过、0 项失败、1 项跳过**；参数化展开后通过 **355 次执行**，结果包没有 runtime warnings。新增后台唤醒和后台图标编码两项回归。结果包：`macos/build/DerivedData/Logs/Test/Test-Ghostty-2026.09.20_08-21-08-+0800.xcresult`；成功日志：`/private/tmp/cghostty-swift6-test-compile.log`。UI 测试目标通过编译，本轮未执行 XCTest UI 测试套件。
+- Debug 原生测试和 ReleaseLocal 完整构建通过，成功日志未发现 Swift 源码警告或错误。Xcode 仍有原有 ImGui 调试符号提示，以及不使用 AppIntents 的目标跳过元数据提取的提示；不将这些工具提示视作 Swift 源码诊断。Release 日志：`/private/tmp/cghostty-swift6-release.log`。
+- 独立身份的 ReleaseLocal 副本完成真实运行检查：AppleScript 窗口/标签/终端对象引用、中文 shell 命令输入、键盘事件、鼠标位置/按钮/滚动事件、核心后台输出触发标题更新、新标签、分屏、关闭标签与释放分屏全部通过。使用独立命令行配置，测试副本已退出；Metal API Validation 启用，运行日志未出现隔离断言、崩溃或 Metal 错误。日志：`/private/tmp/cghostty-swift6-runtime-check.log` 和 `/private/tmp/cghostty-swift6-runtime3/app.log`。
+- 严格 SwiftLint、版本检查、actionlint、diff 空白检查和应用范围/arm64/资源/签名检查通过。CI 新增 `scripts/check-swift6.py`；临时项目故障注入验证 Swift 5、minimal 并发检查、关闭 warnings-as-errors、取消默认 MainActor、关闭 Approachable Concurrency 均被拒绝。
+- 最新本地应用为 `macos/build/ReleaseLocal/cghostty.app`。本轮未改 Zig/C 核心行为，未重复核心回归；下方 C 库记录中的核心测试属于此前验证。未远程运行 GitHub Actions，未重打历史 ZIP，未对外发布。
+
+## C/C++ 依赖更新（2026-09-20）
+
+- 更新 FreeType 2.14.3、libpng 1.6.58、zlib 1.3.2、Oniguruma 6.9.10、HarfBuzz 14.4.0、gettext/libintl 1.0、Highway 1.4.0、simdutf 9.2.0，以及 Dear ImGui 1.92.9b-docking / Dear Bindings 0.21。源码 URL、Zig 内容哈希、生成头文件和版本记录同步更新；来源与再生成方法见 `pkg/README.md`、`pkg/libintl/README.md`。
+- simdutf 两个 vendor 文件直接取自官方 singleheader.zip；libpng 使用上游预生成配置。libintl 在 macOS 27 / arm64 重新配置，加入 gnulib 字符串头与 `string.c`，解决新版本 `streq` 的编译与 Debug 链接需求。Inspector 适配 `ImGui_OpenPopup` 的 bool 返回值。
+- 默认 Zig 定向回归覆盖 renderer/config/Command/Terminal/font/simd/kitty/tmux/search：**1,645 / 1,645 项通过**，88 / 88 构建步骤成功。日志：`/private/tmp/cghostty-clibs-default-tests.log`。
+- 可选 `coretext_freetype` 字体后端：**200 项通过、5 项跳过**；`coretext_harfbuzz`：**197 项通过、7 项跳过**。两者均 93 / 93 构建步骤成功。日志分别为 `/private/tmp/cghostty-clibs-freetype-tests.log` 和 `/private/tmp/cghostty-clibs-harfbuzz-tests.log`。
+- 重建核心后，Swift 单元测试 **234 项通过、0 项失败、1 项跳过**；参数化展开后通过 355 次执行。结果包：`/private/tmp/cghostty-clibs-swift-tests.xcresult`。
+- 临时 C 程序直接链接本轮 Debug 合并静态库，验证 zlib 压缩往返、libpng RGBA 编解码与截断输入拒绝、FreeType 字形光栅化、Oniguruma 中文匹配、gettext 中文目录查询、ImGui 绑定数据布局与上下文创建，全部通过。翻译测试显式设置 `LANG=zh_CN.UTF-8 LC_ALL=zh_CN.UTF-8`。程序源码保存在 `/private/tmp/cghostty-clibs-smoke.c`。
+- `check-versions.py` 新增 libpng 与 libintl 生成文件校验；临时副本故障注入确认 libpng 旧配置、libintl 旧配置和两个旧公开头均被拒绝。Zig 格式和 diff 空白检查通过。
+- ReleaseLocal 完整构建及 `check-scope.py --app` 通过，更新后的应用位于 `macos/build/ReleaseLocal/cghostty.app`。日志：`/private/tmp/cghostty-clibs-release.log`。
+- Wuffs 保留原有生成源码快照，未更换正则引擎；Oniguruma 原上游已归档，6.9.10 为其最终发布版本。本轮未重新生成历史 ZIP、未运行远程 CI 或界面交互验收、未对外发布。
+
+## 兼容层、版本记录与 CI 整理（2026-09-20）
+
+- 删除旧系统 Backport、Ventura 标签栏类和 XIB，以及 macOS 27 基线下恒定的系统版本/旧编译器分支。搜索框保留字符串选区与 `TextSelection` 的绑定转换，Glass 改用原生类型，现有标签切换修复继续保留。
+- simdutf 包清单由 5.2.8 校正为内置源码的 9.0.0；未更换第三方源码。Zig 0.16.0 版本与归档 SHA-256 集中管理，安装脚本和 CI 读取同一记录。
+- CI 加入 Zig 格式、严格 SwiftLint、版本记录和 actionlint 检查；Actions 固定提交 SHA，缓存键纳入 SDK 和工具链。失败时也尝试保存构建日志和 `.xcresult`，与发行包分开上传。
+- Zig 核心重建通过；CI 合并过滤器命令覆盖 renderer/config/Command/Terminal，**760 / 760 项通过**，88 / 88 构建步骤成功。该次沙盒运行的标准错误包含系统 XPC 连接警告，命令退出码为 0。
+- Swift 单元测试 **234 项通过、0 项失败、1 项跳过**；参数化展开后通过 355 次执行。首次沙盒构建受系统服务访问限制而失败，随后在沙盒外重跑通过；成功结果包为 `/private/tmp/cghostty-modernize-verified-tests.xcresult`。
+- `zig fmt --check`、严格 SwiftLint、actionlint 1.7.12、脚本语法和 diff 空白检查通过。临时副本中的故障注入确认：Zig 版本不匹配、simdutf 记录不匹配、无效 SHA-256 均被拒绝；非测试动作使用 `--result-bundle` 也被拒绝。
+- ReleaseLocal 完整构建及 `check-scope.py --app` 通过：arm64、身份、资源与签名均符合要求；实际应用资源中已无 Ventura nib，保留当前 Tahoe 标签栏 nib。
+- 本轮更新了本地应用，未重新生成下方历史 ZIP；未远程运行 GitHub Actions，未进行界面交互验收或对外发布。
+
 ## 应用图标更新（2026-09-20）
 
 - 采用圆润、立体的白色小幽灵：chevron 眨眼、薄荷绿吐舌微笑、挥手与小卷尾巴。最终原画及提示词保存在 `images/cghostty-icon-v4/`。

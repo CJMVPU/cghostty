@@ -57,7 +57,7 @@ class SecureInput: ObservableObject {
             object: nil)
     }
 
-    deinit {
+    isolated deinit {
         NotificationCenter.default.removeObserver(self)
 
         // Reset our state so that we can ensure we set the proper secure input

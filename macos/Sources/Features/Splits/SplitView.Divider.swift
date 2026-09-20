@@ -45,10 +45,10 @@ extension SplitView {
             }
         }
 
-        private var pointerStyle: BackportPointerStyle {
+        private var pointerStyle: PointerStyle {
             return switch direction {
-            case .horizontal: .resizeLeftRight
-            case .vertical: .resizeUpDown
+            case .horizontal: .columnResize
+            case .vertical: .rowResize
             }
         }
 
@@ -61,25 +61,7 @@ extension SplitView {
                     .fill(color)
                     .frame(width: visibleWidth, height: visibleHeight)
             }
-            .backport.pointerStyle(pointerStyle)
-            .onHover { isHovered in
-                // macOS 15+ we use the pointerStyle helper which is much less
-                // error-prone versus manual NSCursor push/pop
-                if #available(macOS 15, *) {
-                    return
-                }
-
-                if isHovered {
-                    switch direction {
-                    case .horizontal:
-                        NSCursor.resizeLeftRight.push()
-                    case .vertical:
-                        NSCursor.resizeUpDown.push()
-                    }
-                } else {
-                    NSCursor.pop()
-                }
-            }
+            .pointerStyle(pointerStyle)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(axLabel)
             .accessibilityValue("\(Int(split * 100))%")

@@ -115,7 +115,7 @@ extension Ghostty {
             self.completion = completion
         }
 
-        deinit {
+        isolated deinit {
             guard let surface, let completion else { return }
             self.completion = nil
             DispatchQueue.main.async {

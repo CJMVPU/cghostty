@@ -1,6 +1,6 @@
 .{
     .name = .dcimgui,
-    .version = "1.92.5", // -docking branch
+    .version = "1.92.9+b", // Upstream v1.92.9b-docking (SemVer build metadata for the hotfix).
     .fingerprint = 0x1a25797442c6324f,
     .paths = .{""},
     .dependencies = .{
@@ -8,15 +8,15 @@
 
         .bindings = .{
             // https://github.com/dearimgui/dear_bindings
-            .url = "https://deps.files.ghostty.org/DearBindings_v0.17_ImGui_v1.92.5-docking.tar.gz",
-            .hash = "N-V-__8AANT61wB--nJ95Gj_ctmzAtcjloZ__hRqNw5lC1Kr",
+            .url = "https://github.com/dearimgui/dear_bindings/releases/download/DearBindings_v0.21_ImGui_v1.92.9b-docking/DearBindings_v0.21_ImGui_v1.92.9b-docking.zip",
+            .hash = "N-V-__8AAGoBZQQ8m53uq8K_fEHmzU67Xj4Khn3n2IFidY5-",
             .lazy = true,
         },
 
         .imgui = .{
             // https://github.com/ocornut/imgui
-            .url = "https://deps.files.ghostty.org/N-V-__8AAEbOfQBnvcFcCX2W5z7tDaN8vaNZGamEQtNOe0UI.tar.gz",
-            .hash = "N-V-__8AAEbOfQBnvcFcCX2W5z7tDaN8vaNZGamEQtNOe0UI",
+            .url = "https://github.com/ocornut/imgui/archive/refs/tags/v1.92.9b-docking.tar.gz",
+            .hash = "N-V-__8AAAPHhAB86bkFSQlFlaioKXgArks51cXvTB1G5j7F",
             .lazy = true,
         },
 

@@ -45,10 +45,3 @@ extension KeyboardShortcut: @retroactive CustomStringConvertible {
         return self.keyList.joined()
     }
 }
-
-// This is available in macOS 14 so this only applies to early macOS versions.
-extension KeyEquivalent: @retroactive Equatable {
-    public static func == (lhs: KeyEquivalent, rhs: KeyEquivalent) -> Bool {
-        lhs.character == rhs.character
-    }
-}

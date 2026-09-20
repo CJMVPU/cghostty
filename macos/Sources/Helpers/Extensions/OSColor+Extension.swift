@@ -4,7 +4,7 @@ import AppKit
 import GhosttyKit
 #endif
 
-extension NSColor {
+nonisolated extension NSColor {
     var isLightColor: Bool {
         return self.luminance > 0.5
     }
@@ -74,7 +74,7 @@ extension NSColor {
 
 // MARK: Ghostty Types
 #if !DOCK_TILE_PLUGIN
-extension NSColor {
+nonisolated extension NSColor {
     /// Create a color from a Ghostty color.
     convenience init(ghostty: ghostty_config_color_s) {
         let red = Double(ghostty.r) / 255

@@ -108,6 +108,7 @@ final class GhosttyTitlebarTabsUITests: GhosttyCustomConfigCase {
         checkTabsGeometry(app.windows.firstMatch)
     }
 
+    @MainActor
     func checkTabsGeometry(_ window: XCUIElement) {
         let closeTabButtons = window.buttons.matching(identifier: "_closeButton")
 

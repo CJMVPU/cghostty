@@ -34,7 +34,7 @@ class TabGroupCloseCoordinator {
     /// Timer used to debounce close requests and determine intent.
     private var debounceTimer: Timer?
 
-    deinit {
+    isolated deinit {
         trigger(.tab)
     }
 
@@ -100,7 +100,7 @@ class TabGroupCloseCoordinator {
             withTimeInterval: Duration.milliseconds(100).timeInterval,
             repeats: false
         ) { [weak self] _ in
-            self?.trigger(.tab)
+            MainActor.assumeIsolated { self?.trigger(.tab) }
         }
     }
 

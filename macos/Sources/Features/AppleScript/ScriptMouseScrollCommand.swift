@@ -8,37 +8,50 @@ import AppKit
 @MainActor
 @objc(GhosttyScriptMouseScrollCommand)
 final class ScriptMouseScrollCommand: NSScriptCommand {
-    override func performDefaultImplementation() -> Any? {
-        guard NSApp.validateScript(command: self) else { return nil }
+    nonisolated override init(commandDescription: NSScriptCommandDescription) {
+        super.init(commandDescription: commandDescription)
+    }
+
+    nonisolated override func performDefaultImplementation() -> Any? {
+        // Cocoa scripting dispatches application commands on the main thread.
+        // NSScriptCommand predates actor annotations; this reference stays synchronous.
+        nonisolated(unsafe) let command = self
+        MainActor.assumeIsolated { command.performOnMainActor() }
+        return nil
+    }
+
+    @MainActor
+    private func performOnMainActor() {
+        guard NSApp.validateScript(command: self) else { return }
 
         guard let x = evaluatedArguments?["x"] as? Double else {
             scriptErrorNumber = errAEParamMissed
             scriptErrorString = "Missing x scroll delta."
-            return nil
+            return
         }
 
         guard let y = evaluatedArguments?["y"] as? Double else {
             scriptErrorNumber = errAEParamMissed
             scriptErrorString = "Missing y scroll delta."
-            return nil
+            return
         }
 
         guard let terminal = evaluatedArguments?["terminal"] as? ScriptTerminal else {
             scriptErrorNumber = errAEParamMissed
             scriptErrorString = "Missing terminal target."
-            return nil
+            return
         }
 
         guard let surfaceView = terminal.surfaceView else {
             scriptErrorNumber = errAEEventFailed
             scriptErrorString = "Terminal surface is no longer available."
-            return nil
+            return
         }
 
         guard let surface = surfaceView.surfaceModel else {
             scriptErrorNumber = errAEEventFailed
             scriptErrorString = "Terminal surface model is not available."
-            return nil
+            return
         }
 
         let precision = evaluatedArguments?["precision"] as? Bool ?? false
@@ -66,6 +79,6 @@ final class ScriptMouseScrollCommand: NSScriptCommand {
         )
         surface.sendMouseScroll(scrollEvent)
 
-        return nil
+        return
     }
 }

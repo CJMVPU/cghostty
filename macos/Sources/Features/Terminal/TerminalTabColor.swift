@@ -57,11 +57,7 @@ enum TerminalTabColor: Int, CaseIterable, Codable {
         case .green:
             return .systemGreen
         case .teal:
-            if #available(macOS 13.0, *) {
-                return .systemMint
-            } else {
-                return .systemTeal
-            }
+            return .systemMint
         case .graphite:
             return .systemGray
         }
@@ -151,11 +147,7 @@ struct TabColorMenuView: View {
     /// Leading padding to align with the menu's icon gutter.
     /// macOS 26 introduced icons in menus, requiring additional padding.
     private static var leadingPadding: CGFloat {
-        if #available(macOS 26.0, *) {
-            return 40
-        } else {
-            return 12
-        }
+        return 40
     }
 }
 

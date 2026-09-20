@@ -1,5 +1,6 @@
 import Cocoa
 
+@MainActor
 protocol TerminalRestorable: Codable {
     static var selfKey: String { get }
     static var versionKey: String { get }
@@ -57,7 +58,7 @@ extension TerminalRestorable {
 }
 
 /// The state stored for terminal window restoration.
-final class TerminalRestorableState: TerminalRestorable {
+final class TerminalRestorableState: @MainActor TerminalRestorable {
     static var version: Int { 7 }
     static var minimumVersion: Int { 5 }
 

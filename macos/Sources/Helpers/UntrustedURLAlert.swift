@@ -57,7 +57,7 @@ enum UntrustedURLAlert {
     /// The core action callback runs with the renderer mutex held. Queue modal
     /// presentation for the next main-loop turn so AppKit cannot reenter a
     /// render callback before that mutex is released.
-    private static func deferPresentation(_ action: @escaping () -> Void) {
+    private static func deferPresentation(_ action: @escaping @MainActor @Sendable () -> Void) {
         DispatchQueue.main.async(execute: action)
     }
 

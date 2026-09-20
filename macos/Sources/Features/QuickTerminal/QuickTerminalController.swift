@@ -97,7 +97,7 @@ class QuickTerminalController: BaseTerminalController {
         fatalError("init(coder:) is not supported for this view")
     }
 
-    deinit {
+    isolated deinit {
         // Remove all of our notificationcenter subscriptions
         let center = NotificationCenter.default
         center.removeObserver(self)
@@ -555,10 +555,12 @@ class QuickTerminalController: BaseTerminalController {
         // hide it.
         if !window.isOnActiveSpace {
             self.previousApp = nil
-            window.orderOut(self)
-            // If our application is hidden previously, we hide it again
-            if (NSApp.delegate as? AppDelegate)?.hiddenState != nil {
-                NSApp.hide(nil)
+            MainActor.assumeIsolated {
+                window.orderOut(self)
+                // If our application was hidden previously, hide it again.
+                if (NSApp.delegate as? AppDelegate)?.hiddenState != nil {
+                    NSApp.hide(nil)
+                }
             }
             return
         }
@@ -595,10 +597,12 @@ class QuickTerminalController: BaseTerminalController {
         }, completionHandler: {
             // This causes the window to be removed from the screen list and macOS
             // handles what should be focused next.
-            window.orderOut(self)
-            // If our application is hidden previously, we hide it again
-            if (NSApp.delegate as? AppDelegate)?.hiddenState != nil {
-                NSApp.hide(nil)
+            MainActor.assumeIsolated {
+                window.orderOut(self)
+                // If our application was hidden previously, hide it again.
+                if (NSApp.delegate as? AppDelegate)?.hiddenState != nil {
+                    NSApp.hide(nil)
+                }
             }
         })
     }
@@ -778,7 +782,7 @@ class QuickTerminalController: BaseTerminalController {
             previousAutoHide = Dock.autoHideEnabled
         }
 
-        deinit {
+        isolated deinit {
             restore()
         }
 

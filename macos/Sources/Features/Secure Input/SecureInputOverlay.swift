@@ -53,7 +53,7 @@ struct SecureInputOverlay: View {
                     .onTapGesture {
                         isPopover = true
                     }
-                    .backport.pointerStyle(.link)
+                    .pointerStyle(.link)
                     .popover(isPresented: $isPopover, arrowEdge: .bottom) {
                         Text("""
                         Secure Input is active. Secure Input is a macOS security feature that

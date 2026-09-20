@@ -156,7 +156,15 @@ final class ScriptTab: NSObject {
     }
 
     /// Provides Cocoa scripting with a canonical "path" back to this object.
-    override var objectSpecifier: NSScriptObjectSpecifier? {
+    nonisolated override var objectSpecifier: NSScriptObjectSpecifier? {
+        // Cocoa scripting requests object paths on the application thread.
+        // This synchronous ObjC return never leaves the application thread.
+        nonisolated(unsafe) var result: NSScriptObjectSpecifier?
+        MainActor.assumeIsolated { result = mainActorObjectSpecifier }
+        return result
+    }
+
+    private var mainActorObjectSpecifier: NSScriptObjectSpecifier? {
         guard NSApp.isAppleScriptEnabled else { return nil }
         guard let window else { return nil }
         guard let windowClassDescription = window.classDescription as? NSScriptClassDescription else {

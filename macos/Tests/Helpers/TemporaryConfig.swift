@@ -29,7 +29,7 @@ class TemporaryConfig: Ghostty.Config {
         clone(config: cfg)
     }
 
-    deinit {
+    isolated deinit {
         try? FileManager.default.removeItem(at: temporaryFile)
     }
 }

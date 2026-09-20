@@ -4,9 +4,10 @@ import UniformTypeIdentifiers
 
 /// Conformance to `Transferable` enables drag-and-drop.
 extension Ghostty.SurfaceView: Transferable {
-    static var transferRepresentation: some TransferRepresentation {
+    nonisolated static var transferRepresentation: some TransferRepresentation {
         DataRepresentation(contentType: .ghosttySurfaceId) { surface in
-            withUnsafeBytes(of: surface.id.uuid) { Data($0) }
+            let id = surface.id
+            return withUnsafeBytes(of: id.uuid) { Data($0) }
         } importing: { data in
             guard data.count == 16 else {
                 throw TransferError.invalidData
@@ -38,10 +39,10 @@ extension Ghostty.SurfaceView: Transferable {
 extension UTType {
     /// A format that encodes the bare UUID only for the surface. This can be used if you have
     /// a way to look up a surface by ID.
-    static let ghosttySurfaceId = UTType(exportedAs: "com.cjmvpu.cghosttySurfaceId")
+    nonisolated static let ghosttySurfaceId = UTType(exportedAs: "com.cjmvpu.cghosttySurfaceId")
 }
 
 extension NSPasteboard.PasteboardType {
     /// Pasteboard type for dragging surface IDs.
-    static let ghosttySurfaceId = NSPasteboard.PasteboardType(UTType.ghosttySurfaceId.identifier)
+    nonisolated static let ghosttySurfaceId = NSPasteboard.PasteboardType(UTType.ghosttySurfaceId.identifier)
 }

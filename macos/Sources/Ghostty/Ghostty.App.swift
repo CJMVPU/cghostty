@@ -58,7 +58,7 @@ extension Ghostty {
             var runtime_cfg = ghostty_runtime_config_s(
                 userdata: Unmanaged.passUnretained(self).toOpaque(),
                 supports_selection_clipboard: true,
-                wakeup_cb: { userdata in App.wakeup(userdata) },
+                wakeup_cb: { @Sendable userdata in App.wakeup(userdata) },
                 action_cb: { app, target, action in App.action(app!, target: target, action: action) },
                 read_clipboard_cb: { userdata, loc, state, mimes, mimesLen, list in
                     App.readClipboard(
@@ -108,7 +108,7 @@ extension Ghostty {
             self.readiness = .ready
         }
 
-        deinit {
+        isolated deinit {
             // This will force the didSet callbacks to run which free.
             self.app = nil
             NotificationCenter.default.removeObserver(self)
@@ -537,7 +537,7 @@ extension Ghostty {
             surfaceView.pendingClipboardConfirmation = request
         }
 
-        static func wakeup(_ userdata: UnsafeMutableRawPointer?) {
+        nonisolated static func wakeup(_ userdata: UnsafeMutableRawPointer?) {
             let state = Unmanaged<App>.fromOpaque(userdata!).takeUnretainedValue()
 
             // Wakeup can be called from any thread so we schedule the app tick
@@ -1620,11 +1620,13 @@ extension Ghostty {
 
             center.getNotificationSettings { settings in
                 guard settings.authorizationStatus == .authorized else { return }
-                surfaceView.showUserNotification(
-                    title: title,
-                    body: body,
-                    requireFocus: requireFocus
-                )
+                DispatchQueue.main.async {
+                    surfaceView.showUserNotification(
+                        title: title,
+                        body: body,
+                        requireFocus: requireFocus
+                    )
+                }
             }
         }
 

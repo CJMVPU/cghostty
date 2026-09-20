@@ -1,12 +1,12 @@
 .{
     .name = .libintl,
-    .version = "0.24.0",
+    .version = "1.0.0",
     .fingerprint = 0x16434c723ba7278a,
     .paths = .{""},
     .dependencies = .{
         .gettext = .{
-            .url = "https://deps.files.ghostty.org/gettext-0.24.tar.gz",
-            .hash = "N-V-__8AADcZkgn4cMhTUpIz6mShCKyqqB-NBtf_S2bHaTC-",
+            .url = "https://ftp.gnu.org/pub/gnu/gettext/gettext-1.0.tar.gz",
+            .hash = "N-V-__8AAN5fvQ4FbIGZadCKkDe0sfhNiPZ9puZqFnOMusJS",
             .lazy = true,
         },
 

@@ -196,24 +196,21 @@ struct SplitTreeTests {
 
     // MARK: - Resizing
 
-    @Test(arguments: [
-        // (resizeDirection, insertDirection, bounds, pixels, expectedRatio)
-        (SplitTree<MockView>.Spatial.Direction.right, SplitTree<MockView>.NewDirection.right,
-         CGRect(x: 0, y: 0, width: 1000, height: 500), UInt16(100), 0.6),
-        (.left, .right,
-         CGRect(x: 0, y: 0, width: 1000, height: 500), UInt16(50), 0.45),
-        (.down, .down,
-         CGRect(x: 0, y: 0, width: 500, height: 1000), UInt16(200), 0.7),
-        (.up, .down,
-         CGRect(x: 0, y: 0, width: 500, height: 1000), UInt16(50), 0.45),
-    ])
-    func resizingAdjustsRatio(
-        resizeDirection: SplitTree<MockView>.Spatial.Direction,
-        insertDirection: SplitTree<MockView>.NewDirection,
-        bounds: CGRect,
-        pixels: UInt16,
-        expectedRatio: Double
-    ) throws {
+    @Test(arguments: 0..<4)
+    func resizingAdjustsRatio(caseIndex: Int) throws {
+        // Keep actor-bound generic types inside the test body, outside macro arguments.
+        let cases = [
+            // (resizeDirection, insertDirection, bounds, pixels, expectedRatio)
+            (SplitTree<MockView>.Spatial.Direction.right, SplitTree<MockView>.NewDirection.right,
+             CGRect(x: 0, y: 0, width: 1000, height: 500), UInt16(100), 0.6),
+            (.left, .right,
+             CGRect(x: 0, y: 0, width: 1000, height: 500), UInt16(50), 0.45),
+            (.down, .down,
+             CGRect(x: 0, y: 0, width: 500, height: 1000), UInt16(200), 0.7),
+            (.up, .down,
+             CGRect(x: 0, y: 0, width: 500, height: 1000), UInt16(50), 0.45),
+        ]
+        let (resizeDirection, insertDirection, bounds, pixels, expectedRatio) = cases[caseIndex]
         let view1 = MockView()
         let view2 = MockView()
         var tree = SplitTree<MockView>(view: view1)
@@ -427,16 +424,16 @@ struct SplitTreeTests {
 
     // MARK: - Spatial
 
-    @Test(arguments: [
-        (SplitTree<MockView>.Spatial.Direction.left, SplitTree<MockView>.NewDirection.right),
-        (.right, .right),
-        (.up, .down),
-        (.down, .down),
-    ])
-    func doesBorderEdge(
-        side: SplitTree<MockView>.Spatial.Direction,
-        insertDirection: SplitTree<MockView>.NewDirection
-    ) throws {
+    @Test(arguments: 0..<4)
+    func doesBorderEdge(caseIndex: Int) throws {
+        // Keep actor-bound generic types inside the test body, outside macro arguments.
+        let cases = [
+            (SplitTree<MockView>.Spatial.Direction.left, SplitTree<MockView>.NewDirection.right),
+            (.right, .right),
+            (.up, .down),
+            (.down, .down),
+        ]
+        let (side, insertDirection) = cases[caseIndex]
         let view1 = MockView()
         let view2 = MockView()
         var tree = SplitTree<MockView>(view: view1)
@@ -555,16 +552,16 @@ struct SplitTreeTests {
         #expect(b4 == CGRect(x: 500, y: 0, width: 500, height: 400))   // bottom-right
     }
 
-    @Test(arguments: [
-        (SplitTree<MockView>.Spatial.Direction.right, SplitTree<MockView>.NewDirection.right),
-        (.left, .right),
-        (.down, .down),
-        (.up, .down),
-    ])
-    func slotsFromNode(
-        direction: SplitTree<MockView>.Spatial.Direction,
-        insertDirection: SplitTree<MockView>.NewDirection
-    ) throws {
+    @Test(arguments: 0..<4)
+    func slotsFromNode(caseIndex: Int) throws {
+        // Keep actor-bound generic types inside the test body, outside macro arguments.
+        let cases = [
+            (SplitTree<MockView>.Spatial.Direction.right, SplitTree<MockView>.NewDirection.right),
+            (.left, .right),
+            (.down, .down),
+            (.up, .down),
+        ]
+        let (direction, insertDirection) = cases[caseIndex]
         let view1 = MockView()
         let view2 = MockView()
         var tree = SplitTree<MockView>(view: view1)

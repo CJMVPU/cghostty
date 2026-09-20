@@ -1,5 +1,6 @@
 import Cocoa
-import ApplicationServices
+// The SDK exposes the immutable AX prompt key as a mutable C global.
+@preconcurrency import ApplicationServices
 import CoreGraphics
 import Carbon
 import OSLog
@@ -25,7 +26,7 @@ class GlobalEventTap {
     // Private init so it can't be constructed outside of our singleton
     private init() {}
 
-    deinit {
+    isolated deinit {
         disable()
     }
 
@@ -53,13 +54,14 @@ class GlobalEventTap {
 
         // Check in a timer
         enableTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            guard let self, AXIsProcessTrusted() else { return }
+            MainActor.assumeIsolated {
+                guard let self, AXIsProcessTrusted() else { return }
 
-            // Stop polling before attempting creation. If creation fails for a
-            // reason other than permissions, we must not retry it indefinitely.
-            self.enableTimer?.invalidate()
-            self.enableTimer = nil
-            _ = self.tryEnable()
+                // Stop polling before attempting creation. Do not retry failures indefinitely.
+                self.enableTimer?.invalidate()
+                self.enableTimer = nil
+                _ = self.tryEnable()
+            }
         }
     }
 
@@ -121,12 +123,22 @@ class GlobalEventTap {
     }
 }
 
-private func cgEventFlagsChangedHandler(
+nonisolated private func cgEventFlagsChangedHandler(
     proxy: CGEventTapProxy,
     type: CGEventType,
     cgEvent: CGEvent,
     userInfo: UnsafeMutableRawPointer?
 ) -> Unmanaged<CGEvent>? {
+    // The event source is installed on CFRunLoopGetMain above.
+    nonisolated(unsafe) var result: Unmanaged<CGEvent>?
+    nonisolated(unsafe) let event = cgEvent
+    MainActor.assumeIsolated {
+        result = handleGlobalEvent(type: type, cgEvent: event)
+    }
+    return result
+}
+
+private func handleGlobalEvent(type: CGEventType, cgEvent: CGEvent) -> Unmanaged<CGEvent>? {
     let result = Unmanaged.passUnretained(cgEvent)
 
     // macOS disables the event tap if the callback is too slow or for other

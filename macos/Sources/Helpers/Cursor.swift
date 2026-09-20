@@ -72,41 +72,17 @@ extension CursorStyle {
         case .link:
             return .pointingHand
         case .resizeLeft:
-            if #available(macOS 15.0, *) {
-                return .columnResize(directions: .left)
-            } else {
-                return .resizeLeft
-            }
+            return .columnResize(directions: .left)
         case .resizeRight:
-            if #available(macOS 15.0, *) {
-                return .columnResize(directions: .right)
-            } else {
-                return .resizeRight
-            }
+            return .columnResize(directions: .right)
         case .resizeUp:
-            if #available(macOS 15.0, *) {
-                return .rowResize(directions: .up)
-            } else {
-                return .resizeUp
-            }
+            return .rowResize(directions: .up)
         case .resizeDown:
-            if #available(macOS 15.0, *) {
-                return .rowResize(directions: .down)
-            } else {
-                return .resizeDown
-            }
+            return .rowResize(directions: .down)
         case .resizeUpDown:
-            if #available(macOS 15.0, *) {
-                return .rowResize
-            } else {
-                return .resizeUpDown
-            }
+            return .rowResize
         case .resizeLeftRight:
-            if #available(macOS 15.0, *) {
-                return .columnResize
-            } else {
-                return .resizeLeftRight
-            }
+            return .columnResize
         case .contextMenu:
             return .contextualMenu
         case .crosshair:

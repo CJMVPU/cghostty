@@ -17,6 +17,15 @@ struct ColorizedGhosttyIconTests {
 
     // MARK: - Codable
 
+    @Test func appIconRoundTripOnBackgroundTask() async throws {
+        let icon = AppIcon.customStyle(makeIcon(frame: .chrome))
+        let decoded = try await Task.detached { @Sendable in
+            let data = try JSONEncoder().encode(icon)
+            return try JSONDecoder().decode(AppIcon.self, from: data)
+        }.value
+        #expect(decoded == icon)
+    }
+
     @Test func codableRoundTripPreservesIcon() throws {
         let icon = makeIcon(frame: .chrome)
         let data = try JSONEncoder().encode(icon)

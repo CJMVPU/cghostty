@@ -107,7 +107,7 @@ extension Ghostty.Action {
         let progress: UInt8?
     }
 
-    struct Scrollbar {
+    nonisolated struct Scrollbar: Sendable {
         let total: UInt64
         let offset: UInt64
         let len: UInt64

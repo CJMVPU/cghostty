@@ -3,8 +3,8 @@ import AppIntents
 import GhosttyKit
 
 struct FocusTerminalIntent: AppIntent {
-    static var title: LocalizedStringResource = "Focus Terminal"
-    static var description = IntentDescription("Move focus to an existing terminal.")
+    static let title: LocalizedStringResource = "Focus Terminal"
+    static let description = IntentDescription("Move focus to an existing terminal.")
 
     @Parameter(
         title: "Terminal",
@@ -12,10 +12,7 @@ struct FocusTerminalIntent: AppIntent {
     )
     var terminal: TerminalEntity
 
-#if compiler(>=6.2)
-    @available(macOS 26.0, *)
-    static var supportedModes: IntentModes = .background
-#endif
+    static let supportedModes: IntentModes = .background
 
     @MainActor
     func perform() async throws -> some IntentResult {

@@ -11,7 +11,7 @@ class AppDelegate: NSObject,
                     GhosttyAppDelegate {
     // The application logger. We should probably move this at some point to a dedicated
     // class/struct but for now it lives here! 🤷‍♂️
-    static let logger = Logger(
+    nonisolated static let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier!,
         category: String(describing: AppDelegate.self)
     )
@@ -303,17 +303,20 @@ class AppDelegate: NSObject,
         self.appearanceObserver = NSApplication.shared.observe(
             \.effectiveAppearance,
              options: [.new, .initial]
-        ) { _, change in
-            guard let appearance = change.newValue else { return }
-            guard let app = self.ghostty.app else { return }
-            let scheme: ghostty_color_scheme_e
-            if appearance.isDark {
-                scheme = GHOSTTY_COLOR_SCHEME_DARK
-            } else {
-                scheme = GHOSTTY_COLOR_SCHEME_LIGHT
-            }
+        ) { _, _ in
+            // NSApplication appearance KVO is delivered on the main thread.
+            MainActor.assumeIsolated {
+                let appearance = NSApplication.shared.effectiveAppearance
+                guard let app = self.ghostty.app else { return }
+                let scheme: ghostty_color_scheme_e
+                if appearance.isDark {
+                    scheme = GHOSTTY_COLOR_SCHEME_DARK
+                } else {
+                    scheme = GHOSTTY_COLOR_SCHEME_LIGHT
+                }
 
-            ghostty_app_set_color_scheme(app, scheme)
+                ghostty_app_set_color_scheme(app, scheme)
+            }
         }
 
         // Setup our menu
@@ -687,31 +690,23 @@ class AppDelegate: NSObject,
     private func syncDockBadge() {
         let center = UNUserNotificationCenter.current()
         center.getNotificationSettings { settings in
-            switch settings.authorizationStatus {
-            case .authorized:
-                // If we're authorized and allow badges, then set the badge.
-                if settings.badgeSetting == .enabled {
-                    DispatchQueue.main.async {
+            let status = settings.authorizationStatus
+            let badgeSetting = settings.badgeSetting
+            DispatchQueue.main.async {
+                switch status {
+                case .authorized:
+                    if badgeSetting == .enabled {
                         self.setDockBadge()
+                    } else if badgeSetting == .notSupported {
+                        self.requestBadgeAuthorizationAndSet(.current())
                     }
-                } else if settings.badgeSetting == .notSupported {
-                    // If badge setting is not supported, we may be in a sandbox that doesn't allow it.
-                    // We can still attempt to set the badge and hope for the best, but we should also
-                    // request authorization just in case it is a permissions issue.
-                    self.requestBadgeAuthorizationAndSet(center)
+                case .notDetermined:
+                    self.requestBadgeAuthorizationAndSet(.current())
+                case .denied, .provisional, .ephemeral:
+                    break
+                @unknown default:
+                    break
                 }
-
-            case .notDetermined:
-                // Not determined yet, request authorization for badge
-                self.requestBadgeAuthorizationAndSet(center)
-
-            case .denied, .provisional, .ephemeral:
-                // In these known non-authorized states, do not attempt to set the badge.
-                break
-
-            @unknown default:
-                // Handle future unknown states by doing nothing.
-                break
             }
         }
     }
@@ -1300,9 +1295,9 @@ extension AppDelegate {
                 )
 
                 if [.OK, .alertFirstButtonReturn].contains(response) {
-                    await NSApp.reply(toApplicationShouldTerminate: true)
+                    NSApp.reply(toApplicationShouldTerminate: true)
                 } else {
-                    await NSApp.reply(toApplicationShouldTerminate: false)
+                    NSApp.reply(toApplicationShouldTerminate: false)
                 }
             }
 
@@ -1335,15 +1330,15 @@ extension AppDelegate {
 
                 if [.OK, .alertFirstButtonReturn].contains(response) {
                     // Close this window and until next review is cancelled
-                    await controller.window?.close()
+                    controller.window?.close()
                     continue
                 } else {
-                    await NSApp.reply(toApplicationShouldTerminate: false)
+                    NSApp.reply(toApplicationShouldTerminate: false)
                     // Cancel the review
                     return
                 }
             }
-            await NSApp.reply(toApplicationShouldTerminate: true)
+            NSApp.reply(toApplicationShouldTerminate: true)
         }
     }
 }

@@ -14,6 +14,7 @@ final class GhosttyThemeTests: GhosttyCustomConfigCase {
     }
 
     let windowTitle = "GhosttyThemeTests"
+    @MainActor
     private func assertTitlebarAppearance(
         _ appearance: XCUIDevice.Appearance,
         for app: XCUIApplication,

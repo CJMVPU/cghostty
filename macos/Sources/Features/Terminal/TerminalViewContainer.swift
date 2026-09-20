@@ -101,8 +101,6 @@ extension BaseTerminalController {
 
 /// An `NSView` that contains a liquid glass background effect and
 /// an inactive-window tint overlay.
-#if compiler(>=6.2)
-@available(macOS 26.0, *)
 private class TerminalGlassView: NSView, ObservableObject {
     /// We use this to apply glass effect to background colors
     ///
@@ -181,11 +179,8 @@ private class TerminalGlassView: NSView, ObservableObject {
         topConstraint.constant = offset
     }
 }
-#endif // compiler(>=6.2)
 
 extension TerminalViewContainer {
-#if compiler(>=6.2)
-    @available(macOS 26.0, *)
     private func addGlassEffectViewIfNeeded() -> TerminalGlassView? {
         if let existed = glassEffectView as? TerminalGlassView {
             updateGlassEffectTopInsetIfNeeded()
@@ -205,11 +200,9 @@ extension TerminalViewContainer {
         glassEffectView = effectView
         return effectView
     }
-#endif // compiler(>=6.2)
 
     private func updateGlassEffectIfNeeded() {
-#if compiler(>=6.2)
-        guard #available(macOS 26.0, *), let derivedConfig else {
+        guard let derivedConfig else {
             glassEffectView?.removeFromSuperview()
             glassEffectView = nil
             return
@@ -219,29 +212,25 @@ extension TerminalViewContainer {
         }
 
         effectView.configure(
-            glass: derivedConfig.glass.official,
+            glass: derivedConfig.glass,
             backgroundColor: derivedConfig.backgroundColor,
             backgroundOpacity: derivedConfig.backgroundOpacity,
             cornerRadius: derivedConfig.cornerRadius,
         )
-#endif // compiler(>=6.2)
     }
 
     private func updateGlassEffectTopInsetIfNeeded() {
-#if compiler(>=6.2)
         guard
-            #available(macOS 26.0, *),
             let effectView = glassEffectView as? TerminalGlassView,
             let themeFrameView = windowThemeFrameView
         else {
             return
         }
         effectView.updateTopInset(-themeFrameView.safeAreaInsets.top)
-#endif // compiler(>=6.2)
     }
 
     struct DerivedConfig: Equatable {
-        let glass: BackportGlass
+        let glass: Glass
         let backgroundColor: NSColor
         let backgroundOpacity: Double
         let cornerRadius: CGFloat?

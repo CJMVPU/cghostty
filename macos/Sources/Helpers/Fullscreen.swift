@@ -70,7 +70,7 @@ class FullscreenBase {
             object: window)
     }
 
-    deinit {
+    isolated deinit {
         NotificationCenter.default.removeObserver(self)
     }
 
@@ -162,7 +162,7 @@ class NonNativeFullscreen: FullscreenBase, FullscreenStyle {
             object: window)
     }
 
-    deinit {
+    isolated deinit {
         NotificationCenter.default.removeObserver(self)
     }
 

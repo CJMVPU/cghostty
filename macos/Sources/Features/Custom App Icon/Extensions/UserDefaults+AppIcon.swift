@@ -1,6 +1,6 @@
 import AppKit
 
-extension UserDefaults {
+nonisolated extension UserDefaults {
     private static let customIconKeyOld = "CustomGhosttyIcon"
     private static let customIconKeyNew = "CustomGhosttyIcon2"
 

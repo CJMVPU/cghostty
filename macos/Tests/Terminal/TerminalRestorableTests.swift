@@ -137,7 +137,7 @@ private extension TerminalRestorableTests {
 // MARK: - Dummy States
 
 @MainActor
-private final class DummyTerminalRestorableState: TerminalRestorable {
+private final class DummyTerminalRestorableState: @MainActor TerminalRestorable {
     static var version: Int {
         TerminalRestorableState.version
     }
@@ -166,7 +166,7 @@ private final class DummyTerminalRestorableState: TerminalRestorable {
 }
 
 @MainActor
-struct DummyQuickTerminalRestorableState: TerminalRestorable {
+struct DummyQuickTerminalRestorableState: @MainActor TerminalRestorable {
     static var version: Int = QuickTerminalRestorableState.version
 
     static var minimumVersion: Int = QuickTerminalRestorableState.minimumVersion

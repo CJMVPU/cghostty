@@ -68,7 +68,7 @@ final class TabTitleEditor: NSObject, NSTextFieldDelegate {
         }
     }
 
-    deinit {
+    isolated deinit {
         if let eventMonitor {
             NSEvent.removeMonitor(eventMonitor)
         }

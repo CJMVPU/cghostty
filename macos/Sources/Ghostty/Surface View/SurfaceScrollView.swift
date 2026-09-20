@@ -71,8 +71,8 @@ class SurfaceScrollView: NSView {
             forName: NSView.boundsDidChangeNotification,
             object: scrollView.contentView,
             queue: .main
-        ) { [weak self] notification in
-            self?.handleScrollChange(notification)
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.synchronizeSurfaceView() }
         })
 
         // Listen for scrollbar updates from Ghostty
@@ -81,7 +81,10 @@ class SurfaceScrollView: NSView {
             object: surfaceView,
             queue: .main
         ) { [weak self] notification in
-            self?.handleScrollbarUpdate(notification)
+            guard let scrollbar = notification.userInfo?[SwiftUI.Notification.Name.ScrollbarKey] as? Ghostty.Action.Scrollbar else {
+                return
+            }
+            MainActor.assumeIsolated { self?.handleScrollbarUpdate(scrollbar) }
         })
 
         // Listen for live scroll events
@@ -90,7 +93,7 @@ class SurfaceScrollView: NSView {
             object: scrollView,
             queue: .main
         ) { [weak self] _ in
-            self?.isLiveScrolling = true
+            MainActor.assumeIsolated { self?.isLiveScrolling = true }
         })
 
         observers.append(NotificationCenter.default.addObserver(
@@ -98,7 +101,7 @@ class SurfaceScrollView: NSView {
             object: scrollView,
             queue: .main
         ) { [weak self] _ in
-            self?.isLiveScrolling = false
+            MainActor.assumeIsolated { self?.isLiveScrolling = false }
         })
 
         observers.append(NotificationCenter.default.addObserver(
@@ -106,7 +109,7 @@ class SurfaceScrollView: NSView {
             object: scrollView,
             queue: .main
         ) { [weak self] _ in
-            self?.handleLiveScroll()
+            MainActor.assumeIsolated { self?.handleLiveScroll() }
         })
 
         observers.append(NotificationCenter.default.addObserver(
@@ -117,7 +120,11 @@ class SurfaceScrollView: NSView {
             // the posting thread.
             queue: nil
         ) { [weak self] _ in
-            self?.handleScrollerStyleChange()
+            if Thread.isMainThread {
+                MainActor.assumeIsolated { self?.handleScrollerStyleChange() }
+            } else {
+                DispatchQueue.main.async { [weak self] in self?.handleScrollerStyleChange() }
+            }
         })
 
         // Listen for derived config changes to update scrollbar settings live
@@ -140,7 +147,7 @@ class SurfaceScrollView: NSView {
         fatalError("init(coder:) not implemented")
     }
 
-    deinit {
+    isolated deinit {
         observers.forEach { NotificationCenter.default.removeObserver($0) }
     }
 
@@ -228,11 +235,6 @@ class SurfaceScrollView: NSView {
 
     // MARK: Notifications
 
-    /// Handles bounds changes in the scroll view's clip view, keeping the surface view synchronized.
-    private func handleScrollChange(_ notification: Notification) {
-        synchronizeSurfaceView()
-    }
-
     /// Handles scrollbar style changes
     private func handleScrollerStyleChange() {
         scrollView.scrollerStyle = .overlay
@@ -281,10 +283,7 @@ class SurfaceScrollView: NSView {
     /// - `total`: Total rows in scrollback + active area
     /// - `offset`: First visible row (0 = top of history)
     /// - `len`: Number of visible rows (viewport height)
-    private func handleScrollbarUpdate(_ notification: Notification) {
-        guard let scrollbar = notification.userInfo?[SwiftUI.Notification.Name.ScrollbarKey] as? Ghostty.Action.Scrollbar else {
-            return
-        }
+    private func handleScrollbarUpdate(_ scrollbar: Ghostty.Action.Scrollbar) {
         surfaceView.scrollbar = scrollbar
         synchronizeScrollView()
     }

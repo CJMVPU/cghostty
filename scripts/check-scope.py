@@ -23,7 +23,10 @@ for name in ('src/apprt/gtk', 'src/apprt/gtk.zig', 'src/main_wasm.zig',
              'test/wasm-alloc.mjs', 'pkg/glslang', 'pkg/spirv-cross',
              'src/renderer/shadertoy.zig',
              'src/build/GhosttyLibVt.zig', 'src/build/webgen', 'example',
-             'flatpak', 'snap', 'nix', 'dist', 'test/windows', 'test/fuzz-libghostty'):
+             'flatpak', 'snap', 'nix', 'dist', 'test/windows', 'test/fuzz-libghostty',
+             'macos/Sources/Helpers/Backport.swift',
+             'macos/Sources/Features/Terminal/Window Styles/TitlebarTabsVenturaTerminalWindow.swift',
+             'macos/Sources/Features/Terminal/Window Styles/TerminalTabsTitlebarVentura.xib'):
     check(not (ROOT / name).exists(), f'Out-of-scope source returned: {name}')
 
 project = json.loads(subprocess.check_output([
@@ -48,7 +51,7 @@ for obj in app_configs:
     check(settings['EXECUTABLE_NAME'] == 'cghostty', 'App executable identity mismatch')
 
 zig = shutil.which('zig')
-check(zig, 'zig 0.16.0 must be on PATH')
+check(zig, 'The pinned Zig toolchain must be on PATH; see scripts/zig-toolchain.json')
 # Exercise the actual entry point: accepting an unsupported target is a failure.
 for target, diagnostic in (('x86_64-macos', 'Apple Silicon'), ('aarch64-linux', 'on and for macOS'),
                            ('aarch64-windows', 'on and for macOS'), ('aarch64-ios', 'on and for macOS'),
