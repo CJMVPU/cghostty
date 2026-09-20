@@ -15,7 +15,9 @@ protocol behavior remain product requirements.
 - A window owns its terminal presentation state and split tree. The split tree
   keeps stable native surface instances, including while moving between windows.
 - Each surface owns one observable presentation state. SwiftUI recreation must
-  never create or destroy its terminal session.
+  never create or destroy its terminal session. The surface handle retains its
+  owning app until core teardown completes, including deferred main-actor frees.
+  The app must never be freed while one of its surface handles still exists.
 - AppKit controllers execute window operations. Native surface views execute
   input, scrolling, accessibility and core calls. UI state has one source of truth.
 - Loaded terminal windows have explicit native controller ownership until close.

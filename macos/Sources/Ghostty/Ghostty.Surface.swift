@@ -9,6 +9,10 @@ extension Ghostty {
         /// may be unsafe but the value itself is safe to send across threads.
         nonisolated(unsafe) private let surface: ghostty_surface_t
 
+        /// The core app must outlive every surface, including handles retained
+        /// briefly by queued work after a window or controller has closed.
+        private let app: Ghostty.App
+
         /// Read the underlying C value for this surface. This is unsafe because the value will be
         /// freed when the Surface class is deinitialized.
         var unsafeCValue: ghostty_surface_t {
@@ -16,8 +20,9 @@ extension Ghostty {
         }
 
         /// Initialize from the C structure.
-        init(cSurface: ghostty_surface_t) {
+        init(cSurface: ghostty_surface_t, app: Ghostty.App) {
             self.surface = cSurface
+            self.app = app
         }
 
         deinit {
@@ -25,7 +30,7 @@ extension Ghostty {
                 // The surface remains registered with the app and holds unretained
                 // userdata until it is freed. When already on the main thread, free
                 // it synchronously so teardown completes before we disappear.
-                ghostty_surface_free(surface)
+                withExtendedLifetime(app) { ghostty_surface_free(surface) }
                 return
             }
             // deinit is not guaranteed to happen on the main actor and our API
@@ -34,8 +39,9 @@ extension Ghostty {
             // We can't wait for the task to succeed so this will happen sometime
             // but that's okay.
             let surface = self.surface
+            let app = self.app
             Task.detached { @MainActor in
-                ghostty_surface_free(surface)
+                withExtendedLifetime(app) { ghostty_surface_free(surface) }
             }
         }
 

@@ -1,3 +1,12 @@
+## 0.1.3 发布前生命周期复验（2026-09-20）
+
+- 首次标签 CI 的原生测试在 `commandsFollowSurfaceOwnershipAfterMovingBetweenWindows` 附近发生 malloc 内存损坏，main 的同一提交测试通过。停止发布并检查释放路径：Swift `Surface` 只有 C 句柄，未持有所属 `App`；当临时控制器先释放 App、Surface 仍存活时，核心 `App.deinit` 会先清理其 Surface，之后 Swift 句柄再释放会访问失效对象。
+- `Surface` 明确持有创建它的 `App`，同步及延迟到主线程的释放都保证 App 活到 `ghostty_surface_free` 之后。新增行为测试证明撤销外部 App 引用后终端仍保有核心，销毁终端后两者都能释放，不形成循环引用。
+- 修正后的完整原生测试 **243 项通过、1 项跳过、0 项失败**；桌面交互 **2/2**、标签几何 **5/5** 通过，三份结果均无运行时警告。结果包：`/private/tmp/cghostty-013-native-lifetime.xcresult`、`/private/tmp/cghostty-013-ui-lifetime.xcresult`、`/private/tmp/cghostty-013-geometry-lifetime.xcresult`。
+- 同一进程连续重复执行 PresentationStateTests **20 轮、260 次执行全部通过**，无跳过、失败或运行时警告。结果包：`/private/tmp/cghostty-013-lifetime-repeat.xcresult`；摘要：`/private/tmp/cghostty-013-lifetime-repeat-summary.json`。
+- 最终 ReleaseLocal 重编译、macOS/arm64 资源及签名检查、ZIP 完整性检查通过。日志：`/private/tmp/cghostty-013-release-lifetime.log`、`/private/tmp/cghostty-013-scope-lifetime.log`；本地最终 ZIP SHA-256：`6ea0f73898da116c233d2a3f53628dadb5faf29ac45185383fabc727df22703e`。
+- 下节为首次本地验证记录，测试数量、发行包校验值以本节最终复验及公开 Release 的校验文件为准。未将一次远程崩溃当作环境波动直接重试跳过。
+
 ## 0.1.3 原生标签栏布局重构与发布前验证（2026-09-20）
 
 - `NativeTitlebarTabLayout` 统一持有定位原生标签附件的 8 条约束；调整窗口尺寸时复用，在附件转移、关闭、脱离窗口或工具栏临时零尺寸时解除，并恢复 AppKit 原有 autoresizing 行为。帧变化在主队列合并处理，不使用轮询或固定等待。

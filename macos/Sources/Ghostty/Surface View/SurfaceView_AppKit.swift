@@ -487,7 +487,8 @@ extension Ghostty {
                 self.error = Ghostty.Error.apiFailed
                 return
             }
-            self.surfaceModel = Ghostty.Surface(cSurface: surface)
+            let owner = Unmanaged<Ghostty.App>.fromOpaque(ghostty_app_userdata(app)!).takeUnretainedValue()
+            self.surfaceModel = Ghostty.Surface(cSurface: surface, app: owner)
 
             // Setup our tracking area so we get mouse moved events
             updateTrackingAreas()

@@ -31,6 +31,23 @@ import Testing
         withExtendedLifetime(app) {}
     }
 
+    @Test func surfaceHandleKeepsCoreAppAliveUntilItIsFreed() async throws {
+        var app: Ghostty.App? = Ghostty.App(configPath: "/dev/null")
+        weak let weakApp = app
+        var view: Ghostty.SurfaceView? = Ghostty.SurfaceView(
+            try #require(app?.app), baseConfig: isolatedSurfaceConfiguration)
+        #expect(view?.surfaceModel != nil)
+        weak let weakView = view
+        app = nil
+        await drainMainQueue()
+        #expect(weakApp != nil)
+        // The view owns its handle; releasing both must also release the app.
+        view = nil
+        await drainMainQueue()
+        #expect(weakView == nil)
+        #expect(weakApp == nil)
+    }
+
     @Test func windowStatePreservesSurfaceAndCoreIdentity() throws {
         let app = Ghostty.App(configPath: "/dev/null")
         let surface = Ghostty.SurfaceView(try #require(app.app), baseConfig: isolatedSurfaceConfiguration)
