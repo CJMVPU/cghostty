@@ -3,93 +3,43 @@ import Observation
 import GhosttyKit
 
 extension Ghostty {
-    /// Maps to a `ghostty_config_t` and the various operations on that.
+    /// Observable publication of a matched core resource and immutable native snapshot.
     @MainActor @Observable class Config {
-        // The underlying C pointer to the Ghostty config structure. This
-        // should never be accessed directly. Any operations on this should
-        // be called from the functions on this or another class.
-        private(set) var config: ghostty_config_t? {
-            didSet {
-                // Free the old value whenever we change
-                guard let old = oldValue else { return }
-                ghostty_config_free(old)
+        /// One assignment publishes a coherent generation; observers cannot see a new
+        /// snapshot paired with an old handle. Replacing state releases the old owner.
+        private var state: State
+
+        private struct State {
+            let handle: ConfigHandle?
+            let snapshot: ConfigSnapshot
+
+            init(handle: ConfigHandle?) {
+                self.handle = handle
+                self.snapshot = ConfigSnapshot(handle: handle)
             }
         }
 
-        /// True if the configuration is loaded
-        var loaded: Bool { config != nil }
+        /// Borrowed only by the internal bridge while this Config remains alive.
+        var config: ghostty_config_t? { state.handle?.value }
+        var snapshot: ConfigSnapshot { state.snapshot }
+        var window: WindowConfig { snapshot.window }
+        var loaded: Bool { snapshot.loaded }
+        var errors: [String] { snapshot.errors }
 
-        /// Return the errors found while loading the configuration.
-        var errors: [String] { Self.diagnostics(config) }
-
-        private static func diagnostics(_ config: ghostty_config_t?) -> [String] {
-            guard let config else { return [] }
-            return (0..<ghostty_config_diagnostics_count(config)).map { index in
-                String(cString: ghostty_config_get_diagnostic(config, UInt32(index)).message)
-            }
-        }
-
-        init(config: ghostty_config_t?) {
-            self.config = config
+        init(handle: ConfigHandle?) {
+            state = State(handle: handle)
         }
 
         convenience init(at path: String? = nil, finalize: Bool = true) {
-            self.init(config: Self.loadConfig(at: path, finalize: finalize))
+            self.init(handle: ConfigHandle.load(at: path, finalize: finalize))
         }
 
         convenience init(clone config: ghostty_config_t) {
-            self.init(config: ghostty_config_clone(config))
+            self.init(handle: ConfigHandle(cloning: config))
         }
 
-        func clone(config: ghostty_config_t) {
-            self.config = config
-        }
-
-        isolated deinit {
-            self.config = nil
-        }
-
-        /// Initializes a new configuration and loads all the values.
-        /// - Parameters:
-        ///   - path: An optional preferred config file path. Pass `nil` to load the default configuration files.
-        ///   - finalize: Whether to finalize the configuration to populate default values.
-        static func loadConfig(at path: String?, finalize: Bool) -> ghostty_config_t? {
-            // Initialize the global configuration.
-            guard let cfg = ghostty_config_new() else {
-                logger.critical("ghostty_config_new failed")
-                return nil
-            }
-
-            // Load our configuration from files, CLI args, and then any referenced files.
-            if let path {
-                ghostty_config_load_file(cfg, path)
-            } else {
-                ghostty_config_load_default_files(cfg)
-            }
-
-            // We only load CLI args when not running in Xcode because in Xcode we
-            // pass some special parameters to control the debugger.
-            if !isRunningInXcode() {
-                ghostty_config_load_cli_args(cfg)
-            }
-
-            ghostty_config_load_recursive_files(cfg)
-
-            if finalize {
-                // Finalize will make our defaults available.
-                ghostty_config_finalize(cfg)
-            }
-            // Log any configuration errors. These will be automatically shown in a
-            // pop-up window too.
-            let errors = diagnostics(cfg)
-            if !errors.isEmpty {
-                logger.warning("config error: \(errors.count, privacy: .public) configuration errors on reload")
-                for message in errors {
-                    logger.warning("config error: \(message, privacy: .public)")
-                }
-            }
-
-            return cfg
+        func replace(with handle: ConfigHandle) {
+            state = State(handle: handle)
         }
 
         // MARK: - Keybindings
@@ -105,545 +55,57 @@ extension Ghostty {
         }
 
         func keybindTrigger(for action: String) -> ghostty_input_trigger_s? {
-            guard let config else { return nil }
-            return ghostty_config_trigger(config, action, UInt(action.lengthOfBytes(using: .utf8)))
+            state.handle?.keybindTrigger(for: action)
         }
 
-        // MARK: - Configuration Values
-
-        /// For all of the configuration values below, see the associated Ghostty documentation for
-        /// details on what each means. We only add documentation if there is a strange conversion
-        /// due to the embedded library and Swift.
-
-        var bellFeatures: BellFeatures {
-            guard let config = self.config else { return .defaultValue }
-            var v: CUnsignedInt = 0
-            let key = "bell-features"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return .defaultValue }
-            return .init(rawValue: v)
-        }
-
-        var bellAudioPath: ConfigPath? {
-            guard let config = self.config else { return nil }
-            var v = ghostty_config_path_s()
-            let key = "bell-audio-path"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return nil }
-            let path = String(cString: v.path)
-            return path.isEmpty ? nil : ConfigPath(path: path, optional: v.optional)
-        }
-
-        var bellAudioVolume: Float {
-            guard let config = self.config else { return 0.5 }
-            var v: Double = 0.5
-            let key = "bell-audio-volume"
-            _ = ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8)))
-            return Float(v)
-        }
-
-        var notifyOnCommandFinish: NotifyOnCommandFinish {
-            guard let config = self.config else { return .never }
-            var v: UnsafePointer<Int8>?
-            let key = "notify-on-command-finish"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return .never }
-            guard let ptr = v else { return .never }
-            return NotifyOnCommandFinish(rawValue: String(cString: ptr)) ?? .never
-        }
-
-        var notifyOnCommandFinishAction: NotifyOnCommandFinishAction {
-            let defaultValue = NotifyOnCommandFinishAction.bell
-            guard let config = self.config else { return defaultValue }
-            var v: CUnsignedInt = 0
-            let key = "notify-on-command-finish-action"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return defaultValue }
-            return .init(rawValue: v)
-        }
-
-        var notifyOnCommandFinishAfter: Duration {
-            guard let config = self.config else { return .seconds(5) }
-            var v: UInt = 0
-            let key = "notify-on-command-finish-after"
-            _ = ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8)))
-            return .milliseconds(v)
-        }
-
-        var splitPreserveZoom: SplitPreserveZoom {
-            guard let config = self.config else { return .init() }
-            var v: CUnsignedInt = 0
-            let key = "split-preserve-zoom"
-            guard ghostty_config_get(config, &v, key, UInt(key.count)) else { return .init() }
-            return .init(rawValue: v)
-        }
-
-        var initialWindow: Bool {
-            guard let config = self.config else { return true }
-            var v = true
-            let key = "initial-window"
-            _ = ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8)))
-            return v
-        }
-
-        var shouldQuitAfterLastWindowClosed: Bool {
-            guard let config = self.config else { return true }
-            var v = false
-            let key = "quit-after-last-window-closed"
-            _ = ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8)))
-            return v
-        }
-
-        var title: String? {
-            guard let config = self.config else { return nil }
-            var v: UnsafePointer<Int8>?
-            let key = "title"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return nil }
-            guard let ptr = v else { return nil }
-            return String(cString: ptr)
-        }
-
-        var windowSaveState: String {
-            guard let config = self.config else { return "" }
-            var v: UnsafePointer<Int8>?
-            let key = "window-save-state"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return "" }
-            guard let ptr = v else { return "" }
-            return String(cString: ptr)
-        }
-
-        var windowPositionX: Int16? {
-            guard let config = self.config else { return nil }
-            var v: Int16 = 0
-            let key = "window-position-x"
-            return ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) ? v : nil
-        }
-
-        var windowPositionY: Int16? {
-            guard let config = self.config else { return nil }
-            var v: Int16 = 0
-            let key = "window-position-y"
-            return ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) ? v : nil
-        }
-
-        var windowNewTabPosition: String {
-            guard let config = self.config else { return "" }
-            var v: UnsafePointer<Int8>?
-            let key = "window-new-tab-position"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return "" }
-            guard let ptr = v else { return "" }
-            return String(cString: ptr)
-        }
-
-        var windowDecorations: Bool {
-            let defaultValue = true
-            guard let config = self.config else { return defaultValue }
-            var v: UnsafePointer<Int8>?
-            let key = "window-decoration"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return defaultValue }
-            guard let ptr = v else { return defaultValue }
-            let str = String(cString: ptr)
-            return WindowDecoration(rawValue: str)?.enabled() ?? defaultValue
-        }
-
-        var windowTheme: String? {
-            guard let config = self.config else { return nil }
-            var v: UnsafePointer<Int8>?
-            let key = "window-theme"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return nil }
-            guard let ptr = v else { return nil }
-            return String(cString: ptr)
-        }
-
-        var windowStepResize: Bool {
-            guard let config = self.config else { return true }
-            var v = false
-            let key = "window-step-resize"
-            _ = ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8)))
-            return v
-        }
-
-        var dragHandle: DragHandle {
-            let defaultValue = DragHandle.auto
-            guard let config = self.config else { return defaultValue }
-            var v: UnsafePointer<Int8>?
-            let key = "drag-handle"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return defaultValue }
-            guard let ptr = v else { return defaultValue }
-            return DragHandle(rawValue: String(cString: ptr)) ?? defaultValue
-        }
-
-        /// Returns the fullscreen mode if fullscreen is enabled, or nil if disabled.
-        /// This parses the `fullscreen` enum config which supports both
-        /// native and non-native fullscreen modes.
-        var windowFullscreen: FullscreenMode? {
-            guard let config = self.config else { return nil }
-            var v: UnsafePointer<Int8>?
-            let key = "fullscreen"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return nil }
-            guard let ptr = v else { return nil }
-            let str = String(cString: ptr)
-            return switch str {
-            case "false":
-                nil
-            case "true":
-                .native
-            case "non-native":
-                .nonNative
-            case "non-native-visible-menu":
-                .nonNativeVisibleMenu
-            case "non-native-padded-notch":
-                .nonNativePaddedNotch
-            default:
-                nil
-            }
-        }
-
-        /// Returns the fullscreen mode for toggle actions (keybindings).
-        /// This is controlled by `macos-non-native-fullscreen` config.
-        var windowFullscreenMode: FullscreenMode {
-            let defaultValue: FullscreenMode = .native
-            guard let config = self.config else { return defaultValue }
-            var v: UnsafePointer<Int8>?
-            let key = "macos-non-native-fullscreen"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return defaultValue }
-            guard let ptr = v else { return defaultValue }
-            let str = String(cString: ptr)
-            return switch str {
-            case "false":
-                    .native
-            case "true":
-                    .nonNative
-            case "visible-menu":
-                    .nonNativeVisibleMenu
-            case "padded-notch":
-                    .nonNativePaddedNotch
-            default:
-                defaultValue
-            }
-        }
-
-        var windowTitleFontFamily: String? {
-            guard let config = self.config else { return nil }
-            var v: UnsafePointer<Int8>?
-            let key = "window-title-font-family"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return nil }
-            guard let ptr = v else { return nil }
-            return String(cString: ptr)
-        }
-
-        var macosWindowButtons: MacOSWindowButtons {
-            let defaultValue = MacOSWindowButtons.visible
-            guard let config = self.config else { return defaultValue }
-            var v: UnsafePointer<Int8>?
-            let key = "macos-window-buttons"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return defaultValue }
-            guard let ptr = v else { return defaultValue }
-            let str = String(cString: ptr)
-            return MacOSWindowButtons(rawValue: str) ?? defaultValue
-        }
-
-        var macosTitlebarStyle: MacOSTitlebarStyle {
-            let defaultValue = MacOSTitlebarStyle.transparent
-            guard let config = self.config else { return defaultValue }
-            var v: UnsafePointer<Int8>?
-            let key = "macos-titlebar-style"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return defaultValue }
-            guard let ptr = v else { return defaultValue }
-            return MacOSTitlebarStyle(rawValue: String(cString: ptr)) ?? defaultValue
-        }
-
-        var macosTitlebarProxyIcon: MacOSTitlebarProxyIcon {
-            let defaultValue = MacOSTitlebarProxyIcon.visible
-            guard let config = self.config else { return defaultValue }
-            var v: UnsafePointer<Int8>?
-            let key = "macos-titlebar-proxy-icon"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return defaultValue }
-            guard let ptr = v else { return defaultValue }
-            let str = String(cString: ptr)
-            return MacOSTitlebarProxyIcon(rawValue: str) ?? defaultValue
-        }
-
-        var macosDockDropBehavior: MacDockDropBehavior {
-            let defaultValue = MacDockDropBehavior.new_tab
-            guard let config = self.config else { return defaultValue }
-            var v: UnsafePointer<Int8>?
-            let key = "macos-dock-drop-behavior"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return defaultValue }
-            guard let ptr = v else { return defaultValue }
-            let str = String(cString: ptr)
-            return MacDockDropBehavior(rawValue: str) ?? defaultValue
-        }
-
-        var macosWindowShadow: Bool {
-            guard let config = self.config else { return false }
-            var v = false
-            let key = "macos-window-shadow"
-            _ = ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8)))
-            return v
-        }
-
-        var macosHidden: MacHidden {
-            guard let config = self.config else { return .never }
-            var v: UnsafePointer<Int8>?
-            let key = "macos-hidden"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return .never }
-            guard let ptr = v else { return .never }
-            let str = String(cString: ptr)
-            return MacHidden(rawValue: str) ?? .never
-        }
-
-        var focusFollowsMouse: Bool {
-            guard let config = self.config else { return false }
-            var v = false
-            let key = "focus-follows-mouse"
-            _ = ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8)))
-            return v
-        }
-
-        var backgroundColor: Color {
-            var color: ghostty_config_color_s = .init()
-            let bg_key = "background"
-            if !ghostty_config_get(config, &color, bg_key, UInt(bg_key.lengthOfBytes(using: .utf8))) {
-                return Color(NSColor.windowBackgroundColor)
-            }
-
-            return .init(
-                red: Double(color.r) / 255,
-                green: Double(color.g) / 255,
-                blue: Double(color.b) / 255
-            )
-        }
-
-        var backgroundOpacity: Double {
-            guard let config = self.config else { return 1 }
-            var v: Double = 1
-            let key = "background-opacity"
-            _ = ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8)))
-            return v
-        }
-
-        var backgroundBlur: BackgroundBlur {
-            guard let config = self.config else { return .disabled }
-            var v: Int16 = 0
-            let key = "background-blur"
-            _ = ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8)))
-            return BackgroundBlur(fromCValue: v)
-        }
-
-        var unfocusedSplitOpacity: Double {
-            guard let config = self.config else { return 1 }
-            var opacity: Double = 0.85
-            let key = "unfocused-split-opacity"
-            _ = ghostty_config_get(config, &opacity, key, UInt(key.lengthOfBytes(using: .utf8)))
-            return 1 - opacity
-        }
-
-        var unfocusedSplitFill: Color {
-            guard let config = self.config else { return .white }
-
-            var color: ghostty_config_color_s = .init()
-            let key = "unfocused-split-fill"
-            if !ghostty_config_get(config, &color, key, UInt(key.lengthOfBytes(using: .utf8))) {
-                let bg_key = "background"
-                _ = ghostty_config_get(config, &color, bg_key, UInt(bg_key.lengthOfBytes(using: .utf8)))
-            }
-
-            return .init(
-                red: Double(color.r) / 255,
-                green: Double(color.g) / 255,
-                blue: Double(color.b) / 255
-            )
-        }
-
-        var splitDividerColor: Color {
-            let backgroundColor = NSColor(backgroundColor)
-            let isLightBackground = backgroundColor.isLightColor
-            let newColor = isLightBackground ? backgroundColor.darken(by: 0.08) : backgroundColor.darken(by: 0.4)
-
-            guard let config = self.config else { return Color(newColor) }
-
-            var color: ghostty_config_color_s = .init()
-            let key = "split-divider-color"
-            if !ghostty_config_get(config, &color, key, UInt(key.lengthOfBytes(using: .utf8))) {
-                return Color(newColor)
-            }
-
-            return .init(
-                red: Double(color.r) / 255,
-                green: Double(color.g) / 255,
-                blue: Double(color.b) / 255
-            )
-        }
-
-        var quickTerminalPosition: QuickTerminalPosition {
-            guard let config = self.config else { return .top }
-            var v: UnsafePointer<Int8>?
-            let key = "quick-terminal-position"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return .top }
-            guard let ptr = v else { return .top }
-            let str = String(cString: ptr)
-            return QuickTerminalPosition(rawValue: str) ?? .top
-        }
-
-        var quickTerminalScreen: QuickTerminalScreen {
-            guard let config = self.config else { return .main }
-            var v: UnsafePointer<Int8>?
-            let key = "quick-terminal-screen"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return .main }
-            guard let ptr = v else { return .main }
-            let str = String(cString: ptr)
-            return QuickTerminalScreen(fromGhosttyConfig: str) ?? .main
-        }
-
-        var quickTerminalAnimationDuration: Double {
-            guard let config = self.config else { return 0.2 }
-            var v: Double = 0.2
-            let key = "quick-terminal-animation-duration"
-            _ = ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8)))
-            return v
-        }
-
-        var quickTerminalAutoHide: Bool {
-            guard let config = self.config else { return true }
-            var v = true
-            let key = "quick-terminal-autohide"
-            _ = ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8)))
-            return v
-        }
-
-        var quickTerminalSpaceBehavior: QuickTerminalSpaceBehavior {
-            guard let config = self.config else { return .move }
-            var v: UnsafePointer<Int8>?
-            let key = "quick-terminal-space-behavior"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return .move }
-            guard let ptr = v else { return .move }
-            let str = String(cString: ptr)
-            return QuickTerminalSpaceBehavior(fromGhosttyConfig: str) ?? .move
-        }
-
-        var quickTerminalSize: QuickTerminalSize {
-            guard let config = self.config else { return QuickTerminalSize() }
-            var v = ghostty_config_quick_terminal_size_s()
-            let key = "quick-terminal-size"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return QuickTerminalSize() }
-            return QuickTerminalSize(from: v)
-        }
-
-        var resizeOverlay: ResizeOverlay {
-            guard let config = self.config else { return .after_first }
-            var v: UnsafePointer<Int8>?
-            let key = "resize-overlay"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return .after_first }
-            guard let ptr = v else { return .after_first }
-            let str = String(cString: ptr)
-            return ResizeOverlay(rawValue: str) ?? .after_first
-        }
-
-        var resizeOverlayPosition: ResizeOverlayPosition {
-            let defaultValue = ResizeOverlayPosition.center
-            guard let config = self.config else { return defaultValue }
-            var v: UnsafePointer<Int8>?
-            let key = "resize-overlay-position"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return defaultValue }
-            guard let ptr = v else { return defaultValue }
-            let str = String(cString: ptr)
-            return ResizeOverlayPosition(rawValue: str) ?? defaultValue
-        }
-
-        var resizeOverlayDuration: UInt {
-            guard let config = self.config else { return 1000 }
-            var v: UInt = 0
-            let key = "resize-overlay-duration"
-            _ = ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8)))
-            return v
-        }
-
-        var undoTimeout: Duration {
-            guard let config = self.config else { return .seconds(5) }
-            var v: UInt = 0
-            let key = "undo-timeout"
-            _ = ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8)))
-            return .milliseconds(v)
-        }
-
-        var autoSecureInput: Bool {
-            guard let config = self.config else { return true }
-            var v = false
-            let key = "macos-auto-secure-input"
-            _ = ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8)))
-            return v
-        }
-
-        var secureInputIndication: Bool {
-            guard let config = self.config else { return true }
-            var v = false
-            let key = "macos-secure-input-indication"
-            _ = ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8)))
-            return v
-        }
-
-        var macosAppleScript: Bool {
-            guard let config = self.config else { return true }
-            var v = false
-            let key = "macos-applescript"
-            _ = ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8)))
-            return v
-        }
-
-        var maximize: Bool {
-            guard let config = self.config else { return true }
-            var v = false
-            let key = "maximize"
-            _ = ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8)))
-            return v
-        }
-
-        var macosShortcuts: MacShortcuts {
-            let defaultValue = MacShortcuts.ask
-            guard let config = self.config else { return defaultValue }
-            var v: UnsafePointer<Int8>?
-            let key = "macos-shortcuts"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return defaultValue }
-            guard let ptr = v else { return defaultValue }
-            let str = String(cString: ptr)
-            return MacShortcuts(rawValue: str) ?? defaultValue
-        }
-
-        var abnormalCommandExitRuntime: Duration {
-            let defaultValue: Duration = .milliseconds(250)
-            guard let config = self.config else { return defaultValue }
-            var v: UInt32?
-            let key = "abnormal-command-exit-runtime"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return defaultValue }
-            guard let v else { return defaultValue }
-            return .milliseconds(v)
-        }
-
-        var scrollbar: Scrollbar {
-            let defaultValue = Scrollbar.system
-            guard let config = self.config else { return defaultValue }
-            var v: UnsafePointer<Int8>?
-            let key = "scrollbar"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return defaultValue }
-            guard let ptr = v else { return defaultValue }
-            let str = String(cString: ptr)
-            return Scrollbar(rawValue: str) ?? defaultValue
-        }
-
-        var commandPaletteEntries: [Ghostty.Command] {
-            guard let config = self.config else { return [] }
-            var v: ghostty_config_command_list_s = .init()
-            let key = "command-palette-entry"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return [] }
-            guard v.len > 0 else { return [] }
-            let buffer = UnsafeBufferPointer(start: v.commands, count: v.len)
-            return buffer.map { Ghostty.Command(cValue: $0) }
-        }
-
-        var progressStyle: Bool {
-            guard let config = self.config else { return true }
-            var v = true
-            let key = "progress-style"
-            _ = ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8)))
-            return v
-        }
+        // Existing native accessors are projections of the same snapshot, not C reads.
+        var bellFeatures: BellFeatures { snapshot.bellFeatures }
+        var bellAudioPath: ConfigPath? { snapshot.bellAudioPath }
+        var bellAudioVolume: Float { snapshot.bellAudioVolume }
+        var notifyOnCommandFinish: NotifyOnCommandFinish { snapshot.notifyOnCommandFinish }
+        var notifyOnCommandFinishAction: NotifyOnCommandFinishAction { snapshot.notifyOnCommandFinishAction }
+        var notifyOnCommandFinishAfter: Duration { snapshot.notifyOnCommandFinishAfter }
+        var splitPreserveZoom: SplitPreserveZoom { snapshot.splitPreserveZoom }
+        var initialWindow: Bool { snapshot.initialWindow }
+        var shouldQuitAfterLastWindowClosed: Bool { snapshot.shouldQuitAfterLastWindowClosed }
+        var title: String? { snapshot.title }
+        var windowSaveState: String { snapshot.windowSaveState }
+        var windowNewTabPosition: String { snapshot.windowNewTabPosition }
+        var windowDecorations: Bool { snapshot.windowDecorations }
+        var windowTheme: String? { snapshot.windowTheme }
+        var dragHandle: DragHandle { snapshot.dragHandle }
+        var windowFullscreen: FullscreenMode? { snapshot.windowFullscreen }
+        var windowFullscreenMode: FullscreenMode { snapshot.windowFullscreenMode }
+        var macosWindowButtons: MacOSWindowButtons { snapshot.macosWindowButtons }
+        var macosTitlebarStyle: MacOSTitlebarStyle { snapshot.macosTitlebarStyle }
+        var macosTitlebarProxyIcon: MacOSTitlebarProxyIcon { snapshot.macosTitlebarProxyIcon }
+        var macosDockDropBehavior: MacDockDropBehavior { snapshot.macosDockDropBehavior }
+        var macosWindowShadow: Bool { snapshot.macosWindowShadow }
+        var macosHidden: MacHidden { snapshot.macosHidden }
+        var backgroundColor: Color { snapshot.backgroundColor }
+        var backgroundOpacity: Double { snapshot.backgroundOpacity }
+        var backgroundBlur: BackgroundBlur { snapshot.backgroundBlur }
+        var unfocusedSplitOpacity: Double { snapshot.unfocusedSplitOpacity }
+        var unfocusedSplitFill: Color { snapshot.unfocusedSplitFill }
+        var splitDividerColor: Color { snapshot.splitDividerColor }
+        var quickTerminalPosition: QuickTerminalPosition { snapshot.quickTerminalPosition }
+        var quickTerminalScreen: QuickTerminalScreen { snapshot.quickTerminalScreen }
+        var quickTerminalAnimationDuration: Double { snapshot.quickTerminalAnimationDuration }
+        var quickTerminalAutoHide: Bool { snapshot.quickTerminalAutoHide }
+        var quickTerminalSpaceBehavior: QuickTerminalSpaceBehavior { snapshot.quickTerminalSpaceBehavior }
+        var quickTerminalSize: QuickTerminalSize { snapshot.quickTerminalSize }
+        var resizeOverlay: ResizeOverlay { snapshot.resizeOverlay }
+        var resizeOverlayPosition: ResizeOverlayPosition { snapshot.resizeOverlayPosition }
+        var resizeOverlayDuration: UInt { snapshot.resizeOverlayDuration }
+        var undoTimeout: Duration { snapshot.undoTimeout }
+        var autoSecureInput: Bool { snapshot.autoSecureInput }
+        var secureInputIndication: Bool { snapshot.secureInputIndication }
+        var macosAppleScript: Bool { snapshot.macosAppleScript }
+        var macosShortcuts: MacShortcuts { snapshot.macosShortcuts }
+        var abnormalCommandExitRuntime: Duration { snapshot.abnormalCommandExitRuntime }
+        var scrollbar: Scrollbar { snapshot.scrollbar }
+        var commandPaletteEntries: [Ghostty.Command] { snapshot.commandPaletteEntries }
+        var progressStyle: Bool { snapshot.progressStyle }
     }
 }
 
@@ -654,7 +116,7 @@ extension Ghostty.Config {
     /// Background blur configuration that maps from the C API values.
     /// Positive values represent blur radius, special negative values
     /// represent macOS-specific glass effects.
-    enum BackgroundBlur: Equatable {
+    nonisolated enum BackgroundBlur: Equatable, Sendable {
         case disabled
         case radius(Int)
         case macosGlassRegular
@@ -705,7 +167,7 @@ extension Ghostty.Config {
         }
     }
 
-    struct BellFeatures: OptionSet {
+    nonisolated struct BellFeatures: OptionSet, Sendable {
         let rawValue: CUnsignedInt
 
         static let system = BellFeatures(rawValue: 1 << 0)
@@ -717,40 +179,40 @@ extension Ghostty.Config {
         static let defaultValue = BellFeatures([.attention, .title])
     }
 
-    struct SplitPreserveZoom: OptionSet {
+    nonisolated struct SplitPreserveZoom: OptionSet, Sendable {
         let rawValue: CUnsignedInt
 
         static let navigation = SplitPreserveZoom(rawValue: 1 << 0)
     }
 
-    enum MacDockDropBehavior: String {
+    nonisolated enum MacDockDropBehavior: String, Sendable {
         case new_tab = "new-tab"
         case new_window = "new-window"
     }
 
-    enum MacHidden: String {
+    nonisolated enum MacHidden: String, Sendable {
         case never
         case always
     }
 
-    enum MacShortcuts: String {
+    nonisolated enum MacShortcuts: String, Sendable {
         case allow
         case deny
         case ask
     }
 
-    enum Scrollbar: String {
+    nonisolated enum Scrollbar: String, Sendable {
         case system
         case never
     }
 
-    enum ResizeOverlay: String {
+    nonisolated enum ResizeOverlay: String, Sendable {
         case always
         case never
         case after_first = "after-first"
     }
 
-    enum ResizeOverlayPosition: String {
+    nonisolated enum ResizeOverlayPosition: String, Sendable {
         case center
         case top_left = "top-left"
         case top_center = "top-center"
@@ -788,7 +250,7 @@ extension Ghostty.Config {
         }
     }
 
-    enum WindowDecoration: String {
+    nonisolated enum WindowDecoration: String, Sendable {
         case none
         case client
         case server
@@ -802,25 +264,25 @@ extension Ghostty.Config {
         }
     }
 
-    enum NotifyOnCommandFinish: String {
+    nonisolated enum NotifyOnCommandFinish: String, Sendable {
         case never
         case unfocused
         case always
     }
 
-    struct NotifyOnCommandFinishAction: OptionSet {
+    nonisolated struct NotifyOnCommandFinishAction: OptionSet, Sendable {
         let rawValue: CUnsignedInt
 
         static let bell = NotifyOnCommandFinishAction(rawValue: 1 << 0)
         static let notify = NotifyOnCommandFinishAction(rawValue: 1 << 1)
     }
 
-    enum MacOSTitlebarStyle: String {
+    nonisolated enum MacOSTitlebarStyle: String, Sendable {
         static let `default` = MacOSTitlebarStyle.transparent
         case native, transparent, tabs, hidden
     }
 
-    enum DragHandle: String {
+    nonisolated enum DragHandle: String, Sendable {
         case always, auto, never
     }
 }

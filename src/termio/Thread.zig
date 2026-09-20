@@ -12,7 +12,7 @@
 pub const Thread = @This();
 
 const std = @import("std");
-const ArenaAllocator = std.heap.ArenaAllocator;
+const SurfaceFault = @import("../SurfaceFault.zig");
 const global = @import("../global.zig");
 const xev = global.xev;
 const internal_os = @import("../os/main.zig");
@@ -136,98 +136,34 @@ pub fn threadMain(self: *Thread, io: *termio.Termio) void {
     self.threadMain_(io) catch |err| {
         log.warn("error in io thread err={}", .{err});
 
-        // Use an arena to simplify memory management below
-        var arena = ArenaAllocator.init(self.alloc);
-        defer arena.deinit();
-        const alloc = arena.allocator();
-
-        // If there is an error, we replace our terminal screen with
-        // the error message. It might be better in the future to send
-        // the error to the surface thread and let the apprt deal with it
-        // in some way but this works for now. Without this, the user would
-        // just see a blank terminal window.
-        io.renderer_state.mutex.lockUncancelable(global.io());
-        defer io.renderer_state.mutex.unlock(global.io());
-        const t = io.renderer_state.terminal;
-
-        // Hide the cursor
-        t.modes.set(.cursor_visible, false);
-
-        // This is weird but just ensures that no matter what our underlying
-        // implementation we have the errors below. For example, Windows doesn't
-        // have "OpenptyFailed".
-        const Err = @TypeOf(err) || error{
-            OpenptyFailed,
-            InputNotFound,
-            InputFailed,
-        };
-
-        switch (@as(Err, @errorCast(err))) {
-            error.OpenptyFailed => {
-                const str =
-                    \\Your system cannot allocate any more pty devices.
-                    \\
-                    \\Ghostty requires a pty device to launch a new terminal.
-                    \\This error is usually due to having too many terminal
-                    \\windows open or having another program that is using too
-                    \\many pty devices.
-                    \\
-                    \\Please free up some pty devices and try again.
-                ;
-
-                t.eraseDisplay(.complete, false);
-                t.printString(str) catch {};
-            },
-
-            error.InputNotFound,
-            error.InputFailed,
-            => {
-                const str =
-                    \\A configured `input` path was not found, was not readable,
-                    \\was too large, or the underlying pty failed to accept
-                    \\the write.
-                    \\
-                    \\Ghostty can't continue since it can't guarantee that
-                    \\initial terminal state will be as desired. Please review
-                    \\the value of `input` in your configuration file and
-                    \\ensure that all the path values exist and are readable.
-                ;
-
-                t.eraseDisplay(.complete, false);
-                t.printString(str) catch {};
-            },
-
-            else => {
-                const str = std.fmt.allocPrint(
-                    alloc,
-                    \\error starting IO thread: {}
-                    \\
-                    \\The underlying shell or command was unable to be started.
-                    \\This error is usually due to exhausting a system resource.
-                    \\If this looks like a bug, please report it.
-                    \\
-                    \\This terminal is non-functional. Please close it and try again.
-                ,
-                    .{err},
-                ) catch
-                    \\Out of memory. This terminal is non-functional. Please close it and try again.
-                ;
-
-                t.eraseDisplay(.complete, false);
-                t.printString(str) catch {};
-            },
-        }
+        // Presentation belongs to Surface/native UI. This payload owns no
+        // resources and is safe to discard if the surface closes before delivery.
+        _ = io.surface_mailbox.push(.{
+            .surface_fault = SurfaceFault.init(err),
+        }, .{ .forever = {} });
     };
 
-    // If our loop is not stopped, then we need to keep running so that
-    // messages are drained and we can wait for the surface to send a stop
-    // message.
+    // threadMain_ owns stack-backed backend completions. After it returns,
+    // never run that loop again: startup can fail after registering process,
+    // timer, and write callbacks, and their data has already been cleaned up.
+    // Use a fresh loop containing only mailbox disposal and the stop signal.
     if (!self.loop.stopped()) {
-        log.warn("abrupt io thread exit detected, starting xev to drain mailbox", .{});
-        defer log.debug("io thread fully exiting after abnormal failure", .{});
+        const drain_loop = xev.Loop.init(.{}) catch |err| {
+            log.err("failed to create IO drain loop err={}", .{err});
+            return;
+        };
+        self.loop.deinit();
+        self.loop = drain_loop;
         self.flags.drain = true;
+        self.wakeup_c = .{};
+        self.stop_c = .{};
+        var cb: CallbackData = .{ .self = self, .io = io };
+        io.mailbox.spsc.wakeup.wait(&self.loop, &self.wakeup_c, CallbackData, &cb, wakeupCallback);
+        self.stop.wait(&self.loop, &self.stop_c, CallbackData, &cb, stopCallback);
+        // Requests can predate wakeup registration. Dispose them before waiting.
+        self.drainMailbox(&cb) catch unreachable;
         self.loop.run(.until_done) catch |err| {
-            log.err("failed to start xev loop for draining err={}", .{err});
+            log.err("failed to run IO drain loop err={}", .{err});
         };
     }
 }

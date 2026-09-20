@@ -1,7 +1,6 @@
 import Cocoa
 import SwiftUI
 import Observation
-import GhosttyKit
 
 /// AppKit coordination shared by normal and quick terminal windows.
 /// Owns native surface lifetimes, focus, clipboard sheets and terminal commands.
@@ -12,11 +11,6 @@ class BaseTerminalController: NSWindowController,
                               TerminalViewDelegate,
                               ClipboardConfirmationViewDelegate,
                               FullscreenDelegate {
-    /// Weak surface-to-controller ownership independent of AppKit's transient
-    /// view and window attachment state.
-    private static let surfaceControllers =
-        NSMapTable<Ghostty.SurfaceView, BaseTerminalController>.weakToWeakObjects()
-
     /// The app instance that this terminal view will represent.
     let ghostty: Ghostty.App
 
@@ -34,7 +28,7 @@ class BaseTerminalController: NSWindowController,
         set {
             let previous = uiState.surfaceTree
             uiState.surfaceTree = newValue
-            Self.updateSurfaceControllers(self, from: previous, to: newValue)
+            ghostty.windowRegistry.update(self, from: previous, to: newValue)
             surfaceTreeDidChange(from: previous, to: newValue)
         }
     }
@@ -67,7 +61,7 @@ class BaseTerminalController: NSWindowController,
     private var savedFrame: SavedFrame?
 
     /// Cache previously applied appearance to avoid unnecessary updates
-    private var appliedColorScheme: ghostty_color_scheme_e?
+    private var appliedDarkAppearance: Bool?
 
     /// The configuration derived from the Ghostty config so we don't need to rely on references.
     private var derivedConfig: DerivedConfig
@@ -125,14 +119,14 @@ class BaseTerminalController: NSWindowController,
          surfaceTree tree: SplitTree<Ghostty.SurfaceView>? = nil
     ) {
         self.ghostty = ghostty
-        self.derivedConfig = DerivedConfig(ghostty.config)
+        self.derivedConfig = DerivedConfig(ghostty.config.snapshot)
 
         super.init(window: nil)
 
         // Initialize our initial surface.
-        guard let ghostty_app = ghostty.app else { preconditionFailure("app must be loaded") }
-        self.surfaceTree = tree ?? .init(view: Ghostty.SurfaceView(ghostty_app, baseConfig: base))
-        Self.updateSurfaceControllers(self, from: .init(), to: surfaceTree)
+        guard ghostty.isReady else { preconditionFailure("app must be loaded") }
+        self.surfaceTree = tree ?? .init(view: Ghostty.SurfaceView(ghostty, baseConfig: base))
+        ghostty.windowRegistry.update(self, from: .init(), to: surfaceTree)
 
         // Setup our bell state for the window
         observeBellState()
@@ -176,44 +170,6 @@ class BaseTerminalController: NSWindowController,
 
     // MARK: Methods
 
-    /// Finds the controller whose split tree owns the given surface.
-    ///
-    /// A surface's `window` can briefly be nil or point at its previous window
-    /// while AppKit is attaching or moving a native tab. Callers performing
-    /// lifecycle operations must use tree ownership rather than that transient
-    /// view relationship.
-    static func controller(owning surface: Ghostty.SurfaceView) -> BaseTerminalController? {
-        if let controller = surfaceControllers.object(forKey: surface),
-           controller.surfaceTree.contains(surface) {
-            return controller
-        }
-
-        if let controller = surface.window?.windowController as? BaseTerminalController,
-           controller.surfaceTree.contains(surface) {
-            return controller
-        }
-
-        return NSApp.windows
-            .compactMap { $0.windowController as? BaseTerminalController }
-            .first { $0.surfaceTree.contains(surface) }
-    }
-
-    private static func updateSurfaceControllers(
-        _ controller: BaseTerminalController,
-        from oldTree: SplitTree<Ghostty.SurfaceView>,
-        to newTree: SplitTree<Ghostty.SurfaceView>
-    ) {
-        for surface in oldTree where !newTree.contains(surface) {
-            if surfaceControllers.object(forKey: surface) === controller {
-                surfaceControllers.removeObject(forKey: surface)
-            }
-        }
-
-        for surface in newTree {
-            surfaceControllers.setObject(controller, forKey: surface)
-        }
-    }
-
     /// Request a tab using the owning window's behavior.
     func requestNewTab(from target: Ghostty.SurfaceView, baseConfig: Ghostty.SurfaceConfiguration) {}
 
@@ -233,8 +189,8 @@ class BaseTerminalController: NSWindowController,
         guard surfaceTree.root?.node(view: oldView) != nil else { return nil }
 
         // Create a new surface view
-        guard let ghostty_app = ghostty.app else { return nil }
-        let newView = Ghostty.SurfaceView(ghostty_app, baseConfig: config)
+        guard ghostty.isReady else { return nil }
+        let newView = Ghostty.SurfaceView(ghostty, baseConfig: config)
 
         // Do the split
         let newTree: SplitTree<Ghostty.SurfaceView>
@@ -478,6 +434,7 @@ class BaseTerminalController: NSWindowController,
             // This is a weird workaround, since `resignFirstResponder` wasn't called on `focusedSurface` after drag,
             // but the first responder became the window itself.
             moveFocusTo: nextFocus ?? focusedSurface,
+            moveFocusFrom: focusedSurface,
             undoAction: "Close Terminal"
         )
     }
@@ -584,7 +541,7 @@ class BaseTerminalController: NSWindowController,
         ] as? Ghostty.Config else { return }
 
         // Update our derived config
-        self.derivedConfig = DerivedConfig(config)
+        self.derivedConfig = DerivedConfig(config.snapshot)
     }
 
     func toggleCommandPalette(from surfaceView: Ghostty.SurfaceView) {
@@ -933,12 +890,8 @@ class BaseTerminalController: NSWindowController,
     }
 
     func performAction(_ action: String, on surfaceView: Ghostty.SurfaceView) {
-        guard let surface = surfaceView.surface else { return }
-        let len = action.utf8CString.count
-        if len == 0 { return }
-        _ = action.withCString { cString in
-            ghostty_surface_binding_action(surface, cString, UInt(len - 1))
-        }
+        guard let surface = surfaceView.surfaceModel else { return }
+        _ = surface.perform(action: action)
     }
 
     // MARK: Appearance
@@ -1145,8 +1098,8 @@ class BaseTerminalController: NSWindowController,
     private func syncSurfaceTreeOcclusionState() {
         let visible = self.window?.occlusionState.contains(.visible) ?? false
         for view in surfaceTree {
-            if let surface = view.surface, view.isWindowVisible != visible {
-                ghostty_surface_set_occlusion(surface, visible)
+            if let surface = view.surfaceModel, view.isWindowVisible != visible {
+                surface.setVisible(visible)
                 view.isWindowVisible = visible
             }
         }
@@ -1168,8 +1121,8 @@ class BaseTerminalController: NSWindowController,
     // MARK: First Responder
 
     @IBAction func close(_ sender: Any) {
-        guard let surface = focusedSurface?.surface else { return }
-        ghostty.requestClose(surface: surface)
+        guard let surface = focusedSurface?.surfaceModel else { return }
+        surface.requestClose()
     }
 
     @IBAction func closeWindow(_ sender: Any) {
@@ -1193,28 +1146,28 @@ class BaseTerminalController: NSWindowController,
     }
 
     @IBAction func splitRight(_ sender: Any) {
-        guard let surface = focusedSurface?.surface else { return }
-        ghostty.split(surface: surface, direction: GHOSTTY_SPLIT_DIRECTION_RIGHT)
+        guard let surface = focusedSurface?.surfaceModel else { return }
+        surface.split(.right)
     }
 
     @IBAction func splitLeft(_ sender: Any) {
-        guard let surface = focusedSurface?.surface else { return }
-        ghostty.split(surface: surface, direction: GHOSTTY_SPLIT_DIRECTION_LEFT)
+        guard let surface = focusedSurface?.surfaceModel else { return }
+        surface.split(.left)
     }
 
     @IBAction func splitDown(_ sender: Any) {
-        guard let surface = focusedSurface?.surface else { return }
-        ghostty.split(surface: surface, direction: GHOSTTY_SPLIT_DIRECTION_DOWN)
+        guard let surface = focusedSurface?.surfaceModel else { return }
+        surface.split(.down)
     }
 
     @IBAction func splitUp(_ sender: Any) {
-        guard let surface = focusedSurface?.surface else { return }
-        ghostty.split(surface: surface, direction: GHOSTTY_SPLIT_DIRECTION_UP)
+        guard let surface = focusedSurface?.surfaceModel else { return }
+        surface.split(.up)
     }
 
     @IBAction func splitZoom(_ sender: Any) {
-        guard let surface = focusedSurface?.surface else { return }
-        ghostty.splitToggleZoom(surface: surface)
+        guard let surface = focusedSurface?.surfaceModel else { return }
+        surface.perform(.toggleSplitZoom)
     }
 
     @IBAction func splitMoveFocusPrevious(_ sender: Any) {
@@ -1242,48 +1195,48 @@ class BaseTerminalController: NSWindowController,
     }
 
     @IBAction func equalizeSplits(_ sender: Any) {
-        guard let surface = focusedSurface?.surface else { return }
-        ghostty.splitEqualize(surface: surface)
+        guard let surface = focusedSurface?.surfaceModel else { return }
+        surface.equalizeSplits()
     }
 
     @IBAction func moveSplitDividerUp(_ sender: Any) {
-        guard let surface = focusedSurface?.surface else { return }
-        ghostty.splitResize(surface: surface, direction: .up, amount: 10)
+        guard let surface = focusedSurface?.surfaceModel else { return }
+        surface.resizeSplit( .up, amount: 10)
     }
 
     @IBAction func moveSplitDividerDown(_ sender: Any) {
-        guard let surface = focusedSurface?.surface else { return }
-        ghostty.splitResize(surface: surface, direction: .down, amount: 10)
+        guard let surface = focusedSurface?.surfaceModel else { return }
+        surface.resizeSplit( .down, amount: 10)
     }
 
     @IBAction func moveSplitDividerLeft(_ sender: Any) {
-        guard let surface = focusedSurface?.surface else { return }
-        ghostty.splitResize(surface: surface, direction: .left, amount: 10)
+        guard let surface = focusedSurface?.surfaceModel else { return }
+        surface.resizeSplit( .left, amount: 10)
     }
 
     @IBAction func moveSplitDividerRight(_ sender: Any) {
-        guard let surface = focusedSurface?.surface else { return }
-        ghostty.splitResize(surface: surface, direction: .right, amount: 10)
+        guard let surface = focusedSurface?.surfaceModel else { return }
+        surface.resizeSplit( .right, amount: 10)
     }
 
     private func splitMoveFocus(direction: Ghostty.SplitFocusDirection) {
-        guard let surface = focusedSurface?.surface else { return }
-        ghostty.splitMoveFocus(surface: surface, direction: direction)
+        guard let surface = focusedSurface?.surfaceModel else { return }
+        surface.moveSplitFocus(direction)
     }
 
     @IBAction func increaseFontSize(_ sender: Any) {
-        guard let surface = focusedSurface?.surface else { return }
-        ghostty.changeFontSize(surface: surface, .increase(1))
+        guard let surface = focusedSurface?.surfaceModel else { return }
+        surface.changeFontSize(by: 1)
     }
 
     @IBAction func decreaseFontSize(_ sender: Any) {
-        guard let surface = focusedSurface?.surface else { return }
-        ghostty.changeFontSize(surface: surface, .decrease(1))
+        guard let surface = focusedSurface?.surfaceModel else { return }
+        surface.changeFontSize(by: -1)
     }
 
     @IBAction func resetFontSize(_ sender: Any) {
-        guard let surface = focusedSurface?.surface else { return }
-        ghostty.changeFontSize(surface: surface, .reset)
+        guard let surface = focusedSurface?.surfaceModel else { return }
+        surface.perform(.resetFontSize)
     }
 
     @IBAction func toggleCommandPalette(_ sender: Any?) {
@@ -1330,8 +1283,8 @@ class BaseTerminalController: NSWindowController,
     }
 
     @objc func resetTerminal(_ sender: Any) {
-        guard let surface = focusedSurface?.surface else { return }
-        ghostty.resetTerminal(surface: surface)
+        guard let surface = focusedSurface?.surfaceModel else { return }
+        surface.perform(.reset)
     }
 
     private struct DerivedConfig {
@@ -1347,10 +1300,10 @@ class BaseTerminalController: NSWindowController,
             self.splitPreserveZoom = .init()
         }
 
-        init(_ config: Ghostty.Config) {
+        init(_ config: Ghostty.ConfigSnapshot) {
             self.macosTitlebarProxyIcon = config.macosTitlebarProxyIcon
-            self.windowStepResize = config.windowStepResize
-            self.focusFollowsMouse = config.focusFollowsMouse
+            self.windowStepResize = config.window.stepResize
+            self.focusFollowsMouse = config.window.focusFollowsMouse
             self.splitPreserveZoom = config.splitPreserveZoom
         }
     }
@@ -1381,21 +1334,16 @@ extension BaseTerminalController: NSMenuItemValidation {
         ///
         /// Using App's effectiveAppearance here to prevent incorrect updates.
         let themeAppearance = NSApplication.shared.effectiveAppearance
-        let scheme: ghostty_color_scheme_e
-        if themeAppearance.isDark {
-            scheme = GHOSTTY_COLOR_SCHEME_DARK
-        } else {
-            scheme = GHOSTTY_COLOR_SCHEME_LIGHT
-        }
-        guard scheme != appliedColorScheme else {
+        let dark = themeAppearance.isDark
+        guard dark != appliedDarkAppearance else {
             return
         }
         for surfaceView in surfaceTree {
-            if let surface = surfaceView.surface {
-                ghostty_surface_set_color_scheme(surface, scheme)
+            if let surface = surfaceView.surfaceModel {
+                surface.setColorScheme(dark: dark)
             }
         }
-        appliedColorScheme = scheme
+        appliedDarkAppearance = dark
     }
 }
 

@@ -21,6 +21,7 @@ const Overlay = @import("Overlay.zig");
 const imagepkg = @import("image.zig");
 const ImageState = imagepkg.State;
 const SmoothCursor = @import("SmoothCursor.zig");
+const FrameScheduler = @import("FrameScheduler.zig");
 const assert = @import("../quirks.zig").inlineAssert;
 const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
@@ -859,26 +860,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             self.syncDisplayLink(id, draw_now);
         }
 
-        /// The cadence of continuous (draw-only) animation wakes,
-        /// i.e. 120fps, and the floor for any animation wake delay.
-        pub const draw_interval_ms: u64 = 8;
-
-        /// A point in the future when the renderer needs to be driven
-        /// again to keep animating, and what kind of drive it needs.
-        pub const AnimationWake = struct {
-            /// Delay in milliseconds until the wake is due.
-            delay_ms: u64,
-            kind: Kind,
-
-            pub const Kind = enum {
-                /// A redraw alone suffices, no updateFrame. Much cheaper
-                /// than `update`.
-                draw,
-
-                /// Frame data must be updated first: updateFrame, then draw.
-                update,
-            };
-        };
+        pub const AnimationWake = FrameScheduler.Wake;
 
         /// The soonest animation wake this renderer needs, if any:
         /// Smooth cursor motion requests draw-only wakes while active. A Kitty
@@ -888,35 +870,18 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
         ///
         /// Must be called on the render thread.
         pub fn animationWake(self: *const Self) ?AnimationWake {
-            const cursor_delay: ?u64 = if (self.cursor_animation_running.load(.acquire)) draw_interval_ms else null;
-
-            // Kitty animations tick during updateFrame; between
-            // updates the deadline is absolute on the animation
-            // clock, so a stream of draw wakes recomputing this
-            // cannot starve it into the future.
-            const kitty_delay: ?u64 = kitty: {
-                const next = self.kitty_animation_next_ms orelse break :kitty null;
-                const base = self.kitty_animation_clock orelse break :kitty null;
+            var now_ms: u64 = 0;
+            const deadline: ?u64 = if (self.kitty_animation_clock) |base| deadline: {
+                if (self.kitty_animation_next_ms == null) break :deadline null;
                 const now: std.Io.Timestamp = .now(global.io(), .awake);
-                const now_ms: u64 = @intCast(@divTrunc(
-                    base.durationTo(now).nanoseconds,
-                    std.time.ns_per_ms,
-                ));
-                // Never wake faster than the draw interval; an
-                // overdue frame is picked up on the next wake.
-                break :kitty @max(next -| now_ms, draw_interval_ms);
-            };
-
-            // An update wake includes a draw, so it wins ties.
-            if (kitty_delay) |k| {
-                if (cursor_delay == null or k <= cursor_delay.?) {
-                    return .{ .delay_ms = k, .kind = .update };
-                }
-            }
-
-            if (cursor_delay) |s| return .{ .delay_ms = s, .kind = .draw };
-
-            return null;
+                now_ms = @intCast(@divTrunc(base.durationTo(now).nanoseconds, std.time.ns_per_ms));
+                break :deadline self.kitty_animation_next_ms;
+            } else null;
+            return FrameScheduler.nextWake(
+                now_ms,
+                self.cursor_animation_running.load(.acquire),
+                deadline,
+            );
         }
 
         /// True if our renderer is using vsync. If true, the renderer or apprt
@@ -1032,11 +997,11 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                 };
             }
 
-            const should_run =
-                // Non-visible windows never vsync
-                self.visible and
-                // Only vsync if we have cell changes or animation
-                (self.cells_rebuilt or self.animationWake() != null);
+            const should_run = FrameScheduler.needsDisplayLink(
+                self.visible,
+                self.cells_rebuilt,
+                self.animationWake(),
+            );
 
             if (should_run) {
                 if (!display_link.isRunning()) {

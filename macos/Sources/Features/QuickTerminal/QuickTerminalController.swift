@@ -1,7 +1,6 @@
 import Foundation
 import Cocoa
 import SwiftUI
-import GhosttyKit
 
 /// Controller for the "quick" terminal.
 class QuickTerminalController: BaseTerminalController {
@@ -44,7 +43,7 @@ class QuickTerminalController: BaseTerminalController {
          restorationState: QuickTerminalRestorableState? = nil,
     ) {
         self.position = position
-        self.derivedConfig = DerivedConfig(ghostty.config)
+        self.derivedConfig = DerivedConfig(ghostty.config.snapshot)
         // The window we manage is not restorable if we've specified a command
         // to execute. We do this because the restored window is meaningless at the
         // time of writing this: it'd just restore to a shell in the same directory
@@ -344,7 +343,7 @@ class QuickTerminalController: BaseTerminalController {
         // tree can be empty if for example we run "exit" in the terminal and force
         // animate out.
         if surfaceTree.isEmpty,
-           let ghostty_app = ghostty.app {
+           ghostty.isReady {
             if let tree = restorationState?.surfaceTree, !tree.isEmpty {
                 surfaceTree = tree
                 let view = tree.first(where: { $0.id.uuidString == restorationState?.focusedSurface }) ?? tree.first!
@@ -362,7 +361,7 @@ class QuickTerminalController: BaseTerminalController {
                 var config = Ghostty.SurfaceConfiguration()
                 config.environmentVariables["GHOSTTY_QUICK_TERMINAL"] = "1"
 
-                let view = Ghostty.SurfaceView(ghostty_app, baseConfig: config)
+                let view = Ghostty.SurfaceView(ghostty, baseConfig: config)
                 surfaceTree = SplitTree(view: view)
                 focusedSurface = view
             }
@@ -613,7 +612,7 @@ class QuickTerminalController: BaseTerminalController {
             window.backgroundColor = .white.withAlphaComponent(0.001)
 
             if !derivedConfig.backgroundBlur.isGlassStyle {
-                ghostty_set_window_background_blur(ghostty.app, Unmanaged.passUnretained(window).toOpaque())
+                ghostty.applyBackgroundBlur(to: window)
             }
         } else {
             window.isOpaque = true
@@ -654,13 +653,13 @@ class QuickTerminalController: BaseTerminalController {
     }
 
     @IBAction func toggleGhosttyFullScreen(_ sender: Any) {
-        guard let surface = focusedSurface?.surface else { return }
-        ghostty.toggleFullscreen(surface: surface)
+        guard let surface = focusedSurface?.surfaceModel else { return }
+        surface.perform(.toggleFullscreen)
     }
 
     @IBAction func toggleTerminalInspector(_ sender: Any?) {
-        guard let surface = focusedSurface?.surface else { return }
-        ghostty.toggleTerminalInspector(surface: surface)
+        guard let surface = focusedSurface?.surfaceModel else { return }
+        surface.perform(.toggleInspector)
     }
 
     // MARK: Notifications
@@ -710,7 +709,7 @@ class QuickTerminalController: BaseTerminalController {
         ] as? Ghostty.Config else { return }
 
         // Update our derived config
-        self.derivedConfig = DerivedConfig(config)
+        self.derivedConfig = DerivedConfig(config.snapshot)
 
         syncAppearance()
 
@@ -741,7 +740,7 @@ class QuickTerminalController: BaseTerminalController {
             self.backgroundBlur = .disabled
         }
 
-        init(_ config: Ghostty.Config) {
+        init(_ config: Ghostty.ConfigSnapshot) {
             self.quickTerminalScreen = config.quickTerminalScreen
             self.quickTerminalAnimationDuration = config.quickTerminalAnimationDuration
             self.quickTerminalAutoHide = config.quickTerminalAutoHide

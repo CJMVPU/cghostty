@@ -1,5 +1,4 @@
 import SwiftUI
-import GhosttyKit
 
 func sortedTerminalPaletteOptions(_ options: [CommandOption]) -> [CommandOption] {
     options.sorted { lhs, rhs in
@@ -97,7 +96,7 @@ struct TerminalCommandPaletteView: View {
 
     /// Commands for jumping to other terminal surfaces.
     private var jumpOptions: [CommandOption] {
-        TerminalController.all.flatMap { controller -> [CommandOption] in
+        surfaceView.windowRegistry.all.flatMap { controller -> [CommandOption] in
             guard let window = controller.window else { return [] }
 
             let color = (window as? TerminalWindow)?.tabColor
@@ -127,7 +126,7 @@ struct TerminalCommandPaletteView: View {
                     leadingColor: displayColor?.displayColor.map { Color($0) },
                     sortKey: ObjectIdentifier(surface)
                 ) {
-                    BaseTerminalController.controller(owning: surface)?.presentTerminal(surface)
+                    surface.windowRegistry.owner(of: surface)?.presentTerminal(surface)
                 }
             }
         }

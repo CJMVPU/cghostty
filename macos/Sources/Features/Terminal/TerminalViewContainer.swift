@@ -76,7 +76,7 @@ class TerminalViewContainer: NSView {
     }
 
     func ghosttyConfigDidChange(_ config: Ghostty.Config, preferredBackgroundColor: NSColor?) {
-        let newValue = DerivedConfig(config: config, preferredBackgroundColor: preferredBackgroundColor, cornerRadius: windowCornerRadius)
+        let newValue = DerivedConfig(config: config.snapshot, preferredBackgroundColor: preferredBackgroundColor, cornerRadius: windowCornerRadius)
         guard newValue != derivedConfig else { return }
         derivedConfig = newValue
 
@@ -236,7 +236,7 @@ extension TerminalViewContainer {
         let backgroundOpacity: Double
         let cornerRadius: CGFloat?
 
-        init?(config: Ghostty.Config, preferredBackgroundColor: NSColor?, cornerRadius: CGFloat?) {
+        init?(config: Ghostty.ConfigSnapshot, preferredBackgroundColor: NSColor?, cornerRadius: CGFloat?) {
             switch config.backgroundBlur {
             case .macosGlassRegular:
                 glass = .regular

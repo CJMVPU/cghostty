@@ -6,6 +6,18 @@ extension Ghostty {
     ///
     /// Wraps a `ghostty_inspector_t`
     final class Inspector: Sendable {
+        enum Visibility {
+            case toggle, show, hide
+            init?(coreValue: ghostty_action_inspector_e) {
+                switch coreValue {
+                case GHOSTTY_INSPECTOR_TOGGLE: self = .toggle
+                case GHOSTTY_INSPECTOR_SHOW: self = .show
+                case GHOSTTY_INSPECTOR_HIDE: self = .hide
+                default: return nil
+                }
+            }
+        }
+
         /// A inspector is sendable because it is just a reference type. Using the inspector in parameters
         /// may be unsafe but the value itself is safe to send across threads.
         nonisolated(unsafe) private let inspector: ghostty_inspector_t
@@ -42,11 +54,11 @@ extension Ghostty {
         /// Send a mouse button event to the inspector.
         @MainActor
         func mouseButton(
-            _ state: ghostty_input_mouse_state_e,
-            button: ghostty_input_mouse_button_e,
-            mods: ghostty_input_mods_e
+            _ state: Input.MouseState,
+            button: Input.MouseButton,
+            mods: Input.Mods
         ) {
-            ghostty_inspector_mouse_button(inspector, state, button, mods)
+            ghostty_inspector_mouse_button(inspector, state.cMouseState, button.cMouseButton, mods.cMods)
         }
 
         /// Send a mouse position event to the inspector.
@@ -57,18 +69,18 @@ extension Ghostty {
 
         /// Send a mouse scroll event to the inspector.
         @MainActor
-        func mouseScroll(x: Double, y: Double, mods: ghostty_input_scroll_mods_t) {
-            ghostty_inspector_mouse_scroll(inspector, x, y, mods)
+        func mouseScroll(x: Double, y: Double, mods: Input.ScrollMods) {
+            ghostty_inspector_mouse_scroll(inspector, x, y, mods.cScrollMods)
         }
 
         /// Send a key event to the inspector.
         @MainActor
         func key(
-            _ action: ghostty_input_action_e,
-            key: ghostty_input_key_e,
-            mods: ghostty_input_mods_e
+            _ action: Input.Action,
+            key: Input.Key,
+            mods: Input.Mods
         ) {
-            ghostty_inspector_key(inspector, action, key, mods)
+            ghostty_inspector_key(inspector, action.cAction, key.cKey, mods.cMods)
         }
 
         /// Send text to the inspector.

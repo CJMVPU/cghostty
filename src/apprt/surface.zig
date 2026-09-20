@@ -102,6 +102,9 @@ pub const Message = union(enum) {
     /// command are given in the `ChildExited` struct.
     child_exited: ChildExited,
 
+    /// IO thread failure; presentation is coordinated by Surface.
+    surface_fault: @import("../SurfaceFault.zig"),
+
     /// Show a desktop notification.
     desktop_notification: DesktopNotification,
 

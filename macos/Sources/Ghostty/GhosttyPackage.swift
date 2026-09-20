@@ -18,6 +18,7 @@ extension Ghostty {
     struct Info {
         var mode: ghostty_build_mode_e
         var version: String
+        var showsDebugOverlays: Bool { mode == GHOSTTY_BUILD_MODE_DEBUG || mode == GHOSTTY_BUILD_MODE_RELEASE_SAFE }
     }
 
     static var info: Info {
@@ -266,7 +267,7 @@ extension Ghostty {
     }
 
     /// Enum for the macos-window-buttons config option
-    enum MacOSWindowButtons: String {
+    nonisolated enum MacOSWindowButtons: String, Sendable {
         case visible
         case hidden
     }

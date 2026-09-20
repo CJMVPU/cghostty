@@ -49,6 +49,11 @@ def main [
     } else { $version }
     let marketing_version = ($app_version | split row "-" | first | split row "+" | first)
     let optimize = if $configuration == "Debug" { "Debug" } else { "ReleaseFast" }
+    if $skip_core and $action != "clean" {
+        cd $root
+        ^zig build check-config-bridge
+        if $env.LAST_EXIT_CODE != 0 { exit $env.LAST_EXIT_CODE }
+    }
     if not $skip_core and $action != "clean" {
         cd $root
         ^zig build -Demit-macos-app=false $"-Doptimize=($optimize)" $"-Dversion-string=($app_version)"

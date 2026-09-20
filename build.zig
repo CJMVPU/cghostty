@@ -11,6 +11,34 @@ pub fn build(b: *std.Build) !void {
     const config = try buildpkg.Config.init(b, zon.version);
     const filters = b.option([][]const u8, "test-filter", "Filter Zig unit tests") orelse &.{};
     const deps = try buildpkg.SharedDeps.init(b, &config);
+    // Reflection uses the same lightweight configuration as help generation;
+    // this program does not initialize or link the terminal runtime.
+    const config_gen = b.addExecutable(.{
+        .name = "configgen",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/configgen.zig"),
+            .target = b.graph.host,
+        }),
+    });
+    var generator_config = config;
+    generator_config.exe_entrypoint = .helpgen;
+    const generator_options = b.addOptions();
+    try generator_config.addOptions(generator_options);
+    config_gen.root_module.addOptions("build_options", generator_options);
+    const generated_config = b.addRunArtifact(config_gen).captureStdOut(.{});
+    const config_destination = "macos/Sources/Ghostty/Ghostty.ConfigSchema.swift";
+    const check_config = b.addSystemCommand(&.{"python3"});
+    check_config.addFileArg(b.path("scripts/config-bridge-output.py"));
+    check_config.addFileArg(generated_config);
+    check_config.addFileArg(b.path(config_destination));
+    b.step("check-config-bridge", "Verify native config bridge matches Zig schema").dependOn(&check_config.step);
+    b.getInstallStep().dependOn(&check_config.step);
+    const update_config = b.addSystemCommand(&.{"python3"});
+    update_config.addFileArg(b.path("scripts/config-bridge-output.py"));
+    update_config.addFileArg(generated_config);
+    update_config.addArg(b.pathFromRoot(config_destination));
+    update_config.addArg("--update");
+    b.step("update-config-bridge", "Regenerate native typed config bridge").dependOn(&update_config.step);
     const resources = try buildpkg.GhosttyResources.init(b, &config, &deps);
     const docs = try buildpkg.GhosttyDocs.init(b, &deps);
     if (config.emit_docs) docs.install() else docs.installDummy(b.getInstallStep());
@@ -58,6 +86,7 @@ pub fn build(b: *std.Build) !void {
         .system_include_paths = &.{b.path("include")},
     });
     const test_step = b.step("test", "Run macOS core Zig tests");
+    tests.step.dependOn(&check_config.step);
     const run_tests = b.addRunArtifact(tests);
     test_step.dependOn(&run_tests.step);
     b.step("test-build", "Compile macOS core tests without running").dependOn(&tests.step);

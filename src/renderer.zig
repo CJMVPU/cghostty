@@ -8,6 +8,7 @@
 const cursor = @import("renderer/cursor.zig");
 const message = @import("renderer/message.zig");
 const size = @import("renderer/size.zig");
+pub const FrameScheduler = @import("renderer/FrameScheduler.zig");
 pub const SmoothCursor = @import("renderer/SmoothCursor.zig");
 pub const GenericRenderer = @import("renderer/generic.zig").Renderer;
 pub const Metal = @import("renderer/Metal.zig");
@@ -46,6 +47,7 @@ test {
     _ = cursor;
     _ = message;
     _ = SmoothCursor;
+    _ = FrameScheduler;
     _ = size;
     _ = Thread;
     _ = State;

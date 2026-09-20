@@ -998,7 +998,20 @@ typedef enum {
   GHOSTTY_ACTION_READONLY,
   GHOSTTY_ACTION_COPY_TITLE_TO_CLIPBOARD,
   GHOSTTY_ACTION_MOVE_TAB_TO_NEW_WINDOW,
+  GHOSTTY_ACTION_SURFACE_FAULT,
 } ghostty_action_tag_e;
+
+// IO fault details are valid during the action callback; copy before deferring.
+typedef enum {
+  GHOSTTY_SURFACE_FAULT_PTY_UNAVAILABLE,
+  GHOSTTY_SURFACE_FAULT_INPUT_FAILED,
+  GHOSTTY_SURFACE_FAULT_IO_FAILED,
+} ghostty_surface_fault_kind_e;
+
+typedef struct {
+  ghostty_surface_fault_kind_e kind;
+  const char* error_code;
+} ghostty_surface_fault_s;
 
 typedef union {
   ghostty_action_split_direction_e new_split;
@@ -1041,6 +1054,7 @@ typedef union {
   ghostty_action_search_selected_s search_selected;
   ghostty_action_readonly_e readonly;
   ghostty_action_open_config_e open_config;
+  ghostty_surface_fault_s surface_fault;
 } ghostty_action_u;
 
 typedef struct {
@@ -1176,6 +1190,39 @@ GHOSTTY_API void ghostty_surface_split_resize(ghostty_surface_t,
                                                  uint16_t);
 GHOSTTY_API void ghostty_surface_split_equalize(ghostty_surface_t);
 GHOSTTY_API bool ghostty_surface_binding_action(ghostty_surface_t, const char*, uintptr_t);
+
+// Fixed native commands bypass keybinding string parsing.
+typedef enum {
+  GHOSTTY_COMMAND_NEW_TAB,
+  GHOSTTY_COMMAND_NEW_WINDOW,
+  GHOSTTY_COMMAND_TOGGLE_SPLIT_ZOOM,
+  GHOSTTY_COMMAND_TOGGLE_FULLSCREEN,
+  GHOSTTY_COMMAND_COPY_TO_CLIPBOARD,
+  GHOSTTY_COMMAND_PASTE_FROM_CLIPBOARD,
+  GHOSTTY_COMMAND_PASTE_FROM_SELECTION,
+  GHOSTTY_COMMAND_SELECT_ALL,
+  GHOSTTY_COMMAND_START_SEARCH,
+  GHOSTTY_COMMAND_SEARCH_SELECTION,
+  GHOSTTY_COMMAND_SCROLL_TO_SELECTION,
+  GHOSTTY_COMMAND_TOGGLE_READONLY,
+  GHOSTTY_COMMAND_RESET,
+  GHOSTTY_COMMAND_INSPECTOR,
+  GHOSTTY_COMMAND_RESET_FONT_SIZE,
+} ghostty_surface_command_e;
+GHOSTTY_API bool ghostty_surface_command(ghostty_surface_t, ghostty_surface_command_e);
+GHOSTTY_API bool ghostty_surface_change_font_size(ghostty_surface_t, float);
+GHOSTTY_API bool ghostty_surface_scroll_to_row(ghostty_surface_t, uintptr_t);
+
+// Query bytes are borrowed for this call and copied by the core before returning.
+// An empty query clears matches without closing UI.
+typedef enum {
+  GHOSTTY_SEARCH_NEXT,
+  GHOSTTY_SEARCH_PREVIOUS,
+} ghostty_search_direction_e;
+GHOSTTY_API bool ghostty_surface_search(ghostty_surface_t, const char*, uintptr_t);
+GHOSTTY_API bool ghostty_surface_end_search(ghostty_surface_t);
+GHOSTTY_API bool ghostty_surface_navigate_search(ghostty_surface_t,
+                                              ghostty_search_direction_e);
 GHOSTTY_API void ghostty_surface_complete_clipboard_request(
     ghostty_surface_t,
     const ghostty_clipboard_complete_s*,

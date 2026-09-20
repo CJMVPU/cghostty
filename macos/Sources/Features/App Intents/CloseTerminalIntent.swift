@@ -1,6 +1,5 @@
 import AppKit
 import AppIntents
-import GhosttyKit
 
 struct CloseTerminalIntent: AppIntent {
     static let title: LocalizedStringResource = "Close Terminal"
@@ -24,7 +23,7 @@ struct CloseTerminalIntent: AppIntent {
             throw GhosttyIntentError.surfaceNotFound
         }
 
-        guard let controller = BaseTerminalController.controller(owning: surfaceView) else {
+        guard let controller = surfaceView.windowRegistry.owner(of: surfaceView) else {
             return .result()
         }
 

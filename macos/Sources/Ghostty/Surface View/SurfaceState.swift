@@ -1,7 +1,6 @@
 import AppKit
 import SwiftUI
 import Observation
-import GhosttyKit
 
 extension Ghostty {
     /// UI state for one stable native terminal. It never owns a core handle or view.
@@ -10,12 +9,13 @@ extension Ghostty {
         var cellSize: CGSize = .zero
         var healthy: Bool = true
         var error: Error?
+        var fault: SurfaceFault?
         var hoverUrl: String?
         var progressReport: Action.ProgressReport?
         var keyTables: [String] = []
         var searchState: SearchState?
         var focusInstant: ContinuousClock.Instant?
-        var surfaceSize: ghostty_surface_size_s?
+        var surfaceSize: Ghostty.Surface.Size?
         var readonly: Bool = false
         var highlighted: Bool = false
         var childExitedMessage: ChildExitedMessage?

@@ -28,17 +28,17 @@ struct ConfigTests {
 
     @Test func windowStepResizeDefaultsToFalse() throws {
         let config = try TemporaryConfig("")
-        #expect(config.windowStepResize == false)
+        #expect(config.window.stepResize == false)
     }
 
     @Test func focusFollowsMouseDefaultsToFalse() throws {
         let config = try TemporaryConfig("")
-        #expect(config.focusFollowsMouse == false)
+        #expect(config.window.focusFollowsMouse == false)
     }
 
     @Test func focusFollowsMouseSetToTrue() throws {
         let config = try TemporaryConfig("focus-follows-mouse = true")
-        #expect(config.focusFollowsMouse == true)
+        #expect(config.window.focusFollowsMouse == true)
     }
 
     @Test func windowDecorationsDefaultsToTrue() throws {
@@ -58,12 +58,12 @@ struct ConfigTests {
 
     @Test func maximizeDefaultsToFalse() throws {
         let config = try TemporaryConfig("")
-        #expect(config.maximize == false)
+        #expect(config.window.maximize == false)
     }
 
     @Test func maximizeSetToTrue() throws {
         let config = try TemporaryConfig("maximize = true")
-        #expect(config.maximize == true)
+        #expect(config.window.maximize == true)
     }
 
     // MARK: - String / Optional String Properties
@@ -80,12 +80,12 @@ struct ConfigTests {
 
     @Test func windowTitleFontFamilyDefaultsToNil() throws {
         let config = try TemporaryConfig("")
-        #expect(config.windowTitleFontFamily == nil)
+        #expect(config.window.titleFontFamily == nil)
     }
 
     @Test func windowTitleFontFamilySetToValue() throws {
         let config = try TemporaryConfig("window-title-font-family = Menlo")
-        #expect(config.windowTitleFontFamily == "Menlo")
+        #expect(config.window.titleFontFamily == "Menlo")
     }
 
     // MARK: - Enum Properties
@@ -155,8 +155,8 @@ struct ConfigTests {
 
     @Test func windowPositionDefaultsToNil() throws {
         let config = try TemporaryConfig("")
-        #expect(config.windowPositionX == nil)
-        #expect(config.windowPositionY == nil)
+        #expect(config.window.positionX == nil)
+        #expect(config.window.positionY == nil)
     }
 
     // MARK: - Config Loading
@@ -214,11 +214,48 @@ struct ConfigTests {
         """)
         #expect(config.initialWindow == false)
         #expect(config.shouldQuitAfterLastWindowClosed == true)
-        #expect(config.maximize == true)
-        #expect(config.focusFollowsMouse == true)
+        #expect(config.window.maximize == true)
+        #expect(config.window.focusFollowsMouse == true)
     }
 
     // MARK: - Keybind
+
+    @Test func windowSnapshotSurvivesReloadAndHandleRelease() throws {
+        var config: TemporaryConfig? = try TemporaryConfig("""
+        window-position-x = 120
+        window-position-y = 80
+        window-title-font-family = Snapshot Font
+        focus-follows-mouse = true
+        maximize = true
+        """)
+        let before = try #require(config?.window)
+        try config?.reload("window-step-resize = true")
+        let after = try #require(config?.window)
+        config = nil
+        #expect(before.positionX == 120)
+        #expect(before.positionY == 80)
+        #expect(before.titleFontFamily == "Snapshot Font")
+        #expect(before.focusFollowsMouse)
+        #expect(before.maximize)
+        #expect(!before.stepResize)
+        #expect(after.positionX == nil)
+        #expect(after.positionY == nil)
+        #expect(after.titleFontFamily == nil)
+        #expect(!after.focusFollowsMouse)
+        #expect(!after.maximize)
+        #expect(after.stepResize)
+    }
+
+    @Test func invalidWindowValueKeepsDiagnosticsAndOtherSnapshotValues() throws {
+        let config = try TemporaryConfig("window-position-x = invalid\nfocus-follows-mouse = true")
+        #expect(!config.errors.isEmpty)
+        #expect(config.window.positionX == nil)
+        #expect(config.window.focusFollowsMouse)
+        try config.reload("window-position-x = 24")
+        #expect(config.errors.isEmpty)
+        #expect(config.window.positionX == 24)
+        #expect(!config.window.focusFollowsMouse)
+    }
 
     @MainActor @Test
     func uppercasedLetterShouldBeNormalized() throws {

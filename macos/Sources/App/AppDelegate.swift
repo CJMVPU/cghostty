@@ -2,7 +2,6 @@ import AppKit
 import SwiftUI
 import UserNotifications
 import OSLog
-import GhosttyKit
 
 class AppDelegate: NSObject,
                     NSApplicationDelegate,
@@ -294,15 +293,7 @@ class AppDelegate: NSObject,
             // NSApplication appearance KVO is delivered on the main thread.
             MainActor.assumeIsolated {
                 let appearance = NSApplication.shared.effectiveAppearance
-                guard let app = self.ghostty.app else { return }
-                let scheme: ghostty_color_scheme_e
-                if appearance.isDark {
-                    scheme = GHOSTTY_COLOR_SCHEME_DARK
-                } else {
-                    scheme = GHOSTTY_COLOR_SCHEME_LIGHT
-                }
-
-                ghostty_app_set_color_scheme(app, scheme)
+                self.ghostty.setColorScheme(dark: appearance.isDark)
             }
         }
 
@@ -353,7 +344,7 @@ class AppDelegate: NSObject,
             // is possible to have other windows in a few scenarios:
             //   - if we're opening a URL since `application(_:openFile:)` is called before this.
             //   - if we're restoring from persisted state
-            if TerminalController.all.isEmpty && derivedConfig.initialWindow {
+            if ghostty.windowRegistry.all.isEmpty && derivedConfig.initialWindow {
                 undoManager.disableUndoRegistration()
                 _ = TerminalController.newWindow(ghostty)
                 undoManager.enableUndoRegistration()
@@ -411,7 +402,7 @@ class AppDelegate: NSObject,
         // This is possible with flag set to false if there a race where the
         // window is still initializing and is not visible but the user clicked
         // the dock icon.
-        guard TerminalController.all.isEmpty else { return true }
+        guard ghostty.windowRegistry.all.isEmpty else { return true }
 
         // If the application isn't active yet then we don't want to process
         // this because we're not ready. This happens sometimes in Xcode runs
@@ -497,7 +488,7 @@ class AppDelegate: NSObject,
         case .new_tab:
             _ = TerminalController.newTab(
                 ghostty,
-                from: TerminalController.preferredParent?.window,
+                from: ghostty.windowRegistry.preferredParent?.window,
                 withBaseConfig: config
             )
         case .new_window: _ = TerminalController.newWindow(ghostty, withBaseConfig: config)
@@ -566,24 +557,8 @@ class AppDelegate: NSObject,
         guard NSApp.mainWindow == nil else { return event }
 
         // If this event as-is would result in a key binding then we send it.
-        if let app = ghostty.app, let config = ghostty.config.config {
-            var ghosttyEvent = event.ghosttyKeyEvent(GHOSTTY_ACTION_PRESS)
-            let match = (event.characters ?? "").withCString { ptr in
-                ghosttyEvent.text = ptr
-                if !ghostty_config_key_is_binding(config, ghosttyEvent) {
-                    return false
-                }
-
-                return ghostty_app_key(app, ghosttyEvent)
-            }
-
-            // If the key was handled by Ghostty we stop the event chain. If
-            // the key wasn't handled then we let it fall through and continue
-            // processing. This is important because some bindings may have no
-            // affect at this scope.
-            if match {
-                return nil
-            }
+        if ghostty.sendKeyEvent(event.terminalKeyEvent(.press, text: event.characters ?? ""), onlyIfBinding: true) {
+            return nil
         }
 
         // If this event would be handled by our menu then we do nothing.
@@ -596,10 +571,10 @@ class AppDelegate: NSObject,
         // through the Ghostty key mechanism.
 
         // Ghostty must be loaded
-        guard let ghostty = self.ghostty.app else { return event }
+        guard ghostty.isReady else { return event }
 
         // Build our event input and call ghostty
-        if ghostty_app_key(ghostty, event.ghosttyKeyEvent(GHOSTTY_ACTION_PRESS)) {
+        if ghostty.sendKeyEvent(event.terminalKeyEvent(.press)) {
             // The key was used so we want to stop it from going to our Mac app
             Ghostty.logger.debug("local key event handled event=\(event, privacy: .public)")
             return nil
@@ -631,7 +606,7 @@ class AppDelegate: NSObject,
 
     @MainActor @objc private func keyboardSelectionDidChange(_ notification: Notification) {
         syncMenuShortcuts(ghostty.config)
-        TerminalController.all.forEach { $0.relabelTabs() }
+        ghostty.windowRegistry.all.forEach { $0.relabelTabs() }
     }
 
     @objc private func ghosttyBellDidRing(_ notification: Notification) {
@@ -710,7 +685,7 @@ class AppDelegate: NSObject,
 
     private func ghosttyConfigDidChange(config: Ghostty.Config) {
         // Update the config we need to store
-        self.derivedConfig = DerivedConfig(config)
+        self.derivedConfig = DerivedConfig(config.snapshot)
 
         // Depending on the "window-save-state" setting we have to set the NSQuitAlwaysKeepsWindows
         // configuration. This is the only way to carefully control whether macOS invokes the
@@ -726,7 +701,7 @@ class AppDelegate: NSObject,
         DispatchQueue.main.async {
             self.syncMenuShortcuts(config)
         }
-        TerminalController.all.forEach { $0.relabelTabs() }
+        ghostty.windowRegistry.all.forEach { $0.relabelTabs() }
 
         // Update our badge since config can change what we show.
         syncDockBadge()
@@ -756,7 +731,7 @@ class AppDelegate: NSObject,
 
         // We need to handle our global event tap depending on if there are global
         // events that we care about in Ghostty.
-        if ghostty_app_has_global_keybinds(ghostty.app!) {
+        if ghostty.hasGlobalKeyBindings {
             if timeSinceLaunch > 5 {
                 // If the process has been running for awhile we enable right away
                 // because no windows are likely to pop up.
@@ -777,7 +752,7 @@ class AppDelegate: NSObject,
 
     /// Sync the appearance of our app with the theme specified in the config.
     private func syncAppearance(config: Ghostty.Config) {
-        NSApplication.shared.appearance = .init(ghosttyConfig: config)
+        NSApplication.shared.appearance = .init(ghosttyConfig: config.snapshot)
     }
 
     // MARK: - Restorable State
@@ -838,7 +813,7 @@ class AppDelegate: NSObject,
     // MARK: - GhosttyAppDelegate
 
     func findSurface(forUUID uuid: UUID) -> Ghostty.SurfaceView? {
-        for c in TerminalController.all {
+        for c in ghostty.windowRegistry.all {
             for view in c.surfaceTree where view.id == uuid {
                 return view
             }
@@ -887,12 +862,12 @@ class AppDelegate: NSObject,
     @IBAction func newTab(_ sender: Any?) {
         _ = TerminalController.newTab(
             ghostty,
-            from: TerminalController.preferredParent?.window
+            from: ghostty.windowRegistry.preferredParent?.window
         )
     }
 
     @IBAction func closeAllWindows(_ sender: Any?) {
-        TerminalController.closeAllWindows()
+        TerminalController.closeAllWindows(ghostty)
         AboutController.shared.hide()
     }
 
@@ -963,7 +938,7 @@ class AppDelegate: NSObject,
             self.quickTerminalPosition = .top
         }
 
-        init(_ config: Ghostty.Config) {
+        init(_ config: Ghostty.ConfigSnapshot) {
             self.initialWindow = config.initialWindow
             self.shouldQuitAfterLastWindowClosed = config.shouldQuitAfterLastWindowClosed
             self.quickTerminalPosition = config.quickTerminalPosition

@@ -78,8 +78,8 @@ private struct TerminalSplitSubtreeView: View {
                     TerminalSplitSubtreeView(node: split.right, action: action)
                 },
                 onEqualize: {
-                    guard let surface = node.leftmostLeaf().surface else { return }
-                    ghostty.splitEqualize(surface: surface)
+                    guard let surface = node.leftmostLeaf().surfaceModel else { return }
+                    surface.equalizeSplits()
                 }
             )
         }

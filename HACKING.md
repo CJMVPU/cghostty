@@ -31,6 +31,8 @@ zig build test -Dtest-filter=Terminal
 zig build test -Dtest-filter=input -Dtest-filter=os. -Dtest-filter=termio -Dtest-filter=pty
 # 验证构建入口拒绝其他平台、Intel Mac 和被移除的独立产物
 python3 scripts/check-scope.py
+# 只检查原生业务层与内部 C 桥接边界（范围检查也会运行）
+python3 scripts/check-bridge.py
 # 对实际发布包增加身份、arm64、资源、签名检查
 python3 scripts/check-scope.py --app macos/build/ReleaseLocal/cghostty.app
 ```
@@ -82,6 +84,10 @@ Metal 编译通过 `xcrun --toolchain Metal` 调用安装的工具链。缺失�
 
 ## 渲染与光标回归
 
+`zig build test -Dtest-filter=FrameScheduler` 验证独立帧调度策略：空闲停帧、
+光标与 Kitty 动画竞争、绝对截止时间、过期帧和可见性。计时器、DisplayLink
+启停及锁仍由原渲染对象管理，不由策略模块创建。
+
 `zig build test -Dtest-filter=renderer -Dtest-filter=config` 覆盖光标距离分档、八方向前后角关系、前沿展开和恢复、中断时四角连续、持续按键与隐藏/显示交替、Vim 模式切换和细线厚度、快速反向的凸轮廓，以及配置迁移提示。
 Metal 4 每个在途帧独占可复用的命令缓冲区、分配器、参数表与 residency set，GPU 完成后才允许重用。
 开启 `MTL_DEBUG_LAYER=1` 运行应用可检查 Metal API；交互验收需覆盖单步、快速输入、连续导航、斜向移动、中文宽字符、选区、失焦和缩放。
@@ -94,16 +100,43 @@ CI 在构建前检查 Zig 格式、严格 SwiftLint、版本记录和工作流�
 
 ## UI 状态与原生交互
 
-结构和所有权约定见 [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md)。SwiftUI 内容读取
+整体所有权与线程边界见 [ARCHITECTURE.md](ARCHITECTURE.md)，原生 UI 约定见
+[UI_ARCHITECTURE.md](UI_ARCHITECTURE.md)。SwiftUI 内容读取
 Observation 模型；窗口由 `TerminalWindowState` 保存共享显示状态，终端区域由
 `Ghostty.SurfaceState` 保存显示状态。AppKit 控制器负责窗口、焦点、关闭与恢复，
-原生 SurfaceView 负责输入和持有核心句柄。UI 重建不能重建终端会话。
+原生 SurfaceView 负责输入，由 SurfaceLifecycle 持有核心句柄。UI 重建不能重建终端会话。
+生命周期区分暂时脱离窗口和最终释放：移动、关闭后的撤销保留会话；脱离时撤销本地事件监听、焦点及可见状态，
+附着时刷新显示器与可见状态，最终释放才取消视图任务和释放句柄。旧滚动容器只能操作仍属于自己的原生视图。
+核心 userdata 指向句柄持有的 SurfaceCallbackContext，内部弱引用视图，迟到回调必须处理视图已释放的情况。
+修改此路径需运行 `SurfaceLifecycleTests`、`GhosttySurfaceLifecycleUITests`，并回归 `GhosttyObservationUITests`
+和 `GhosttyTitlebarTabsUITests`。撤销测试需要验证原 shell 状态与输入焦点，不能仅检查分屏或标签数量。
 已加载终端窗口的控制器由原生层持有，关闭时释放；不能依赖 SwiftUI 对状态模型的引用延长控制器寿命。
 
 状态观察使用可取消的 Observation 任务；搜索任务在查询替换、关闭和释放时取消。
 剪贴板确认是有一次性完成语义的请求，通过原生操作入口递送，不从合并后的显示状态推断。
-窗口、标签和分屏命令通过 `BaseTerminalController.controller(owning:)` 找到当前归属，
+窗口、标签和分屏命令通过 `Ghostty.App.windowRegistry.owner(of:)` 找到当前归属，
 再调用有明确参数类型的控制器方法；不广播内部窗口命令，不使用字符串字典传参。
+普通窗口列表、最近主窗口和层叠位置也由该注册表按 App 隔离；列表保留 AppKit 标签顺序。
+窗口加载时弱注册，关闭时立即注销，不以控制器销毁作为窗口关闭的判据。强引用保活仍独立。
+原生业务层、Helpers、AppDelegate 和 SurfaceView 不导入 GhosttyKit，不直接使用 C 句柄或分配/释放 API。
+固定菜单命令、分屏、字体、滚动、搜索、输入及显示状态统一经过 `Ghostty.Surface`；
+只有用户配置驱动的动作保留 `perform(action:)` 字符串入口。键盘与鼠标按钮调用必须保留核心的消费结果。
+文本读取返回已复制的 Swift 值，C 文本和字体所有权在桥接内处理。
+`Ghostty.App` 管理 App 资源，`Ghostty.App+Callbacks.swift` 负责反向回调转换，
+剪贴板的核心请求状态由一次性 `Surface.ClipboardReadRequest` 管理。
+`scripts/check-bridge.py` 随范围检查执行，防止 UI 再引入 C ABI 依赖。
+配置分为 `Ghostty.ConfigHandle`（分配/加载/克隆/诊断/释放）和 `Ghostty.ConfigSnapshot`
+（47 项原生设置、六项窗口字段及加载/诊断状态的不可变副本）。`Ghostty.Config` 一次替换一整代
+句柄与快照；现有属性只转发快照，不再读取 C。窗口与 Surface 的显示投影显式接收快照。
+全局配置先发布到 App，再发送同步通知；Surface 回调保持局部作用域。
+增加原生设置时，把转换放进快照解码并补齐热重载/所有权验证，不在 UI 或 Config facade 追加 C 查询。
+将需要读取的配置加入 `src/configgen.zig` 的 `native_keys`，运行 `zig build update-config-bridge`。
+`Ghostty.ConfigSchema.swift` 的 53 个键由 Zig 字段与 `c_get.CValue` 自动生成；不要手改生成文件或另写字符串键。
+读取使用 `ConfigSchema.<key>.read(from:into:)`，接收变量的类型必须匹配；可选数值以读取结果判断缺失，
+不能把 Swift Optional 当作 C 整数的存储。显示枚举、默认值和字符串复制仍在快照解码器维护。
+`zig build check-config-bridge` 只校验，不改文件；核心构建/测试、`--skip-core` 原生构建和范围检查都会执行。
+修改字段类型或桥接规则时，运行配置 Zig 定向测试、`ConfigSnapshotTests` 和 `GhosttyConfigSnapshotUITests`。
+快捷键查询继续使用同代句柄，解析和配置优先级由 Zig 负责。
 Combine 仅用于仍有必要的原生通知/控件事件。不要引入新旧状态互相同步的兼容层。
 
 `--ui-tests` 显式包含桌面测试，`--only-testing` 接受 Xcode 的目标/套件/测试标识；
@@ -120,3 +153,10 @@ Combine 仅用于仍有必要的原生通知/控件事件。不要引入新旧�
 旧配置中的 `macos-icon`、`macos-custom-icon`、`macos-icon-frame`、
 `macos-icon-ghost-color`、`macos-icon-screen-color` 已不支持；仍保留这些字段的用户配置
 会显示未知选项诊断，应删除相应行。
+
+### IO 启动失败
+
+IO 线程通过 `SurfaceFault` 值报告错误，不直接改写终端画面展示产品提示。
+原生回调复制诊断后写入 SurfaceState；未附着窗口时也要接收。Surface 负责未接收时的文本兜底和绘制唤醒。
+异常返回后不能重新运行持有旧栈上回调数据的事件循环；部分启动失败必须同时关闭后端和释放 ThreadData。
+修改此路径时运行 `SurfaceFaultTests` 与 `GhosttySurfaceFaultUITests`，覆盖缺失/超限输入文件、失败后消息清理、关闭和配置修正后新建窗口。

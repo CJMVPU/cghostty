@@ -1,6 +1,6 @@
 import Cocoa
 
-enum QuickTerminalPosition: String {
+enum QuickTerminalPosition: String, Sendable {
     case top
     case bottom
     case left

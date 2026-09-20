@@ -1,7 +1,6 @@
 import Foundation
 import MetalKit
 import SwiftUI
-import GhosttyKit
 
 extension Ghostty {
     /// InspectableSurface is a type of Surface view that allows an inspector to be attached.
@@ -33,8 +32,8 @@ extension Ghostty {
                             .focused($inspectorFocus)
                             .focusedValue(\.ghosttySurfaceView, surfaceView)
                     }, onEqualize: {
-                        guard let surface = surfaceView.surface else { return }
-                        ghostty.splitEqualize(surface: surface)
+                        guard let surface = surfaceView.surfaceModel else { return }
+                        surface.equalizeSplits()
                     })
                 }
             }
@@ -57,20 +56,18 @@ extension Ghostty {
         private func onControlInspector(_ notification: SwiftUI.Notification) {
             // Determine our mode
             guard let modeAny = notification.userInfo?["mode"] else { return }
-            guard let mode = modeAny as? ghostty_action_inspector_e else { return }
+            guard let mode = modeAny as? Ghostty.Inspector.Visibility else { return }
 
             switch mode {
-            case GHOSTTY_INSPECTOR_TOGGLE:
+            case .toggle:
                 surfaceView.inspectorVisible = !surfaceView.inspectorVisible
 
-            case GHOSTTY_INSPECTOR_SHOW:
+            case .show:
                 surfaceView.inspectorVisible = true
 
-            case GHOSTTY_INSPECTOR_HIDE:
+            case .hide:
                 surfaceView.inspectorVisible = false
 
-            default:
-                return
             }
         }
     }
@@ -226,26 +223,26 @@ extension Ghostty {
 
         override func mouseDown(with event: NSEvent) {
             guard let inspector = self.inspector else { return }
-            let mods = Ghostty.ghosttyMods(event.modifierFlags)
-            inspector.mouseButton(GHOSTTY_MOUSE_PRESS, button: GHOSTTY_MOUSE_LEFT, mods: mods)
+            let mods = Ghostty.Input.Mods(nsFlags: event.modifierFlags)
+            inspector.mouseButton(.press, button: .left, mods: mods)
         }
 
         override func mouseUp(with event: NSEvent) {
             guard let inspector = self.inspector else { return }
-            let mods = Ghostty.ghosttyMods(event.modifierFlags)
-            inspector.mouseButton(GHOSTTY_MOUSE_RELEASE, button: GHOSTTY_MOUSE_LEFT, mods: mods)
+            let mods = Ghostty.Input.Mods(nsFlags: event.modifierFlags)
+            inspector.mouseButton(.release, button: .left, mods: mods)
         }
 
         override func rightMouseDown(with event: NSEvent) {
             guard let inspector = self.inspector else { return }
-            let mods = Ghostty.ghosttyMods(event.modifierFlags)
-            inspector.mouseButton(GHOSTTY_MOUSE_PRESS, button: GHOSTTY_MOUSE_RIGHT, mods: mods)
+            let mods = Ghostty.Input.Mods(nsFlags: event.modifierFlags)
+            inspector.mouseButton(.press, button: .right, mods: mods)
         }
 
         override func rightMouseUp(with event: NSEvent) {
             guard let inspector = self.inspector else { return }
-            let mods = Ghostty.ghosttyMods(event.modifierFlags)
-            inspector.mouseButton(GHOSTTY_MOUSE_RELEASE, button: GHOSTTY_MOUSE_RIGHT, mods: mods)
+            let mods = Ghostty.Input.Mods(nsFlags: event.modifierFlags)
+            inspector.mouseButton(.release, button: .right, mods: mods)
         }
 
         override func mouseMoved(with event: NSEvent) {
@@ -265,76 +262,49 @@ extension Ghostty {
             guard let inspector = self.inspector else { return }
 
             // Builds up the "input.ScrollMods" bitmask
-            var mods: Int32 = 0
+            let mods = Ghostty.Input.ScrollMods(
+                precision: event.hasPreciseScrollingDeltas, momentum: .init(event.momentumPhase))
 
-            let x = event.scrollingDeltaX
-            let y = event.scrollingDeltaY
-            if event.hasPreciseScrollingDeltas {
-                mods = 1
-            }
-
-            // Determine our momentum value
-            var momentum: ghostty_input_mouse_momentum_e = GHOSTTY_MOUSE_MOMENTUM_NONE
-            switch event.momentumPhase {
-            case .began:
-                momentum = GHOSTTY_MOUSE_MOMENTUM_BEGAN
-            case .stationary:
-                momentum = GHOSTTY_MOUSE_MOMENTUM_STATIONARY
-            case .changed:
-                momentum = GHOSTTY_MOUSE_MOMENTUM_CHANGED
-            case .ended:
-                momentum = GHOSTTY_MOUSE_MOMENTUM_ENDED
-            case .cancelled:
-                momentum = GHOSTTY_MOUSE_MOMENTUM_CANCELLED
-            case .mayBegin:
-                momentum = GHOSTTY_MOUSE_MOMENTUM_MAY_BEGIN
-            default:
-                break
-            }
-
-            // Pack our momentum value into the mods bitmask
-            mods |= Int32(momentum.rawValue) << 1
-
-            inspector.mouseScroll(x: x, y: y, mods: mods)
+            inspector.mouseScroll(x: event.scrollingDeltaX, y: event.scrollingDeltaY, mods: mods)
         }
 
         override func keyDown(with event: NSEvent) {
-            let action = event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS
+            let action: Ghostty.Input.Action = event.isARepeat ? .repeat : .press
             keyAction(action, event: event)
             self.interpretKeyEvents([event])
         }
 
         override func keyUp(with event: NSEvent) {
-            keyAction(GHOSTTY_ACTION_RELEASE, event: event)
+            keyAction(.release, event: event)
         }
 
         override func flagsChanged(with event: NSEvent) {
             let mod: UInt32
             switch event.keyCode {
-            case 0x39: mod = GHOSTTY_MODS_CAPS.rawValue
-            case 0x38, 0x3C: mod = GHOSTTY_MODS_SHIFT.rawValue
-            case 0x3B, 0x3E: mod = GHOSTTY_MODS_CTRL.rawValue
-            case 0x3A, 0x3D: mod = GHOSTTY_MODS_ALT.rawValue
-            case 0x37, 0x36: mod = GHOSTTY_MODS_SUPER.rawValue
+            case 0x39: mod = Ghostty.Input.Mods.caps.rawValue
+            case 0x38, 0x3C: mod = Ghostty.Input.Mods.shift.rawValue
+            case 0x3B, 0x3E: mod = Ghostty.Input.Mods.ctrl.rawValue
+            case 0x3A, 0x3D: mod = Ghostty.Input.Mods.alt.rawValue
+            case 0x37, 0x36: mod = Ghostty.Input.Mods.super.rawValue
             default: return
             }
 
             // The keyAction function will do this AGAIN below which sucks to repeat
             // but this is super cheap and flagsChanged isn't that common.
-            let mods = Ghostty.ghosttyMods(event.modifierFlags)
+            let mods = Ghostty.Input.Mods(nsFlags: event.modifierFlags)
 
             // If the key that pressed this is active, its a press, else release
-            var action = GHOSTTY_ACTION_RELEASE
-            if mods.rawValue & mod != 0 { action = GHOSTTY_ACTION_PRESS }
+            var action: Ghostty.Input.Action = .release
+            if mods.rawValue & mod != 0 { action = .press }
 
             keyAction(action, event: event)
         }
 
-        private func keyAction(_ action: ghostty_input_action_e, event: NSEvent) {
+        private func keyAction(_ action: Ghostty.Input.Action, event: NSEvent) {
             guard let inspector = self.inspector else { return }
             guard let key = Ghostty.Input.Key(keyCode: event.keyCode) else { return }
-            let mods = Ghostty.ghosttyMods(event.modifierFlags)
-            inspector.key(action, key: key.cKey, mods: mods)
+            let mods = Ghostty.Input.Mods(nsFlags: event.modifierFlags)
+            inspector.key(action, key: key, mods: mods)
         }
 
         // MARK: NSTextInputClient

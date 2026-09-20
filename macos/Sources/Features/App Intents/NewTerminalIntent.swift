@@ -1,6 +1,5 @@
 import AppKit
 import AppIntents
-import GhosttyKit
 
 /// App intent that allows creating a new terminal window or tab.
 struct NewTerminalIntent: AppIntent {
@@ -85,7 +84,7 @@ struct NewTerminalIntent: AppIntent {
             }
 
             parent = view
-        } else if let preferred = TerminalController.preferredParent {
+        } else if let preferred = ghostty.windowRegistry.preferredParent {
             parent = preferred.focusedSurface ?? preferred.surfaceTree.root?.leftmostLeaf()
         } else {
             parent = nil

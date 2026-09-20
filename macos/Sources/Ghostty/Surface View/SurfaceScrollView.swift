@@ -144,9 +144,24 @@ class SurfaceScrollView: NSView {
         fatalError("init(coder:) not implemented")
     }
 
-    isolated deinit {
+    private var ownsSurfacePresentation: Bool { surfaceView.superview === documentView }
+
+    private func stopObserving() {
         appearanceObservation?.cancel()
+        appearanceObservation = nil
         observers.forEach { NotificationCenter.default.removeObserver($0) }
+        observers.removeAll()
+    }
+
+    /// SwiftUI may dismantle the old wrapper after the destination has attached
+    /// the same terminal. Never detach or resize a new owner's presentation.
+    func dismantle() {
+        stopObserving()
+        if ownsSurfacePresentation { surfaceView.removeFromSuperview() }
+    }
+
+    isolated deinit {
+        stopObserving()
     }
 
     // The entire bounds is a safe area, so we override any default
@@ -156,6 +171,7 @@ class SurfaceScrollView: NSView {
 
     override func layout() {
         super.layout()
+        guard ownsSurfacePresentation else { return }
 
         // Fill entire bounds with scroll view
         scrollView.frame = bounds
@@ -188,6 +204,7 @@ class SurfaceScrollView: NSView {
     /// actual terminal rendering) always fills exactly the visible portion of the document view,
     /// so the renderer only needs to render what's currently on screen.
     private func synchronizeSurfaceView() {
+        guard ownsSurfacePresentation else { return }
         let visibleRect = scrollView.contentView.documentVisibleRect
         surfaceView.frame.origin = visibleRect.origin
     }
@@ -196,6 +213,7 @@ class SurfaceScrollView: NSView {
     /// frame because we do want to render the whole thing, but it will prevent our
     /// rows/cols from going into the non-content area.
     private func synchronizeCoreSurface() {
+        guard ownsSurfacePresentation else { return }
         // Only update the pty if we have a valid (non-zero) content size. The content size
         // can be zero when this is added early to a view, or to an invisible hierarchy.
         // Practically, this happened in the quick terminal.
@@ -250,6 +268,7 @@ class SurfaceScrollView: NSView {
     /// Converts the current scroll position to a row number and sends a `scroll_to_row` action
     /// to the terminal core. Only sends actions when the row changes to avoid IPC spam.
     private func handleLiveScroll() {
+        guard ownsSurfacePresentation else { return }
         // If our cell height is currently zero then we avoid a div by zero below
         // and just don't scroll (there's no where to scroll anyways). This can
         // happen with a tiny terminal.
@@ -266,8 +285,8 @@ class SurfaceScrollView: NSView {
         guard row != lastSentRow else { return }
         lastSentRow = row
 
-        // Use the keybinding action to scroll.
-        _ = surfaceView.surfaceModel?.perform(action: "scroll_to_row:\(row)")
+        // Send the native scroll command.
+        _ = surfaceView.surfaceModel?.scroll(toRow: row)
     }
 
     /// Handles scrollbar state updates from the terminal core.
@@ -282,6 +301,7 @@ class SurfaceScrollView: NSView {
     /// - `offset`: First visible row (0 = top of history)
     /// - `len`: Number of visible rows (viewport height)
     private func handleScrollbarUpdate(_ scrollbar: Ghostty.Action.Scrollbar) {
+        guard ownsSurfacePresentation else { return }
         surfaceView.scrollbar = scrollbar
         synchronizeScrollView()
     }

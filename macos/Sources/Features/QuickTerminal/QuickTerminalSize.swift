@@ -1,4 +1,4 @@
-import GhosttyKit
+import Foundation
 
 /// Represents the Ghostty `quick-terminal-size` configuration. See the documentation for
 /// that for more details on exactly how it works. Some of those docs will be reproduced in various comments
@@ -6,7 +6,7 @@ import GhosttyKit
 ///
 /// The size determines the size of the quick terminal along the primary and secondary axis. The primary and
 /// secondary axis is defined by the `quick-terminal-position`.
-struct QuickTerminalSize {
+nonisolated struct QuickTerminalSize: Sendable {
     let primary: Size?
     let secondary: Size?
 
@@ -15,28 +15,9 @@ struct QuickTerminalSize {
         self.secondary = secondary
     }
 
-    init(from cStruct: ghostty_config_quick_terminal_size_s) {
-        self.primary = Size(from: cStruct.primary)
-        self.secondary = Size(from: cStruct.secondary)
-    }
-
-    enum Size {
+    enum Size: Sendable {
         case percentage(Float)
         case pixels(UInt32)
-
-        init?(from cStruct: ghostty_quick_terminal_size_s) {
-            switch cStruct.tag {
-            case GHOSTTY_QUICK_TERMINAL_SIZE_NONE:
-                return nil
-            case GHOSTTY_QUICK_TERMINAL_SIZE_PERCENTAGE:
-                self = .percentage(cStruct.value.percentage)
-            case GHOSTTY_QUICK_TERMINAL_SIZE_PIXELS:
-                self = .pixels(cStruct.value.pixels)
-            default:
-                assertionFailure()
-                return nil
-            }
-        }
 
         func toPixels(parentDimension: CGFloat) -> CGFloat {
             switch self {

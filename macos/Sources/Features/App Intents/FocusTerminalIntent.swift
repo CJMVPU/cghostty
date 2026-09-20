@@ -1,6 +1,5 @@
 import AppKit
 import AppIntents
-import GhosttyKit
 
 struct FocusTerminalIntent: AppIntent {
     static let title: LocalizedStringResource = "Focus Terminal"
@@ -24,7 +23,7 @@ struct FocusTerminalIntent: AppIntent {
             throw GhosttyIntentError.surfaceNotFound
         }
 
-        guard let controller = BaseTerminalController.controller(owning: surfaceView) else {
+        guard let controller = surfaceView.windowRegistry.owner(of: surfaceView) else {
             return .result()
         }
 

@@ -9,7 +9,7 @@ extension NSEvent {
     ///
     /// The translationMods should be set to the modifiers used for actual character
     /// translation if available.
-    func ghosttyKeyEvent(
+    private func ghosttyKeyEvent(
         _ action: ghostty_input_action_e,
         translationMods: NSEvent.ModifierFlags? = nil
     ) -> ghostty_input_key_s {
@@ -45,6 +45,19 @@ extension NSEvent {
         }
 
         return key_ev
+    }
+
+    /// Native event value; string lifetime is managed only when the bridge calls C.
+    func terminalKeyEvent(
+        _ action: Ghostty.Input.Action,
+        translationMods: NSEvent.ModifierFlags? = nil,
+        text: String? = nil,
+        composing: Bool = false
+    ) -> Ghostty.Input.KeyEvent {
+        let value = ghosttyKeyEvent(action.cAction, translationMods: translationMods)
+        return .init(keyCode: value.keycode, action: action, text: text, composing: composing,
+                     mods: .init(cMods: value.mods), consumedMods: .init(cMods: value.consumed_mods),
+                     unshiftedCodepoint: value.unshifted_codepoint)
     }
 
     /// Returns the text to set for a key event for Ghostty.

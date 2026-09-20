@@ -1,8 +1,9 @@
+import Cocoa
 import GhosttyKit
 
 extension Ghostty {
     /// Owns one core terminal handle and exposes native terminal operations.
-    /// The AppKit SurfaceView owns this resource; its observable SurfaceState
+    /// The AppKit SurfaceView's lifecycle owns this resource; its SurfaceState
     /// contains presentation values and does not extend the handle's lifetime.
     final class Surface: Sendable {
         /// A surface is sendable because it is just a reference type. Using the surface in parameters
@@ -12,6 +13,7 @@ extension Ghostty {
         /// The core app must outlive every surface, including handles retained
         /// briefly by queued work after a window or controller has closed.
         private let app: Ghostty.App
+        let callbackContext: SurfaceCallbackContext
 
         /// Read the underlying C value for this surface. This is unsafe because the value will be
         /// freed when the Surface class is deinitialized.
@@ -20,9 +22,11 @@ extension Ghostty {
         }
 
         /// Initialize from the C structure.
-        init(cSurface: ghostty_surface_t, app: Ghostty.App) {
+        init(cSurface: ghostty_surface_t, app: Ghostty.App, callbackContext: SurfaceCallbackContext) {
             self.surface = cSurface
             self.app = app
+            self.callbackContext = callbackContext
+            callbackContext.surface = self
         }
 
         deinit {
@@ -30,7 +34,7 @@ extension Ghostty {
                 // The surface remains registered with the app and holds unretained
                 // userdata until it is freed. When already on the main thread, free
                 // it synchronously so teardown completes before we disappear.
-                withExtendedLifetime(app) { ghostty_surface_free(surface) }
+                withExtendedLifetime((app, callbackContext)) { ghostty_surface_free(surface) }
                 return
             }
             // deinit is not guaranteed to happen on the main actor and our API
@@ -40,10 +44,210 @@ extension Ghostty {
             // but that's okay.
             let surface = self.surface
             let app = self.app
+            let callbackContext = self.callbackContext
             Task.detached { @MainActor in
-                withExtendedLifetime(app) { ghostty_surface_free(surface) }
+                withExtendedLifetime((app, callbackContext)) { ghostty_surface_free(surface) }
             }
         }
+
+        /// Stop native delivery before the view disappears, while outstanding
+        /// operations may still retain the core handle and callback context.
+        @MainActor func detachView() {
+            callbackContext.view = nil
+            setFocus(false)
+            setVisible(false)
+        }
+
+        @MainActor func updateConfig(_ config: Ghostty.Config) {
+            guard let value = config.config else { return }
+            ghostty_surface_update_config(surface, value)
+        }
+
+        enum Command {
+            case newTab
+            case newWindow
+            case toggleSplitZoom
+            case toggleFullscreen
+            case copy
+            case paste
+            case pasteSelection
+            case selectAll
+            case startSearch
+            case searchSelection
+            case scrollToSelection
+            case toggleReadonly
+            case reset
+            case toggleInspector
+            case resetFontSize
+
+            fileprivate var cValue: ghostty_surface_command_e {
+                switch self {
+                case .newTab: GHOSTTY_COMMAND_NEW_TAB
+                case .newWindow: GHOSTTY_COMMAND_NEW_WINDOW
+                case .toggleSplitZoom: GHOSTTY_COMMAND_TOGGLE_SPLIT_ZOOM
+                case .toggleFullscreen: GHOSTTY_COMMAND_TOGGLE_FULLSCREEN
+                case .copy: GHOSTTY_COMMAND_COPY_TO_CLIPBOARD
+                case .paste: GHOSTTY_COMMAND_PASTE_FROM_CLIPBOARD
+                case .pasteSelection: GHOSTTY_COMMAND_PASTE_FROM_SELECTION
+                case .selectAll: GHOSTTY_COMMAND_SELECT_ALL
+                case .startSearch: GHOSTTY_COMMAND_START_SEARCH
+                case .searchSelection: GHOSTTY_COMMAND_SEARCH_SELECTION
+                case .scrollToSelection: GHOSTTY_COMMAND_SCROLL_TO_SELECTION
+                case .toggleReadonly: GHOSTTY_COMMAND_TOGGLE_READONLY
+                case .reset: GHOSTTY_COMMAND_RESET
+                case .toggleInspector: GHOSTTY_COMMAND_INSPECTOR
+                case .resetFontSize: GHOSTTY_COMMAND_RESET_FONT_SIZE
+                }
+            }
+        }
+
+        @MainActor @discardableResult
+        func perform(_ command: Command) -> Bool {
+            ghostty_surface_command(surface, command.cValue)
+        }
+
+        @MainActor @discardableResult
+        func changeFontSize(by delta: Float) -> Bool {
+            ghostty_surface_change_font_size(surface, delta)
+        }
+
+        @MainActor @discardableResult
+        func scroll(toRow row: Int) -> Bool {
+            guard row >= 0 else { return false }
+            return ghostty_surface_scroll_to_row(surface, UInt(row))
+        }
+
+        enum SplitDirection { case left, right, up, down }
+
+        @MainActor func split(_ direction: SplitDirection) {
+            let value: ghostty_action_split_direction_e = switch direction {
+            case .left: GHOSTTY_SPLIT_DIRECTION_LEFT
+            case .right: GHOSTTY_SPLIT_DIRECTION_RIGHT
+            case .up: GHOSTTY_SPLIT_DIRECTION_UP
+            case .down: GHOSTTY_SPLIT_DIRECTION_DOWN
+            }
+            ghostty_surface_split(surface, value)
+        }
+
+        @MainActor func moveSplitFocus(_ direction: SplitFocusDirection) {
+            ghostty_surface_split_focus(surface, direction.toNative())
+        }
+
+        @MainActor func resizeSplit(_ direction: SplitResizeDirection, amount: UInt16) {
+            ghostty_surface_split_resize(surface, direction.toNative(), amount)
+        }
+
+        @MainActor func equalizeSplits() { ghostty_surface_split_equalize(surface) }
+        @MainActor func requestClose() { ghostty_surface_request_close(surface) }
+        @MainActor func setFocus(_ focused: Bool) { ghostty_surface_set_focus(surface, focused) }
+        @MainActor func setVisible(_ visible: Bool) { ghostty_surface_set_occlusion(surface, visible) }
+        @MainActor func setSize(width: UInt32, height: UInt32) { ghostty_surface_set_size(surface, width, height) }
+        struct Size: Equatable, Sendable {
+            let columns: UInt16
+            let rows: UInt16
+            let pixels: CGSize
+            let cellPixels: CGSize
+        }
+        @MainActor var size: Size {
+            let value = ghostty_surface_size(surface)
+            return Size(columns: value.columns, rows: value.rows,
+                        pixels: CGSize(width: Int(value.width_px), height: Int(value.height_px)),
+                        cellPixels: CGSize(width: Int(value.cell_width_px), height: Int(value.cell_height_px)))
+        }
+        @MainActor func setDisplayID(_ id: UInt32) { ghostty_surface_set_display_id(surface, id) }
+        @MainActor func setContentScale(x: Double, y: Double) { ghostty_surface_set_content_scale(surface, x, y) }
+        @MainActor func setColorScheme(dark: Bool) {
+            ghostty_surface_set_color_scheme(surface, dark ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT)
+        }
+        @MainActor func sendPressure(stage: UInt32, pressure: Double) {
+            ghostty_surface_mouse_pressure(surface, stage, pressure)
+        }
+        @MainActor func setPreedit(_ text: String?) {
+            guard let text else {
+                ghostty_surface_preedit(surface, nil, 0)
+                return
+            }
+            text.withCString { ghostty_surface_preedit(surface, $0, UInt(text.utf8.count)) }
+        }
+        @MainActor var hasSelection: Bool { ghostty_surface_has_selection(surface) }
+        @MainActor var imePoint: NSRect {
+            var x = 0.0, y = 0.0, width = 0.0, height = 0.0
+            ghostty_surface_ime_point(surface, &x, &y, &width, &height)
+            return NSRect(x: x, y: y, width: width, height: height)
+        }
+
+        /// A copied value; the core allocation never crosses the bridge.
+        struct TextSnapshot {
+            let text: String
+            let range: NSRange
+            let topLeft: NSPoint
+        }
+
+        @MainActor private func readText(
+            _ read: (UnsafeMutablePointer<ghostty_text_s>) -> Bool
+        ) -> TextSnapshot? {
+            var value = ghostty_text_s()
+            guard read(&value) else { return nil }
+            defer { ghostty_surface_free_text(surface, &value) }
+            let bytes = UnsafeRawBufferPointer(start: value.text, count: Int(value.text_len))
+            return TextSnapshot(
+                text: String(bytes: bytes, encoding: .utf8) ?? "",
+                range: NSRange(location: Int(value.offset_start), length: Int(value.offset_len)),
+                topLeft: NSPoint(x: value.tl_px_x, y: value.tl_px_y))
+        }
+
+        @MainActor var selection: TextSnapshot? {
+            readText { ghostty_surface_read_selection(surface, $0) }
+        }
+        @MainActor var quickLookWord: TextSnapshot? {
+            readText { ghostty_surface_quicklook_word(surface, $0) }
+        }
+        @MainActor func readContents(viewport: Bool) -> String {
+            let tag = viewport ? GHOSTTY_POINT_VIEWPORT : GHOSTTY_POINT_SCREEN
+            let selection = ghostty_selection_s(
+                top_left: ghostty_point_s(tag: tag, coord: GHOSTTY_POINT_COORD_TOP_LEFT, x: 0, y: 0),
+                bottom_right: ghostty_point_s(tag: tag, coord: GHOSTTY_POINT_COORD_BOTTOM_RIGHT, x: 0, y: 0),
+                rectangle: false)
+            return readText { ghostty_surface_read_text(surface, selection, $0) }?.text ?? ""
+        }
+        @MainActor var font: CTFont? {
+            guard let value = ghostty_surface_quicklook_font(surface) else { return nil }
+            return Unmanaged<CTFont>.fromOpaque(value).takeRetainedValue()
+        }
+        @MainActor var inspector: Ghostty.Inspector? {
+            guard let value = ghostty_surface_inspector(surface) else { return nil }
+            return Ghostty.Inspector(cInspector: value)
+        }
+        @MainActor func freeInspector() { ghostty_inspector_free(surface) }
+
+        enum SearchDirection {
+            case next
+            case previous
+        }
+
+        /// The core copies query bytes before returning; no C pointer escapes.
+        /// Empty text clears matches while the native search UI stays open.
+        @MainActor @discardableResult
+        func search(_ query: String) -> Bool {
+            query.withCString { ghostty_surface_search(surface, $0, UInt(query.utf8.count)) }
+        }
+
+        /// Also notifies native UI to close even when no search is active.
+        @MainActor @discardableResult
+        func endSearch() -> Bool {
+            ghostty_surface_end_search(surface)
+        }
+
+        @MainActor @discardableResult
+        func navigateSearch(_ direction: SearchDirection) -> Bool {
+            ghostty_surface_navigate_search(surface, direction == .next ? GHOSTTY_SEARCH_NEXT : GHOSTTY_SEARCH_PREVIOUS)
+        }
+
+        @MainActor
+        var needsQuitConfirmation: Bool { ghostty_surface_needs_confirm_quit(surface) }
+
+        @MainActor
+        var processExited: Bool { ghostty_surface_process_exited(surface) }
 
         /// Send text to the terminal using paste semantics. This doesn't send key events, so keyboard
         /// shortcuts and other encodings do not take effect. Bracketed paste framing is applied when
@@ -77,8 +281,8 @@ extension Ghostty {
         /// encoding based on the complete key event information.
         ///
         /// - Parameter event: The key event to send to the terminal
-        @MainActor
-        func sendKeyEvent(_ event: Input.KeyEvent) {
+        @MainActor @discardableResult
+        func sendKeyEvent(_ event: Input.KeyEvent) -> Bool {
             event.withCValue { cEvent in
                 ghostty_surface_key(surface, cEvent)
             }
@@ -92,7 +296,7 @@ extension Ghostty {
         /// - Parameter event: The key event to check
         /// - Returns: The binding flags if a binding matches, or nil if no binding matches
         @MainActor
-        func keyIsBinding(_ event: ghostty_input_key_s) -> Input.BindingFlags? {
+        private func keyIsBinding(_ event: ghostty_input_key_s) -> Input.BindingFlags? {
             var flags = ghostty_binding_flags_e(0)
             guard ghostty_surface_key_is_binding(surface, event, &flags) else { return nil }
             return Input.BindingFlags(cFlags: flags)
@@ -136,8 +340,8 @@ extension Ghostty {
         /// The terminal processes this event according to its mouse handling configuration.
         ///
         /// - Parameter event: The mouse button event to send to the terminal
-        @MainActor
-        func sendMouseButton(_ event: Input.MouseButtonEvent) {
+        @MainActor @discardableResult
+        func sendMouseButton(_ event: Input.MouseButtonEvent) -> Bool {
             ghostty_surface_mouse_button(
                 surface,
                 event.action.cMouseState,

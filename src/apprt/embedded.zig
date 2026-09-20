@@ -2192,6 +2192,72 @@ pub const CAPI = struct {
         };
     }
 
+    export fn ghostty_surface_command(ptr: *Surface, command: c_int) bool {
+        const action: input.Binding.Action = switch (command) {
+            0 => .new_tab,
+            1 => .new_window,
+            2 => .toggle_split_zoom,
+            3 => .toggle_fullscreen,
+            4 => .{ .copy_to_clipboard = .default },
+            5 => .paste_from_clipboard,
+            6 => .paste_from_selection,
+            7 => .select_all,
+            8 => .start_search,
+            9 => .search_selection,
+            10 => .scroll_to_selection,
+            11 => .toggle_readonly,
+            12 => .reset,
+            13 => .{ .inspector = .toggle },
+            14 => .reset_font_size,
+            else => return false,
+        };
+        return ptr.core_surface.performBindingAction(action) catch |err| {
+            log.err("error performing native command err={}", .{err});
+            return false;
+        };
+    }
+
+    export fn ghostty_surface_change_font_size(ptr: *Surface, delta: f32) bool {
+        if (!std.math.isFinite(delta)) return false;
+        const action: input.Binding.Action = if (delta >= 0)
+            .{ .increase_font_size = delta }
+        else
+            .{ .decrease_font_size = -delta };
+        return ptr.core_surface.performBindingAction(action) catch return false;
+    }
+
+    export fn ghostty_surface_scroll_to_row(ptr: *Surface, row: usize) bool {
+        return ptr.core_surface.performBindingAction(.{ .scroll_to_row = row }) catch return false;
+    }
+
+    /// Search query memory is borrowed only until performBindingAction copies
+    /// it into the search mailbox. Native callers need not encode a binding.
+    export fn ghostty_surface_search(ptr: *Surface, text: [*]const u8, len: usize) bool {
+        return ptr.core_surface.performBindingAction(.{ .search = text[0..len] }) catch |err| {
+            log.err("error searching err={}", .{err});
+            return false;
+        };
+    }
+
+    export fn ghostty_surface_end_search(ptr: *Surface) bool {
+        return ptr.core_surface.performBindingAction(.end_search) catch |err| {
+            log.err("error ending search err={}", .{err});
+            return false;
+        };
+    }
+
+    export fn ghostty_surface_navigate_search(ptr: *Surface, direction: c_int) bool {
+        const nav: input.Binding.Action.NavigateSearch = switch (direction) {
+            0 => .next,
+            1 => .previous,
+            else => return false,
+        };
+        return ptr.core_surface.performBindingAction(.{ .navigate_search = nav }) catch |err| {
+            log.err("error navigating search err={}", .{err});
+            return false;
+        };
+    }
+
     /// Complete a clipboard read request started via the read callback
     /// with the representations that could be served and, if requested,
     /// the listing of available MIME types. All memory is borrowed for

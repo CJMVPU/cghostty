@@ -151,9 +151,10 @@ extension Ghostty.Input {
     /// `ghostty_input_key_s`
     struct KeyEvent {
         let action: Action
-        let key: Key
-        let text: String?
-        let composing: Bool
+        let key: Key?
+        let keyCode: UInt32
+        var text: String?
+        var composing: Bool
         let mods: Mods
         let consumedMods: Mods
         let unshiftedCodepoint: UInt32
@@ -168,6 +169,20 @@ extension Ghostty.Input {
             unshiftedCodepoint: UInt32 = 0
         ) {
             self.key = key
+            self.keyCode = UInt32(key.keyCode ?? 0)
+            self.action = action
+            self.text = text
+            self.composing = composing
+            self.mods = mods
+            self.consumedMods = consumedMods
+            self.unshiftedCodepoint = unshiftedCodepoint
+        }
+
+        /// Preserve unknown hardware codes and IME's synthetic code zero.
+        init(keyCode: UInt32, action: Action, text: String? = nil, composing: Bool = false,
+             mods: Mods = [], consumedMods: Mods = [], unshiftedCodepoint: UInt32 = 0) {
+            self.keyCode = keyCode
+            self.key = Key(keyCode: UInt16(truncatingIfNeeded: keyCode))
             self.action = action
             self.text = text
             self.composing = composing
@@ -188,6 +203,7 @@ extension Ghostty.Input {
             // Convert key from keycode
             guard let key = Key(keyCode: UInt16(cValue.keycode)) else { return nil }
             self.key = key
+            self.keyCode = cValue.keycode
 
             // Convert text
             if let textPtr = cValue.text {
@@ -220,7 +236,7 @@ extension Ghostty.Input {
         func withCValue<T>(execute: (ghostty_input_key_s) -> T) -> T {
             var keyEvent = ghostty_input_key_s()
             keyEvent.action = action.cAction
-            keyEvent.keycode = UInt32(key.keyCode ?? 0)
+            keyEvent.keycode = keyCode
             keyEvent.composing = composing
             keyEvent.mods = mods.cMods
             keyEvent.consumed_mods = consumedMods.cMods

@@ -148,6 +148,9 @@ config_conditional_state: configpkg.ConditionalState,
 /// This is used to determine if we need to confirm, hold open, etc.
 child_exited: bool = false,
 
+/// Sticky IO failure; a later child-exit event must not dismiss its explanation.
+surface_fault: ?@import("SurfaceFault.zig") = null,
+
 /// We maintain our focus state and assume we're focused by default.
 /// If we're not initially focused then apprts can call focusCallback
 /// to let us know.
@@ -919,9 +922,9 @@ pub fn needsConfirmQuit(self: *Surface) bool {
     // If the surface is in read-only mode, always require confirmation
     if (self.readonly) return true;
 
-    // If the child has exited, then our process is certainly not alive.
-    // We check this first to avoid the locking overhead below.
-    if (self.child_exited) return false;
+    // IO faults are published only after backend shutdown, so there is no
+    // running command to confirm, just as after a normal child exit.
+    if (self.child_exited or self.surface_fault != null) return false;
 
     // Check the configuration for confirming close behavior.
     return switch (self.config.confirm_close_surface) {
@@ -1060,6 +1063,8 @@ pub fn handleMessage(self: *Surface, msg: Message) !void {
         .close => self.close(),
 
         .child_exited => |v| self.childExited(v),
+
+        .surface_fault => |v| self.showSurfaceFault(v),
 
         .desktop_notification => |notification| {
             if (!self.config.desktop_notifications) {
@@ -1215,9 +1220,27 @@ fn selectionScrollTick(self: *Surface) !void {
     try self.queueRender();
 }
 
+fn showSurfaceFault(self: *Surface, fault: @import("SurfaceFault.zig")) void {
+    self.surface_fault = fault;
+    const handled = self.rt_app.performAction(.{ .surface = self }, .surface_fault, fault) catch false;
+    if (handled) return;
+
+    {
+        self.renderer_state.mutex.lockUncancelable(global.io());
+        defer self.renderer_state.mutex.unlock(global.io());
+        fault.renderFallback(self.renderer_state.terminal) catch |err| {
+            log.err("failed to render IO fault fallback err={}", .{err});
+        };
+    }
+    self.queueRender() catch |err| {
+        log.err("failed to queue IO fault render err={}", .{err});
+    };
+}
+
 fn childExited(self: *Surface, info: apprt.surface.Message.ChildExited) void {
     // Mark our flag that we exited immediately
     self.child_exited = true;
+    if (self.surface_fault != null) return;
 
     // If our runtime was below some threshold then we assume that this
     // was an abnormal exit and we show an error message.

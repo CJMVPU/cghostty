@@ -4,7 +4,6 @@ import Cocoa
 import CoreGraphics
 import Carbon
 import OSLog
-import GhosttyKit
 
 // Manages the event tap to monitor global events, currently only used for
 // global keybindings.
@@ -162,14 +161,14 @@ private func handleGlobalEvent(type: CGEventType, cgEvent: CGEvent) -> Unmanaged
 
     // We need an app delegate to get the Ghostty app instance
     guard let appDelegate = NSApplication.shared.delegate as? AppDelegate else { return result }
-    guard let ghostty = appDelegate.ghostty.app else { return result }
+    let ghostty = appDelegate.ghostty
 
     // We need an NSEvent for our logic below
     guard let event: NSEvent = .init(cgEvent: cgEvent) else { return result }
 
     // Build our event input and call ghostty
-    let key_ev = event.ghosttyKeyEvent(GHOSTTY_ACTION_PRESS)
-    if ghostty_app_key(ghostty, key_ev) {
+    let key_ev = event.terminalKeyEvent(.press)
+    if ghostty.sendKeyEvent(key_ev) {
         GlobalEventTap.logger.info("global key event handled event=\(event, privacy: .public)")
         return nil
     }

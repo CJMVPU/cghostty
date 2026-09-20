@@ -1,6 +1,6 @@
 import Cocoa
 
-enum QuickTerminalScreen {
+enum QuickTerminalScreen: Sendable {
     case main
     case mouse
     case menuBar

@@ -7,6 +7,7 @@ from pathlib import Path
 import plistlib
 import shutil
 import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
@@ -16,6 +17,8 @@ args = parser.parse_args()
 def check(condition, message):
     if not condition:
         raise SystemExit(message)
+
+subprocess.run([sys.executable, str(ROOT / 'scripts/check-bridge.py')], check=True)
 
 for name in ('src/apprt/gtk', 'src/apprt/gtk.zig', 'src/main_wasm.zig',
              'src/lib_vt.zig', 'src/terminal/c', 'include/ghostty',
@@ -58,6 +61,7 @@ for obj in app_configs:
 
 zig = shutil.which('zig')
 check(zig, 'The pinned Zig toolchain must be on PATH; see scripts/zig-toolchain.json')
+subprocess.run([zig, 'build', 'check-config-bridge'], cwd=ROOT, check=True)
 # Exercise the actual entry point: accepting an unsupported target is a failure.
 for target, diagnostic in (('x86_64-macos', 'Apple Silicon'), ('aarch64-linux', 'on and for macOS'),
                            ('aarch64-windows', 'on and for macOS'), ('aarch64-ios', 'on and for macOS'),

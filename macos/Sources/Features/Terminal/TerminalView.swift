@@ -1,5 +1,4 @@
 import SwiftUI
-import GhosttyKit
 import os
 
 /// This delegate is notified of actions and property changes regarding the terminal view. This
@@ -60,7 +59,7 @@ struct TerminalView: View {
                 VStack(spacing: 0) {
                     // If we're running in debug mode we show a warning so that users
                     // know that performance will be degraded.
-                    if Ghostty.info.mode == GHOSTTY_BUILD_MODE_DEBUG || Ghostty.info.mode == GHOSTTY_BUILD_MODE_RELEASE_SAFE {
+                    if Ghostty.info.showsDebugOverlays {
                         DebugBuildWarningView()
                     }
 

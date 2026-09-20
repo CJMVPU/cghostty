@@ -1,3 +1,96 @@
+## 0.1.5 本地构建与发布包（2026-09-20，交由用户发布）
+
+- 项目版本提升至 **0.1.5**，三个应用构建配置的构建号均提升至 **5**。完整重建 ReleaseFast Zig 核心及 ReleaseLocal 原生应用成功；日志 `/private/tmp/cghostty-0.1.5-release-build.log` 无 warning/error。应用路径 `macos/build/ReleaseLocal/cghostty.app`。
+- 实际应用的 CFBundleShortVersionString、CGhosttyVersion 及 CLI `+version` 均为 0.1.5，CFBundleVersion 为 5，最低 macOS 27.0。平台范围、arm64、原生配置桥、应用资源及完整签名检查通过；日志 `/private/tmp/cghostty-0.1.5-release-scope.log`。
+- 发布 ZIP：`artifacts/cghostty-0.1.5-macos-arm64.zip`，**12,665,550 字节**；SHA-256 为 `fa3e075d65ecde7ffc922bb0ff29b41a12c27d77df43dda41fc51bac74a41fb0`，同名 `.sha256` 校验通过。ZIP 内容完整性通过；解压后重新检查签名、arm64 和实际可执行文件版本全部通过。记录 `/private/tmp/cghostty-0.1.5-package-verification.json`。
+- 更新说明：`artifacts/cghostty-0.1.5-release-notes.md`。采用 ad-hoc 签名，未使用 Developer ID、未提交 Apple 公证。未替换已安装应用；按用户要求由用户在 GitHub 操作发布，本轮没有提交、推送、创建标签或 Release。当前包包含本地未提交架构改动，发布标签须与包含这些改动的源码提交对应。
+- 本次执行完整发布构建及包校验；功能测试结果沿用下方各轮记录，不将打包检查描述为新一轮全部功能验收。
+
+## 自动生成原生配置桥（2026-09-20，未发布）
+
+- 新增 `src/configgen.zig`，通过 Zig `Key` / `Config` 反射及 `c_get.CValue` 生成 `Ghostty.ConfigSchema.swift`。维护列表只选择原生消费的 53 个键，不重复维护字段类型；实际 C getter 与生成器使用同一存储类型函数。Swift `Key<Value>.read` 强制接收变量的类型，构造器限制在生成文件内。
+- `ConfigSnapshot` 与 `WindowConfig` 的全部配置读取迁入生成入口，删除手写字符串读取；原生默认值、显示枚举转换、字符串/列表复制及配置应用作用域保持原路径。可选数值仍写入标量存储，以返回 false 表示缺失；可选字符串仍可返回 true 并写入空指针，不混淆两种约定。
+- 修复 `abnormal-command-exit-runtime` 以 `UInt32?` 接收 C 整数的布局错误，改用 `CUnsignedInt`；原来写入整数不会正确更新 Swift Optional 的存在标记，可能忽略自定义值。新增参数化测试覆盖 **0、1、250、2500、UInt32.max**，并验证重载为零。核心新增缺失可选数值不改输出、空字符串指针成功返回、不支持类型不改输出的语义测试。
+- `zig build update-config-bridge` 更新生成文件；`zig build check-config-bridge` 逐字节校验。正常核心构建、核心测试、原生 `--skip-core` 构建和范围/CI 检查接入校验。使用临时副本将整数键改成 Bool 后，校验明确失败并提示重新生成；记录 `/private/tmp/cghostty-configgen-negative.log`。桥接检查只允许生成文件调用 `ghostty_config_get`，且类型化读取只允许快照解码器使用。
+- 核心配置回归 **258/258 通过、89/89 构建步骤**，日志 `/private/tmp/cghostty-configgen-core-tests-v2.log`。Debug 核心已重建用于本轮原生与桌面测试，日志 `/private/tmp/cghostty-configgen-core-build.log`。
+- 完整原生测试 **275 通过、1 项现有基准测试跳过、0 失败**，结果 `/private/tmp/cghostty-configgen-native.xcresult`，摘要 `/private/tmp/cghostty-configgen-native-summary.json`。桌面配置重载与外观测试 **2/2 通过**，结果 `/private/tmp/cghostty-configgen-ui-v2.xcresult`，摘要 `/private/tmp/cghostty-configgen-ui-summary.json`。两份摘要运行时警告均为空。
+- 桌面首轮模拟重载快捷键未触发更新；最终用实际 Reload Configuration 菜单触发并等待标题/像素状态，保留新快捷键创建窗口的独立断言。该结果证明菜单重载、既有/新窗口配置和深浅色转换，不宣称验收了重载快捷键在所有键盘布局下的行为。
+- 5 个 Swift 文件严格 lint、Zig 格式、Swift 6、依赖版本、平台范围、126 个原生文件的桥接边界与 diff 检查通过。生成的是原生使用字段的类型化读取入口，不是完整 C 头文件、配置解析器、显示枚举或全部核心配置的自动生成。
+- 版本仍为 **0.1.4**；本轮改动留在本地，未提交、推送、发布或替换已安装应用。
+
+## SurfaceView 生命周期与移动、撤销恢复（2026-09-20，未发布）
+
+- 新增 `SurfaceLifecycle`，集中创建、最终释放与窗口事件监听。暂时离开窗口时移除本地事件监听并清除焦点/可见状态；重新附着时刷新窗口、显示器、缩放与可见状态。移动、关闭后的撤销继续使用同一核心会话，不在 SwiftUI 重建时重新启动 shell。
+- 核心 userdata 改为句柄持有的 `SurfaceCallbackContext`，弱引用视图与句柄；主线程和延迟主线程释放均保持 App 与上下文存活直到 core free 完成。最终视图释放先取消搜索、剪贴板确认、观察与计时器，再清除回调视图并释放生命周期。迟到回调可安全忽略，失去视图的剪贴板确认会拒绝完成。原生 Metal 创建仍单独收到真实 NSView。
+- `SurfaceRepresentable` 显式拆除滚动容器并取消观察；旧容器只有在视图仍属于自己的 document view 时才能布局、滚动或拆除，防止移动后的旧通知修改新窗口尺寸或移除新窗口视图。创建时的原生显示配置改从所属 App 读取。
+- 新增 **5 项原生测试**：跨窗口附着保留核心身份并拆除监听；旧容器不能回写尺寸或移除已迁移视图；视图已释放但句柄仍存活时的迟到关闭/标题/剪贴板回调；重复释放与禁止重新附着；创建配置按 App 隔离。
+- 最终完整原生回归 **274 项通过、1 项现有基准测试跳过、0 失败**，运行时警告为空。包含撤销焦点修复的最终结果 `/private/tmp/cghostty-lifecycle-native-final.xcresult`，摘要 `/private/tmp/cghostty-lifecycle-native-final-summary.json`。
+- 新增 **2 项桌面撤销测试**，通过原 shell 的变量确认恢复的是原会话，并立即输入确认焦点。首次分屏测试发现关闭时未记录原焦点，恢复树后输入丢失；补充关闭操作的 `moveFocusFrom` 后，标签与分屏 **2/2 通过**。结果 `/private/tmp/cghostty-lifecycle-undo-ui-v2.xcresult`，摘要 `/private/tmp/cghostty-lifecycle-undo-ui-summary.json`，运行时警告为空。测试没有通过额外点击掩盖焦点恢复问题。
+- 既有标签布局、全屏、跨窗口移动、合并和分屏缩放 **5/5 通过**，结果 `/private/tmp/cghostty-lifecycle-tabs.xcresult`；搜索、命令面板、标签会话与焦点 **2/2 通过**，结果 `/private/tmp/cghostty-lifecycle-observation.xcresult`。对应摘要文件为同名前缀的 `-summary.json`。
+- 分屏拖出新窗口的位置与尺寸 **1/1 通过**，结果 `/private/tmp/cghostty-lifecycle-drag.xcresult`，摘要 `/private/tmp/cghostty-lifecycle-drag-summary.json`。四组桌面回归合计 **10/10 通过**，运行时警告均为空。
+- 严格 SwiftLint、Swift 6、依赖版本、平台范围、126 个原生文件的桥接边界与 diff 检查通过。架构与维护文档同步创建、附着、最终释放及回调上下文契约。应用退出后的磁盘恢复仍按原设计创建新会话，未声称恢复旧进程。
+- 本轮修改原生代码，使用上一轮已重建的 Debug 核心；未把这轮原生回归描述为新的 Zig 或光标性能测试。版本仍为 **0.1.4**，代码留在本地，未提交、推送、发布或替换已安装应用。
+
+## SurfaceFault 与 IO 失败生命周期（2026-09-20，未发布）
+
+- 新增 `SurfaceFault`：PTY 不可用、输入文件失败、其他 IO 失败三类，保留实际 Zig 错误码。IO 线程通过既有 app mailbox 传递值，不再分配展示字符串或直接改写终端画面。内部 C action 追加枚举值；原生适配器同步复制错误码，跨线程消息不含借用资源。
+- Surface 记录故障并请求原生展示；界面未接收时，在 renderer-state 锁内写入终端文本兜底，解锁后请求绘制。原生 SurfaceState 接收尚未附着窗口的错误，SurfaceFaultView 显示原因、错误码和关闭按钮。后来的子进程退出不自动关闭已有故障；IO 已停止时不再提示存在运行中的命令。只读模式原有关闭确认仍保留。
+- 超限输入文件测试暴露异常清理缺陷：后端已启动并注册进程/计时器回调后返回失败，旧事件循环继续访问已退出栈中的 completion，实际发生 `EXC_BAD_ACCESS`。修复为丢弃旧循环，使用仅处理消息释放与停止信号的循环；部分启动失败同时执行 backend shutdown 和 ThreadData deinit，避免旧回调和资源泄漏。
+- 最终核心定向回归 **84/84 通过**，**85/85 构建步骤**：错误分类、稳定 C 错误码、C 枚举匹配、清空旧画面/隐藏光标/可见文本兜底，以及命令启动回归。日志 `/private/tmp/cghostty-fault-core-final.log`。更新后的 Debug 核心已重建并用于原生与桌面测试。
+- 新增 **3 项原生测试**（输入失败包含缺失、超过 10 MiB 两组）：诊断字符串复制及跨线程使用；真实 IO 故障抵达未附着原生视图，原生接收后不污染终端内容；故障后连续 200 次输入超过消息队列容量仍可清理，配置消息正常释放；交付前关闭可释放视图和 App。完整原生回归 **269 通过、1 项现有基准测试跳过、0 失败**，运行时警告为空。结果 `/private/tmp/cghostty-fault-native-final.xcresult`，摘要 `/private/tmp/cghostty-fault-native-summary.json`。
+- 新增桌面回归 **2/2 通过**：缺失文件显示明确错误且按钮可关闭；通过菜单重载修正配置后，新窗口正常启动，原错误保留，并能单独关闭失败窗口。测试使用独立配置和默认值域。恢复用例最终通过实际菜单标题定位重载，并先置前被新窗口遮挡的旧窗口再点击关闭，不使用固定延时。结果 `/private/tmp/cghostty-fault-ui-final.xcresult`，摘要 `/private/tmp/cghostty-fault-ui-summary.json`，运行时警告为空。
+- SwiftLint 严格检查、Zig 格式、Swift 6、版本记录、平台范围、125 个原生文件的桥接边界和 diff 检查通过；架构文档同步错误交付和异常释放契约。同步 Surface 创建失败与普通进程退出仍沿用原路径，不宣称统一了所有错误类型。
+- 改动留在本地；版本仍为 **0.1.4**，本轮未提交、推送、发布或替换已安装应用。
+
+## 窗口注册表与应用级窗口状态收尾（2026-09-20，未发布）
+
+- `WindowRegistry` 增加普通窗口弱注册、按 App 过滤的 AppKit 顺序列表、弱 last-main 与独立层叠位置。保留未选中标签窗口；普通窗口强引用保活仍由 `openControllers` 负责，快速终端仍独立持有，不引入 App 与控制器的循环引用。
+- `TerminalController` 删除静态窗口列表、最近主窗口和层叠位置；加载时注册、关闭时注销。已关闭但被撤销或待执行任务持有的控制器不再成为默认父窗口；延迟 focus/cascade 对已关闭窗口无效。最后一个窗口关闭会清空位置状态，其他 App 的 key window 和面板不能污染该状态。
+- AppDelegate、系统服务、AppleScript、App Intent、命令面板统一使用所属 App 的注册表；核心“关闭全部窗口”回调从传入核心 App 找到对应原生 App。窗口模板也读取其所属 App 配置。
+- 新增 **6 项原生测试**：列表/父窗口按 App 隔离；关闭仍被持有的最近主窗口；固定位置、外来窗口和关闭后排布保护；外来 key window 不改变位置；核心 close-all 仅关闭发起 App；窗口关闭后控制器和 App 释放。初版测试使用空分屏树触发现有自动关闭规则，改为真实隔离 shell 后通过。
+- 最终完整原生回归 **266 项通过、1 项现有基准测试跳过、0 失败**，运行时警告为空。结果 `/private/tmp/cghostty-window-registry-native-final.xcresult`，摘要 `/private/tmp/cghostty-window-registry-native-summary.json`。
+- 新增实际桌面测试 **2/2 通过**：连续窗口按 30pt 错位、关闭最近窗口后继续排布；关闭最近窗口后新标签加入剩余窗口。独立配置/默认值域，等待实际窗口数量与位置，不增加固定延时。结果 `/private/tmp/cghostty-window-registry-ui.xcresult`，摘要 `/private/tmp/cghostty-window-registry-ui-summary.json`，运行时警告为空。
+- 既有标签栏、分屏缩放、全屏、跨窗口移动和合并回归 **5/5 通过**。结果 `/private/tmp/cghostty-window-registry-tabs.xcresult`，摘要 `/private/tmp/cghostty-window-registry-tabs-summary.json`，运行时警告为空。
+- 本轮 10 个改动 Swift 文件的严格 lint、124 个原生文件的桥接边界检查、Swift 6、版本记录、平台范围与 diff 检查通过。文档同步窗口状态归属。本轮未修改 Zig，沿用已验证的 Debug 核心；版本仍为 **0.1.4**，本轮改动未提交、推送或发布。
+
+## 原生配置句柄与完整界面快照（2026-09-20，未发布）
+
+- 新增 `Ghostty.ConfigHandle`，集中拥有配置分配、按原顺序加载文件/CLI/递归文件、finalize、clone、诊断和释放。`Ghostty.Config` 以一个 State 同时发布句柄与快照；删除原始指针替换入口和含混的 `clone(config:)` 采用语义。快捷键查询继续使用同代核心句柄。
+- 新增不可变、Sendable 的 `Ghostty.ConfigSnapshot`：覆盖原 Config 的 **47 个原生配置读取项**，加已有 **6 个窗口字段**及加载/诊断状态。字符串、命令面板项、颜色和尺寸均为自有 Swift 值；旧快照不持有句柄。Config 保留的原生属性仅转发快照，不再逐次调用 C getter。
+- App、普通窗口、快速终端、Surface、玻璃背景的 DerivedConfig 显式接收快照。全局应用配置现在先发布到 App，再发送同步通知，避免同步监听者读取旧 App 配置；局部 Surface 配置仍独立，隔离测试扩展至背景透明度和窗口主题。
+- 快照初始化覆盖未加载配置时，测试暴露系统目录颜色不能直接调用 `getHue` 的异常；`NSColor.darken` 先转换到 sRGB，再取颜色分量。未加载快照及原有 unfinalized 配置回归最终均通过。测试中同步通知的载荷先提取为 Sendable 的 Config 引用后再进入 MainActor，符合 Swift 6 检查。
+- 新增 **6 项原生配置快照测试**：跨线程/重载/释放后的字符串、命令与诊断存活；旧句柄及时释放；clone 独立句柄与快捷键；未加载默认值；整代替换仅通知一次；App 发布先于同步通知。玻璃背景测试改为真实配置，不再覆盖 facade 属性制造另一份状态。
+- 完整原生回归 **260 项通过、1 项现有基准测试跳过、0 失败**；运行时警告为空。结果 `/private/tmp/cghostty-snapshot-native-v4.xcresult`，摘要 `/private/tmp/cghostty-snapshot-native-summary.json`。
+- 新增桌面配置回归 **2/2 通过**：重载更新现有窗口标题、新快捷键打开的新窗口继承配置，以及实际原生窗口从深色切换到浅色。使用状态/像素谓词等待结果，不增加固定延时。测试使用独立临时配置和默认值域，不修改用户系统外观；结果 `/private/tmp/cghostty-snapshot-ui.xcresult`，摘要 `/private/tmp/cghostty-snapshot-ui-summary.json`，运行时警告为空。
+- 桥接检查增加配置约束：C 配置值查询仅允许快照解码器，分配/克隆/加载/释放仅允许 ConfigHandle。**124 个原生文件**边界检查、SwiftLint 严格检查、Swift 6、版本记录、平台范围和 diff 空白检查通过。
+- 本轮未改 Zig 配置解析规则或渲染器；核心沿用上一轮已验证产物，本轮不重复宣称新的核心测试结果。自动生成配置桥仍为后续工作。改动保持本地，版本仍为 **0.1.4**，未提交、推送或发布。
+
+## 原生桥接集中收尾（2026-09-20，未发布）
+
+- 固定菜单命令、新建窗口/标签、分屏和焦点/缩放、字体大小、复制粘贴、只读、搜索、重置和 Inspector 统一经过现有 `Ghostty.Surface`。新增内部固定命令、字体和滚动入口，直接调用 Zig 类型化绑定动作；用户 keybinding、AppleScript、App Intent 和配置命令面板保留动态入口。
+- 键盘、鼠标、压力、预编辑、焦点、可见性、尺寸、缩放、显示器和主题状态均经资源桥接。键盘/鼠标消费 Bool 保留；键码不经枚举转换丢弃未知值，提交文本保留合成键码 0。文本读取在桥接中复制并成对释放，Quick Look 字体引用也在桥接内管理。SurfaceView 改为接收 App，删除旧裸 App 初始化及裸 Surface 属性。
+- `Ghostty.App` 保持资源创建/释放、tick、配置和 Surface 创建职责；反向 C 回调集中到 `Ghostty.App+Callbacks.swift`。请求载荷同步复制，异步唤醒保持弱持有。`Surface.ClipboardReadRequest` 在调用核心前清空请求指针，重复完成/拒绝无效；窗口销毁仍由确认请求显式取消。
+- Helpers 中剪贴板/颜色/快速终端尺寸转换及 Inspector、鼠标样式、标签目标和渲染健康通知也迁入桥接。业务、界面、Helpers、AppDelegate 不再导入 GhosttyKit。新增 `scripts/check-bridge.py` 并接入平台范围检查：**124 个原生文件通过**；内部 Ghostty 适配文件和 `App/main.swift` 启动入口为明确边界。
+- 全量原生测试：**254 项通过、1 项基准测试跳过、0 失败**，`runtimeWarnings` 为空。结果：`/private/tmp/cghostty-bridge-native-final.xcresult`；摘要：`/private/tmp/cghostty-bridge-native-summary.json`。新增 5 项测试覆盖未知键码/中文提交载荷、复制文本跨核心变更与释放、预编辑与连续重复键经 PTY、无效字体增量/固定命令，以及真实 OSC 52 剪贴板请求在视图销毁时取消并释放资源。
+- 初次专项输入测试依赖 `NSApp.currentEvent`，无事件时 AppKit 按既有契约忽略提交；修正测试为通过实际桥接入口提交合成键码 0 后，全量通过。此项验证桥接和 PTY，不等同于所有系统输入法的人工验收。
+- 核心嵌入接口与绑定回归：**158/158**，**85/85 构建步骤**，日志 `/private/tmp/cghostty-bridge-core.log`。
+- 真实桌面：窗口/标签/搜索/分屏/命令面板及焦点 **2/2**；标签栏布局、分屏缩放、全屏及跨窗口标签流程 **5/5**，均无运行时警告。结果：`/private/tmp/cghostty-bridge-ui.xcresult`、`/private/tmp/cghostty-bridge-tabs.xcresult`。最后 Helpers 适配文件抽取后重新编译并运行标签套件通过。
+- SwiftLint 严格检查、Zig 格式、Swift 6 配置、依赖版本、平台范围和 diff 空白检查通过。结构和维护约定同步至 `ARCHITECTURE.md`、`UI_ARCHITECTURE.md`、`HACKING.md`。
+- 代码留在本地工作区，版本仍为 **0.1.4**；本轮未提交、推送或发布，也未替换已安装应用。没有将桥接回归描述为新的光标动画性能或所有 Vim/输入法场景验收。
+
+## 架构边界第一轮（2026-09-20，未发布）
+
+- 新增 `ARCHITECTURE.md`，记录 App / Surface / 窗口的强弱引用、主线程 / IO / 渲染线程边界和释放顺序；更新原生 UI 与开发约定。
+- `WindowRegistry` 由各 App 持有，使用弱键/弱值索引；分屏树变更同步归属。移除静态 Surface 索引和归属查询中的 AppKit 窗口扫描，保留普通窗口 `openControllers` 的强引用存活机制，以及快速终端的独立持有。原生命令、App Intent、AppleScript、命令面板和剪贴板确认均查询创建该 Surface 的 App 索引。
+- 归属专项 **15/15** 通过，增加跨 App 隔离、目标先注册而源稍后注销、树恢复和释放检查。既有窗口保活、脱离 AppKit 后命令路由、跨窗口迁移与旧 owner 失效测试仍通过。结果：`/private/tmp/cghostty-registry-debug.xcresult`。
+- 在现有 `Ghostty.Surface` 增加搜索、结束搜索、结果导航及退出状态接口；搜索使用三个内部 C 入口，直接调用现有 Zig 强类型动作。清空查询、关闭搜索和双向导航覆盖中文、换行、内含零字节；查询内存在同步调用内复制到搜索消息。专项套件 **16/16** 通过（参数化搜索包含三组输入）：`/private/tmp/cghostty-bridge.xcresult`。用户 keybinding 字符串和尚未迁移的其他原生命令继续保留。
+- 配置快照试点为 `Ghostty.Config.window` 的六项值：横/纵位置、步进缩放、鼠标跟随焦点、最大化、标题字体。不可变值拥有复制后的字符串；重载/释放原句柄后旧快照仍有效。每个有效配置对象独立生成快照，局部 Surface 配置不会覆盖 App 快照。C 句柄仍由现有 Config 管理，Zig DerivedConfig 和线程消息保持原有所有权。
+- 完整原生回归 **249 项通过、1 项现有 Benchmarks 示例跳过、0 失败**，`runtimeWarnings` 为空：`/private/tmp/cghostty-config-native-v3.xcresult`。初次 ReleaseLocal 测试因未启用 enable-testing 而停止，改为匹配 Debug 核心后通过；新局部配置测试首次未等待主队列应用通知，修正为等待实际队列交付后通过，没有增加固定延时。
+- `FrameScheduler.zig` 仅提取现有纯调度策略，保留只绘制/更新后绘制、8ms 最小间隔、Kitty 绝对截止时间与可见性。新增空闲停帧、持续光标不饿死图片动画、过期截止时间和可见性回归。计时器、DisplayLink、时钟与锁仍由原对象管理。核心定向回归 **300/300**，构建步骤 **85/85**：`/private/tmp/cghostty-architecture-core.log`。
+- 最终核心已重建并用于桌面测试。分屏/搜索/面板/标签会话 **2/2**、标签布局/全屏/跨窗口拖动/合并 **5/5**、分屏拖出 **1/1** 通过；补齐上一项按钮与隐藏搜索菜单的桥接后，搜索交互复验 **1/1** 通过。四份结果的 `runtimeWarnings` 均为空。结果：`/private/tmp/cghostty-architecture-ui.xcresult`、`/private/tmp/cghostty-architecture-tabs.xcresult`、`/private/tmp/cghostty-architecture-drag.xcresult`、`/private/tmp/cghostty-architecture-search-final.xcresult`。
+- 严格 SwiftLint **180 个文件、0 问题**；最后两个搜索调用点再次检查通过。Zig 格式、Swift 6、版本记录、平台范围和 diff 空白检查通过。测试输出有系统 linkd 服务连接日志，未将其宣称为全系统零日志。
+- 本轮是本地边界改造，不是完整配置桥生成、通用 MotionEngine、Surface 大拆分或新的发行版；版本号仍为 0.1.4，未替换已安装应用、未推送或发布。未把桌面特定流程等同于所有输入法、全部快速终端/多显示器恢复场景验收，也未声称性能提升。
+
 ## 0.1.4 方向光标与 Vim 连续搜索（2026-09-20）
 
 - 追加回归覆盖新目标在旧目标后方、但仍在当前显示位置前方的情况：按实际显示位置判断领跑方向，计时仍采用本次逻辑输入距离。

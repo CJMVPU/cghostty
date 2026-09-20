@@ -376,7 +376,10 @@ pub fn threadEnter(
 
     // Setup our backend
     try self.backend.threadEnter(self.alloc, self, data);
-    errdefer self.backend.threadExit(data);
+    errdefer {
+        self.backend.threadExit(data);
+        data.deinit();
+    }
 
     // If we have inputs, then queue them all up.
     for (inputs orelse &.{}) |input| switch (input) {

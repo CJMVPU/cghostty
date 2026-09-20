@@ -260,7 +260,7 @@ extension NSApplication {
 
             parentWindow = resolvedWindow
         } else {
-            parentWindow = TerminalController.preferredParent?.window
+            parentWindow = appDelegate.ghostty.windowRegistry.preferredParent?.window
         }
 
         guard let createdController = TerminalController.newTab(

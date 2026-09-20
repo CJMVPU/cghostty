@@ -1,6 +1,5 @@
 import Foundation
 import AppKit
-import GhosttyKit
 
 nonisolated extension NSColor {
     var isLightColor: Bool {
@@ -21,23 +20,14 @@ nonisolated extension NSColor {
 
     func darken(by amount: CGFloat) -> NSColor {
         var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-        self.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+        // Catalog/system colors must be resolved before extracting components.
+        guard let rgb = usingColorSpace(.sRGB) else { return self }
+        rgb.getHue(&h, saturation: &s, brightness: &b, alpha: &a)
         return NSColor(
             hue: h,
             saturation: s,
             brightness: min(b * (1 - amount), 1),
             alpha: a
         )
-    }
-}
-
-// MARK: Ghostty Types
-nonisolated extension NSColor {
-    /// Create a color from a Ghostty color.
-    convenience init(ghostty: ghostty_config_color_s) {
-        let red = Double(ghostty.r) / 255
-        let green = Double(ghostty.g) / 255
-        let blue = Double(ghostty.b) / 255
-        self.init(red: red, green: green, blue: blue, alpha: 1)
     }
 }

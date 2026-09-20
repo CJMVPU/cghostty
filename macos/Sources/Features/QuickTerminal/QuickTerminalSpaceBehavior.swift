@@ -1,7 +1,7 @@
 import Foundation
 import Cocoa
 
-enum QuickTerminalSpaceBehavior {
+enum QuickTerminalSpaceBehavior: Sendable {
     case remain
     case move
 
