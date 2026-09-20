@@ -1,6 +1,6 @@
 .{
     .name = .cghostty,
-    .version = "0.1.1",
+    .version = "0.1.2",
     .paths = .{""},
     .fingerprint = 0xc26add652b9f425d,
     .minimum_zig_version = "0.16.0",
@@ -54,7 +54,7 @@
         .libintl = .{ .path = "./pkg/libintl", .lazy = true },
         .libpng = .{ .path = "./pkg/libpng", .lazy = true },
         .macos = .{ .path = "./pkg/macos", .lazy = true },
-        .oniguruma = .{ .path = "./pkg/oniguruma", .lazy = true },
+        .pcre2 = .{ .path = "./pkg/pcre2", .lazy = true },
         .simdutf = .{ .path = "./pkg/simdutf", .lazy = true },
         .wuffs = .{ .path = "./pkg/wuffs", .lazy = true },
         .zlib = .{ .path = "./pkg/zlib", .lazy = true },

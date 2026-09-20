@@ -58,7 +58,7 @@ pub extern fn ImGui_DockBuilderCopyNode(src_node_id: c.ImGuiID, dst_node_id: c.I
 pub extern fn ImGui_DockBuilderCopyWindowSettings(src_name: [*:0]const u8, dst_name: [*:0]const u8) callconv(.c) void;
 pub extern fn ImGui_DockBuilderFinish(node_id: c.ImGuiID) callconv(.c) void;
 
-// Extension functions from ext.cpp
+// Extension functions from dcimgui_ext.cpp
 pub const ext = struct {
     pub extern fn ImFontConfig_ImFontConfig(self: *c.ImFontConfig) callconv(.c) void;
     pub extern fn ImGuiStyle_ImGuiStyle(self: *c.ImGuiStyle) callconv(.c) void;

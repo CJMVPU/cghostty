@@ -22,26 +22,12 @@ protocol TerminalViewDelegate: AnyObject {
     func performSplitAction(_ action: TerminalSplitOperation)
 }
 
-/// The view model is a required implementation for TerminalView callers. This contains
-/// the main state between the TerminalView caller and SwiftUI. This abstraction is what
-/// allows AppKit to own most of the data in SwiftUI.
-protocol TerminalViewModel: ObservableObject {
-    /// The tree of terminal surfaces (splits) within the view. This is mutated by TerminalView
-    /// and children. This should be @Published.
-    var surfaceTree: SplitTree<Ghostty.SurfaceView> { get set }
-
-    /// The command palette state.
-    var commandPaletteIsShowing: Bool { get set }
-
-    /// The update overlay should be visible.
-}
-
 /// The main terminal view. This terminal view supports splits.
-struct TerminalView<ViewModel: TerminalViewModel>: View {
-    @ObservedObject var ghostty: Ghostty.App
+struct TerminalView: View {
+    let ghostty: Ghostty.App
 
     // The required view model
-    @ObservedObject var viewModel: ViewModel
+    @Bindable var viewModel: TerminalWindowState
 
     // An optional delegate to receive information about terminal changes.
     weak var delegate: (any TerminalViewDelegate)?
@@ -81,7 +67,7 @@ struct TerminalView<ViewModel: TerminalViewModel>: View {
                     TerminalSplitTreeView(
                         tree: viewModel.surfaceTree,
                         action: { delegate?.performSplitAction($0) })
-                        .environmentObject(ghostty)
+                        .environment(ghostty)
                         .ghosttyLastFocusedSurface(lastFocusedSurface)
                         .focused($focused)
                         .onAppear { self.focused = true }
@@ -114,8 +100,6 @@ struct TerminalView<ViewModel: TerminalViewModel>: View {
                         self.delegate?.performAction(action, on: surfaceView)
                     }
                 }
-
-                // Show update information above all else.
 
             }
             .frame(maxWidth: .greatestFiniteMagnitude, maxHeight: .greatestFiniteMagnitude)

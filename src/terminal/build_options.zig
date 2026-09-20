@@ -13,15 +13,6 @@ pub const Options = struct {
     /// The target artifact to build. This will gate some functionality.
     artifact: Artifact,
 
-    /// Whether Oniguruma regex support is available. If this isn't
-    /// available, some features will be disabled. This may be outdated,
-    /// but the specific disabled features are:
-    ///
-    /// - Kitty graphics protocol
-    /// - Tmux control mode
-    ///
-    oniguruma: bool,
-
     /// Whether to build SIMD-accelerated code paths. This pulls in more
     /// build-time dependencies and adds libc as a runtime dependency,
     /// but results in significant performance improvements.
@@ -278,12 +269,11 @@ pub const Options = struct {
         const opts = b.addOptions();
         opts.addOption(Artifact, "artifact", self.artifact);
         opts.addOption(bool, "c_abi", self.c_abi);
-        opts.addOption(bool, "oniguruma", self.oniguruma);
         opts.addOption(bool, "simd", self.simd);
         opts.addOption(bool, "slow_runtime_safety", self.slow_runtime_safety);
 
-        // These are synthesized based on other options.
-        opts.addOption(bool, "tmux_control_mode", self.oniguruma);
+        // Control mode parsing has no regex dependency.
+        opts.addOption(bool, "tmux_control_mode", true);
 
         // Feature gates, emitted as flat bools (e.g. `options.snapshot`).
         inline for (@typeInfo(Features).@"struct".fields) |field| {

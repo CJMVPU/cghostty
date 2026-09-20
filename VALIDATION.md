@@ -4,6 +4,62 @@
 
 本轮将交付基线提高为 macOS 27+、arm64、Metal 4 命令 API 与 MSL 4.1。此记录替代此前 macOS 13 部署目标的验证记录。
 
+## 0.1.2 发布与文稿权限排查（2026-09-20）
+
+- 系统 TCC 日志确认：此前 Debug 应用从文稿目录下的构建产物运行时出现 DocumentsFolder 查询；已安装应用的请求来自用户终端命令 `ls` / `nvim`。用户确认正式版是在进入项目或执行命令后提示。没有修改系统权限、TCC 数据库或要求完全磁盘访问。
+- `macos/build.nu --action test` 默认将应用、runner、DerivedData 放到带 checkout 标识的系统临时目录；可通过 `--build-dir` 覆盖。Xcode 启动目录改为用户主目录；UI 测试使用临时工作目录，测试计划使用空配置，涉及真实 Surface 的原生测试使用不加载个人启动文件的 shell。
+- 新环境下首次原生测试暴露核心销毁期间唤醒回调强持有已销毁对象的崩溃。将排队 tick 改为弱持有 App，增加 `queuedWakeupDoesNotRetainApp` 验证排队回调不延长其寿命；之后完整测试通过。
+- 最终原生测试 **249 项通过、1 项跳过、0 项失败**，参数化展开后 368 次执行通过，运行时警告为空：`/private/tmp/cghostty-012-native-final.xcresult`。
+- 最终桌面测试 **2/2 项通过**，无运行时警告：`/private/tmp/cghostty-012-ui.xcresult`。覆盖标签切换、标题、分屏、搜索、命令面板及焦点恢复。
+- 13:50 起至验证结束的 TCC 日志没有新的 `SystemPolicyDocumentsFolder` 记录：`/private/tmp/cghostty-012-tcc-final.log`。这证明本轮隔离测试没有触发该访问；不代表用户命令访问文稿文件可绕过系统权限。
+- 核心回归 **1,364 项通过、1 项跳过**，85/85 构建步骤通过；PCRE2 绑定 **3/3 项通过**。日志：`/private/tmp/cghostty-012-core-summary.log`、`/private/tmp/cghostty-012-pcre2.log`。
+- SwiftLint 严格检查 188 文件、0 问题；Zig 格式、依赖版本记录、Swift 6 配置、actionlint 和 diff 空白检查通过。
+- 图标使用 imagegen 为现有角色添加银色边框，规范为 1024 像素源画布，重新导出 1024/512/64 像素 macOS 图标并同步 Dock 插件。实际导出目视确认边框完整。
+- ReleaseLocal 构建成功。发行包沿用 ad-hoc 签名，不代表 Developer ID 签名或 Apple 公证；未修改已安装应用。源码位置及项目目录不自动搬迁。
+
+## SwiftUI / Observation / AppKit 职责收拢（2026-09-20）
+
+- 共享 UI 状态统一到 Observation：应用、配置、终端窗口、Surface、搜索、标题栏、玻璃背景、安全输入和配置错误。SwiftUI 使用类型化环境及局部 State；当前 `macos/Sources` 不再使用 ObservableObject、Published、ObservedObject、StateObject 或 EnvironmentObject。
+- 新增 `TerminalWindowState`、`Ghostty.SurfaceState` 和 `Ghostty.SearchState`，终端显示状态与 AppKit 对象分离。原生 SurfaceView 保持稳定身份并持有核心 Surface；窗口结构变更仍经过控制器同步所有权，不复制核心句柄或建立双向兼容状态。
+- 删除 TerminalViewModel 协议、OSSurfaceView 中间类、SplitTree 通用 publisher 工具和旧状态订阅链。关于、配置错误和剪贴板确认窗口改为程序化 AppKit 窗口托管 SwiftUI，删除三个空壳 XIB 和未使用的 SettingsView 占位页面；保留实际承担原生窗口/菜单初始化的 XIB。
+- 剪贴板请求继续使用明确的原生事件、身份核对和取消流程，避免 Observation 合并中间显示状态时丢失一次性完成语义。观察任务使用弱引用，并在切换目标或关闭时取消；短搜索仍保留原有防抖。
+- 桌面验证定位并修复了原先依赖 SwiftUI 引用延长窗口控制器寿命的隐含持有关系：已加载的普通终端控制器由原生层持有，关闭时释放；快捷终端仍由 AppDelegate 持有。新增存活至关闭、关闭后释放的测试。
+- 原生测试迁移前基线为 **236 项通过、1 项跳过、0 项失败**，结果包 `/private/tmp/cghostty-ui-baseline.xcresult`。
+- 架构和维护约定写入 `UI_ARCHITECTURE.md`、`HACKING.md`。桌面测试改为构建脚本显式选择，不再因为缺少 Xcode IDE 环境变量而静默执行零项测试。测试期间遇到系统弹窗和输入法干扰，用户处理弹窗后继续验证；固定 shell 命令改为粘贴并恢复原剪贴板，避免输入法转换。
+
+- 最终原生测试 **248 项通过、1 项跳过、0 项失败**；参数化展开后通过 367 次执行，`runtimeWarnings` 为空。相比基线新增 12 项有效测试，覆盖属性级观察、稳定 Surface/核心身份、控制器释放、原生窗口存活与关闭、标题切换、辅助窗口、剪贴板取消及搜索防抖。结果包：`/private/tmp/cghostty-ui-native-complete.xcresult`；摘要：`/private/tmp/cghostty-ui-native-complete-summary.json`。
+- 移除临时诊断后的最终桌面验收 **2/2 项通过、0 项跳过**，运行时警告为空：实际 OSC 标题更新、分屏、搜索编辑与关闭、命令面板关闭后的输入，以及两个标签之间往返切换保留会话标题。结果包：`/private/tmp/cghostty-ui-desktop-complete.xcresult`；摘要：`/private/tmp/cghostty-ui-desktop-complete-summary.json`。这是特定流程的验收，未遍历全部输入法、全屏或系统恢复场景。
+- 从空生成目录完整构建 ReleaseLocal 成功；范围检查确认 macOS/arm64、应用资源和 ad-hoc 签名有效。一次性核对包内三个已删除辅助 nib 均不存在，六个现用菜单/终端 nib 齐全；应用和 dSYM 的 arm64 UUID 一致。日志：`/private/tmp/cghostty-ui-release-complete.log`、`/private/tmp/cghostty-ui-app-check.log`。此前两条 Dear ImGui dSYM 警告没有重现；干净构建另有 DockTilePlugin 不依赖 AppIntents.framework 因而跳过元数据提取的 Xcode 提示。
+- 严格 SwiftLint 检查 **188 个文件、0 个问题**，版本记录、Swift 6 配置、源码范围和 diff 空白检查通过。最终产物为 `macos/build/ReleaseLocal/cghostty.app`；本轮未修改已安装应用、未生成发行 ZIP、未推送远程或发布新版本。
+
+## Dear ImGui dSYM 符号警告修复（2026-09-20）
+
+- 根因：`pkg/dcimgui/ext.cpp` 与 `pkg/macos/text/ext.c` 均生成 `ext.o`，合并到内部静态库后形成同名成员。两个 ImGui 构造包装符号实际存在，但 `dsymutil` 通过归档成员名读取调试信息时定位到不含这些符号的对象。
+- 将 ImGui 扩展更名为 `dcimgui_ext.cpp`，同步构建路径和注释。C++ 文件与更名前逐字节一致，没有改变接口、初始化行为或调试信息生成选项。
+- Debug 内部框架 **194/194 步骤成功**；Debug 与 ReleaseLocal 原生应用均重新构建成功，两个完整构建日志均无 `warning:` 或 `error:`。日志：`/private/tmp/cghostty-imgui-dsym-debug.log`、`/private/tmp/cghostty-imgui-dsym-release.log`。
+- 两种配置的静态库各有一个 `ext.o` 和一个 `dcimgui_ext.o`。`dwarfdump` 确认两个 ImGui 包装函数均具有有效代码地址、正确源码路径和行号；ReleaseLocal 的 `dsymutil --dump-debug-map` 无诊断输出。调试信息记录：`/private/tmp/cghostty-imgui-dsym-debug-dwarf.txt`、`/private/tmp/cghostty-imgui-dsym-release-dwarf.txt`。
+- ReleaseLocal 的 arm64、资源和签名检查通过；Zig 格式、版本记录和 diff 空白检查通过。本次仅更名构建输入，未新增长期检查或重跑功能单元测试，未对外发布。下方旧记录中的两条 dSYM 警告为修复前历史结果。
+
+## PCRE2 替换与 tmux 协议解析（2026-09-20）
+
+- 先在 `/private/tmp/cghostty-regex-probe/` 中链接原 Oniguruma 6.9.10 与 PCRE2 10.48 做对照。现有 **90 个** URL/路径输入及 **5,010 个** Unicode、边界和确定性组合输入，逐次匹配的 UTF-8 字节范围全部一致；正式规则与已验证规则逐字节一致。
+- 将无限长度美元数字后向断言与相邻的单词边界限制合并为固定长度字符排除；显式保留 Unicode 字母、全部标记、数字与连接标点集合，覆盖中文、组合音标、间距标记和包围标记。PCRE2 自身 Unicode 数据由旧库的 16 升为 17，对照范围不构成所有 Unicode 码点语义完全一致的保证。
+- 链接渲染与点击定位统一使用 PCRE2；每次搜索独立上下文，限制匹配工作 100,000、深度 1,000、堆内存 8 MiB，排除无法映射到终端单元格的空匹配。复用上游 Zig 0.16 构建，静态链接 8 位库，关闭 JIT。
+- tmux 的 8 处正则解析改为字段、前缀和十进制数字解析；保留数据/名称空格、CRLF 与空布局标志，非法或溢出 ID 被拒绝并可继续解析下一条消息。删除旧 RegexError 分支以及 tmux 对正则开关的依赖。
+- 删除 `pkg/oniguruma` 的 **11 个文件**、全局初始化、构建依赖、系统库选项与功能门控。新 PCRE2 构建/封装/清单共 **145 行**，对照程序只留在临时目录，应用没有旧引擎回退。更新依赖版本表，并将 PCRE2 封装、StringMap 和 tmux 测试纳入 CI。
+- 最终相关核心回归 **744/744 项通过**，85/85 构建步骤成功；PCRE2 封装 **3/3 项通过**。测试覆盖 Unicode 链接选区、多次匹配、空匹配、预算耗尽、非法 UTF-8、非法偏移和 tmux 畸形消息恢复。核心测试的沙盒日志包含系统 XPC 警告，测试命令退出码为 0。日志：`/private/tmp/cghostty-pcre2-regression-final.log`。
+- Debug 内部框架 **194/194 构建步骤成功**；原生测试 **236 项通过、1 项跳过、0 项失败**，运行时警告为空。结果包：`/private/tmp/cghostty-pcre2-native-tests.xcresult`；摘要：`/private/tmp/cghostty-pcre2-native-summary.json`。
+- ReleaseLocal 应用构建成功，arm64、资源及签名检查通过。一次性符号审计确认最终内部静态库和应用包含 PCRE2 编译/匹配符号，无 Oniguruma 符号。日志：`/private/tmp/cghostty-pcre2-release.log`、`/private/tmp/cghostty-pcre2-app-check.log`。构建仍有此前的两条 Dear ImGui dSYM 符号警告。
+- Zig 格式、版本记录、Swift 6 配置、actionlint 和 diff 空白检查通过；依赖记录故障注入再次通过，包括 PCRE2 版本/归档地址不匹配拒绝。本轮未运行远程 CI、完整 Zig 全量测试或真实 tmux/鼠标交互验收，未发布新版本。
+
+## CI 环境记录与依赖版本文档（2026-09-20）
+
+- CI 新增环境报告，记录实际工具版本、SDK 构建号及选定的 runner 元数据；报告进入 Actions 摘要和既有诊断产物，工具安装失败时也尝试采集。
+- C/C++ 依赖表由包清单生成，默认检查拒绝文档漂移；新增源码归档 URL 与包版本一致性、ImGui 与 Dear Bindings 版本匹配校验，保留既有生成头检查。Wuffs 记录提交快照，维护状态保留在文档正文。
+- 临时副本故障注入通过：7 个依赖的包版本与归档 URL 不一致均被拒绝；ImGui 包版本、绑定目标版本、绑定发布标签与文件名不一致均被拒绝；表格过期、标记缺失及重复均被拒绝。默认检查不写文件，更新仅修改表格、保留人工正文，重复生成逐字节一致，Zig 安装脚本的版本/校验和输出不受文档漂移影响。
+- 本机环境报告成功采集全部 14 项命令输出，保存于 `/private/tmp/cghostty-ci-environment.md`。空 PATH 模拟安装失败时仍输出完整报告，全部缺失工具标记为 `Unavailable`，未选中的环境变量不会被导出。SDK 查询在沙盒中附带 Xcode 缓存/文件监听警告，命令仍返回成功及实际版本。
+- 版本检查、actionlint、Swift 6 配置检查、macOS/arm64 范围检查和 diff 空白检查通过。本轮仅修改 CI、脚本和维护文档，未重新构建应用、未运行远程 CI、未发布新版本。
+
 ## macOS 实现、键码表与彩蛋设施精简（2026-09-20）
 
 - 删除无调用的 `locales_map`、`initGlobalDomain`、`staticLocale` 及专属 gettext 声明/导入；保留域绑定、翻译查询、语言规范化。全部 PO/POT 文件与本轮开始时逐字节相同；最终包内 34 个 `.mo` 的翻译内容逐一与当前 PO 编译结果一致。

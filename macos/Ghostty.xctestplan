@@ -17,7 +17,11 @@
     "environmentVariableEntries" : [
       {
         "key" : "CGHOSTTY_CONFIG_PATH",
-        "value" : "\/tmp\/Ghostty\/testing_config.ghostty"
+        "value" : "/dev/null"
+      },
+      {
+        "key" : "CGHOSTTY_MAC_LAUNCH_SOURCE",
+        "value" : "app"
       }
     ],
     "performanceAntipatternCheckerEnabled" : true,

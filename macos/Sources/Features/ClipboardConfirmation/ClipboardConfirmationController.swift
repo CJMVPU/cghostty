@@ -6,7 +6,34 @@ import SwiftUI
 /// WILL NOT show automatically and the caller must show the window via
 /// showWindow, beginSheet, etc.
 class ClipboardConfirmationController: NSWindowController {
-    override var windowNibName: NSNib.Name? { "ClipboardConfirmation" }
+    private var windowCreated = false
+    override var isWindowLoaded: Bool { windowCreated }
+
+    // NSWindowController only auto-loads a window when it has a nib name.
+    // Keep programmatic windows lazy and run the same lifecycle callbacks.
+    override var window: NSWindow? {
+        get {
+            if !isWindowLoaded {
+                windowWillLoad()
+                loadWindow()
+                windowDidLoad()
+            }
+            return super.window
+        }
+        set {
+            windowCreated = newValue != nil
+            super.window = newValue
+        }
+    }
+
+    override func loadWindow() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 270),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        self.window = window
+    }
 
     private(set) var confirmation: Ghostty.ClipboardConfirmationRequest
     weak private var delegate: ClipboardConfirmationViewDelegate?

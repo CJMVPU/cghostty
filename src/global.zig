@@ -5,7 +5,6 @@ const build_options = @import("build_options");
 const cli = @import("cli.zig");
 const internal_os = @import("os/main.zig");
 const harfbuzz = @import("harfbuzz");
-const oni = @import("oniguruma");
 const renderer = @import("renderer.zig");
 const apprt = @import("apprt.zig");
 const assert = @import("quirks.zig").inlineAssert;
@@ -172,9 +171,6 @@ pub fn init(opts: InitOpts) !void {
     // We need to re-sync the environment after this completes.
     try internal_os.ensureLocale();
     syncEnviron();
-
-    // Initialize oniguruma for regex
-    try oni.init(&.{oni.Encoding.utf8});
 
     // Find our resources directory once for the app so every launch
     // hereafter can use this cached value.

@@ -1,11 +1,14 @@
 import SwiftUI
+import Observation
 
-protocol ConfigurationErrorsViewModel: ObservableObject {
-    var errors: [String] { get set }
+@MainActor @Observable final class ConfigurationErrorsState {
+    var errors: [String] = []
 }
 
-struct ConfigurationErrorsView<ViewModel: ConfigurationErrorsViewModel>: View {
-    @ObservedObject var model: ViewModel
+struct ConfigurationErrorsView: View {
+    let model: ConfigurationErrorsState
+    let dismiss: () -> Void
+    let reload: () -> Void
 
     var body: some View {
         VStack {
@@ -45,9 +48,9 @@ struct ConfigurationErrorsView<ViewModel: ConfigurationErrorsViewModel>: View {
 
             HStack {
                 Spacer()
-                Button("Ignore") { model.errors = [] }
+                Button("Ignore", action: dismiss)
                     .keyboardShortcut(.cancelAction)
-                Button("Reload Configuration") { reloadConfig() }
+                Button("Reload Configuration", action: reload)
                     .keyboardShortcut(.defaultAction)
             }
             .controlSize(.large)
@@ -56,8 +59,4 @@ struct ConfigurationErrorsView<ViewModel: ConfigurationErrorsViewModel>: View {
         .frame(minWidth: 480, maxWidth: 960, minHeight: 270)
     }
 
-    private func reloadConfig() {
-        guard let delegate = NSApplication.shared.delegate as? AppDelegate else { return }
-        delegate.reloadConfig(nil)
-    }
 }

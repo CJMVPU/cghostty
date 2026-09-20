@@ -25,7 +25,7 @@ struct TerminalCommandPaletteView: View {
     @Binding var isPresented: Bool
 
     /// The configuration so we can lookup keyboard shortcuts.
-    @ObservedObject var ghosttyConfig: Ghostty.Config
+    let ghosttyConfig: Ghostty.Config
 
     /// The callback when an action is submitted.
     var onAction: ((String) -> Void)

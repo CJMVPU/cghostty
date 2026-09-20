@@ -1,4 +1,5 @@
 import SwiftUI
+import Observation
 import UniformTypeIdentifiers
 import UserNotifications
 import GhosttyKit
@@ -11,27 +12,27 @@ protocol GhosttyAppDelegate: AnyObject {
 }
 
 extension Ghostty {
-    class App: ObservableObject {
+    @MainActor @Observable final class App {
         enum Readiness: String {
             case loading, error, ready
         }
 
         /// Optional delegate
-        weak var delegate: GhosttyAppDelegate?
+        @ObservationIgnored weak var delegate: GhosttyAppDelegate?
 
         /// The readiness value of the state.
-        @Published var readiness: Readiness = .loading
+        var readiness: Readiness = .loading
 
         /// The global app configuration. This defines the app level configuration plus any behavior
         /// for new windows, tabs, etc. Note that when creating a new window, it may inherit some
         /// configuration (i.e. font size) from the previously focused window. This would override this.
-        @Published private(set) var config: Config
+        private(set) var config: Config
 
         /// Preferred config file than the default ones
-        private var configPath: String?
+        @ObservationIgnored private var configPath: String?
         /// The ghostty app instance. We only have one of these for the entire app, although I guess
         /// in theory you can have multiple... I don't know why you would...
-        @Published var app: ghostty_app_t? {
+        @ObservationIgnored var app: ghostty_app_t? {
             didSet {
                 guard let old = oldValue else { return }
                 ghostty_app_free(old)
@@ -538,13 +539,16 @@ extension Ghostty {
         }
 
         nonisolated static func wakeup(_ userdata: UnsafeMutableRawPointer?) {
-            let state = Unmanaged<App>.fromOpaque(userdata!).takeUnretainedValue()
+            guard let userdata else { return }
+            let state = Unmanaged<App>.fromOpaque(userdata).takeUnretainedValue()
 
             // Wakeup can be called from any thread so we schedule the app tick
             // from the main thread. There is probably some improvements we can make
             // to coalesce multiple ticks but I don't think it matters from a performance
             // standpoint since we don't do this much.
-            DispatchQueue.main.async { state.appTick() }
+            // Core teardown can wake the main thread while App is deinitializing.
+            // A queued tick must neither resurrect its owner nor outlive it.
+            DispatchQueue.main.async { [weak state] in state?.appTick() }
         }
 
         /// Determine if a given notification should be presented to the user when Ghostty is running in the foreground.
@@ -2284,7 +2288,7 @@ extension Ghostty {
                             searchState.setNeedle(needle)
                         }
                     } else {
-                        surfaceView.searchState = Ghostty.SurfaceView.SearchState(from: startSearch)
+                        surfaceView.searchState = Ghostty.SearchState(from: startSearch)
                     }
 
                     NotificationCenter.default.post(name: .ghosttySearchFocus, object: surfaceView)

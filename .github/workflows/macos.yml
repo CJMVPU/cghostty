@@ -19,6 +19,7 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        id: checkout
       - name: Set up Apple Silicon tools
         id: tools
         run: |
@@ -34,6 +35,12 @@ jobs:
           echo "sdk=$(xcrun --show-sdk-build-version)" >> "$GITHUB_OUTPUT"
           xcodebuild -downloadComponent MetalToolchain
           xcrun --toolchain Metal metal --version
+      - name: Record build environment
+        if: always() && steps.checkout.outcome == 'success'
+        run: |
+          mkdir -p macos/build/ci-logs
+          python3 scripts/record-build-environment.py > macos/build/ci-logs/environment.md
+          cat macos/build/ci-logs/environment.md >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
@@ -57,7 +64,11 @@ jobs:
         run: |
           zig build test -Dtest-filter=renderer -Dtest-filter=config -Dtest-filter=Command -Dtest-filter=Terminal \
             -Dtest-filter=input -Dtest-filter=os. -Dtest-filter=termio -Dtest-filter=pty \
+            -Dtest-filter=StringMap -Dtest-filter=tmux \
             2>&1 | tee macos/build/ci-logs/core-tests.log
+      - name: PCRE2 binding tests
+        working-directory: pkg/pcre2
+        run: zig build test 2>&1 | tee ../../macos/build/ci-logs/pcre2-tests.log
       - name: Build and test native app
         run: |
           nu macos/build.nu --action test --result-bundle macos/build/TestResults.xcresult \

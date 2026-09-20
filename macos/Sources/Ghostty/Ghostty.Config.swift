@@ -1,9 +1,10 @@
 import SwiftUI
+import Observation
 import GhosttyKit
 
 extension Ghostty {
     /// Maps to a `ghostty_config_t` and the various operations on that.
-    class Config: ObservableObject {
+    @MainActor @Observable class Config {
         // The underlying C pointer to the Ghostty config structure. This
         // should never be accessed directly. Any operations on this should
         // be called from the functions on this or another class.

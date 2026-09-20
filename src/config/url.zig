@@ -1,5 +1,5 @@
 const std = @import("std");
-const oni = @import("oniguruma");
+const pcre2 = @import("pcre2");
 
 /// Default URL/path regex. This is used to detect URLs and file paths in
 /// terminal output.
@@ -32,16 +32,18 @@ const ipv6_url_pattern =
     \\(?:\[[:0-9a-fA-F]+(?:[:0-9a-fA-F]*)+\](?::[0-9]+)?)
 ;
 
+// Preserve the full Unicode word set (letters, marks, numbers, connector
+// punctuation). PCRE2's \w omits spacing/enclosing marks used in some paths.
 const scheme_url_chars =
-    \\[\w\-.~:/?#@!$&*+,;=%]
+    \\[\p{L}\p{M}\p{N}\p{Pc}\-.~:/?#@!$&*+,;=%]
 ;
 
 const path_chars =
-    \\[\w\-.~:\/?#@!$&*+;=%]
+    \\[\p{L}\p{M}\p{N}\p{Pc}\-.~:\/?#@!$&*+;=%]
 ;
 
 const optional_bracketed_word_suffix =
-    \\(?:[\(\[]\w*[\)\]])?
+    \\(?:[\(\[][\p{L}\p{M}\p{N}\p{Pc}]*[\)\]])?
 ;
 
 const no_trailing_punctuation =
@@ -53,19 +55,19 @@ const no_trailing_colon =
 ;
 
 const dotted_path_lookahead =
-    \\(?=[\w\-.~:\/?#@!$&*+;=%]*\.)
+    \\(?=[\p{L}\p{M}\p{N}\p{Pc}\-.~:\/?#@!$&*+;=%]*\.)
 ;
 
 const non_dotted_path_lookahead =
-    \\(?![\w\-.~:\/?#@!$&*+;=%]*\.)
+    \\(?![\p{L}\p{M}\p{N}\p{Pc}\-.~:\/?#@!$&*+;=%]*\.)
 ;
 
 const dotted_path_space_segments =
-    \\(?:(?<!:) (?!\w+:\/\/)(?!\.{0,2}\/)(?!~\/)[\w\-.~:\/?#@!$&*+;=%]*[\/.])*
+    \\(?:(?<!:) (?![\p{L}\p{M}\p{N}\p{Pc}]+:\/\/)(?!\.{0,2}\/)(?!~\/)[\p{L}\p{M}\p{N}\p{Pc}\-.~:\/?#@!$&*+;=%]*[\/.])*
 ;
 
 const any_path_space_segments =
-    \\(?:(?<!:) (?!\w+:\/\/)(?!\.{0,2}\/)(?!~\/)[\w\-.~:\/?#@!$&*+;=%]+)*
+    \\(?:(?<!:) (?![\p{L}\p{M}\p{N}\p{Pc}]+:\/\/)(?!\.{0,2}\/)(?!~\/)[\p{L}\p{M}\p{N}\p{Pc}\-.~:\/?#@!$&*+;=%]+)*
 ;
 
 // Branch 1: URLs with explicit schemes (http, mailto, ftp, etc.).
@@ -75,7 +77,7 @@ const scheme_url_branch =
     no_trailing_punctuation;
 
 const rooted_or_relative_path_prefix =
-    \\(?:\.\.\/|\.\/|(?<!\w)~\/|(?:[\w][\w\-.]*\/)*(?<!\w)\$[A-Za-z_]\w*\/|\.[\w][\w\-.]*\/|(?<![\w~\/])\/(?!\/))
+    \\(?:\.\.\/|\.\/|(?<![\p{L}\p{M}\p{N}\p{Pc}])~\/|(?:[\p{L}\p{M}\p{N}\p{Pc}][\p{L}\p{M}\p{N}\p{Pc}\-.]*\/)*(?<![\p{L}\p{M}\p{N}\p{Pc}])\$[A-Za-z_][\p{L}\p{M}\p{N}\p{Pc}]*\/|\.[\p{L}\p{M}\p{N}\p{Pc}][\p{L}\p{M}\p{N}\p{Pc}\-.]*\/|(?<![\p{L}\p{M}\p{N}\p{Pc}~\/])\/(?!\/))
 ;
 
 // Branch 2: Absolute paths and dot-relative paths (/, ./, ../).
@@ -96,8 +98,10 @@ const rooted_or_relative_path_branch =
     ")";
 
 // Branch 3: Bare relative paths such as src/config/url.zig.
+// Rejecting a preceding word character already rejects every digit. Excluding
+// '$' as well avoids an unbounded lookbehind for dollar-number prefixes.
 const bare_relative_path_prefix =
-    \\(?<!\$\d*)(?<!\w)[\w][\w\-.]*\/
+    \\(?<![\p{L}\p{M}\p{N}\p{Pc}$])[\p{L}\p{M}\p{N}\p{Pc}][\p{L}\p{M}\p{N}\p{Pc}\-.]*\/
 ;
 
 const bare_relative_path_branch =
@@ -116,14 +120,7 @@ pub const regex =
 test "url regex" {
     const testing = std.testing;
 
-    try oni.testing.ensureInit();
-    var re = try oni.Regex.init(
-        regex,
-        .{},
-        oni.Encoding.utf8,
-        oni.Syntax.default,
-        null,
-    );
+    var re = try pcre2.Regex.init(regex);
     defer re.deinit();
 
     // The URL cases to test what our regex matches. Feel free to add to this
@@ -131,8 +128,12 @@ test "url regex" {
     const cases = [_]struct {
         input: []const u8,
         expect: []const u8,
-        num_matches: usize = 1,
     }{
+        .{ .input = "🙂 https://例子.测试/文件 end", .expect = "https://例子.测试/文件" },
+        .{ .input = "open /tmp/文件.txt now", .expect = "/tmp/文件.txt" },
+        .{ .input = "./cafe\u{0301}.txt", .expect = "./cafe\u{0301}.txt" },
+        .{ .input = "./का.txt", .expect = "./का.txt" },
+        .{ .input = "./a\u{20dd}.txt", .expect = "./a\u{20dd}.txt" },
         .{
             .input = "hello https://example.com world",
             .expect = "https://example.com",
@@ -477,19 +478,13 @@ test "url regex" {
     };
 
     for (cases) |case| {
-        //std.debug.print("input: {s}\n", .{case.input});
-        //std.debug.print("match: {s}\n", .{case.expect});
-        var reg = try re.search(case.input, .{});
-        //std.debug.print("count: {d}\n", .{@as(usize, reg.count())});
-        //std.debug.print("starts: {d}\n", .{reg.starts()});
-        //std.debug.print("ends: {d}\n", .{reg.ends()});
-        defer reg.deinit();
-        try testing.expectEqual(@as(usize, case.num_matches), reg.count());
-        const match = case.input[@intCast(reg.starts()[0])..@intCast(reg.ends()[0])];
+        const reg = try re.search(case.input, 0);
+        const match = case.input[reg.start..reg.end];
         try testing.expectEqualStrings(case.expect, match);
     }
 
     const no_match_cases = [_][]const u8{
+        "$" ++ "1" ** 1024 ++ "/file.txt",
         // bare relative paths without any dot should not match as file paths
         "input/output",
         "foo/bar",
@@ -508,10 +503,6 @@ test "url regex" {
         "//foo",
     };
     for (no_match_cases) |input| {
-        var result = re.search(input, .{});
-        if (result) |*reg| {
-            reg.deinit();
-            return error.TestUnexpectedResult;
-        } else |_| {}
+        try testing.expectError(error.NoMatch, re.search(input, 0));
     }
 }

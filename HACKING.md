@@ -15,6 +15,8 @@ nu macos/build.nu --skip-core
 nu macos/build.nu --action test
 # 指定一个尚不存在的结果包路径，便于在 Xcode 中查看测试结果
 nu macos/build.nu --action test --result-bundle macos/build/TestResults.xcresult
+# 真实桌面 UI 回归；需要可交互的 macOS 会话
+nu macos/build.nu --action test --ui-tests --only-testing GhosttyUITests/GhosttyObservationUITests
 # 与 CI 一致的格式与版本检查
 zig fmt --check build.zig build.zig.zon src pkg
 swiftlint lint --strict --no-cache
@@ -33,11 +35,17 @@ python3 scripts/check-scope.py
 python3 scripts/check-scope.py --app macos/build/ReleaseLocal/cghostty.app
 ```
 
+`--action test` 默认将应用、测试 runner 和 DerivedData 放到 `$TMPDIR/cghostty-tests-<checkout-hash>`，避免运行时读取文稿目录中的构建资源。`--build-dir /absolute/path` 可覆盖产物目录；测试配置及工作目录也使用非受保护路径。源码仍可留在文稿目录。Xcode 直接运行使用用户主目录作为工作目录；日常使用请运行安装到“应用程序”的发行版。终端命令主动读取文稿中的项目仍受 macOS 权限管理，若不希望授权，请将项目放在 `~/Developer` 等非受保护目录。
+
 `zig build` 也可作为根入口，会调用同一个 `macos/build.nu`。日常应用开发直接使用 Nushell 脚本。`--skip-core` 只适用于版本和优化模式均匹配的已有核心；切换 Debug / ReleaseLocal 时重新构建完整应用。
 
 Zig 改动使用 `zig fmt`；Swift 使用 `swiftlint lint --strict --fix`。完整核心测试为 `zig build test`，通常优先运行相关过滤测试。终端压缩、快照等子目录的测试约定继续适用。
 
-Zig 安装版本和 Apple Silicon 归档 SHA-256 集中在 `scripts/zig-toolchain.json`；安装脚本和 CI 读取同一份记录。更新工具链时同步 `build.zig.zon` 的 `minimum_zig_version`。`scripts/check-versions.py` 检查两者一致，并检查 simdutf 内置源码、libpng 配置头和 libintl 生成头与各自包清单的版本一致。当前 C/C++ 依赖和生成说明见 `pkg/README.md`。
+Zig 安装版本和 Apple Silicon 归档 SHA-256 集中在 `scripts/zig-toolchain.json`；安装脚本和 CI 读取同一份记录。更新工具链时同步 `build.zig.zon` 的 `minimum_zig_version`。`scripts/check-versions.py` 检查两者一致，并检查 simdutf 内置源码、libpng 配置头和 libintl 生成头与各自包清单的版本一致。
+
+C/C++ 依赖版本表直接从 `pkg/*/build.zig.zon` 生成，见 `pkg/README.md`。更新依赖及生成文件后运行 `python3 scripts/check-versions.py --update-docs`，再运行默认检查。检查同时核对版本与源码归档 URL，以及 ImGui 与 Dear Bindings 的匹配关系；默认模式只读，表格过期时给出更新命令。Wuffs 按源码提交快照记录，维护状态和生成说明保留为人工维护的正文。
+
+链接与路径识别使用 PCRE2，渲染高亮和点击定位共用 UTF-8 匹配及资源预算。修改匹配行为时运行 `(cd pkg/pcre2 && zig build test)`，并定向测试 `url regex`、`StringMap`、`renderCellMap`；tmux 控制消息由字节字段解析器处理，对应 `tmux` 过滤测试。封装和升级说明见 `pkg/pcre2/README.md`。
 
 原生界面直接使用 macOS 27 基线可用的 API，不再保留旧系统 Backport 或 Ventura 标签栏资源。`SelectionTextField` 仅负责搜索模型的字符串选区与 SwiftUI `TextSelection` 之间的绑定转换。
 
@@ -77,3 +85,25 @@ Metal 4 每个在途帧独占可复用的命令缓冲区、分配器、参数表
 开启 `MTL_DEBUG_LAYER=1` 运行应用可检查 Metal API；交互验收需覆盖单步、快速输入、连续导航、斜向移动、中文宽字符、选区、失焦和缩放。
 CI 使用 GitHub `xcode-27` arm64 预览镜像，并在运行测试前验证系统为 macOS 27+。
 CI 在构建前检查 Zig 格式、严格 SwiftLint、版本记录和工作流语法。`.github/actionlint.yaml` 补充校验器尚未内置的 `xcode-27` 官方预览标签，不改变 runner 的选择方式。日志与指定的 `.xcresult` 结果包以 `cghostty-ci-diagnostics` 产物保存 14 天，失败时也尝试上传；打包 ZIP 和校验文件仍使用独立的 `cghostty-macos-arm64` 产物。Action 均锁定提交 SHA，缓存键包含 SDK 构建号和工具链记录。
+
+工具安装后，`scripts/record-build-environment.py` 记录 macOS、架构、Xcode、SDK、Swift、Metal、Zig、Nushell、gettext、SwiftLint、actionlint 和 Python 的实际版本。报告写入 `macos/build/ci-logs/environment.md`，同时显示在 Actions 运行摘要中，并随诊断产物上传。工具安装失败时也尝试记录，缺失或失败的命令标记为 `Unavailable`；报告本身不替代构建检查。Homebrew 工具随安装时可用版本变化，环境记录用于定位差异，不代表整个构建环境已完全固定。仅记录选定的公开 runner 元数据，不导出完整环境变量。
+
+本地可运行 `python3 scripts/record-build-environment.py` 查看相同格式的报告。
+
+## UI 状态与原生交互
+
+结构和所有权约定见 [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md)。SwiftUI 内容读取
+Observation 模型；窗口由 `TerminalWindowState` 保存共享显示状态，终端区域由
+`Ghostty.SurfaceState` 保存显示状态。AppKit 控制器负责窗口、焦点、关闭与恢复，
+原生 SurfaceView 负责输入和持有核心句柄。UI 重建不能重建终端会话。
+已加载终端窗口的控制器由原生层持有，关闭时释放；不能依赖 SwiftUI 对状态模型的引用延长控制器寿命。
+
+状态观察使用可取消的 Observation 任务；搜索任务在查询替换、关闭和释放时取消。
+剪贴板确认是有一次性完成语义的请求，通过原生操作入口递送，不从合并后的显示状态推断。
+Combine 仅用于仍有必要的原生通知/控件事件。不要引入新旧状态互相同步的兼容层。
+
+`--ui-tests` 显式包含桌面测试，`--only-testing` 接受 Xcode 的目标/套件/测试标识；
+默认单元测试和 CI 仍不启动桌面交互测试。辅助窗口直接创建并托管 SwiftUI 内容；
+主菜单、主终端窗口样式和快捷终端仍使用实际承担 AppKit 初始化的 XIB。
+桌面测试要求解锁的交互会话及已处理的系统提示。测试命令使用粘贴避免输入法转换，
+随后恢复原剪贴板内容；测试期间不要操作键盘鼠标。

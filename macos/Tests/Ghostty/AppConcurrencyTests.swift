@@ -4,8 +4,20 @@ import Testing
 
 @MainActor
 struct AppConcurrencyTests {
+    @Test func queuedWakeupDoesNotRetainApp() async {
+        var app: Ghostty.App? = Ghostty.App(configPath: "/dev/null")
+        weak let releasedApp = app
+        Ghostty.App.wakeup(Unmanaged.passUnretained(app!).toOpaque())
+        app = nil
+        #expect(releasedApp == nil)
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+        #expect(releasedApp == nil)
+    }
+
     @Test func backgroundWakeupReturnsToMainActor() async throws {
-        let app = Ghostty.App()
+        let app = Ghostty.App(configPath: "/dev/null")
         #expect(app.readiness == .ready)
         _ = try #require(app.app)
 

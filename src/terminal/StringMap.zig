@@ -3,19 +3,12 @@
 const StringMap = @This();
 
 const std = @import("std");
-const build_options = @import("terminal_options");
-const oni = @import("oniguruma");
+const pcre2 = @import("pcre2");
 const point = @import("point.zig");
 const PinMap = @import("formatter.zig").PinMap;
 const Selection = @import("Selection.zig");
 const Screen = @import("Screen.zig");
 const Allocator = std.mem.Allocator;
-
-// Retry budget for StringMap regex searches.
-//
-// Units are Oniguruma retry steps (internal backtracking/retry counter),
-// not bytes/characters/time.
-const oni_search_retry_limit = 100_000;
 
 string: [:0]const u8,
 
@@ -30,15 +23,9 @@ pub fn deinit(self: StringMap, alloc: Allocator) void {
 }
 
 /// Returns an iterator that yields the next match of the given regex.
-/// Requires Ghostty to be compiled with regex support.
-pub const searchIterator = if (build_options.oniguruma)
-    searchIteratorOni
-else
-    void;
-
-fn searchIteratorOni(
+pub fn searchIterator(
     self: StringMap,
-    regex: oni.Regex,
+    regex: pcre2.Regex,
 ) SearchIterator {
     return .{ .map = self, .regex = regex };
 }
@@ -46,7 +33,7 @@ fn searchIteratorOni(
 /// Iterates over the regular expression matches of the string.
 pub const SearchIterator = struct {
     map: StringMap,
-    regex: oni.Regex,
+    regex: pcre2.Regex,
     offset: usize = 0,
 
     /// Returns the next regular expression match or null if there are
@@ -54,38 +41,18 @@ pub const SearchIterator = struct {
     pub fn next(self: *SearchIterator) !?Match {
         if (self.offset >= self.map.string.len) return null;
 
-        // Use per-search match params so we can bound regex retry steps
-        // (Oniguruma's internal backtracking work counter).
-        var match_param = try oni.MatchParam.init();
-        defer match_param.deinit();
-        try match_param.setRetryLimitInSearch(oni_search_retry_limit);
-
-        var region = self.regex.searchWithParam(
-            self.map.string[self.offset..],
-            .{},
-            &match_param,
-        ) catch |err| switch (err) {
-            // Retry/stack-limit errors mean we hit our work budget and
-            // aborted matching.
-            // For iterator callers this is equivalent to "no further matches".
-            error.Mismatch,
-            error.RetryLimitInMatchOver,
-            error.RetryLimitInSearchOver,
-            error.MatchStackLimitOver,
-            error.SubexpCallLimitInSearchOver,
-            => {
+        const region = self.regex.search(self.map.string[self.offset..], 0) catch |err| switch (err) {
+            error.NoMatch, error.MatchLimitExceeded => {
                 self.offset = self.map.string.len;
                 return null;
             },
-
             else => return err,
         };
-        errdefer region.deinit();
 
         // Increment our offset by the number of bytes in the match.
         // We defer this so that we can return the match before
         // modifying the offset.
-        const end_idx: usize = @intCast(region.ends()[0]);
+        const end_idx: usize = region.end;
         defer self.offset += end_idx;
 
         return .{
@@ -100,16 +67,12 @@ pub const SearchIterator = struct {
 pub const Match = struct {
     map: StringMap,
     offset: usize,
-    region: oni.Region,
-
-    pub fn deinit(self: *Match) void {
-        self.region.deinit();
-    }
+    region: pcre2.Match,
 
     /// Returns the selection containing the full match.
     pub fn selection(self: Match) Selection {
-        const start_idx: usize = @intCast(self.region.starts()[0]);
-        const end_idx: usize = @intCast(self.region.ends()[0] - 1);
+        const start_idx: usize = self.region.start;
+        const end_idx: usize = self.region.end - 1;
         const start_pt = self.map.map.get(self.offset + start_idx).?;
         const end_pt = self.map.map.get(self.offset + end_idx).?;
         return .init(start_pt, end_pt, false);
@@ -117,21 +80,12 @@ pub const Match = struct {
 };
 
 test "StringMap searchIterator" {
-    if (comptime !build_options.oniguruma) return error.SkipZigTest;
-
     const testing = std.testing;
     const alloc = testing.allocator;
     const io = testing.io;
 
     // Initialize our regex
-    try oni.testing.ensureInit();
-    var re = try oni.Regex.init(
-        "[A-B]{2}",
-        .{},
-        oni.Encoding.utf8,
-        oni.Syntax.default,
-        null,
-    );
+    var re = try pcre2.Regex.init("[A-B]{2}");
     defer re.deinit();
 
     // Initialize our screen
@@ -154,8 +108,7 @@ test "StringMap searchIterator" {
     // Get our iterator
     var it = map.searchIterator(re);
     {
-        var match = (try it.next()).?;
-        defer match.deinit();
+        const match = (try it.next()).?;
 
         const sel = match.selection();
         try testing.expectEqual(point.Point{ .screen = .{
@@ -172,22 +125,13 @@ test "StringMap searchIterator" {
 }
 
 test "StringMap searchIterator URL detection" {
-    if (comptime !build_options.oniguruma) return error.SkipZigTest;
-
     const testing = std.testing;
     const alloc = testing.allocator;
     const io = testing.io;
     const url = @import("../config/url.zig");
 
     // Initialize URL regex
-    try oni.testing.ensureInit();
-    var re = try oni.Regex.init(
-        url.regex,
-        .{},
-        oni.Encoding.utf8,
-        oni.Syntax.default,
-        null,
-    );
+    var re = try pcre2.Regex.init(url.regex);
     defer re.deinit();
 
     // Initialize our screen with text containing a URL
@@ -211,8 +155,7 @@ test "StringMap searchIterator URL detection" {
     // Search for URL match
     var it = map.searchIterator(re);
     {
-        var match = (try it.next()).?;
-        defer match.deinit();
+        const match = (try it.next()).?;
 
         const sel = match.selection();
         // URL should start at x=6 ("https://example.com/path" starts after "hello ")
@@ -231,22 +174,13 @@ test "StringMap searchIterator URL detection" {
 }
 
 test "StringMap searchIterator URL with click position" {
-    if (comptime !build_options.oniguruma) return error.SkipZigTest;
-
     const testing = std.testing;
     const alloc = testing.allocator;
     const io = testing.io;
     const url = @import("../config/url.zig");
 
     // Initialize URL regex
-    try oni.testing.ensureInit();
-    var re = try oni.Regex.init(
-        url.regex,
-        .{},
-        oni.Encoding.utf8,
-        oni.Syntax.default,
-        null,
-    );
+    var re = try pcre2.Regex.init(url.regex);
     defer re.deinit();
 
     // Initialize our screen with text containing a URL
@@ -274,8 +208,7 @@ test "StringMap searchIterator URL with click position" {
     var it = map.searchIterator(re);
     var found_url = false;
     while (true) {
-        var match = (try it.next()) orelse break;
-        defer match.deinit();
+        const match = (try it.next()) orelse break;
 
         const sel = match.selection();
         if (sel.contains(&s, click_pin)) {
@@ -293,4 +226,47 @@ test "StringMap searchIterator URL with click position" {
         }
     }
     try testing.expect(found_url);
+}
+
+test "StringMap Unicode URL selections and multiple matches" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    var screen = try Screen.init(testing.io, alloc, .{ .cols = 80, .rows = 2, .max_scrollback_bytes = 0 });
+    defer screen.deinit();
+    try screen.testWriteString("🙂 ./文件.txt ./cafe\u{0301}.txt");
+    const line = screen.selectLine(.{
+        .pin = screen.pages.pin(.{ .active = .{ .x = 3, .y = 0 } }).?,
+    }).?;
+    const map = try screen.selectionStringMap(alloc, .{ .sel = line, .trim = false });
+    defer map.deinit(alloc);
+    var regex = try pcre2.Regex.init(@import("../config/url.zig").regex);
+    defer regex.deinit();
+    var iter = map.searchIterator(regex);
+    for ([_][]const u8{ "./文件.txt", "./cafe\u{0301}.txt" }) |expected| {
+        const match = (try iter.next()).?;
+        const text = try screen.selectionString(alloc, .{ .sel = match.selection(), .trim = false });
+        defer alloc.free(text);
+        try testing.expectEqualStrings(expected, text);
+    }
+    try testing.expectEqual(null, try iter.next());
+}
+
+test "StringMap empty matches and exhausted budgets stop iteration" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    var screen = try Screen.init(testing.io, alloc, .{ .cols = 40, .rows = 2, .max_scrollback_bytes = 0 });
+    defer screen.deinit();
+    try screen.testWriteString("a" ** 30 ++ "!");
+    const line = screen.selectLine(.{
+        .pin = screen.pages.pin(.{ .active = .{ .x = 0, .y = 0 } }).?,
+    }).?;
+    const map = try screen.selectionStringMap(alloc, .{ .sel = line, .trim = false });
+    defer map.deinit(alloc);
+    for ([_][]const u8{ "(?=a)", "(*NO_START_OPT)(*NO_AUTO_POSSESS)^(a+)+$" }) |pattern| {
+        var regex = try pcre2.Regex.init(pattern);
+        defer regex.deinit();
+        var iter = map.searchIterator(regex);
+        try testing.expectEqual(null, try iter.next());
+        try testing.expectEqual(null, try iter.next());
+    }
 }

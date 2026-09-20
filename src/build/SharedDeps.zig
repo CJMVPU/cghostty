@@ -270,24 +270,14 @@ pub fn add(
         }
     }
 
-    // Oniguruma
-    if (b.lazyDependency("oniguruma", .{
+    // PCRE2: the pinned UTF-8 static library, shared by link consumers.
+    if (b.lazyDependency("pcre2", .{
         .target = target,
         .optimize = optimize,
-    })) |oniguruma_dep| {
-        step.root_module.addImport(
-            "oniguruma",
-            oniguruma_dep.module("oniguruma"),
-        );
-        if (b.systemIntegrationOption("oniguruma", .{})) {
-            step.root_module.linkSystemLibrary("oniguruma", dynamic_link_opts);
-        } else {
-            step.root_module.linkLibrary(oniguruma_dep.artifact("oniguruma"));
-            try static_libs.append(
-                b.allocator,
-                oniguruma_dep.artifact("oniguruma").getEmittedBin(),
-            );
-        }
+    })) |pcre2_dep| {
+        step.root_module.addImport("pcre2", pcre2_dep.module("pcre2"));
+        step.root_module.linkLibrary(pcre2_dep.artifact("pcre2-8"));
+        try static_libs.append(b.allocator, pcre2_dep.artifact("pcre2-8").getEmittedBin());
     }
 
     // Simd

@@ -1,7 +1,7 @@
 const std = @import("std");
 const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
-const oni = @import("oniguruma");
+const pcre2 = @import("pcre2");
 const inputpkg = @import("../input.zig");
 const terminal = @import("../terminal/main.zig");
 const point = terminal.point;
@@ -13,7 +13,7 @@ const log = std.log.scoped(.renderer_link);
 /// The link configuration needed for renderers.
 pub const Link = struct {
     /// The regular expression to match the link against.
-    regex: oni.Regex,
+    regex: pcre2.Regex,
 
     /// The situations in which the link should be highlighted.
     highlight: inputpkg.Link.Highlight,
@@ -50,9 +50,10 @@ pub const Set = struct {
     ) !Set {
         var links: std.ArrayList(Link) = .empty;
         defer links.deinit(alloc);
+        errdefer for (links.items) |*link| link.deinit();
 
         for (config) |link| {
-            var regex = try link.oniRegex();
+            var regex = try link.compileRegex();
             errdefer regex.deinit();
             try links.append(alloc, .{
                 .regex = regex,
@@ -106,18 +107,17 @@ pub const Set = struct {
 
             var offset: usize = 0;
             while (offset < str.len) {
-                var region = link.regex.search(
+                const region = link.regex.search(
                     str[offset..],
-                    .{},
+                    0,
                 ) catch |err| switch (err) {
-                    error.Mismatch => break,
+                    error.NoMatch, error.MatchLimitExceeded => break,
                     else => return err,
                 };
-                defer region.deinit();
 
                 // We have a match!
-                const offset_start: usize = @intCast(region.starts()[0]);
-                const offset_end: usize = @intCast(region.ends()[0]);
+                const offset_start: usize = region.start;
+                const offset_end: usize = region.end;
                 const start = offset + offset_start;
                 const end = offset + offset_end;
 
@@ -195,6 +195,31 @@ test "renderCellMap" {
     try testing.expect(!result.contains(.{ .x = 3, .y = 0 }));
     try testing.expect(result.contains(.{ .x = 1, .y = 1 }));
     try testing.expect(!result.contains(.{ .x = 1, .y = 2 }));
+}
+
+test "renderCellMap ignores empty matches and exhausted budgets" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    var t: terminal.Terminal = try .init(testing.io, alloc, .{ .cols = 40, .rows = 2 });
+    defer t.deinit(alloc);
+    var stream = t.vtStream();
+    defer stream.deinit();
+    stream.nextSlice("a" ** 30 ++ "!");
+    var state: terminal.RenderState = .empty;
+    defer state.deinit(alloc);
+    try state.update(alloc, &t);
+
+    var set = try Set.fromConfig(alloc, &.{
+        .{ .regex = "(?=a)", .action = .{ .open = {} }, .highlight = .always },
+        .{ .regex = "(*NO_START_OPT)(*NO_AUTO_POSSESS)^(a+)+$", .action = .{ .open = {} }, .highlight = .always },
+        .{ .regex = "!", .action = .{ .open = {} }, .highlight = .always },
+    });
+    defer set.deinit(alloc);
+    var result: terminal.RenderState.CellSet = .empty;
+    defer result.deinit(alloc);
+    try set.renderCellMap(alloc, &result, &state, null, .{});
+    try testing.expectEqual(@as(usize, 1), result.count());
+    try testing.expect(result.contains(.{ .x = 30, .y = 0 }));
 }
 
 test "renderCellMap hover links" {

@@ -1,13 +1,7 @@
 import AppKit
 import AppIntents
-import Combine
+import Observation
 import SwiftUI
-import os
-
-private let logger = Logger(
-    subsystem: Bundle.main.bundleIdentifier!,
-    category: "AppIntents.TerminalEntity"
-)
 
 struct TerminalEntity: AppEntity {
     let id: UUID
@@ -75,48 +69,23 @@ struct TerminalEntity: AppEntity {
         }
     }
 
-    /// Wait for the surface to be updated then create an entity
-    ///
-    /// The PTY/Config sets the title and pwd asynchronously shortly after the
-    /// surface is created, so concurrently wait for the second published
-    /// value of each (the first is the current value) before returning.
-    ///
-    /// If a value never arrives, the timeout completes the publisher and
-    /// we fall back to the current value.
-    ///
-    /// Waiting for the title and pwd also gives the SurfaceView time to lay
-    /// out, so the screenshot we capture afterwards reflects the rendered view.
+    /// Wait for initial terminal metadata, bounded by a one-second deadline.
+    /// Observation reads both fields together and cancellation ends the loser.
     @MainActor
     init(view: Ghostty.SurfaceView) async {
         self.id = view.id
         self.tty = view.surfaceModel?.ttyName
 
-        let waitTimeout = DispatchQueue.SchedulerTimeType.Stride.seconds(1)
-        let titleValues = view.$title.dropFirst()
-            .setFailureType(to: Error.self)
-            .timeout(waitTimeout, scheduler: DispatchQueue.main, customError: { EntityTimeoutError() })
-            .handleEvents(receiveCompletion: { completion in
-                if case .failure = completion {
-                    logger.error("failed to get terminal's title: timeout")
-                }
-            })
-            .replaceError(with: view.title)
-        let pwdValues = view.$pwd.dropFirst()
-            .setFailureType(to: Error.self)
-            .timeout(waitTimeout, scheduler: DispatchQueue.main, customError: { EntityTimeoutError() })
-            .handleEvents(receiveCompletion: { completion in
-                if case .failure = completion {
-                    logger.error("failed to get terminal's pwd: timeout")
-                }
-            })
-            .replaceError(with: view.pwd)
-        // Subscribe to both updates together without sending Combine's non-Sendable
-        // publishers into child tasks. Each publisher keeps its own timeout fallback.
-        for await (title, pwd) in Publishers.Zip(titleValues, pwdValues).values {
-            self.title = title
-            self.workingDirectory = pwd ?? ""
-            break
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await Self.waitForMetadata(view) }
+            group.addTask {
+                try? await Task.sleep(for: .seconds(1))
+            }
+            await group.next()
+            group.cancelAll()
         }
+        self.title = view.title
+        self.workingDirectory = view.pwd ?? ""
 
         // Wait for the title and pwd then get latest pid and screenshots.
         // This should gave SurfaceView enough time to layout in the window and we can get the most recent process's PID
@@ -132,6 +101,13 @@ struct TerminalEntity: AppEntity {
             self.screenshot = nsImage
         }
     }
+    @MainActor private static func waitForMetadata(_ view: Ghostty.SurfaceView) async {
+        let metadata = Observations { (view.title, view.pwd) }
+        for await (title, pwd) in metadata {
+            if Task.isCancelled || (!title.isEmpty && pwd != nil) { return }
+        }
+    }
+
 }
 
 extension TerminalEntity {
@@ -191,5 +167,3 @@ struct TerminalQuery: EntityStringQuery, EnumerableEntityQuery {
         }
     }
 }
-
-private struct EntityTimeoutError: Error {}

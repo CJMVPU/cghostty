@@ -5,7 +5,6 @@ import OSLog
 import GhosttyKit
 
 class AppDelegate: NSObject,
-                    ObservableObject,
                     NSApplicationDelegate,
                     UNUserNotificationCenterDelegate,
                     GhosttyAppDelegate {
@@ -780,8 +779,8 @@ class AppDelegate: NSObject,
 
         // If we have configuration errors, we need to show them.
         let c = ConfigurationErrorsController.sharedInstance
-        c.errors = config.errors
-        if c.errors.count > 0 {
+        c.updateErrors(config.errors)
+        if !config.errors.isEmpty {
             if c.window == nil || !c.window!.isVisible {
                 c.showWindow(self)
             }

@@ -20,7 +20,7 @@ const assert = @import("quirks.zig").inlineAssert;
 const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 const global = @import("global.zig");
-const oni = @import("oniguruma");
+const pcre2 = @import("pcre2");
 const simd = @import("simd/main.zig");
 const unicode = @import("unicode/main.zig");
 const rendererpkg = @import("renderer.zig");
@@ -342,7 +342,7 @@ const DerivedConfig = struct {
     key_remaps: input.KeyRemapSet,
 
     const Link = struct {
-        regex: oni.Regex,
+        regex: pcre2.Regex,
         action: input.Link.Action,
         highlight: input.Link.Highlight,
     };
@@ -357,7 +357,7 @@ const DerivedConfig = struct {
             var links: std.ArrayList(DerivedConfig.Link) = .empty;
             defer links.deinit(alloc);
             for (config.link.links.items) |link| {
-                var regex = try link.oniRegex();
+                var regex = try link.compileRegex();
                 errdefer regex.deinit();
                 try links.append(alloc, .{
                     .regex = regex,
@@ -4331,8 +4331,7 @@ fn linkAtPin(
 
         var it = strmap.searchIterator(link.regex);
         while (true) {
-            var match = (try it.next()) orelse break;
-            defer match.deinit();
+            const match = (try it.next()) orelse break;
             const sel = match.selection();
             if (!sel.contains(screen, mouse_pin)) continue;
             return .{

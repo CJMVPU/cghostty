@@ -6,10 +6,10 @@ import GhosttyKit
 extension Ghostty {
     /// InspectableSurface is a type of Surface view that allows an inspector to be attached.
     struct InspectableSurface: View {
-        @EnvironmentObject var ghostty: Ghostty.App
+        @Environment(Ghostty.App.self) private var ghostty
 
         /// Same as SurfaceWrapper, see the doc comments there.
-        @ObservedObject var surfaceView: SurfaceView
+        let surfaceView: SurfaceView
         var isSplit: Bool = false
 
         // Maintain whether our view has focus or not

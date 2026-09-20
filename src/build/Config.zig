@@ -59,7 +59,7 @@ pub fn init(b: *std.Build, version: []const u8) !Config {
         };
         @field(config, &field) = b.option(bool, "emit-" ++ name, "Build/install " ++ name) orelse @field(config, &field);
     }
-    for ([_][]const u8{ "freetype", "harfbuzz", "libpng", "zlib", "oniguruma", "simdutf", "libintl" }) |dep| {
+    for ([_][]const u8{ "freetype", "harfbuzz", "libpng", "zlib", "simdutf", "libintl" }) |dep| {
         _ = b.systemIntegrationOption(dep, .{ .default = false });
     }
     return config;
@@ -77,7 +77,7 @@ pub fn addOptions(self: *const Config, step: *std.Build.Step.Options) !void {
 }
 
 pub fn terminalOptions(self: *const Config, artifact: TerminalBuildOptions.Artifact, optimize: std.builtin.OptimizeMode) TerminalBuildOptions {
-    return .{ .artifact = artifact, .simd = self.simd, .oniguruma = true, .c_abi = false, .features = .{}, .version = self.version, .slow_runtime_safety = optimize == .Debug };
+    return .{ .artifact = artifact, .simd = self.simd, .c_abi = false, .features = .{}, .version = self.version, .slow_runtime_safety = optimize == .Debug };
 }
 
 pub fn baselineTarget(self: *const Config, io: std.Io) std.Build.ResolvedTarget {

@@ -1,29 +1,55 @@
 import Foundation
 import Cocoa
 import SwiftUI
-import Combine
 
-class ConfigurationErrorsController: NSWindowController, NSWindowDelegate, ConfigurationErrorsViewModel {
+class ConfigurationErrorsController: NSWindowController, NSWindowDelegate {
     /// Singleton for the errors view.
     static let sharedInstance = ConfigurationErrorsController()
 
-    override var windowNibName: NSNib.Name? { "ConfigurationErrors" }
+    init() { super.init(window: nil) }
 
-    /// The data model for this view. Update this directly and the associated view will be updated, too.
-    @Published var errors: [String] = [] {
-        didSet {
-            if errors.count == 0 {
-                // Only close the window if it was ever loaded: accessing
-                // `window` on an NSWindowController loads the nib (and our
-                // SwiftUI content view), which takes tens of milliseconds.
-                // This happens on every app launch via the initial config
-                // apply, when there are usually no errors and the window
-                // was never loaded.
-                if isWindowLoaded {
-                    self.window?.performClose(nil)
-                }
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    private var windowCreated = false
+    override var isWindowLoaded: Bool { windowCreated }
+
+    // NSWindowController only auto-loads a window when it has a nib name.
+    // Keep programmatic windows lazy and run the same lifecycle callbacks.
+    override var window: NSWindow? {
+        get {
+            if !isWindowLoaded {
+                windowWillLoad()
+                loadWindow()
+                windowDidLoad()
             }
+            return super.window
         }
+        set {
+            windowCreated = newValue != nil
+            super.window = newValue
+        }
+    }
+
+    override func loadWindow() {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 270),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered, defer: false)
+        window.title = "Configuration Errors"
+        window.isRestorable = false
+        window.isReleasedWhenClosed = false
+        window.delegate = self
+        self.window = window
+    }
+
+    private let model = ConfigurationErrorsState()
+
+    func updateErrors(_ errors: [String]) {
+        model.errors = errors
+        // Do not load an unused error window on a successful configuration reload.
+        if errors.isEmpty, isWindowLoaded { window?.performClose(nil) }
     }
 
     // MARK: - NSWindowController
@@ -36,7 +62,11 @@ class ConfigurationErrorsController: NSWindowController, NSWindowDelegate, Confi
         guard let window = window else { return }
         window.center()
         window.level = .popUpMenu
-        window.contentView = NSHostingView(rootView: ConfigurationErrorsView(model: self))
+        window.contentView = NSHostingView(rootView: ConfigurationErrorsView(
+            model: model,
+            dismiss: { [weak self] in self?.updateErrors([]) },
+            reload: { (NSApplication.shared.delegate as? AppDelegate)?.reloadConfig(nil) }
+        ))
         window.titlebarAppearsTransparent = true
     }
 }

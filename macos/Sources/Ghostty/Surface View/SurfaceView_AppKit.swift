@@ -7,11 +7,90 @@ import GhosttyKit
 
 extension Ghostty {
     /// The NSView implementation for a terminal surface.
-    class SurfaceView: OSSurfaceView, Codable, Identifiable, Sendable {
+    class SurfaceView: NSView, Codable, Identifiable, Sendable {
+        let id: UUID
+        let state: SurfaceState
+
+        // The current pwd of the surface as defined by the pty. This can be
+        // changed with escape codes.
+        var pwd: String? {
+            get { state.pwd }
+            set { state.pwd = newValue }
+        }
+
+        // The cell size of this surface. This is set by the core when the
+        // surface is first created and any time the cell size changes (i.e.
+        // when the font size changes). This is used to allow windows to be
+        // resized in discrete steps of a single cell.
+        var cellSize: CGSize {
+            get { state.cellSize }
+            set { state.cellSize = newValue }
+        }
+
+        // The health state of the surface. This currently only reflects the
+        // renderer health. In the future we may want to make this an enum.
+        var healthy: Bool {
+            get { state.healthy }
+            set { state.healthy = newValue }
+        }
+
+        // Any error while initializing the surface.
+        var error: Error? {
+            get { state.error }
+            set { state.error = newValue }
+        }
+
+        // The hovered URL string
+        var hoverUrl: String? {
+            get { state.hoverUrl }
+            set { state.hoverUrl = newValue }
+        }
+
+        // The currently active key tables. Empty if no tables are active.
+        var keyTables: [String] {
+            get { state.keyTables }
+            set { state.keyTables = newValue }
+        }
+
+        // The time this surface last became focused. This is a ContinuousClock.Instant
+        // on supported platforms.
+        var focusInstant: ContinuousClock.Instant? {
+            get { state.focusInstant }
+            set { state.focusInstant = newValue }
+        }
+
+        // Returns sizing information for the surface. This is the raw C
+        // structure because I'm lazy.
+        var surfaceSize: ghostty_surface_size_s? {
+            get { state.surfaceSize }
+            set { state.surfaceSize = newValue }
+        }
+
+        /// True when the surface is in readonly mode.
+        private(set) var readonly: Bool {
+            get { state.readonly }
+            set { state.readonly = newValue }
+        }
+
+        /// True when the surface should show a highlight effect (e.g., when presented via goto_split).
+        private(set) var highlighted: Bool {
+            get { state.highlighted }
+            set { state.highlighted = newValue }
+        }
+
+        /// A message sent from `ghostty_surface_t` when a child process exited
+        private(set) var childExitedMessage: ChildExitedMessage? {
+            get { state.childExitedMessage }
+            set { state.childExitedMessage = newValue }
+        }
+
         // The current title of the surface as defined by the pty. This can be
         // changed with escape codes.
-        @Published private(set) var title: String = "" {
-            didSet {
+        private(set) var title: String {
+            get { state.title }
+            set {
+                state.title = newValue
+
                 if !title.isEmpty {
                     titleFallbackTimer?.invalidate()
                     titleFallbackTimer = nil
@@ -20,8 +99,10 @@ extension Ghostty {
         }
 
         // The progress report (if any)
-        override var progressReport: Action.ProgressReport? {
-            didSet {
+        var progressReport: Action.ProgressReport? {
+            get { state.progressReport }
+            set {
+                state.progressReport = newValue
                 // Cancel any existing timer
                 progressReportTimer?.invalidate()
                 progressReportTimer = nil
@@ -39,61 +120,57 @@ extension Ghostty {
         }
 
         // The currently active key sequence. The sequence is not active if this is empty.
-        @Published var keySequence: [KeyboardShortcut] = []
+        var keySequence: [KeyboardShortcut] {
+            get { state.keySequence }
+            set { state.keySequence = newValue }
+        }
 
-        // The current search state. When non-nil, the search overlay should be shown.
-        override var searchState: SearchState? {
-            didSet {
-                if let searchState {
-                    // I'm not a Combine expert so if there is a better way to do this I'm
-                    // all ears. What we're doing here is grabbing the latest needle. If the
-                    // needle is less than 3 chars, we debounce it for a few hundred ms to
-                    // avoid kicking off expensive searches.
-                    searchNeedleCancellable = searchState.$needle
-                        .map(\.text)
-                        .removeDuplicates()
-                        .map { needle -> AnyPublisher<String, Never> in
-                            if needle.isEmpty || needle.count >= 3 {
-                                return Just(needle).eraseToAnyPublisher()
-                            } else {
-                                return Just(needle)
-                                    .delay(for: .milliseconds(300), scheduler: DispatchQueue.main)
-                                    .eraseToAnyPublisher()
-                            }
-                        }
-                        .switchToLatest()
-                        .sink { [weak self] needle in
-                            guard let surface = self?.surface else { return }
-                            let action = "search:\(needle)"
-                            ghostty_surface_binding_action(surface, action, UInt(action.lengthOfBytes(using: .utf8)))
-                        }
-                } else if oldValue != nil {
-                    searchNeedleCancellable = nil
-                    guard let surface = self.surface else { return }
+        var searchState: SearchState? {
+            get { state.searchState }
+            set {
+                let previous = state.searchState
+                previous?.stopSearching()
+                state.searchState = newValue
+                if let search = newValue {
+                    search.startSearching { [weak self] needle in
+                        guard let surface = self?.surface else { return }
+                        let action = "search:\(needle)"
+                        ghostty_surface_binding_action(surface, action, UInt(action.utf8.count))
+                    }
+                } else if previous != nil, let surface {
                     let action = "end_search"
-                    ghostty_surface_binding_action(surface, action, UInt(action.lengthOfBytes(using: .utf8)))
+                    ghostty_surface_binding_action(surface, action, UInt(action.utf8.count))
                 }
             }
         }
-
-        // Cancellable for search state needle changes
-        private var searchNeedleCancellable: AnyCancellable?
 
         // Cancellable for the debounced accessibility selection-change post.
         private var accessibilitySelectionCancellable: AnyCancellable?
 
         // Whether the pointer should be visible or not
-        @Published private(set) var pointerStyle: CursorStyle = .horizontalText
+        private(set) var pointerStyle: CursorStyle {
+            get { state.pointerStyle }
+            set { state.pointerStyle = newValue }
+        }
 
         // Whether the mouse is currently over this surface
-        @Published private(set) var mouseOverSurface: Bool = false
+        private(set) var mouseOverSurface: Bool {
+            get { state.mouseOverSurface }
+            set { state.mouseOverSurface = newValue }
+        }
 
         // The last known mouse location in the surface's local coordinate space,
         // used by overlays such as the split drag handle reveal region.
-        @Published private(set) var mouseLocationInSurface: CGPoint?
+        private(set) var mouseLocationInSurface: CGPoint? {
+            get { state.mouseLocationInSurface }
+            set { state.mouseLocationInSurface = newValue }
+        }
 
         // Whether the cursor is currently visible (not hidden by typing, etc.)
-        @Published private(set) var cursorVisible: Bool = true
+        private(set) var cursorVisible: Bool {
+            get { state.cursorVisible }
+            set { state.cursorVisible = newValue }
+        }
 
         /// Whether the belonging window is visible
         ///
@@ -102,20 +179,27 @@ extension Ghostty {
         var isWindowVisible = false
 
         /// The configuration derived from the Ghostty config so we don't need to rely on references.
-        @Published private(set) var derivedConfig: DerivedConfig
+        private(set) var derivedConfig: DerivedConfig {
+            get { state.derivedConfig }
+            set { state.derivedConfig = newValue }
+        }
 
         /// The background color within the color palette of the surface. This is only set if it is
         /// dynamically updated. Otherwise, the background color is the default background color.
-        @Published private(set) var backgroundColor: Color?
+        private(set) var backgroundColor: Color? {
+            get { state.backgroundColor }
+            set { state.backgroundColor = newValue }
+        }
 
         /// True when the bell is active. This is set inactive on focus or event.
-        @Published private(set) var bell: Bool = false
+        private(set) var bell: Bool {
+            get { state.bell }
+            set { state.bell = newValue }
+        }
 
         /// A clipboard confirmation waiting to be handled by its controller.
-        @Published var pendingClipboardConfirmation: ClipboardConfirmationRequest? {
-            didSet {
-                pendingClipboardConfirmationDidChange(from: oldValue)
-            }
+        var pendingClipboardConfirmation: ClipboardConfirmationRequest? {
+            didSet { pendingClipboardConfirmationDidChange(from: oldValue) }
         }
 
         // An initial size to request for a window. This will only affect
@@ -167,8 +251,12 @@ extension Ghostty {
         }
 
         // True if the inspector should be visible
-        @Published var inspectorVisible: Bool = false {
-            didSet {
+        var inspectorVisible: Bool {
+            get { state.inspectorVisible }
+            set {
+                let oldValue = state.inspectorVisible
+                state.inspectorVisible = newValue
+
                 if oldValue && !inspectorVisible {
                     guard let surface = self.surface else { return }
                     ghostty_inspector_free(surface)
@@ -176,14 +264,11 @@ extension Ghostty {
             }
         }
 
-        /// Returns the data model for this surface.
-        ///
-        /// Note: eventually, all surface access will be through this, but presently its in a transition
-        /// state so we're mixing this with direct surface access.
+        /// Owns the core terminal handle. Presentation state never owns this resource.
         private(set) var surfaceModel: Ghostty.Surface?
 
-        /// Returns the underlying C value for the surface. See "note" on surfaceModel.
-        override var surface: ghostty_surface_t? {
+        /// Borrowed core handle, valid only while surfaceModel is alive.
+        var surface: ghostty_surface_t? {
             surfaceModel?.unsafeCValue
         }
         /// Current scrollbar state, cached here for persistence across rebuilds
@@ -232,13 +317,14 @@ extension Ghostty {
         override var acceptsFirstResponder: Bool { return true }
 
         init(_ app: ghostty_app_t, baseConfig: SurfaceConfiguration? = nil, uuid: UUID? = nil) {
+            self.id = uuid ?? UUID()
             self.markedText = NSMutableAttributedString()
 
             // Our initial config always is our application wide config.
             if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
-                self.derivedConfig = DerivedConfig(appDelegate.ghostty.config)
+                self.state = SurfaceState(derivedConfig: DerivedConfig(appDelegate.ghostty.config))
             } else {
-                self.derivedConfig = DerivedConfig()
+                self.state = SurfaceState()
             }
 
             // We need to initialize this so it does something but we want to set
@@ -250,7 +336,7 @@ extension Ghostty {
             // Initialize with some default frame size. The important thing is that this
             // is non-zero so that our layer bounds are non-zero so that our renderer
             // can do SOMETHING.
-            super.init(id: uuid, frame: NSRect(x: 0, y: 0, width: 800, height: 600))
+            super.init(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
 
             // Our cache of screen data
             cachedScreenContents = .init(duration: .milliseconds(500)) { [weak self] in
@@ -332,6 +418,11 @@ extension Ghostty {
             let center = NotificationCenter.default
             center.addObserver(
                 self,
+                selector: #selector(ghosttyDidChangeReadonly(_:)),
+                name: .ghosttyDidChangeReadonly,
+                object: self)
+            center.addObserver(
+                self,
                 selector: #selector(onUpdateRendererHealth),
                 name: Ghostty.Notification.didUpdateRendererHealth,
                 object: self)
@@ -410,6 +501,7 @@ extension Ghostty {
         }
 
         isolated deinit {
+            state.searchState?.stopSearching()
             // Resolve clipboard callback state while surfaceModel is still
             // alive. The request's weak SurfaceView reference is already nil
             // during deinit, so didSet passes this instance explicitly.
@@ -441,12 +533,29 @@ extension Ghostty {
             progressReportTimer?.invalidate()
         }
 
-        override func endSearch() {
-            Ghostty.moveFocus(to: self)
-            super.endSearch()
+        @objc private func ghosttyDidChangeReadonly(_ notification: Foundation.Notification) {
+            guard let value = notification.userInfo?[Foundation.Notification.Name.ReadonlyKey] as? Bool else { return }
+            readonly = value
         }
 
-        override func focusDidChange(_ focused: Bool) {
+        /// Triggers a brief highlight animation on this surface.
+        func highlight() {
+            highlighted = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+                self?.highlighted = false
+            }
+        }
+
+        func setChildExitedMessage(_ message: ChildExitedMessage) {
+            self.childExitedMessage = message
+        }
+
+        func endSearch() {
+            Ghostty.moveFocus(to: self)
+            searchState = nil
+        }
+
+        func focusDidChange(_ focused: Bool) {
             guard let surface = self.surface else { return }
             guard self.focused != focused else { return }
             self.focused = focused
@@ -483,7 +592,7 @@ extension Ghostty {
             }
         }
 
-        override func sizeDidChange(_ size: CGSize) {
+        func sizeDidChange(_ size: CGSize) {
             // Ghostty wants to know the actual framebuffer size... It is very important
             // here that we use "size" and NOT the view frame. If we're in the middle of
             // an animation (i.e. a fullscreen animation), the frame will not yet be updated.
@@ -503,9 +612,8 @@ extension Ghostty {
             // Update our cached size metrics
             let size = ghostty_surface_size(surface)
             DispatchQueue.main.async {
-                // DispatchQueue required since this may be called by SwiftUI off
-                // the main thread and Published changes need to be on the main
-                // thread. This caused a crash on macOS <= 14.
+                // Publish geometry on the next main-loop turn, outside the
+                // SwiftUI layout update that requested the native resize.
                 self.surfaceSize = size
             }
         }
@@ -1918,6 +2026,10 @@ extension Ghostty.SurfaceView {
     ) {
         guard previous !== pendingClipboardConfirmation else { return }
         previous?.cancel(from: self)
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            BaseTerminalController.controller(owning: self)?.clipboardConfirmationDidChange(for: self)
+        }
     }
 }
 

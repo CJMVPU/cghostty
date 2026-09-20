@@ -1,35 +1,15 @@
 import Cocoa
 import SwiftUI
-import Combine
+import Observation
 import GhosttyKit
 
-/// A base class for windows that can contain Ghostty windows. This base class implements
-/// the bare minimum functionality that every terminal window in Ghostty should implement.
-///
-/// Usage: Specify this as the base class of your window controller for the window that contains
-/// a terminal. The window controller must also be the window delegate OR the window delegate
-/// functions on this base class must be called by your own custom delegate. For the terminal
-/// view the TerminalView SwiftUI view must be used and this class is the view model and
-/// delegate.
-///
-/// Special considerations to implement:
-///
-///   - Fullscreen: you must manually listen for the right notification and implement the
-///   callback that calls toggleFullscreen on this base class.
-///
-/// Notably, things this class does NOT implement (not exhaustive):
-///
-///   - Tabbing, because there are many ways to get tabbed behavior in macOS and we
-///   don't want to be opinionated about it.
-///   - Window restoration or save state
-///   - Window visual styles (such as titlebar colors)
-///
-/// The primary idea of all the behaviors we don't implement here are that subclasses may not
-/// want these behaviors.
+/// AppKit coordination shared by normal and quick terminal windows.
+/// Owns native surface lifetimes, focus, clipboard sheets and terminal commands.
+/// SwiftUI reads the separate `uiState`; subclasses add tabs, restoration and
+/// their window style without becoming observable presentation models.
 class BaseTerminalController: NSWindowController,
                               NSWindowDelegate,
                               TerminalViewDelegate,
-                              TerminalViewModel,
                               ClipboardConfirmationViewDelegate,
                               FullscreenDelegate {
     /// Weak surface-to-controller ownership independent of AppKit's transient
@@ -45,21 +25,26 @@ class BaseTerminalController: NSWindowController,
         didSet { syncFocusToSurfaceTree() }
     }
 
-    /// The tree of splits within this terminal window.
-    @Published var surfaceTree: SplitTree<Ghostty.SurfaceView> = .init() {
-        didSet {
-            Self.updateSurfaceControllers(self, from: oldValue, to: surfaceTree)
-            surfaceTreeDidChange(from: oldValue, to: surfaceTree)
+    let uiState = TerminalWindowState()
+
+    /// Structural mutations must pass through the window coordinator so native
+    /// ownership, pending requests and occlusion are updated together.
+    var surfaceTree: SplitTree<Ghostty.SurfaceView> {
+        get { uiState.surfaceTree }
+        set {
+            let previous = uiState.surfaceTree
+            uiState.surfaceTree = newValue
+            Self.updateSurfaceControllers(self, from: previous, to: newValue)
+            surfaceTreeDidChange(from: previous, to: newValue)
         }
     }
 
-    /// This can be set to show/hide the command palette.
-    @Published var commandPaletteIsShowing: Bool = false
+    var commandPaletteIsShowing: Bool {
+        get { uiState.commandPaletteIsShowing }
+        set { uiState.commandPaletteIsShowing = newValue }
+    }
 
-    /// Set if the terminal view should show the update overlay.
-
-    /// True when any surface in this controller currently has an active bell.
-    @Published private(set) var bell: Bool = false
+    var bell: Bool { uiState.bell }
 
     /// Whether the terminal surface should focus when the mouse is over it.
     var focusFollowsMouse: Bool {
@@ -90,14 +75,11 @@ class BaseTerminalController: NSWindowController,
     /// Track whether background is forced opaque (true) or using config transparency (false)
     var isBackgroundOpaque: Bool = false
 
-    /// The cancellables related to our focused surface.
-    private var focusedSurfaceCancellables: Set<AnyCancellable> = []
+    /// Observation of the focused surface's title and bell state.
+    private var titleObservation: Task<Void, Never>?
 
-    /// Cancellable for aggregating bell state across all surfaces in this controller.
-    private var bellStateCancellable: AnyCancellable?
-
-    /// Cancellable for clipboard confirmation requests from surfaces in this controller.
-    private var clipboardConfirmationCancellable: AnyCancellable?
+    /// Observation of aggregate bell state across this window's surfaces.
+    private var bellObservation: Task<Void, Never>?
 
     /// An override title for the tab/window set by the user via prompt_tab_title.
     /// When set, this takes precedence over the computed title from the terminal.
@@ -153,8 +135,7 @@ class BaseTerminalController: NSWindowController,
         Self.updateSurfaceControllers(self, from: .init(), to: surfaceTree)
 
         // Setup our bell state for the window
-        setupBellNotificationPublisher()
-        setupClipboardConfirmationPublisher()
+        observeBellState()
 
         // Setup our notifications for behaviors
         let center = NotificationCenter.default
@@ -229,6 +210,8 @@ class BaseTerminalController: NSWindowController,
     }
 
     isolated deinit {
+        titleObservation?.cancel()
+        bellObservation?.cancel()
         NotificationCenter.default.removeObserver(self)
         undoManager?.removeAllActions(withTarget: self)
         if let eventMonitor {
@@ -877,23 +860,21 @@ class BaseTerminalController: NSWindowController,
         let lastFocusedSurface = focusedSurface
         focusedSurface = to
 
-        // Important to cancel any prior subscriptions
-        focusedSurfaceCancellables = []
-
-        // Setup our title listener. If we have a focused surface we always use that.
-        // Otherwise, we try to use our last focused surface. In either case, we only
-        // want to care if the surface is in the tree so we don't listen to titles of
-        // closed surfaces.
+        titleObservation?.cancel()
+        titleObservation = nil
         if let titleSurface = focusedSurface ?? lastFocusedSurface,
            surfaceTree.contains(titleSurface) {
-            // If we have a surface, we want to listen for title changes.
-            titleSurface.$title
-                .combineLatest(titleSurface.$bell)
-                .map { [weak self] in self?.computeTitle(title: $0, bell: $1) ?? "" }
-                .sink { [weak self] in self?.titleDidChange(to: $0) }
-                .store(in: &focusedSurfaceCancellables)
+            titleDidChange(to: computeTitle(title: titleSurface.title, bell: titleSurface.bell))
+            let titles = Observations { [weak titleSurface] in
+                (titleSurface?.title ?? "👻", titleSurface?.bell ?? false)
+            }
+            titleObservation = Task { [weak self] in
+                for await (title, bell) in titles {
+                    guard !Task.isCancelled else { break }
+                    self?.titleDidChange(to: self?.computeTitle(title: title, bell: bell) ?? title)
+                }
+            }
         } else {
-            // There is no surface to listen to titles for.
             titleDidChange(to: "👻")
         }
     }
@@ -1197,6 +1178,8 @@ class BaseTerminalController: NSWindowController,
     }
 
     func windowWillClose(_ notification: Notification) {
+        titleObservation?.cancel()
+        bellObservation?.cancel()
         guard let window else { return }
 
         for surfaceView in surfaceTree {
@@ -1206,7 +1189,7 @@ class BaseTerminalController: NSWindowController,
         // Emit a final bell-state transition so any observers can clear state
         // without separately tracking NSWindow lifecycle events.
         if bell {
-            bell = false
+            uiState.bell = false
             NotificationCenter.default.post(
                 name: .terminalWindowBellDidChangeNotification,
                 object: self,
@@ -1510,36 +1493,11 @@ extension BaseTerminalController: NSMenuItemValidation {
 // MARK: Clipboard Confirmation
 
 extension BaseTerminalController {
-    /// Presents clipboard confirmations published by surfaces in this controller.
-    private func setupClipboardConfirmationPublisher() {
-        clipboardConfirmationCancellable = $surfaceTree
-            // Rebuild the merged publisher whenever the split tree changes.
-            .map { tree in
-                Publishers.MergeMany(tree.map { surface in
-                    // Carry the stable value-type ID rather than capturing the
-                    // surface in the operator chain. The subscription therefore
-                    // cannot extend the SurfaceView's lifetime.
-                    let id = surface.id
-                    return surface.$pendingClipboardConfirmation
-                        .map { (id, $0) }
-                        .eraseToAnyPublisher()
-                })
-                .eraseToAnyPublisher()
-            }
-            // Cancelling the old MergeMany releases every subscription for
-            // surfaces removed from the current tree.
-            .switchToLatest()
-            // Published emits synchronously from the libghostty callback. Hop
-            // to the main queue both for AppKit and so completing a request
-            // cannot invalidate callback state while that callback is active.
-            .receive(on: DispatchQueue.main)
-            // The cancellable is controller-owned, so capture it weakly here to
-            // avoid controller -> cancellable -> sink -> controller.
-            .sink { [weak self] id, request in
-                guard let self,
-                      let surface = surfaceTree.first(where: { $0.id == id }) else { return }
-                onConfirmClipboardRequest(request, for: surface)
-            }
+    /// Delivered explicitly after the core callback returns. Requests are events,
+    /// not coalesced presentation state; identity is checked before presentation.
+    func clipboardConfirmationDidChange(for surface: Ghostty.SurfaceView) {
+        guard surfaceTree.contains(surface) else { return }
+        onConfirmClipboardRequest(surface.pendingClipboardConfirmation, for: surface)
     }
 
     private func onConfirmClipboardRequest(
@@ -1654,49 +1612,26 @@ extension BaseTerminalController {
     }
 }
 
-// MARK: Combine Methods
+// MARK: Presentation observation
 
 extension BaseTerminalController {
-    /// Publishes an app-wide notification whenever this terminal window's aggregate
-    /// bell state changes.
-    private func setupBellNotificationPublisher() {
-        bellStateCancellable = surfaceValuesPublisher(valueKeyPath: \.bell, publisherKeyPath: \.$bell)
-            .map { $0.values.contains(true) }
-            .removeDuplicates()
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] hasBell in
-                guard let self else { return }
-                bell = hasBell
+    private func observeBellState() {
+        let bells = Observations { [weak uiState] in
+            uiState?.surfaceTree.contains(where: { $0.bell }) ?? false
+        }
+        bellObservation = Task { [weak self] in
+            for await hasBell in bells {
+                guard !Task.isCancelled else { break }
+                guard let self else { break }
+                guard uiState.bell != hasBell else { continue }
+                uiState.bell = hasBell
                 NotificationCenter.default.post(
                     name: .terminalWindowBellDidChangeNotification,
                     object: self,
                     userInfo: [Notification.Name.terminalWindowHasBellKey: hasBell]
                 )
             }
-    }
-
-    /// Creates a publisher for values on all surfaces in this controller's tree.
-    ///
-    /// The publisher emits a dictionary of surface IDs to values whenever the tree changes
-    /// or any surface publishes a new value for the key path.
-    func surfaceValuesPublisher<Value>(
-        valueKeyPath: KeyPath<Ghostty.SurfaceView, Value>,
-        publisherKeyPath: KeyPath<Ghostty.SurfaceView, Published<Value>.Publisher>
-    ) -> AnyPublisher<[Ghostty.SurfaceView.ID: Value], Never> {
-        // `surfaceTree` can be replaced entirely when splits are added/removed/closed.
-        // For each tree snapshot we build a fresh publisher that watches all surfaces
-        // in that snapshot.
-        $surfaceTree
-            .map { tree in
-                tree.valuesPublisher(
-                    valueKeyPath: valueKeyPath,
-                    publisherKeyPath: publisherKeyPath
-                )
-            }
-            // Keep only the latest tree publisher active. This automatically cancels
-            // subscriptions for old/removed surfaces when the tree changes.
-            .switchToLatest()
-            .eraseToAnyPublisher()
+        }
     }
 }
 

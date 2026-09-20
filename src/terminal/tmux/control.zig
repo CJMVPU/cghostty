@@ -6,7 +6,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const assert = @import("../../quirks.zig").inlineAssert;
-const oni = @import("oniguruma");
 
 const log = std.log.scoped(.terminal_tmux);
 
@@ -94,15 +93,7 @@ pub const Parser = struct {
             // complete notification we need to parse.
             .notification => if (byte == '\n') {
                 // We have a complete notification, parse it.
-                return self.parseNotification() catch {
-                    // If parsing failed, then we do not mark the state
-                    // as broken because we may be able to continue parsing
-                    // other types of notifications.
-                    //
-                    // In the future we may want to emit a notification
-                    // here about unknown or unsupported notifications.
-                    return null;
-                };
+                return self.parseNotification();
             },
 
             // If we're in a block then we accumulate until we see a newline
@@ -146,8 +137,6 @@ pub const Parser = struct {
         return null;
     }
 
-    const ParseError = error{RegexError};
-
     const BlockTerminator = enum { end, err };
 
     /// Block payload is raw data, so a line only terminates a block if it
@@ -183,7 +172,7 @@ pub const Parser = struct {
         return terminator;
     }
 
-    fn parseNotification(self: *Parser) ParseError!?Notification {
+    fn parseNotification(self: *Parser) ?Notification {
         assert(self.state == .notification);
 
         const line = line: {
@@ -195,6 +184,8 @@ pub const Parser = struct {
             const idx = std.mem.indexOfScalar(u8, line, ' ') orelse line.len;
             break :cmd line[0..idx];
         };
+
+        const args = if (cmd.len < line.len) line[cmd.len + 1 ..] else "";
 
         // The notification MUST exist because we guard entering the notification
         // state on seeing at least a '%'.
@@ -211,63 +202,19 @@ pub const Parser = struct {
             self.buffer.clearRetainingCapacity();
             return null;
         } else if (std.mem.eql(u8, cmd, "%output")) cmd: {
-            var re = oni.Regex.init(
-                "^%output %([0-9]+) (.+)$",
-                .{ .capture_group = true },
-                oni.Encoding.utf8,
-                oni.Syntax.default,
-                null,
-            ) catch |err| {
-                log.warn("regex init failed error={}", .{err});
-                return error.RegexError;
-            };
-            defer re.deinit();
+            var fields = args;
+            const id = parseId(takeField(&fields) orelse break :cmd, '%') orelse break :cmd;
+            const data = fields;
+            if (data.len == 0) break :cmd;
 
-            var region = re.search(line, .{}) catch |err| {
-                log.warn("failed to match notification cmd={s} line=\"{s}\" err={}", .{ cmd, line, err });
-                break :cmd;
-            };
-            defer region.deinit();
-            const starts = region.starts();
-            const ends = region.ends();
-
-            const id = std.fmt.parseInt(
-                usize,
-                line[@intCast(starts[1])..@intCast(ends[1])],
-                10,
-            ) catch unreachable;
-            const data = line[@intCast(starts[2])..@intCast(ends[2])];
-
-            // Important: do not clear buffer here since name points to it
+            // Important: do not clear buffer here since data points to it
             self.state = .idle;
             return .{ .output = .{ .pane_id = id, .data = data } };
         } else if (std.mem.eql(u8, cmd, "%session-changed")) cmd: {
-            var re = oni.Regex.init(
-                "^%session-changed \\$([0-9]+) (.+)$",
-                .{ .capture_group = true },
-                oni.Encoding.utf8,
-                oni.Syntax.default,
-                null,
-            ) catch |err| {
-                log.warn("regex init failed error={}", .{err});
-                return error.RegexError;
-            };
-            defer re.deinit();
-
-            var region = re.search(line, .{}) catch |err| {
-                log.warn("failed to match notification cmd={s} line=\"{s}\" err={}", .{ cmd, line, err });
-                break :cmd;
-            };
-            defer region.deinit();
-            const starts = region.starts();
-            const ends = region.ends();
-
-            const id = std.fmt.parseInt(
-                usize,
-                line[@intCast(starts[1])..@intCast(ends[1])],
-                10,
-            ) catch unreachable;
-            const name = line[@intCast(starts[2])..@intCast(ends[2])];
+            var fields = args;
+            const id = parseId(takeField(&fields) orelse break :cmd, '$') orelse break :cmd;
+            const name = fields;
+            if (name.len == 0) break :cmd;
 
             // Important: do not clear buffer here since name points to it
             self.state = .idle;
@@ -282,34 +229,11 @@ pub const Parser = struct {
             self.state = .idle;
             return .{ .sessions_changed = {} };
         } else if (std.mem.eql(u8, cmd, "%layout-change")) cmd: {
-            var re = oni.Regex.init(
-                "^%layout-change @([0-9]+) (.+) (.+) (.*)$",
-                .{ .capture_group = true },
-                oni.Encoding.utf8,
-                oni.Syntax.default,
-                null,
-            ) catch |err| {
-                log.warn("regex init failed error={}", .{err});
-                return error.RegexError;
-            };
-            defer re.deinit();
-
-            var region = re.search(line, .{}) catch |err| {
-                log.warn("failed to match notification cmd={s} line=\"{s}\" err={}", .{ cmd, line, err });
-                break :cmd;
-            };
-            defer region.deinit();
-            const starts = region.starts();
-            const ends = region.ends();
-
-            const id = std.fmt.parseInt(
-                usize,
-                line[@intCast(starts[1])..@intCast(ends[1])],
-                10,
-            ) catch unreachable;
-            const layout = line[@intCast(starts[2])..@intCast(ends[2])];
-            const visible_layout = line[@intCast(starts[3])..@intCast(ends[3])];
-            const raw_flags = line[@intCast(starts[4])..@intCast(ends[4])];
+            var fields = args;
+            const id = parseId(takeField(&fields) orelse break :cmd, '@') orelse break :cmd;
+            const layout = takeField(&fields) orelse break :cmd;
+            const visible_layout = takeField(&fields) orelse break :cmd;
+            const raw_flags = fields; // An empty flags field is valid.
 
             // Important: do not clear buffer here since layout strings point to it
             self.state = .idle;
@@ -320,155 +244,42 @@ pub const Parser = struct {
                 .raw_flags = raw_flags,
             } };
         } else if (std.mem.eql(u8, cmd, "%window-add")) cmd: {
-            var re = oni.Regex.init(
-                "^%window-add @([0-9]+)$",
-                .{ .capture_group = true },
-                oni.Encoding.utf8,
-                oni.Syntax.default,
-                null,
-            ) catch |err| {
-                log.warn("regex init failed error={}", .{err});
-                return error.RegexError;
-            };
-            defer re.deinit();
-
-            var region = re.search(line, .{}) catch |err| {
-                log.warn("failed to match notification cmd={s} line=\"{s}\" err={}", .{ cmd, line, err });
-                break :cmd;
-            };
-            defer region.deinit();
-            const starts = region.starts();
-            const ends = region.ends();
-
-            const id = std.fmt.parseInt(
-                usize,
-                line[@intCast(starts[1])..@intCast(ends[1])],
-                10,
-            ) catch unreachable;
+            const id = parseId(args, '@') orelse break :cmd;
 
             self.buffer.clearRetainingCapacity();
             self.state = .idle;
             return .{ .window_add = .{ .id = id } };
         } else if (std.mem.eql(u8, cmd, "%window-renamed")) cmd: {
-            var re = oni.Regex.init(
-                "^%window-renamed @([0-9]+) (.+)$",
-                .{ .capture_group = true },
-                oni.Encoding.utf8,
-                oni.Syntax.default,
-                null,
-            ) catch |err| {
-                log.warn("regex init failed error={}", .{err});
-                return error.RegexError;
-            };
-            defer re.deinit();
-
-            var region = re.search(line, .{}) catch |err| {
-                log.warn("failed to match notification cmd={s} line=\"{s}\" err={}", .{ cmd, line, err });
-                break :cmd;
-            };
-            defer region.deinit();
-            const starts = region.starts();
-            const ends = region.ends();
-
-            const id = std.fmt.parseInt(
-                usize,
-                line[@intCast(starts[1])..@intCast(ends[1])],
-                10,
-            ) catch unreachable;
-            const name = line[@intCast(starts[2])..@intCast(ends[2])];
+            var fields = args;
+            const id = parseId(takeField(&fields) orelse break :cmd, '@') orelse break :cmd;
+            const name = fields;
+            if (name.len == 0) break :cmd;
 
             // Important: do not clear buffer here since name points to it
             self.state = .idle;
             return .{ .window_renamed = .{ .id = id, .name = name } };
         } else if (std.mem.eql(u8, cmd, "%window-pane-changed")) cmd: {
-            var re = oni.Regex.init(
-                "^%window-pane-changed @([0-9]+) %([0-9]+)$",
-                .{ .capture_group = true },
-                oni.Encoding.utf8,
-                oni.Syntax.default,
-                null,
-            ) catch |err| {
-                log.warn("regex init failed error={}", .{err});
-                return error.RegexError;
-            };
-            defer re.deinit();
-
-            var region = re.search(line, .{}) catch |err| {
-                log.warn("failed to match notification cmd={s} line=\"{s}\" err={}", .{ cmd, line, err });
-                break :cmd;
-            };
-            defer region.deinit();
-            const starts = region.starts();
-            const ends = region.ends();
-
-            const window_id = std.fmt.parseInt(
-                usize,
-                line[@intCast(starts[1])..@intCast(ends[1])],
-                10,
-            ) catch unreachable;
-            const pane_id = std.fmt.parseInt(
-                usize,
-                line[@intCast(starts[2])..@intCast(ends[2])],
-                10,
-            ) catch unreachable;
+            var fields = args;
+            const window_id = parseId(takeField(&fields) orelse break :cmd, '@') orelse break :cmd;
+            const pane_id = parseId(fields, '%') orelse break :cmd;
 
             self.buffer.clearRetainingCapacity();
             self.state = .idle;
             return .{ .window_pane_changed = .{ .window_id = window_id, .pane_id = pane_id } };
         } else if (std.mem.eql(u8, cmd, "%client-detached")) cmd: {
-            var re = oni.Regex.init(
-                "^%client-detached (.+)$",
-                .{ .capture_group = true },
-                oni.Encoding.utf8,
-                oni.Syntax.default,
-                null,
-            ) catch |err| {
-                log.warn("regex init failed error={}", .{err});
-                return error.RegexError;
-            };
-            defer re.deinit();
-
-            var region = re.search(line, .{}) catch |err| {
-                log.warn("failed to match notification cmd={s} line=\"{s}\" err={}", .{ cmd, line, err });
-                break :cmd;
-            };
-            defer region.deinit();
-            const starts = region.starts();
-            const ends = region.ends();
-
-            const client = line[@intCast(starts[1])..@intCast(ends[1])];
+            const client = args;
+            if (client.len == 0) break :cmd;
 
             // Important: do not clear buffer here since client points to it
             self.state = .idle;
             return .{ .client_detached = .{ .client = client } };
         } else if (std.mem.eql(u8, cmd, "%client-session-changed")) cmd: {
-            var re = oni.Regex.init(
-                "^%client-session-changed (.+) \\$([0-9]+) (.+)$",
-                .{ .capture_group = true },
-                oni.Encoding.utf8,
-                oni.Syntax.default,
-                null,
-            ) catch |err| {
-                log.warn("regex init failed error={}", .{err});
-                return error.RegexError;
-            };
-            defer re.deinit();
-
-            var region = re.search(line, .{}) catch |err| {
-                log.warn("failed to match notification cmd={s} line=\"{s}\" err={}", .{ cmd, line, err });
-                break :cmd;
-            };
-            defer region.deinit();
-            const starts = region.starts();
-            const ends = region.ends();
-
-            const client = line[@intCast(starts[1])..@intCast(ends[1])];
-            const session_id = std.fmt.parseInt(
-                usize,
-                line[@intCast(starts[2])..@intCast(ends[2])],
-                10,
-            ) catch unreachable;
-            const name = line[@intCast(starts[3])..@intCast(ends[3])];
+            // The client and session name can contain spaces. Split at the
+            // last valid " $id " boundary, preserving the previous greedy rule.
+            const split = splitClientSession(args) orelse break :cmd;
+            const client = split.client;
+            const session_id = split.id;
+            const name = split.name;
 
             // Important: do not clear buffer here since client/name point to it
             self.state = .idle;
@@ -482,6 +293,34 @@ pub const Parser = struct {
         self.buffer.clearRetainingCapacity();
         self.state = .idle;
 
+        return null;
+    }
+
+    /// Consume a non-empty space-delimited field, leaving the remainder intact.
+    fn takeField(rest: *[]const u8) ?[]const u8 {
+        const end = std.mem.indexOfScalar(u8, rest.*, ' ') orelse return null;
+        if (end == 0) return null;
+        const field = rest.*[0..end];
+        rest.* = rest.*[end + 1 ..];
+        return field;
+    }
+
+    fn parseId(field: []const u8, prefix: u8) ?usize {
+        if (field.len < 2 or field[0] != prefix) return null;
+        for (field[1..]) |byte| if (!std.ascii.isDigit(byte)) return null;
+        return std.fmt.parseInt(usize, field[1..], 10) catch null;
+    }
+
+    fn splitClientSession(args: []const u8) ?struct { client: []const u8, id: usize, name: []const u8 } {
+        var end = args.len;
+        while (std.mem.lastIndexOf(u8, args[0..end], " $")) |idx| {
+            end = idx;
+            if (idx == 0) return null;
+            var fields = args[idx + 1 ..];
+            const id = parseId(takeField(&fields) orelse continue, '$') orelse continue;
+            if (fields.len == 0) continue;
+            return .{ .client = args[0..idx], .id = id, .name = fields };
+        }
         return null;
     }
 
@@ -836,4 +675,55 @@ test "tmux client-session-changed" {
     try testing.expectEqualStrings("/dev/pts/1", n.client_session_changed.client);
     try testing.expectEqual(2, n.client_session_changed.session_id);
     try testing.expectEqualStrings("mysession", n.client_session_changed.name);
+}
+
+test "tmux malformed notifications recover at the next line" {
+    const testing = std.testing;
+    const cases = [_][]const u8{
+        "%output",                          "%output %1",                             "%output %1 ",                                   "%output @1 data",
+        "%session-changed $1",              "%session-changed $1 ",                   "%window-add @",                                 "%window-add @-1",
+        "%window-add @+1",                  "%window-add @1_0",                       "%window-add @99999999999999999999999999999999", "%window-add @1 extra",
+        "%window-add  @1",                  "%window-renamed @1 ",                    "%window-pane-changed @1 %2 extra",              "%window-pane-changed @1 @2",
+        "%client-detached ",                "%client-session-changed client $x name", "%client-session-changed client $1 ",            "%layout-change @1 layout visible",
+        "%layout-change @1  visible flags",
+    };
+    for (cases) |line| {
+        var parser: Parser = .{ .buffer = .init(testing.allocator) };
+        defer parser.deinit();
+        for (line) |byte| try testing.expectEqual(null, try parser.put(byte));
+        try testing.expectEqual(null, try parser.put('\n'));
+        for ("%window-add @2\r") |byte| try testing.expectEqual(null, try parser.put(byte));
+        const notification = (try parser.put('\n')).?;
+        try testing.expectEqual(@as(usize, 2), notification.window_add.id);
+    }
+}
+
+test "tmux byte payloads and names preserve spaces" {
+    const testing = std.testing;
+    var parser: Parser = .{ .buffer = .init(testing.allocator) };
+    defer parser.deinit();
+    for ("%output %7  hello\\033\xff ") |byte| try testing.expectEqual(null, try parser.put(byte));
+    const output = (try parser.put('\n')).?.output;
+    try testing.expectEqualStrings(" hello\\033\xff ", output.data);
+
+    for ("%window-renamed @7  工作 窗口 ") |byte| try testing.expectEqual(null, try parser.put(byte));
+    const renamed = (try parser.put('\n')).?.window_renamed;
+    try testing.expectEqualStrings(" 工作 窗口 ", renamed.name);
+
+    for ("%client-session-changed client name $1 first $2 final name ") |byte| try testing.expectEqual(null, try parser.put(byte));
+    const session = (try parser.put('\n')).?.client_session_changed;
+    try testing.expectEqualStrings("client name $1 first", session.client);
+    try testing.expectEqual(@as(usize, 2), session.session_id);
+    try testing.expectEqualStrings("final name ", session.name);
+}
+
+test "tmux layout-change accepts empty flags" {
+    const testing = std.testing;
+    var parser: Parser = .{ .buffer = .init(testing.allocator) };
+    defer parser.deinit();
+    for ("%layout-change @1 layout visible ") |byte| try testing.expectEqual(null, try parser.put(byte));
+    const layout = (try parser.put('\n')).?.layout_change;
+    try testing.expectEqualStrings("layout", layout.layout);
+    try testing.expectEqualStrings("visible", layout.visible_layout);
+    try testing.expectEqualStrings("", layout.raw_flags);
 }

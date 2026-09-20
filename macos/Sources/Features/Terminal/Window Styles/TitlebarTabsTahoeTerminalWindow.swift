@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import Observation
 
 /// `macos-titlebar-style = tabs` for macOS 26 (Tahoe) and later.
 ///
@@ -274,11 +275,11 @@ class TitlebarTabsTahoeTerminalWindow: TransparentTitlebarTerminalWindow, NSTool
 
     // MARK: SwiftUI
 
-    class ViewModel: ObservableObject {
-        @Published var titleFont: NSFont?
-        @Published var title: String = "cghostty"
-        @Published var hasTabBar: Bool = false
-        @Published var isMainWindow: Bool = true
+    @MainActor @Observable final class ViewModel {
+        var titleFont: NSFont?
+        var title: String = "cghostty"
+        var hasTabBar: Bool = false
+        var isMainWindow: Bool = true
     }
 }
 
@@ -290,7 +291,7 @@ extension NSToolbarItem.Identifier {
 extension TitlebarTabsTahoeTerminalWindow {
     /// Displays the window title
     struct TitleItem: View {
-        @ObservedObject var viewModel: ViewModel
+        let viewModel: ViewModel
 
         var title: String {
             // An empty title makes this view zero-sized and NSToolbar on macOS

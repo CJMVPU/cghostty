@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import Observation
 
 /// Use this container to achieve a glass effect at the window level.
 /// Modifying `NSThemeFrame` can sometimes be unpredictable.
@@ -101,11 +102,11 @@ extension BaseTerminalController {
 
 /// An `NSView` that contains a liquid glass background effect and
 /// an inactive-window tint overlay.
-private class TerminalGlassView: NSView, ObservableObject {
+private class TerminalGlassView: NSView {
     /// We use this to apply glass effect to background colors
     ///
     struct GlassBackground: View {
-        @ObservedObject var model: GlassViewModel
+        let model: GlassViewModel
 
         var body: some View {
             model.color
@@ -116,11 +117,11 @@ private class TerminalGlassView: NSView, ObservableObject {
         }
     }
 
-    class GlassViewModel: ObservableObject {
-        @Published var backgroundColor: Color = .clear
-        @Published var backgroundOpacity: Double = 0
-        @Published var cornerRadius: CGFloat = 0
-        @Published var glass: Glass = .identity
+    @MainActor @Observable final class GlassViewModel {
+        var backgroundColor: Color = .clear
+        var backgroundOpacity: Double = 0
+        var cornerRadius: CGFloat = 0
+        var glass: Glass = .identity
 
         /// backgroundColor applied with backgroundOpacity
         var color: Color {

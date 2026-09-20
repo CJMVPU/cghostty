@@ -9,7 +9,7 @@ extension Ghostty {
         // Reveal the handle anywhere within the top % of the pane height.
         private static let hoverHeightFactor: CGFloat = 0.2
 
-        @ObservedObject var surfaceView: SurfaceView
+        let surfaceView: SurfaceView
         let dragHandle: Ghostty.Config.DragHandle
 
         @State private var isHovering: Bool = false
@@ -43,13 +43,13 @@ extension Ghostty {
                 break
             }
             // If the cursor isn't visible, never show the handle
-            guard surfaceView.cursorVisible else { return false }
+            guard surfaceView.state.cursorVisible else { return false }
             // If we're hovering or actively dragging, always visible
             if isHovering || isDragging { return true }
 
             // Require our mouse location to be within the top area of the
             // surface.
-            guard let mouseLocation = surfaceView.mouseLocationInSurface else { return false }
+            guard let mouseLocation = surfaceView.state.mouseLocationInSurface else { return false }
             return Self.isInHoverRegion(mouseLocation, in: surfaceView.bounds)
         }
 

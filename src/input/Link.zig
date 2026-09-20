@@ -6,7 +6,7 @@ const Link = @This();
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const oni = @import("oniguruma");
+const pcre2 = @import("pcre2");
 const Mods = @import("key.zig").Mods;
 
 /// The regular expression that will be used to match the link. Ownership
@@ -51,15 +51,9 @@ pub const Highlight = union(enum) {
     hover_mods: Mods,
 };
 
-/// Returns a new oni.Regex that can be used to match the link.
-pub fn oniRegex(self: *const Link) !oni.Regex {
-    return try oni.Regex.init(
-        self.regex,
-        .{},
-        oni.Encoding.utf8,
-        oni.Syntax.default,
-        null,
-    );
+/// Returns a new pcre2.Regex that can be used to match the link.
+pub fn compileRegex(self: *const Link) !pcre2.Regex {
+    return try pcre2.Regex.init(self.regex);
 }
 
 /// Deep clone the link.

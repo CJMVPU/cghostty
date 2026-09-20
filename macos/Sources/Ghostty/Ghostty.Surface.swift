@@ -1,14 +1,9 @@
 import GhosttyKit
 
 extension Ghostty {
-    /// Represents a single surface within Ghostty.
-    ///
-    /// NOTE(mitchellh): This is a work-in-progress class as part of a general refactor
-    /// of our Ghostty data model. At the time of writing there's still a ton of surface
-    /// functionality that is not encapsulated in this class. It is planned to migrate that
-    /// all over.
-    ///
-    /// Wraps a `ghostty_surface_t`
+    /// Owns one core terminal handle and exposes native terminal operations.
+    /// The AppKit SurfaceView owns this resource; its observable SurfaceState
+    /// contains presentation values and does not extend the handle's lifetime.
     final class Surface: Sendable {
         /// A surface is sendable because it is just a reference type. Using the surface in parameters
         /// may be unsafe but the value itself is safe to send across threads.

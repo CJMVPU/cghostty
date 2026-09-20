@@ -178,7 +178,9 @@ pub fn build(b: *std.Build) !void {
         });
         lib.root_module.addCSourceFiles(.{
             .root = b.path(""),
-            .files = &.{"ext.cpp"},
+            // Keep the archive member distinct from macos/text/ext.c's ext.o
+            // so dsymutil can resolve this object's constructor symbols.
+            .files = &.{"dcimgui_ext.cpp"},
             .flags = all_flags.items,
         });
 

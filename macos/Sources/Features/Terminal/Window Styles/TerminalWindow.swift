@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import SwiftUI
+import Observation
 import GhosttyKit
 
 /// The base class for all standalone, "normal" terminal windows. This sets the basic
@@ -669,10 +670,10 @@ class TerminalWindow: NSWindow {
 // MARK: SwiftUI View
 
 extension TerminalWindow {
-    class ViewModel: ObservableObject {
-        @Published var isSurfaceZoomed: Bool = false
-        @Published var hasToolbar: Bool = false
-        @Published var isMainWindow: Bool = true
+    @MainActor @Observable final class ViewModel {
+        var isSurfaceZoomed: Bool = false
+        var hasToolbar: Bool = false
+        var isMainWindow: Bool = true
 
         /// Calculates the top padding based on toolbar visibility
         fileprivate var accessoryTopPadding: CGFloat {
@@ -681,7 +682,7 @@ extension TerminalWindow {
     }
 
     struct ResetZoomAccessoryView: View {
-        @ObservedObject var viewModel: ViewModel
+        let viewModel: ViewModel
         let action: () -> Void
 
         var body: some View {

@@ -1,11 +1,14 @@
 import Foundation
 import Cocoa
 import SwiftUI
-import Combine
+import Observation
 import GhosttyKit
 
 /// A classic, tabbed terminal experience.
 class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Controller {
+    /// AppKit's window/controller link is weak. Keep loaded windows' coordinators
+    /// alive independently of SwiftUI view state, and release them on close.
+    private static var openControllers: [ObjectIdentifier: TerminalController] = [:]
     override var windowNibName: NSNib.Name? {
         let defaultValue = "Terminal"
 
@@ -49,8 +52,8 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
     /// The configuration derived from the Ghostty config so we don't need to rely on references.
     private(set) var derivedConfig: DerivedConfig
 
-    /// The notification cancellable for focused surface property changes.
-    private var surfaceAppearanceCancellables: Set<AnyCancellable> = []
+    /// Observation of the focused surface's native window appearance.
+    private var appearanceObservation: Task<Void, Never>?
 
     init(_ ghostty: Ghostty.App,
          withBaseConfig base: Ghostty.SurfaceConfiguration? = nil,
@@ -131,6 +134,7 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
     }
 
     isolated deinit {
+        appearanceObservation?.cancel()
         // Remove all of our notificationcenter subscriptions
         let center = NotificationCenter.default
         center.removeObserver(self)
@@ -1076,6 +1080,7 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
     override func windowDidLoad() {
         super.windowDidLoad()
         guard let window else { return }
+        Self.openControllers[ObjectIdentifier(self)] = self
 
         // I copy this because we may change the source in the future but also because
         // I regularly audit our codebase for "ghostty.config" access because generally
@@ -1100,7 +1105,7 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
 
         // Initialize our content view to the SwiftUI root
         let container = TerminalViewContainer {
-            TerminalView(ghostty: ghostty, viewModel: self, delegate: self)
+            TerminalView(ghostty: ghostty, viewModel: uiState, delegate: self)
         }
 
         // Set the initial content size on the container so that
@@ -1216,6 +1221,8 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
     }
 
     override func windowWillClose(_ notification: Notification) {
+        defer { Self.openControllers[ObjectIdentifier(self)] = nil }
+        appearanceObservation?.cancel()
         super.windowWillClose(notification)
         cancelPendingInitialPresentation()
         self.relabelTabs()
@@ -1470,32 +1477,19 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
     override func focusedSurfaceDidChange(to: Ghostty.SurfaceView?) {
         super.focusedSurfaceDidChange(to: to)
 
-        // We always cancel our event listener
-        surfaceAppearanceCancellables.removeAll()
-
-        // When our focus changes, we update our window appearance based on the
-        // currently focused surface.
+        appearanceObservation?.cancel()
+        appearanceObservation = nil
         guard let focusedSurface else { return }
         syncAppearance(focusedSurface.derivedConfig)
-
-        // We also want to get notified of certain changes to update our appearance.
-        focusedSurface.$derivedConfig
-            .dropFirst()
-            .sink { [weak self, weak focusedSurface] _ in self?.syncAppearanceOnPropertyChange(focusedSurface) }
-            .store(in: &surfaceAppearanceCancellables)
-        focusedSurface.$backgroundColor
-            .dropFirst()
-            .sink { [weak self, weak focusedSurface] _ in self?.syncAppearanceOnPropertyChange(focusedSurface) }
-            .store(in: &surfaceAppearanceCancellables)
-    }
-
-    private func syncAppearanceOnPropertyChange(_ surface: Ghostty.SurfaceView?) {
-        guard let surface else { return }
-        DispatchQueue.main.async { [weak self, weak surface] in
-            guard let surface else { return }
-            guard let self else { return }
-            guard self.focusedSurface == surface else { return }
-            self.syncAppearance(surface.derivedConfig)
+        let appearance = Observations { [weak focusedSurface] in
+            (focusedSurface?.derivedConfig, focusedSurface?.backgroundColor)
+        }
+        appearanceObservation = Task { [weak self, weak focusedSurface] in
+            for await _ in appearance {
+                guard !Task.isCancelled else { break }
+                guard let self, let focusedSurface, self.focusedSurface === focusedSurface else { break }
+                syncAppearance(focusedSurface.derivedConfig)
+            }
         }
     }
 

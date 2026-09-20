@@ -7,7 +7,7 @@ extension Ghostty {
     struct SurfaceWrapper: View {
         // The surface to create a view for. This must be created upstream. As long as this
         // remains the same, the surface that is being rendered remains the same.
-        @ObservedObject var surfaceView: SurfaceView
+        let surfaceView: SurfaceView
 
         // True if this surface is part of a split view. This is important to know so
         // we know whether to dim the surface out of focus.
@@ -20,9 +20,9 @@ extension Ghostty {
         @State private var windowFocus: Bool = true
 
         // Observe SecureInput to detect when its enabled
-        @ObservedObject private var secureInput = SecureInput.shared
+        private let secureInput = SecureInput.shared
 
-        @EnvironmentObject private var ghostty: Ghostty.App
+        @Environment(Ghostty.App.self) private var ghostty
         @Environment(\.ghosttyLastFocusedSurface) private var lastFocusedSurface
 
         private var isFocusedSurface: Bool {
@@ -42,9 +42,9 @@ extension Ghostty {
 
                     SurfaceRepresentable(view: surfaceView, size: geo.size)
                         .focused($surfaceFocus)
-                        .focusedValue(\.ghosttySurfacePwd, surfaceView.pwd)
+                        .focusedValue(\.ghosttySurfacePwd, surfaceView.state.pwd)
                         .focusedValue(\.ghosttySurfaceView, surfaceView)
-                        .focusedValue(\.ghosttySurfaceCellSize, surfaceView.cellSize)
+                        .focusedValue(\.ghosttySurfaceCellSize, surfaceView.state.cellSize)
                         .onReceive(pubBecomeKey) { notification in
                             guard let window = notification.object as? NSWindow else { return }
                             guard let surfaceWindow = surfaceView.window else { return }
@@ -59,21 +59,21 @@ extension Ghostty {
                         }
 
                     // If our geo size changed then we show the resize overlay as configured.
-                    if let surfaceSize = surfaceView.surfaceSize {
+                    if let surfaceSize = surfaceView.state.surfaceSize {
                         SurfaceResizeOverlay(
                             geoSize: geo.size,
                             size: surfaceSize,
                             overlay: ghostty.config.resizeOverlay,
                             position: ghostty.config.resizeOverlayPosition,
                             duration: ghostty.config.resizeOverlayDuration,
-                            focusInstant: surfaceView.focusInstant)
+                            focusInstant: surfaceView.state.focusInstant)
 
                     }
                 }
                 .ghosttySurfaceView(surfaceView)
 
                 // Progress report
-                if let progressReport = surfaceView.progressReport, progressReport.state != .remove {
+                if let progressReport = surfaceView.state.progressReport, progressReport.state != .remove {
                     VStack(spacing: 0) {
                         SurfaceProgressBar(report: progressReport)
                         Spacer()
@@ -84,7 +84,7 @@ extension Ghostty {
                 }
 
                 // Readonly indicator badge
-                if surfaceView.readonly {
+                if surfaceView.state.readonly {
                     ReadonlyBadge {
                         surfaceView.toggleReadonly(nil)
                     }
@@ -92,21 +92,21 @@ extension Ghostty {
 
                 // Show key state indicator for active key tables and/or pending key sequences
                 KeyStateIndicator(
-                    keyTables: surfaceView.keyTables,
-                    keySequence: surfaceView.keySequence
+                    keyTables: surfaceView.state.keyTables,
+                    keySequence: surfaceView.state.keySequence
                 )
                 .zIndex(1)
 
                 VStack(spacing: 0) {
                     // If we have a URL from hovering a link, we show that.
-                    if let url = surfaceView.hoverUrl {
+                    if let url = surfaceView.state.hoverUrl {
                         URLHoverBanner(url: url)
                     }
 
                     // Show a bar to indicate a child process has exited.
-                    if let msg = surfaceView.childExitedMessage {
+                    if let msg = surfaceView.state.childExitedMessage {
                         ChildExitedMessageBar(msg: msg)
-                            .font(.system(size: min(surfaceView.cellSize.height * 0.8, 30)))
+                            .font(.system(size: min(surfaceView.state.cellSize.height * 0.8, 30)))
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
@@ -121,7 +121,7 @@ extension Ghostty {
                 }
 
                 // Search overlay
-                if let searchState = surfaceView.searchState {
+                if let searchState = surfaceView.state.searchState {
                     SurfaceSearchOverlay(
                         surfaceView: surfaceView,
                         searchState: searchState,
@@ -133,17 +133,17 @@ extension Ghostty {
 
                 // Show bell border if enabled
                 if ghostty.config.bellFeatures.contains(.border) {
-                    BellBorderOverlay(bell: surfaceView.bell)
+                    BellBorderOverlay(bell: surfaceView.state.bell)
                 }
 
                 // Show a highlight effect when this surface needs attention
-                HighlightOverlay(highlighted: surfaceView.highlighted)
+                HighlightOverlay(highlighted: surfaceView.state.highlighted)
 
                 // If our surface is not healthy, then we render an error view over it.
-                if !surfaceView.healthy {
+                if !surfaceView.state.healthy {
                     Rectangle().fill(ghostty.config.backgroundColor)
                     SurfaceRendererUnhealthyView()
-                } else if surfaceView.error != nil {
+                } else if surfaceView.state.error != nil {
                     Rectangle().fill(ghostty.config.backgroundColor)
                     SurfaceErrorView()
                 }
@@ -325,7 +325,7 @@ extension Ghostty {
     /// Search overlay view that displays a search bar with input field and navigation buttons.
     struct SurfaceSearchOverlay: View {
         let surfaceView: SurfaceView
-        @ObservedObject var searchState: SurfaceView.SearchState
+        @Bindable var searchState: Ghostty.SearchState
         let onClose: () -> Void
         @State private var corner: Corner = .topRight
         @State private var dragOffset: CGSize = .zero

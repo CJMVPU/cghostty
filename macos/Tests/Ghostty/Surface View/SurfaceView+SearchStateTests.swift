@@ -4,7 +4,7 @@ import Testing
 @testable import Ghostty
 
 @MainActor struct SurfaceView_SearchStateTests {
-    typealias SearchState = Ghostty.OSSurfaceView.SearchState
+    typealias SearchState = Ghostty.SearchState
     typealias StartSearch = Ghostty.Action.StartSearch
 
     /// A unique pasteboard for each test case prevents flakiness.
@@ -106,5 +106,50 @@ import Testing
 
         let expected = "pb".startIndex..<"pb".endIndex
         #expect(sut.needle.selection == expected)
+    }
+}
+
+extension SurfaceView_SearchStateTests {
+    @Test func selectionChangesDoNotRepeatSearch() {
+        let state = SearchState(from: StartSearch(c: .init(needle: nil)), pasteboard: pasteboard)
+        state.setNeedle("terminal")
+        var calls: [String] = []
+        state.startSearching { calls.append($0) }
+        state.needle.selection = state.needle.text.startIndex..<state.needle.text.endIndex
+        #expect(calls == ["terminal"])
+        state.setNeedle("")
+        #expect(calls == ["terminal", ""])
+        state.stopSearching()
+        state.setNeedle("ignored")
+        #expect(calls == ["terminal", ""])
+    }
+
+    @Test func replacingSearchCancelsDelayedNeedle() async throws {
+        let state = SearchState(from: StartSearch(c: .init(needle: nil)), pasteboard: pasteboard)
+        var calls: [String] = []
+        state.setNeedle("a")
+        state.startSearching { calls.append($0) }
+        state.setNeedle("complete")
+        #expect(calls == ["complete"])
+        // Exercise the real debounce deadline: the obsolete short query must
+        // never fire after the newer immediate query.
+        try await Task.sleep(for: .milliseconds(350))
+        #expect(calls == ["complete"])
+        state.setNeedle("b")
+        state.stopSearching()
+        try await Task.sleep(for: .milliseconds(350))
+        #expect(calls == ["complete"])
+    }
+
+    @Test func delayedSearchDoesNotRetainModel() async throws {
+        var state: SearchState? = SearchState(from: StartSearch(c: .init(needle: nil)), pasteboard: pasteboard)
+        weak let weakState = state
+        var calls: [String] = []
+        state?.setNeedle("a")
+        state?.startSearching { calls.append($0) }
+        state = nil
+        #expect(weakState == nil)
+        try await Task.sleep(for: .milliseconds(350))
+        #expect(calls.isEmpty)
     }
 }
