@@ -33,7 +33,7 @@ pub const ResourcesDir = struct {
 };
 
 /// Gets the directory to the bundled resources directory, if it
-/// exists (not all platforms or packages have it). The output is
+/// exists. The output is
 /// owned by the caller.
 ///
 /// This is highly Ghostty-specific and can likely be generalized at
@@ -59,10 +59,7 @@ pub fn resourcesDir(alloc: Allocator) !ResourcesDir {
 
     // This is the sentinel value we look for in the path to know
     // we've found the resources directory.
-    const sentinels = switch (builtin.os.tag) {
-        .macos => .{"terminfo/78/xterm-ghostty"},
-        else => unreachable,
-    };
+    const sentinels = .{"terminfo/78/xterm-ghostty"};
 
     // Get the path to our running binary
     var exe_buf: [std.fs.max_path_bytes]u8 = undefined;
@@ -78,22 +75,18 @@ pub fn resourcesDir(alloc: Allocator) !ResourcesDir {
         exe = dir;
 
         // On MacOS, we look for the app bundle path.
-        if (comptime builtin.target.os.tag.isDarwin()) {
-            inline for (sentinels) |sentinel| {
-                if (try maybeDir(
-                    &dir_buf,
-                    dir,
-                    "Contents/Resources",
-                    sentinel,
-                )) |v| {
-                    return .{ .app_path = try std.fs.path.join(alloc, &.{ v, "cghostty" }) };
-                }
+        inline for (sentinels) |sentinel| {
+            if (try maybeDir(
+                &dir_buf,
+                dir,
+                "Contents/Resources",
+                sentinel,
+            )) |v| {
+                return .{ .app_path = try std.fs.path.join(alloc, &.{ v, "cghostty" }) };
             }
         }
 
-        // On all platforms (except BSD), we look for a /usr/share style path. This
-        // is valid even on Mac since there is nothing that requires
-        // Ghostty to be in an app bundle.
+        // Also support the share directory used by unbundled CLI builds.
         inline for (sentinels) |sentinel| {
             if (try maybeDir(
                 &dir_buf,

@@ -5,7 +5,6 @@
 //! Swift+XCode-based application.
 
 const std = @import("std");
-const builtin = @import("builtin");
 const assert = @import("../quirks.zig").inlineAssert;
 const Allocator = std.mem.Allocator;
 const objc = @import("objc");
@@ -242,7 +241,6 @@ pub const App = struct {
     /// to run on every keypress.
     pub fn keyboardLayout(self: *App) input.KeyboardLayout {
         // We only support keyboard layout detection on macOS.
-        if (comptime builtin.os.tag != .macos) return .unknown;
 
         // Lazily initialize the keymap.
         const keymap: *input.Keymap = keymap: {
@@ -1125,28 +1123,26 @@ pub const Surface = struct {
         var env = try global.environMap();
         errdefer env.deinit();
 
-        if (comptime builtin.target.os.tag.isDarwin()) {
-            if (env.get("__XCODE_BUILT_PRODUCTS_DIR_PATHS") != null) {
-                _ = env.orderedRemove("__XCODE_BUILT_PRODUCTS_DIR_PATHS");
-                _ = env.orderedRemove("__XPC_DYLD_LIBRARY_PATH");
-                _ = env.orderedRemove("DYLD_FRAMEWORK_PATH");
-                _ = env.orderedRemove("DYLD_INSERT_LIBRARIES");
-                _ = env.orderedRemove("DYLD_LIBRARY_PATH");
-                _ = env.orderedRemove("LD_LIBRARY_PATH");
-                _ = env.orderedRemove("SECURITYSESSIONID");
-                _ = env.orderedRemove("XPC_SERVICE_NAME");
-            }
-
-            // Remove this so that running `ghostty` within Ghostty works.
-            _ = env.orderedRemove("CGHOSTTY_MAC_LAUNCH_SOURCE");
-
-            // If we were launched from the desktop then we want to
-            // remove the LANGUAGE env var so that we don't inherit
-            // our translation settings for Ghostty. If we aren't from
-            // the desktop then we didn't set our LANGUAGE var so we
-            // don't need to remove it.
-            if (internal_os.launchedFromDesktop()) _ = env.orderedRemove("LANGUAGE");
+        if (env.get("__XCODE_BUILT_PRODUCTS_DIR_PATHS") != null) {
+            _ = env.orderedRemove("__XCODE_BUILT_PRODUCTS_DIR_PATHS");
+            _ = env.orderedRemove("__XPC_DYLD_LIBRARY_PATH");
+            _ = env.orderedRemove("DYLD_FRAMEWORK_PATH");
+            _ = env.orderedRemove("DYLD_INSERT_LIBRARIES");
+            _ = env.orderedRemove("DYLD_LIBRARY_PATH");
+            _ = env.orderedRemove("LD_LIBRARY_PATH");
+            _ = env.orderedRemove("SECURITYSESSIONID");
+            _ = env.orderedRemove("XPC_SERVICE_NAME");
         }
+
+        // Remove this so that running `ghostty` within Ghostty works.
+        _ = env.orderedRemove("CGHOSTTY_MAC_LAUNCH_SOURCE");
+
+        // If we were launched from the desktop then we want to
+        // remove the LANGUAGE env var so that we don't inherit
+        // our translation settings for Ghostty. If we aren't from
+        // the desktop then we didn't set our LANGUAGE var so we
+        // don't need to remove it.
+        if (internal_os.launchedFromDesktop()) _ = env.orderedRemove("LANGUAGE");
 
         return env;
     }
@@ -1166,21 +1162,11 @@ pub const Inspector = struct {
 
     surface: *Surface,
     ig_ctx: *cimgui.c.ImGuiContext,
-    backend: ?Backend = null,
+    metal_initialized: bool = false,
     content_scale: f64 = 1,
 
     /// Our previous instant used to calculate delta time for animations.
     instant: ?std.Io.Timestamp = null,
-
-    const Backend = enum {
-        metal,
-
-        pub fn deinit(self: Backend) void {
-            switch (self) {
-                .metal => if (builtin.target.os.tag.isDarwin()) cimgui.ImGui_ImplMetal_Shutdown(),
-            }
-        }
-    };
 
     pub fn init(surface: *Surface) !Inspector {
         const ig_ctx = cimgui.c.ImGui_CreateContext(null) orelse return error.OutOfMemory;
@@ -1204,7 +1190,7 @@ pub const Inspector = struct {
     pub fn deinit(self: *Inspector) void {
         self.surface.core_surface.deactivateInspector();
         cimgui.c.ImGui_SetCurrentContext(self.ig_ctx);
-        if (self.backend) |v| v.deinit();
+        self.shutdownMetal();
         cimgui.c.ImGui_DestroyContext(self.ig_ctx);
     }
 
@@ -1213,21 +1199,24 @@ pub const Inspector = struct {
         self.surface.queueInspectorRender();
     }
 
-    /// Initialize the inspector for a metal backend.
+    fn shutdownMetal(self: *Inspector) void {
+        if (!self.metal_initialized) return;
+        cimgui.ImGui_ImplMetal_Shutdown();
+        self.metal_initialized = false;
+    }
+
+    /// Initialize the inspector for Metal.
     pub fn initMetal(self: *Inspector, device: objc.Object) bool {
         defer device.msgSend(void, objc.sel("release"), .{});
         cimgui.c.ImGui_SetCurrentContext(self.ig_ctx);
 
-        if (self.backend) |v| {
-            v.deinit();
-            self.backend = null;
-        }
+        self.shutdownMetal();
 
         if (!cimgui.ImGui_ImplMetal_Init(device.value)) {
             log.warn("failed to initialize metal backend", .{});
             return false;
         }
-        self.backend = .metal;
+        self.metal_initialized = true;
 
         log.debug("initialized metal backend", .{});
         return true;
@@ -1242,7 +1231,7 @@ pub const Inspector = struct {
             command_buffer.msgSend(void, objc.sel("release"), .{});
             desc.msgSend(void, objc.sel("release"), .{});
         }
-        assert(self.backend == .metal);
+        assert(self.metal_initialized);
         //log.debug("render", .{});
 
         // Setup our imgui frame. We need to render multiple frames to ensure
@@ -1597,9 +1586,7 @@ pub const CAPI = struct {
     // Reference the conditional exports based on target platform
     // so they're included in the C API.
     comptime {
-        if (builtin.target.os.tag.isDarwin()) {
-            _ = Darwin;
-        }
+        _ = Darwin;
     }
 
     /// Create a new app.
@@ -2326,7 +2313,6 @@ pub const CAPI = struct {
         window: *anyopaque,
     ) void {
         // This is only supported on macOS
-        if (comptime builtin.target.os.tag != .macos) return;
 
         const config = &app.config;
 
@@ -2458,10 +2444,7 @@ pub const CAPI = struct {
         }
 
         export fn ghostty_inspector_metal_shutdown(ptr: *Inspector) void {
-            if (ptr.backend) |v| {
-                v.deinit();
-                ptr.backend = null;
-            }
+            ptr.shutdownMetal();
         }
     };
 };

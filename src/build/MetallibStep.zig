@@ -21,45 +21,29 @@ pub const Options = struct {
 step: *Step,
 output: LazyPath,
 
-pub fn create(b: *std.Build, opts: Options) ?*MetallibStep {
-    const sdk = switch (opts.target.result.os.tag) {
-        .macos => "macosx",
-        else => return null,
-    };
-    const platform_version_arg = switch (opts.target.result.os.tag) {
-        .macos => "-mmacos-version-min",
-        else => null,
-    };
-
+pub fn create(b: *std.Build, opts: Options) *MetallibStep {
     const self = b.allocator.create(MetallibStep) catch @panic("OOM");
 
     const min_version = if (opts.target.query.os_version_min) |v|
         b.fmt("{f}", .{v.semver})
-    else switch (opts.target.result.os.tag) {
-        .macos => "27.0",
-        else => unreachable,
-    };
+    else
+        "27.0";
 
     const run_ir = RunStep.create(
         b,
         b.fmt("metal {s}", .{opts.name}),
     );
-    run_ir.addArgs(&.{ "/usr/bin/xcrun", "--toolchain", "Metal", "-sdk", sdk, "metal", "-o" });
+    run_ir.addArgs(&.{ "/usr/bin/xcrun", "--toolchain", "Metal", "-sdk", "macosx", "metal", "-o" });
     const output_ir = run_ir.addOutputFileArg(b.fmt("{s}.ir", .{opts.name}));
     run_ir.addArgs(&.{ "-c", "-std=metal4.1" });
     for (opts.sources) |source| run_ir.addFileArg(source);
-    if (platform_version_arg) |arg| {
-        run_ir.addArgs(&.{b.fmt(
-            "{s}={s}",
-            .{ arg, min_version },
-        )});
-    }
+    run_ir.addArg(b.fmt("-mmacos-version-min={s}", .{min_version}));
 
     const run_lib = RunStep.create(
         b,
         b.fmt("metallib {s}", .{opts.name}),
     );
-    run_lib.addArgs(&.{ "/usr/bin/xcrun", "--toolchain", "Metal", "-sdk", sdk, "metallib", "-o" });
+    run_lib.addArgs(&.{ "/usr/bin/xcrun", "--toolchain", "Metal", "-sdk", "macosx", "metallib", "-o" });
     const output_lib = run_lib.addOutputFileArg(b.fmt("{s}.metallib", .{opts.name}));
     run_lib.addFileArg(output_ir);
     run_lib.step.dependOn(&run_ir.step);

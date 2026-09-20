@@ -1,8 +1,6 @@
 const GhosttyI18n = @This();
 
 const std = @import("std");
-const builtin = @import("builtin");
-const Config = @import("Config.zig");
 const locales = @import("../os/i18n_locales.zig").locales;
 
 const domain = "com.cjmvpu.cghostty";
@@ -14,9 +12,7 @@ steps: []*std.Build.Step,
 /// committed to the repo.
 update_step: *std.Build.Step,
 
-pub fn init(b: *std.Build, cfg: *const Config) !GhosttyI18n {
-    _ = cfg;
-
+pub fn init(b: *std.Build) !GhosttyI18n {
     var steps: std.ArrayList(*std.Build.Step) = .empty;
     defer steps.deinit(b.allocator);
 
@@ -61,40 +57,34 @@ fn createUpdateStep(b: *std.Build) !*std.Build.Step {
         "--keyword=_",
         "--keyword=N_",
         "--keyword=C_:1c,2",
+        "--add-comments=Translators",
+        "--package-name=" ++ domain,
+        "--copyright-holder=Mitchell Hashimoto, Ghostty contributors",
+        "-o",
+        "-",
     });
-
-    // Collect to intermediate .pot file
-    xgettext.addArg("-o");
-    const gtk_pot = xgettext.addOutputFileArg("gtk.pot");
 
     // For localization of command palette
     const command_palette_path = "src/input/command.zig";
     xgettext.addArg(command_palette_path);
     xgettext.addFileInput(b.path(command_palette_path));
 
-    // Merge pot files
-    const xgettext_merge = b.addSystemCommand(&.{
-        "xgettext",
-        "--add-comments=Translators",
-        "--package-name=" ++ domain,
-        "--copyright-holder=\"Mitchell Hashimoto, Ghostty contributors\"",
-        "-o",
-        "-",
-    });
-    // py_pot needs to be first on merge order because of `xgettext` behavior around
-    // charset when merging the two `.pot` files
-    xgettext_merge.addFileArg(gtk_pot);
+    // The command palette is the only gettext source; the GTK/Python
+    // extraction and multi-catalog merge pipeline is no longer needed.
+    const pot = xgettext.captureStdOut(.{});
     const usf = b.addUpdateSourceFiles();
     usf.addCopyFileToSource(
-        xgettext_merge.captureStdOut(.{}),
+        pot,
         "po/" ++ domain ++ ".pot",
     );
 
     inline for (locales) |locale| {
         const msgmerge = b.addSystemCommand(&.{ "msgmerge", "--quiet", "--no-fuzzy-matching" });
         msgmerge.addFileArg(b.path("po/" ++ locale ++ ".po"));
-        msgmerge.addFileArg(xgettext_merge.captureStdOut(.{}));
-        usf.addCopyFileToSource(msgmerge.captureStdOut(.{}), "po/" ++ locale ++ ".po");
+        msgmerge.addFileArg(pot);
+        const active = b.addSystemCommand(&.{ "msgattrib", "--no-obsolete" });
+        active.addFileArg(msgmerge.captureStdOut(.{}));
+        usf.addCopyFileToSource(active.captureStdOut(.{}), "po/" ++ locale ++ ".po");
     }
 
     return &usf.step;

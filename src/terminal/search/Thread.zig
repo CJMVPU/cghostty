@@ -9,7 +9,6 @@
 pub const Thread = @This();
 
 const std = @import("std");
-const builtin = @import("builtin");
 const testing = std.testing;
 const Allocator = std.mem.Allocator;
 const Mutex = std.Io.Mutex;
@@ -145,16 +144,14 @@ fn threadMain_(self: *Thread) !void {
     // Right now, on Darwin, `std.Thread.setName` can only name the current
     // thread, and we have no way to get the current thread from within it,
     // so instead we use this code to name the thread instead.
-    if (comptime builtin.os.tag.isDarwin()) {
-        internal_os.macos.pthread_setname_np(&"search".*);
+    internal_os.macos.pthread_setname_np(&"search".*);
 
-        // We can run with lower priority than other threads.
-        const class: internal_os.macos.QosClass = .utility;
-        if (internal_os.macos.setQosClass(class)) {
-            log.debug("thread QoS class set class={}", .{class});
-        } else |err| {
-            log.warn("error setting QoS class err={}", .{err});
-        }
+    // We can run with lower priority than other threads.
+    const class: internal_os.macos.QosClass = .utility;
+    if (internal_os.macos.setQosClass(class)) {
+        log.debug("thread QoS class set class={}", .{class});
+    } else |err| {
+        log.warn("error setting QoS class err={}", .{err});
     }
 
     // Start the async handlers

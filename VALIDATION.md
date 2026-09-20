@@ -4,6 +4,33 @@
 
 本轮将交付基线提高为 macOS 27+、arm64、Metal 4 命令 API 与 MSL 4.1。此记录替代此前 macOS 13 部署目标的验证记录。
 
+## macOS 实现、键码表与彩蛋设施精简（2026-09-20）
+
+- 删除无调用的 `locales_map`、`initGlobalDomain`、`staticLocale` 及专属 gettext 声明/导入；保留域绑定、翻译查询、语言规范化。全部 PO/POT 文件与本轮开始时逐字节相同；最终包内 34 个 `.mo` 的翻译内容逐一与当前 PO 编译结果一致。
+- 收拢自有 Zig 代码中的固定 macOS 分支，包括系统工具、输入编码、配置、PTY、进程/线程、Metal 和终端页内存管理。保留构建入口的非 macOS/非 arm64 拒绝检查、配置条件中的系统信息、第三方通用实现及实际使用的字体后端。
+- 删除单成员渲染器/运行时枚举和配置传递；直接使用 Metal，保留 CLI 无窗口运行时与原生应用 embedded runtime 的产物区分。Inspector 使用 Metal 初始化状态，保留初始化、重新初始化和关闭流程。内部 C 头文件保持逐字节一致。
+- 键码原始表从六列收缩为 USB / macOS / DOM 三列，全部 **243 条**有效记录的值与顺序逐项一致。新增原生键码唯一性测试，保证核心测试也会实例化完整映射表。
+- 删除 `+boo` 命令、帧数据模块、C 帧生成器和 235 个原始帧文件。移除 v2/v3 图标草稿、未引用的 `Prompt.svg` 及应用资源目录中未分配的旧 `cghostty.svg`；保留 v4 图标与设计源文件。旧 SVG 引发的 Xcode 资源警告已消除。
+- 清理新增的无效平台回退和遗留导入后，当前工作区相对本轮起点删除 **251 个文件**；其中被删除的图标/帧资源共 **6,778,834 字节**。此数字是源码资源体积，不代表压缩后的应用或 Git 历史缩减量。
+- 扩大 Zig 定向回归（OS、Command、config、renderer、input、termio、PTY、PageList、page、mem）：**1,162 项通过、1 项跳过**，83/83 构建步骤成功。最终键码/终端构建选项专项回归：**75/75 项通过**。日志：`/private/tmp/cghostty-cleanup2-core-tests.log`、`/private/tmp/cghostty-cleanup2-keycodes-tests.log`。
+- Debug 内部框架构建成功；Swift 原生测试 **236 项通过、1 项跳过、0 项失败**，`runtimeWarnings` 为空。结果包：`/private/tmp/cghostty-cleanup2-native-tests.xcresult`；摘要：`/private/tmp/cghostty-cleanup2-native-summary.json`。
+- 保留的可选手册和性能工具构建 **106/106 步骤通过**。日志：`/private/tmp/cghostty-cleanup2-maintenance-build.log`。
+- ReleaseLocal 应用构建成功；应用身份、arm64、资源、签名检查通过，`+boo` 不出现在帮助中且调用返回无效命令。新旧应用 `+show-config --default` 与 `+list-keybinds --plain` 输出逐字节一致。日志：`/private/tmp/cghostty-cleanup2-release-final.log`、`/private/tmp/cghostty-cleanup2-app-check.log`。
+- CI 增加 input / OS / termio / PTY 回归；范围检查防止删除的彩蛋设施、图标素材和单成员后端文件重新进入项目。Zig 格式、修改 Swift 文件的严格 lint、版本记录、Swift 6 配置、actionlint 和 diff 空白检查通过。
+- 构建中仍有此前就存在的两条 Dear ImGui dSYM 符号警告（`_ImFontConfig_ImFontConfig`、`_ImGuiStyle_ImGuiStyle`），不影响本轮构建及单元测试通过。本轮未运行完整 Zig 全量测试或手工 GUI/IME/Vim 验收；未更改线上 0.1.1 Release、标签或远程分支。
+
+## 独立仓库旧代码与构建设施清理（2026-09-20）
+
+- GitHub 仓库已由维护者解除 fork 关联；本轮读取 API 确认为 `fork: false`。本轮改动保留在本地工作区，没有修改线上 0.1.1 Release、标签或远程 main。
+- 删除无调用的 Git 版本探测、单成员 XCFramework 目标枚举、转发型归档包装和空 `.gitmodules`。内部构建直接使用唯一 macOS arm64 目标，去掉静态库不可能产生的 dSYM、独立 pkg-config 字段和不再适用的跨平台空操作分支。保留当前 Zig/Xcode 必需的归档规范化、compiler-rt 和 libSystem 符号处理。
+- 移除无调用的桌面环境探测、旧 macOS 版本查询及悬空的 OpenType 导出；简化桌面启动、pipe 和 URL 打开中的恒定平台分支。保留 `CGHOSTTY_MAC_LAUNCH_SOURCE` 行为以及 OSC 8 拒绝通用 opener 的策略，并将已有 hostname / opener 测试纳入 OS 模块测试入口。
+- gettext 直接提取共享命令面板，移除 GTK/Python 中间模板和单输入二次合并，更新目录时清除 obsolete 条目。34 种语言共 5,440 条保留译文逐条一致，移除 2,404 条退役译文；包含模板的 PO/POT 源码从 1,252,074 字节减至 846,744 字节。译者署名保留。
+- 翻译生成在独立临时副本中验证：最终流程 **71/71 步骤通过**，再次生成的 34 个目录及 POT 与工作区逐字节一致；全部目录通过 `msgfmt --check`。日志：`/private/tmp/cghostty-cleanup-i18n-final.log`、`/private/tmp/cghostty-cleanup-i18n-verify.log`。
+- Zig 定向回归覆盖 OS、Command、config、renderer：**340/340 项通过，88/88 构建步骤通过**。日志：`/private/tmp/cghostty-cleanup-core-tests.log`。
+- 重建 Debug 核心后，Swift 原生单元测试 **236 项通过、1 项跳过、0 项失败**，`runtimeWarnings` 为空。结果包：`/private/tmp/cghostty-cleanup-native-tests.xcresult`；日志：`/private/tmp/cghostty-cleanup-native-tests.log`。
+- 最终 ReleaseLocal 完整重建成功，应用范围、arm64、资源、签名和 CLI 配置检查通过；包内 34 个 `.mo` 逐一解析后与当前 PO 编译结果相同。日志：`/private/tmp/cghostty-cleanup-release-final.log`、`/private/tmp/cghostty-cleanup-app-check.log`。
+- Zig 全范围格式检查、版本检查、Swift 6 构建配置检查、actionlint 和 diff 空白检查通过。没有 Swift 源码修改；本轮未重复图形界面手工验收、未运行完整 Zig 测试全集或 XCTest UI 套件，未重新打包发行 ZIP。
+
 ## Swift 6 迁移（2026-09-20）
 
 - 使用 Xcode 27 的 Apple Swift 6.4 编译器，将主应用、Dock 插件、单元测试、UI 测试的全部 **12 个构建配置**统一为 Swift 6 语言模式、完整并发检查与 Swift warnings-as-errors。主应用和单元测试默认 MainActor；UI 测试保留 XCTest 生命周期的非隔离声明，界面操作显式 MainActor。

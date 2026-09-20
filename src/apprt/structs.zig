@@ -1,5 +1,4 @@
 const std = @import("std");
-const build_config = @import("../build_config.zig");
 const terminal = @import("../terminal/main.zig");
 
 /// ContentScale is the ratio between the current DPI and the platform's
@@ -37,19 +36,10 @@ pub const IMEPos = struct {
 /// The clipboard type.
 ///
 /// If this is changed, you must also update ghostty.h
-pub const Clipboard = enum(Backing) {
+pub const Clipboard = enum(u2) {
     standard = 0, // ctrl+c/v
     selection = 1,
     primary = 2,
-
-    // Our backing isn't is as small as we can in Zig, but a full
-    // C int if we're binding to C APIs.
-    const Backing = switch (build_config.app_runtime) {
-        else => u2,
-    };
-
-    /// Make this a valid gobject if we're in a GTK environment.
-    pub const getGObjectType = void;
 };
 
 pub const ClipboardContent = struct {

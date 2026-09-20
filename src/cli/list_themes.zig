@@ -4,7 +4,6 @@ const Action = @import("ghostty.zig").Action;
 const Config = @import("../config/Config.zig");
 const configpkg = @import("../config.zig");
 const themepkg = @import("../config/theme.zig");
-const tui = @import("tui.zig");
 const global = @import("../global.zig");
 
 const vaxis = @import("vaxis");
@@ -178,7 +177,7 @@ pub fn run(gpa_alloc: std.mem.Allocator) !u8 {
 
     std.mem.sortUnstable(ThemeListElement, themes.items, {}, ThemeListElement.lessThan);
 
-    if (tui.can_pretty_print and !opts.plain and try stdout_file.isTty(global.io())) {
+    if (!opts.plain and try stdout_file.isTty(global.io())) {
         try preview(gpa_alloc, themes.items, opts.color);
         return 0;
     }

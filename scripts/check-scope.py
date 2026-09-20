@@ -23,6 +23,13 @@ for name in ('src/apprt/gtk', 'src/apprt/gtk.zig', 'src/main_wasm.zig',
              'test/wasm-alloc.mjs', 'pkg/glslang', 'pkg/spirv-cross',
              'src/renderer/shadertoy.zig',
              'src/build/GhosttyLibVt.zig', 'src/build/webgen', 'example',
+             'src/build/GitVersion.zig', 'src/build/xcframework.zig',
+             'src/build/CombineArchivesStep.zig',
+             'src/build/GhosttyFrameData.zig', 'src/build/framegen', 'src/cli/boo.zig',
+             'src/renderer/backend.zig', 'src/apprt/runtime.zig', 'src/cli/tui.zig',
+             'images/cghostty-icon-v2', 'images/cghostty-icon-v3',
+             'images/cghostty.icon/Assets/Prompt.svg',
+             'macos/Assets.xcassets/AppIconImage.imageset/cghostty.svg',
              'flatpak', 'snap', 'nix', 'dist', 'test/windows', 'test/fuzz-libghostty',
              'macos/Sources/Helpers/Backport.swift',
              'macos/Sources/Features/Terminal/Window Styles/TitlebarTabsVenturaTerminalWindow.swift',
@@ -96,6 +103,10 @@ if args.app:
     help_text = subprocess.check_output([str(executables[0]), '+help'], text=True)
     check('+new-window' not in help_text and '+new-tab' not in help_text and '+toggle-quick-terminal' not in help_text,
           'GTK-only IPC action remains in the CLI')
+    check('+boo' not in help_text, 'Removed animation command remains in CLI help')
+    removed_action = subprocess.run([str(executables[0]), '+boo'], capture_output=True, text=True)
+    check(removed_action.returncode != 0 and 'invalid action' in removed_action.stderr.lower(),
+          'Removed animation command must be rejected as invalid')
     subprocess.run(['codesign', '--verify', '--deep', '--strict', str(app)], check=True)
 
 print('PASS: macOS arm64 scope, independent identity, unsupported targets and removed build options' +

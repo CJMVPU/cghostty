@@ -10,7 +10,6 @@
 const SharedGridSet = @This();
 
 const std = @import("std");
-const builtin = @import("builtin");
 const assert = @import("../quirks.zig").inlineAssert;
 const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
@@ -338,7 +337,7 @@ fn collection(
     // people add other emoji fonts to their system, we always want to
     // prefer the official one. Users can override this by explicitly
     // specifying a font-family for emoji.
-    if (comptime builtin.target.os.tag.isDarwin() and Discover != void) apple_emoji: {
+    if (comptime Discover != void) apple_emoji: {
         const disco = try self.discover() orelse break :apple_emoji;
 
         // Fast path: we know the exact name of the font we want so we
@@ -374,7 +373,7 @@ fn collection(
 
     // Emoji fallback. We don't include this on Mac since Mac is expected
     // to always have the Apple Emoji available on the system.
-    if (comptime !builtin.target.os.tag.isDarwin() or Discover == void) {
+    if (comptime Discover == void) {
         _ = try c.add(
             self.alloc,
             try .init(

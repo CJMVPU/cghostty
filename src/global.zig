@@ -154,7 +154,7 @@ pub fn init(opts: InitOpts) !void {
     // Output some debug information right away
     std.log.info("cghostty version={s}", .{build_config.version_string});
     std.log.info("cghostty build optimize={s}", .{build_config.mode_string});
-    std.log.info("runtime={}", .{build_config.app_runtime});
+    std.log.info("runtime={s}", .{if (build_config.artifact == .lib) "embedded" else "cli"});
     std.log.info("font_backend={}", .{build_config.font_backend});
     if (comptime build_config.font_backend.hasHarfbuzz()) {
         std.log.info("dependency harfbuzz={s}", .{harfbuzz.versionString()});
@@ -266,20 +266,15 @@ pub fn environMap() !std.process.Environ.Map {
 /// `unsetenv` - as a rule, beyond initialization, favor
 /// `std.process.Environ.Map` whenever possible.
 pub fn syncEnviron() void {
-    switch (builtin.os.tag) {
-        .macos => {
-            assert(builtin.link_libc);
-            assert(!builtin.is_test);
-            const new_environ: std.process.Environ = .{ .block = .{ .slice = std.c.environ[0..env_len: {
-                var len: usize = 0;
-                while (std.c.environ[len]) |_| : (len += 1) {}
-                break :env_len len;
-            } :null] } };
-            state.?.environ = new_environ;
-            state.?.io_impl.environ = .{ .process_environ = new_environ };
-        },
-        else => unreachable,
-    }
+    assert(builtin.link_libc);
+    assert(!builtin.is_test);
+    const new_environ: std.process.Environ = .{ .block = .{ .slice = std.c.environ[0..env_len: {
+        var len: usize = 0;
+        while (std.c.environ[len]) |_| : (len += 1) {}
+        break :env_len len;
+    } :null] } };
+    state.?.environ = new_environ;
+    state.?.io_impl.environ = .{ .process_environ = new_environ };
 }
 
 /// Helper to return either the state's args, or one from testing.
@@ -356,10 +351,10 @@ pub const GlobalState = struct {
     pub const Logging = packed struct {
         /// Whether to log to stderr. For lib mode we always disable stderr
         /// logging by default. Otherwise it's enabled by default.
-        stderr: bool = build_config.app_runtime != .none,
+        stderr: bool = false,
         /// Whether to log to macOS's unified logging. Enabled by default
         /// on macOS.
-        macos: bool = builtin.os.tag.isDarwin(),
+        macos: bool = true,
     };
 
     /// Asserts that `self.io_impl` has been initialized.

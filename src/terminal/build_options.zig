@@ -266,16 +266,6 @@ pub const Options = struct {
         }
     };
 
-    /// Whether the Kitty graphics feature is effectively enabled for
-    /// the given target. Kitty graphics requires the ability to get
-    /// timestamps and there is no way to do that on freestanding
-    /// targets, so it is always disabled there regardless of the
-    /// feature setting.
-    pub fn kittyGraphics(self: Options, target: std.Target) bool {
-        if (target.os.tag == .freestanding) return false;
-        return self.features.kitty_graphics;
-    }
-
     /// Add the required build options for the terminal module.
     ///
     /// The memory referenced by self is expected to stick around (it isn't
@@ -296,15 +286,8 @@ pub const Options = struct {
         opts.addOption(bool, "tmux_control_mode", self.oniguruma);
 
         // Feature gates, emitted as flat bools (e.g. `options.snapshot`).
-        const target = m.resolved_target.?.result;
         inline for (@typeInfo(Features).@"struct".fields) |field| {
-            var value = @field(self.features, field.name);
-
-            // Kitty graphics is force-disabled on some targets; see
-            // kittyGraphics for details.
-            if (comptime std.mem.eql(u8, field.name, "kitty_graphics")) {
-                value = self.kittyGraphics(target);
-            }
+            const value = @field(self.features, field.name);
 
             opts.addOption(bool, field.name, value);
         }

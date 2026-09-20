@@ -29,12 +29,8 @@ const Page = pagepkg.Page;
 const Row = pagepkg.Row;
 
 const log = std.log.scoped(.page_list);
-const native_freestanding = builtin.os.tag == .freestanding and
-    !false;
 
-/// The number of pages we preheat the page pool with. For operating systems
-/// that support it, pages are demand-paged (see PagePool) so this only
-/// costs us address space. For other operating systems, we don't preheat.
+/// Preheat demand-paged pool entries; this initially costs only address space.
 const page_preheat = 4;
 
 /// The number of nodes we preheat the node pool with. Unlike pages, nodes
@@ -560,20 +556,9 @@ fn initialCapacity(cols: size.CellCountInt) Capacity {
 }
 
 /// Returns the allocator used for underlying page allocations.
-///
-/// `alloc` is the caller-provided allocator. It is used on native freestanding
-/// targets, where no OS page allocator is available. Other targets select a
-/// platform-specific allocator below.
-inline fn pageAllocator(alloc: Allocator) Allocator {
+inline fn pageAllocator() Allocator {
     // In tests we use our testing allocator so we can detect leaks.
     if (builtin.is_test) return std.testing.allocator;
-
-    // Native freestanding targets don't have an OS page allocator, so use
-    // the allocator provided by the embedder.
-    if (native_freestanding) return alloc;
-
-    // On non-macOS we use our standard Zig page allocator.
-    if (!builtin.target.os.tag.isDarwin()) return std.heap.page_allocator;
 
     // On macOS we want to tag our memory so we can assign it to our
     // core terminal usage.
@@ -642,7 +627,7 @@ pub fn init(
     try tw.check(.init_memory_pool);
     var pool = try MemoryPool.init(
         alloc,
-        pageAllocator(alloc),
+        pageAllocator(),
         page_preheat,
     );
     errdefer pool.deinit();
@@ -756,11 +741,9 @@ fn initPages(
             page_alloc.free(page_buf);
 
         // In runtime safety modes we have to memset because the Zig allocator
-        // interface will always memset to 0xAA for undefined. On freestanding
-        // (WASM), the WasmAllocator reuses freed slots without zeroing since
-        // only fresh memory.grow pages are guaranteed zero by the WASM spec.
-        // On native, the OS page allocator (mmap) returns zeroed pages.
-        if (comptime std.debug.runtime_safety or builtin.os.tag == .freestanding)
+        // interface fills undefined memory with 0xAA. Otherwise, the macOS
+        // page allocator returns zeroed pages.
+        if (comptime std.debug.runtime_safety)
             @memset(page_buf, 0);
 
         // Initialize the first set of pages to contain our viewport so that
@@ -1092,7 +1075,7 @@ pub fn clone(
     // Setup our pool
     var pool: MemoryPool = try .init(
         alloc,
-        pageAllocator(alloc),
+        pageAllocator(),
         page_count,
     );
     errdefer pool.deinit();
@@ -4582,14 +4565,13 @@ inline fn createPageExt(
     else
         page_alloc.free(page_buf);
 
-    // In runtime safety modes, allocators fill with 0xAA. On freestanding
-    // (WASM), the WasmAllocator reuses freed slots without zeroing.
+    // In runtime safety modes, allocators fill with 0xAA.
     //
     // Otherwise, we rely on pool item buffers being zeroed: fresh items
     // come from the OS page allocator (zeroed pages), destroyNodeExt
     // zeroes buffers before returning them to the pool, and the pool
     // never writes into its items (see PagePool).
-    if (comptime std.debug.runtime_safety or builtin.os.tag == .freestanding)
+    if (comptime std.debug.runtime_safety)
         @memset(page_buf, 0);
 
     page.* = .{
@@ -7520,7 +7502,7 @@ pub const Builder = struct {
         return .{
             .pool = try MemoryPool.init(
                 alloc,
-                pageAllocator(alloc),
+                pageAllocator(),
                 page_preheat,
             ),
             .options = options,

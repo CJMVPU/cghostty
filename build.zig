@@ -14,10 +14,10 @@ pub fn build(b: *std.Build) !void {
     const resources = try buildpkg.GhosttyResources.init(b, &config, &deps);
     const docs = try buildpkg.GhosttyDocs.init(b, &deps);
     if (config.emit_docs) docs.install() else docs.installDummy(b.getInstallStep());
-    const i18n = if (config.i18n) try buildpkg.GhosttyI18n.init(b, &config) else null;
+    const i18n = if (config.i18n) try buildpkg.GhosttyI18n.init(b) else null;
 
     if (config.emit_xcframework or config.emit_macos_app) {
-        const framework = try buildpkg.GhosttyXCFramework.init(b, &deps, config.xcframework_target);
+        const framework = try buildpkg.GhosttyXCFramework.init(b, &deps);
         framework.install();
         resources.install();
         if (i18n) |v| v.install();

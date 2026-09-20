@@ -26,6 +26,7 @@ actionlint
 zig build test -Dtest-filter=config
 zig build test -Dtest-filter=Command
 zig build test -Dtest-filter=Terminal
+zig build test -Dtest-filter=input -Dtest-filter=os. -Dtest-filter=termio -Dtest-filter=pty
 # 验证构建入口拒绝其他平台、Intel Mac 和被移除的独立产物
 python3 scripts/check-scope.py
 # 对实际发布包增加身份、arm64、资源、签名检查
@@ -62,6 +63,10 @@ Xcode scheme 和 Swift 模块仍为 `Ghostty`，C 桥接模块为 `GhosttyKit`�
 独立测试配置在 Debug 下可通过 `CGHOSTTY_CONFIG_PATH` 指定；ReleaseLocal 使用 `--config-default-files=false --config-file=/absolute/path/test.ghostty` 启动可执行文件。Release 不读取这个 Debug 专用环境变量，不要把个人 shell 的标题更新误判为隔离故障。
 
 ## 构建服务
+
+内部 XCFramework 只封装一个 arm64 静态库和桥接头文件，没有 Universal 目标选择、独立 pkg-config 安装或静态库 dSYM 分支。版本直接来自 `build.zig.zon` 或显式 `--version`，不依赖 Git 探测。归档规范化与 libSystem 符号处理仍是当前 Zig/Xcode 链接所需步骤。
+
+`zig build update-translations` 直接从共享命令面板提取 gettext 模板，合并现有译文并移除 obsolete 条目；不再生成 GTK/Python 中间模板。译者署名保留，删除的界面译文可从 Git 历史查询。
 
 Metal 编译通过 `xcrun --toolchain Metal` 调用安装的工具链。缺失时先执行 `xcodebuild -downloadComponent MetalToolchain`。无需 Linux 容器、Nix、Flatpak、Snap、独立 CMake SDK 或网站数据生成环境。
 

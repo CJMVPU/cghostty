@@ -2,23 +2,17 @@
 const Config = @This();
 const std = @import("std");
 const builtin = @import("builtin");
-const ApprtRuntime = @import("../apprt/runtime.zig").Runtime;
 const FontBackend = @import("../font/backend.zig").Backend;
-const RendererBackend = @import("../renderer/backend.zig").Backend;
 const TerminalBuildOptions = @import("../terminal/build_options.zig").Options;
-const XCFrameworkTarget = @import("xcframework.zig").Target;
 
 optimize: std.builtin.OptimizeMode,
 target: std.Build.ResolvedTarget,
 env: *const std.process.Environ.Map,
-xcframework_target: XCFrameworkTarget = .native,
-app_runtime: ApprtRuntime = .none,
-renderer: RendererBackend = .metal,
 font_backend: FontBackend = .coretext,
 simd: bool = true,
 i18n: bool = true,
 exe_entrypoint: ExeEntrypoint = .ghostty,
-version: std.SemanticVersion = .{ .major = 0, .minor = 1, .patch = 0 },
+version: std.SemanticVersion,
 strip: bool = false,
 emit_bench: bool = false,
 emit_docs: bool = false,
@@ -47,11 +41,10 @@ pub fn init(b: *std.Build, version: []const u8) !Config {
     const optimize = b.standardOptimizeOption(.{});
     var config: Config = .{
         .optimize = optimize,
-        .target = genericMacOSTarget(b, requested.result.cpu.arch),
+        .target = macOSTarget(b),
         .env = &b.graph.environ_map,
         .version = try std.SemanticVersion.parse(b.option([]const u8, "version-string", "cghostty semantic version") orelse version),
         .strip = b.option(bool, "strip", "Strip release symbols") orelse (optimize == .ReleaseFast or optimize == .ReleaseSmall),
-        .xcframework_target = .native,
         .font_backend = b.option(FontBackend, "font-backend", "macOS font backend") orelse .coretext,
         .simd = b.option(bool, "simd", "Enable SIMD acceleration") orelse true,
         .i18n = b.option(bool, "i18n", "Build gettext translations") orelse true,
@@ -75,9 +68,7 @@ pub fn init(b: *std.Build, version: []const u8) !Config {
 pub fn addOptions(self: *const Config, step: *std.Build.Step.Options) !void {
     step.addOption(bool, "simd", self.simd);
     step.addOption(bool, "i18n", self.i18n);
-    step.addOption(ApprtRuntime, "app_runtime", self.app_runtime);
     step.addOption(FontBackend, "font_backend", self.font_backend);
-    step.addOption(RendererBackend, "renderer", self.renderer);
     step.addOption(ExeEntrypoint, "exe_entrypoint", self.exe_entrypoint);
     step.addOption(std.SemanticVersion, "app_version", self.version);
     var buffer: [1024]u8 = undefined;
@@ -108,20 +99,11 @@ pub fn fromOptions() Config {
     const options = @import("build_options");
     return .{ .optimize = undefined, .target = undefined, .env = undefined, .version = options.app_version, .simd = options.simd, .font_backend = std.meta.stringToEnum(FontBackend, @tagName(options.font_backend)).?, .exe_entrypoint = std.meta.stringToEnum(ExeEntrypoint, @tagName(options.exe_entrypoint)).?, .i18n = options.i18n };
 }
-pub fn omitFramePointer(_: *const Config) bool {
-    return false;
-}
-pub fn osVersionMin(_: std.Target.Os.Tag) ?std.Target.Query.OsVersion {
-    return .{ .semver = .{ .major = 27, .minor = 0, .patch = 0 } };
-}
-pub fn genericMacOSTarget(
-    b: *std.Build,
-    arch: ?std.Target.Cpu.Arch,
-) std.Build.ResolvedTarget {
+fn macOSTarget(b: *std.Build) std.Build.ResolvedTarget {
     return b.resolveTargetQuery(.{
-        .cpu_arch = arch orelse .aarch64,
+        .cpu_arch = .aarch64,
         .os_tag = .macos,
-        .os_version_min = osVersionMin(.macos),
+        .os_version_min = .{ .semver = .{ .major = 27, .minor = 0, .patch = 0 } },
     });
 }
 

@@ -1,5 +1,4 @@
 const std = @import("std");
-const builtin = @import("builtin");
 const testing = std.testing;
 const KittyFlags = @import("../terminal/kitty/key.zig").Flags;
 const OptionAsAlt = @import("config.zig").OptionAsAlt;
@@ -297,15 +296,12 @@ fn kitty(
             // Determine if the Alt modifier should be treated as an actual
             // modifier (in which case it prevents associated text) or as
             // the macOS Option key, which does not prevent associated text.
-            const alt_prevents_text = if (comptime builtin.os.tag == .macos)
-                switch (opts.macos_option_as_alt) {
-                    .left => all_mods.sides.alt == .left,
-                    .right => all_mods.sides.alt == .right,
-                    .true => true,
-                    .false => false,
-                }
-            else
-                true;
+            const alt_prevents_text = switch (opts.macos_option_as_alt) {
+                .left => all_mods.sides.alt == .left,
+                .right => all_mods.sides.alt == .right,
+                .true => true,
+                .false => false,
+            };
 
             if (seq.mods.preventsText(alt_prevents_text)) break :associated;
 
@@ -399,7 +395,7 @@ fn legacy(
         // super, alt unless it is actually option).
         const mods = mods: {
             var mods_binding = event.mods.binding();
-            if (comptime builtin.target.os.tag.isDarwin()) alt: {
+            alt: {
                 switch (opts.macos_option_as_alt) {
                     .false => {},
                     .true => break :alt,
@@ -542,7 +538,7 @@ fn legacy(
     // For Linux, we continue to encode text because it is typical.
     // For example on Gnome Console Super+b will encode a "b" character
     // with legacy encoding.
-    if ((comptime builtin.os.tag == .macos) and all_mods.super) {
+    if (all_mods.super) {
         return;
     }
 
@@ -562,13 +558,11 @@ fn legacyAltPrefix(
     // On macOS, we only handle option like alt in certain
     // circumstances. Otherwise, macOS does a unicode translation
     // and we allow that to happen.
-    if (comptime builtin.os.tag == .macos) {
-        switch (opts.macos_option_as_alt) {
-            .false => return false,
-            .left => if (mods.sides.alt == .right) return false,
-            .right => if (mods.sides.alt == .left) return false,
-            .true => {},
-        }
+    switch (opts.macos_option_as_alt) {
+        .false => return false,
+        .left => if (mods.sides.alt == .right) return false,
+        .right => if (mods.sides.alt == .left) return false,
+        .true => {},
     }
 
     // A single byte is already the exact text we want to prefix. In
@@ -585,14 +579,12 @@ fn legacyAltPrefix(
         // On macOS, Option may translate the text into a different Unicode
         // value. When Option is configured as Alt, use the physical key's
         // unshifted codepoint just as the single-byte implementation did.
-        if (comptime builtin.os.tag == .macos) {
-            if (event.unshifted_codepoint > 0) {
-                const len = std.unicode.utf8Encode(
-                    event.unshifted_codepoint,
-                    &unshifted_buf,
-                ) catch return false;
-                break :value unshifted_buf[0..len];
-            }
+        if (event.unshifted_codepoint > 0) {
+            const len = std.unicode.utf8Encode(
+                event.unshifted_codepoint,
+                &unshifted_buf,
+            ) catch return false;
+            break :value unshifted_buf[0..len];
         }
 
         // Outside of the macOS translation case, prefix the complete UTF-8
@@ -1787,8 +1779,6 @@ test "kitty: left shift with report all" {
 }
 
 test "kitty: report associated with alt text on macOS with option" {
-    if (comptime !builtin.target.os.tag.isDarwin()) return error.SkipZigTest;
-
     var buf: [128]u8 = undefined;
     var writer: std.Io.Writer = .fixed(&buf);
     try kitty(&writer, .{
@@ -1809,8 +1799,6 @@ test "kitty: report associated with alt text on macOS with option" {
 }
 
 test "kitty: report associated with alt text on macOS with alt" {
-    if (comptime !builtin.target.os.tag.isDarwin()) return error.SkipZigTest;
-
     {
         // With Alt modifier
         var buf: [128]u8 = undefined;
@@ -2187,8 +2175,6 @@ test "legacy: alt+unicode without unshifted" {
 }
 
 test "legacy: alt+x macos" {
-    if (comptime !builtin.target.os.tag.isDarwin()) return error.SkipZigTest;
-
     var buf: [128]u8 = undefined;
     var writer: std.Io.Writer = .fixed(&buf);
     try legacy(&writer, .{
@@ -2204,8 +2190,6 @@ test "legacy: alt+x macos" {
 }
 
 test "legacy: shift+alt+. macos" {
-    if (comptime !builtin.target.os.tag.isDarwin()) return error.SkipZigTest;
-
     var buf: [128]u8 = undefined;
     var writer: std.Io.Writer = .fixed(&buf);
     try legacy(&writer, .{
@@ -2377,7 +2361,6 @@ test "legacy: alt+digit with modify other state 2" {
 }
 
 test "legacy: alt+digit with modify other state 2 and macos-option-as-alt = false" {
-    if (comptime builtin.os.tag != .macos) return error.SkipZigTest;
     var buf: [128]u8 = undefined;
     var writer: std.Io.Writer = .fixed(&buf);
     try legacy(&writer, .{
@@ -2739,8 +2722,6 @@ test "legacy: hu layout ctrl+ő sends proper codepoint" {
 }
 
 test "legacy: super-only on macOS with text" {
-    if (comptime builtin.os.tag != .macos) return error.SkipZigTest;
-
     var buf: [128]u8 = undefined;
     var writer: std.Io.Writer = .fixed(&buf);
     try legacy(&writer, .{
@@ -2752,8 +2733,6 @@ test "legacy: super-only on macOS with text" {
 }
 
 test "legacy: super and other mods on macOS with text" {
-    if (comptime builtin.os.tag != .macos) return error.SkipZigTest;
-
     var buf: [128]u8 = undefined;
     var writer: std.Io.Writer = .fixed(&buf);
     try legacy(&writer, .{

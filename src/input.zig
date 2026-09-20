@@ -1,5 +1,4 @@
 const std = @import("std");
-const builtin = @import("builtin");
 
 const config = @import("input/config.zig");
 const mouse = @import("input/mouse.zig");
@@ -36,12 +35,8 @@ pub const SplitFocusDirection = Binding.Action.SplitFocusDirection;
 pub const SplitResizeDirection = Binding.Action.SplitResizeDirection;
 pub const Trigger = Binding.Trigger;
 
-// Keymap is only available on macOS right now. We could implement it
-// in theory for XKB too on Linux but we don't need it right now.
-pub const Keymap = switch (builtin.os.tag) {
-    .macos => @import("input/KeymapDarwin.zig"),
-    else => unreachable,
-};
+// Native keyboard layout translation.
+pub const Keymap = @import("input/KeymapDarwin.zig");
 
 test {
     std.testing.refAllDecls(@This());

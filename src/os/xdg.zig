@@ -2,7 +2,6 @@
 //! (https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html)
 
 const std = @import("std");
-const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const posix = std.posix;
 const homedir = @import("homedir.zig");
@@ -64,12 +63,8 @@ fn dir(
         });
     }
 
-    // First check the env var. On Windows we treat `LOCALAPPDATA` as a
-    // fallback for `XDG_CONFIG_HOME`
-    const env = switch (builtin.os.tag) {
-        .macos => environ_map.get(internal_opts.env) orelse "",
-        else => unreachable,
-    };
+    // First check the requested XDG environment variable.
+    const env = environ_map.get(internal_opts.env) orelse "";
 
     if (env.len > 0) {
         // If we have a subdir, then we use the env as-is to avoid a copy.

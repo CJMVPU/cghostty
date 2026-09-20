@@ -160,10 +160,7 @@ pub fn start(self: *Command, alloc: Allocator) !void {
     defer arena_allocator.deinit();
     const arena = arena_allocator.allocator();
 
-    switch (builtin.os.tag) {
-        .macos => try self.startPosix(arena),
-        else => unreachable,
-    }
+    try self.startPosix(arena);
 }
 
 fn startPosix(self: *Command, arena: Allocator) !void {
@@ -316,22 +313,17 @@ fn setupFd(src: File.Handle, target: i32) !void {
         }
     };
 
-    switch (builtin.os.tag) {
-        .macos => {
-            // Mac doesn't support dup3 so we use dup2. We purposely clear
-            // CLO_ON_EXEC for this fd.
-            const flags = try PosixCall.f(posix.system.fcntl, .{ src, posix.F.GETFD });
-            if (flags & posix.FD_CLOEXEC != 0) {
-                _ = try PosixCall.f(
-                    posix.system.fcntl,
-                    .{ src, posix.F.SETFD, flags & ~@as(u32, posix.FD_CLOEXEC) },
-                );
-            }
-
-            _ = try PosixCall.f(posix.system.dup2, .{ src, target });
-        },
-        else => unreachable,
+    // Mac doesn't support dup3 so we use dup2. We purposely clear
+    // CLO_ON_EXEC for this fd.
+    const flags = try PosixCall.f(posix.system.fcntl, .{ src, posix.F.GETFD });
+    if (flags & posix.FD_CLOEXEC != 0) {
+        _ = try PosixCall.f(
+            posix.system.fcntl,
+            .{ src, posix.F.SETFD, flags & ~@as(u32, posix.FD_CLOEXEC) },
+        );
     }
+
+    _ = try PosixCall.f(posix.system.dup2, .{ src, target });
 }
 
 /// Wait for the command to exit and return information about how it exited.
@@ -680,11 +672,7 @@ test "Command: custom working directory" {
     };
     defer testing.allocator.free(contents);
 
-    if (builtin.os.tag == .macos) {
-        try testing.expectEqualStrings("/private/tmp\n", contents);
-    } else {
-        try testing.expectEqualStrings("/tmp\n", contents);
-    }
+    try testing.expectEqualStrings("/private/tmp\n", contents);
 }
 
 // Test validate an execveZ failure correctly terminates when error.ExecFailedInChild is correctly handled

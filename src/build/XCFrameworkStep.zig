@@ -1,6 +1,4 @@
-//! A zig builder step that runs "swift build" in the context of
-//! a Swift project managed with SwiftPM. This is primarily meant to build
-//! executables currently since that is what we build.
+//! Package the internal macOS arm64 static library for the Swift application.
 const XCFrameworkStep = @This();
 
 const std = @import("std");
@@ -15,20 +13,11 @@ pub const Options = struct {
     /// The path to write the framework
     out_path: []const u8,
 
-    /// The libraries to bundle
-    libraries: []const Library,
-};
-
-/// A single library to bundle into the xcframework.
-pub const Library = struct {
-    /// Library file (dylib, a) to package.
+    /// Combined static archive to package.
     library: LazyPath,
 
     /// Path to a directory with the headers.
     headers: LazyPath,
-
-    /// Path to a debug symbols file (.dSYM) if available.
-    dsym: ?LazyPath,
 };
 
 step: *Step,
@@ -50,16 +39,10 @@ pub fn create(b: *std.Build, opts: Options) *XCFrameworkStep {
         const run = RunStep.create(b, b.fmt("xcframework {s}", .{opts.name}));
         run.has_side_effects = true;
         run.addArgs(&.{ "xcodebuild", "-create-xcframework" });
-        for (opts.libraries) |lib| {
-            run.addArg("-library");
-            run.addFileArg(lib.library);
-            run.addArg("-headers");
-            run.addFileArg(lib.headers);
-            if (lib.dsym) |dsym| {
-                run.addArg("-debug-symbols");
-                run.addFileArg(dsym);
-            }
-        }
+        run.addArg("-library");
+        run.addFileArg(opts.library);
+        run.addArg("-headers");
+        run.addFileArg(opts.headers);
         run.addArg("-output");
         run.addArg(opts.out_path);
         run.expectExitCode(0);

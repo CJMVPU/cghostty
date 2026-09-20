@@ -1,13 +1,11 @@
 const SharedDeps = @This();
 
 const std = @import("std");
-const builtin = @import("builtin");
 
 const Config = @import("Config.zig");
 const HelpStrings = @import("HelpStrings.zig");
 const MetallibStep = @import("MetallibStep.zig");
 const UnicodeTables = @import("UnicodeTables.zig");
-const GhosttyFrameData = @import("GhosttyFrameData.zig");
 const translate_c = @import("translate_c");
 
 const dynamic_link_opts: std.Build.Module.LinkSystemLibraryOptions = .{
@@ -19,9 +17,8 @@ config: *const Config,
 
 options: *std.Build.Step.Options,
 help_strings: HelpStrings,
-metallib: ?*MetallibStep,
+metallib: *MetallibStep,
 unicode_tables: UnicodeTables,
-framedata: GhosttyFrameData,
 uucode_tables: std.Build.LazyPath,
 
 /// Singleton uucode module, instantiated once in `init` and reused
@@ -83,27 +80,15 @@ pub fn init(b: *std.Build, cfg: *const Config) !SharedDeps {
         .config = cfg,
         .help_strings = try .init(b, cfg),
         .unicode_tables = try .init(b, uucode_tables),
-        .framedata = try .init(b),
         .uucode_tables = uucode_tables,
         .uucode_mod = uucode_mod,
 
-        // Setup by retarget
+        // Setup by initTarget
         .options = undefined,
         .metallib = undefined,
     };
     try result.initTarget(b, cfg.target);
     if (cfg.emit_unicode_table_gen) result.unicode_tables.install(b);
-    return result;
-}
-
-/// Retarget our dependencies for another build target. Modifies in-place.
-pub fn retarget(
-    self: *const SharedDeps,
-    b: *std.Build,
-    target: std.Build.ResolvedTarget,
-) !SharedDeps {
-    var result = self.*;
-    try result.initTarget(b, target);
     return result;
 }
 
@@ -182,17 +167,11 @@ pub fn add(
     });
 
     // C imports needed to manage/create PTYs
-    switch (target.result.os.tag) {
-        .macos,
-        => {
-            try translate_c.addImportToModule(b, "pty-c", step.root_module, .{
-                .source = .{ .file = b.path("src/pty.c") },
-                .target = target,
-                .optimize = optimize,
-            });
-        },
-        else => {},
-    }
+    try translate_c.addImportToModule(b, "pty-c", step.root_module, .{
+        .source = .{ .file = b.path("src/pty.c") },
+        .target = target,
+        .optimize = optimize,
+    });
 
     // POSIX C imports that are used throughout Ghostty on a general basis.
     // (note: errno is C stdlib but we just include it here because that's
@@ -340,17 +319,12 @@ pub fn add(
     // libc++ is required for the app's C++ dependencies.
     step.root_module.link_libcpp = true;
 
-    // We always require the system SDK so that our system headers are available.
-    // This makes things like `os/log.h` available for cross-compiling.
-    if (step.rootModuleTarget().os.tag.isDarwin()) {
-        try @import("apple_sdk").addPaths(b, step);
-
-        const metallib = self.metallib.?;
-        metallib.output.addStepDependencies(&step.step);
-        step.root_module.addAnonymousImport("ghostty_metallib", .{
-            .root_source_file = metallib.output,
-        });
-    }
+    // System SDK headers and the Metal library are required by every artifact.
+    try @import("apple_sdk").addPaths(b, step);
+    self.metallib.output.addStepDependencies(&step.step);
+    step.root_module.addAnonymousImport("ghostty_metallib", .{
+        .root_source_file = self.metallib.output,
+    });
 
     // Other dependencies, mostly pure Zig
     if (b.lazyDependency("vaxis", .{
@@ -388,49 +362,47 @@ pub fn add(
         step.root_module.addImport("zf", dep.module("zf"));
     }
 
-    // Mac Stuff
-    if (step.rootModuleTarget().os.tag.isDarwin()) {
-        if (b.lazyDependency("zig_objc", .{
-            .target = target,
-            .optimize = optimize,
-        })) |objc_dep| {
-            step.root_module.addImport(
-                "objc",
-                objc_dep.module("objc"),
-            );
-        }
+    // Native macOS dependencies.
+    if (b.lazyDependency("zig_objc", .{
+        .target = target,
+        .optimize = optimize,
+    })) |objc_dep| {
+        step.root_module.addImport(
+            "objc",
+            objc_dep.module("objc"),
+        );
+    }
 
-        if (b.lazyDependency("macos", .{
-            .target = target,
-            .optimize = optimize,
-        })) |macos_dep| {
-            step.root_module.addImport(
-                "macos",
-                macos_dep.module("macos"),
-            );
-            step.root_module.linkLibrary(
-                macos_dep.artifact("macos"),
-            );
-            try static_libs.append(
-                b.allocator,
-                macos_dep.artifact("macos").getEmittedBin(),
-            );
-        }
+    if (b.lazyDependency("macos", .{
+        .target = target,
+        .optimize = optimize,
+    })) |macos_dep| {
+        step.root_module.addImport(
+            "macos",
+            macos_dep.module("macos"),
+        );
+        step.root_module.linkLibrary(
+            macos_dep.artifact("macos"),
+        );
+        try static_libs.append(
+            b.allocator,
+            macos_dep.artifact("macos").getEmittedBin(),
+        );
+    }
 
-        // Apple platforms do not include libc libintl so we bundle it.
-        // This is LGPL but since our source code is open source we are
-        // in compliance with the LGPL since end users can modify this
-        // build script to replace the bundled libintl with their own.
-        if (b.lazyDependency("libintl", .{
-            .target = target,
-            .optimize = optimize,
-        })) |libintl_dep| {
-            step.root_module.linkLibrary(libintl_dep.artifact("intl"));
-            try static_libs.append(
-                b.allocator,
-                libintl_dep.artifact("intl").getEmittedBin(),
-            );
-        }
+    // Apple platforms do not include libc libintl so we bundle it.
+    // This is LGPL but since our source code is open source we are
+    // in compliance with the LGPL since end users can modify this
+    // build script to replace the bundled libintl with their own.
+    if (b.lazyDependency("libintl", .{
+        .target = target,
+        .optimize = optimize,
+    })) |libintl_dep| {
+        step.root_module.linkLibrary(libintl_dep.artifact("intl"));
+        try static_libs.append(
+            b.allocator,
+            libintl_dep.artifact("intl").getEmittedBin(),
+        );
     }
 
     // cimgui
@@ -491,7 +463,6 @@ pub fn add(
 
     self.help_strings.addImport(step);
     self.unicode_tables.addImport(step);
-    self.framedata.addImport(step);
 
     return static_libs;
 }

@@ -13,7 +13,6 @@ pub const Thread = @This();
 
 const std = @import("std");
 const ArenaAllocator = std.heap.ArenaAllocator;
-const builtin = @import("builtin");
 const global = @import("../global.zig");
 const xev = global.xev;
 const internal_os = @import("../os/main.zig");
@@ -239,9 +238,7 @@ fn threadMain_(self: *Thread, io: *termio.Termio) !void {
     // Right now, on Darwin, `std.Thread.setName` can only name the current
     // thread, and we have no way to get the current thread from within it,
     // so instead we use this code to name the thread instead.
-    if (builtin.os.tag.isDarwin()) {
-        internal_os.macos.pthread_setname_np(&"io".*);
-    }
+    internal_os.macos.pthread_setname_np(&"io".*);
 
     // Get the mailbox. This must be an SPSC mailbox for threading.
     const mailbox = switch (io.mailbox) {

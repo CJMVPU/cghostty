@@ -16,7 +16,6 @@ pub const Mailbox = apprt.surface.Mailbox;
 pub const Message = apprt.surface.Message;
 
 const std = @import("std");
-const builtin = @import("builtin");
 const assert = @import("quirks.zig").inlineAssert;
 const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
@@ -1222,14 +1221,7 @@ fn childExited(self: *Surface, info: apprt.surface.Message.ChildExited) void {
 
     // If our runtime was below some threshold then we assume that this
     // was an abnormal exit and we show an error message.
-    if (info.runtime_ms <= self.config.abnormal_command_exit_runtime_ms) runtime: {
-        // On macOS, our exit code detection doesn't work, possibly
-        // because of our `login` wrapper. More investigation required.
-        if (comptime !builtin.target.os.tag.isDarwin()) {
-            // If the exit code is 0 then it was a good exit.
-            if (info.exit_code == 0) break :runtime;
-        }
-
+    if (info.runtime_ms <= self.config.abnormal_command_exit_runtime_ms) {
         log.warn("abnormal process exit detected, showing error message", .{});
 
         // Try and show a GUI message. If it returns true, don't do anything else.
@@ -1353,18 +1345,6 @@ fn childExitedAbnormally(
     try t.setAttribute(.{ .@"8_fg" = .red });
     try t.printString(runtime_str);
     try t.setAttribute(.{ .unset = {} });
-
-    // We don't print this on macOS because the exit code is always 0
-    // due to the way we launch the process.
-    if (comptime !builtin.target.os.tag.isDarwin()) {
-        const exit_code_str = try std.fmt.allocPrint(alloc, "{d}", .{info.exit_code});
-        t.carriageReturn();
-        try t.linefeed();
-        try t.printString("Exit Code: ");
-        try t.setAttribute(.{ .@"8_fg" = .red });
-        try t.printString(exit_code_str);
-        try t.setAttribute(.{ .unset = {} });
-    }
 
     t.carriageReturn();
     try t.linefeed();
@@ -3277,7 +3257,6 @@ fn encodeKeyOpts(self: *const Surface) input.key_encode.Options {
     const t = &self.io.terminal;
 
     var opts: input.key_encode.Options = .fromTerminal(t);
-    if (comptime builtin.os.tag != .macos) return opts;
 
     opts.macos_option_as_alt = self.config.macos_option_as_alt orelse detect: {
         // If we don't have alt pressed, it doesn't matter what this
@@ -3473,23 +3452,19 @@ pub fn scrollCallback(
         const yoff_adjusted: f64 = if (scroll_mods.precision)
             yoff * self.config.mouse_scroll_multiplier.precision
         else yoff_adjusted: {
-            if (comptime builtin.target.os.tag.isDarwin()) {
-                // Round out the yoff to an absolute minimum of 1. macos tries to
-                // simulate precision scrolling with non precision events by
-                // ramping up the magnitude of the offsets as it detects faster
-                // scrolling. Single click (very slow) scrolls are reported with a
-                // magnitude of 0.1 which would normally require a few clicks
-                // before we register an actual scroll event (depending on cell
-                // height and the mouse_scroll_multiplier setting).
-                const yoff_max: f64 = if (yoff > 0)
-                    @max(yoff, 1)
-                else
-                    @min(yoff, -1);
+            // Round out the yoff to an absolute minimum of 1. macos tries to
+            // simulate precision scrolling with non precision events by
+            // ramping up the magnitude of the offsets as it detects faster
+            // scrolling. Single click (very slow) scrolls are reported with a
+            // magnitude of 0.1 which would normally require a few clicks
+            // before we register an actual scroll event (depending on cell
+            // height and the mouse_scroll_multiplier setting).
+            const yoff_max: f64 = if (yoff > 0)
+                @max(yoff, 1)
+            else
+                @min(yoff, -1);
 
-                break :yoff_adjusted yoff_max * cell_size * self.config.mouse_scroll_multiplier.discrete;
-            } else {
-                break :yoff_adjusted yoff * cell_size * self.config.mouse_scroll_multiplier.discrete;
-            }
+            break :yoff_adjusted yoff_max * cell_size * self.config.mouse_scroll_multiplier.discrete;
         };
 
         // Add our previously saved pending amount to the offset to get the
@@ -5702,10 +5677,7 @@ fn writeScreenFile(
     var file = try tmp_dir.dir.createFile(
         global.io(),
         filename,
-        switch (builtin.os.tag) {
-            .macos => .{ .permissions = .fromMode(0o600) },
-            else => unreachable,
-        },
+        .{ .permissions = .fromMode(0o600) },
     );
     defer file.close(global.io());
 

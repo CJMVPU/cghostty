@@ -4,7 +4,6 @@ pub const Metal = @This();
 const std = @import("std");
 const assert = @import("../quirks.zig").inlineAssert;
 const Allocator = std.mem.Allocator;
-const builtin = @import("builtin");
 const objc = @import("objc");
 const macos = @import("macos");
 const graphics = macos.graphics;
@@ -58,11 +57,6 @@ max_texture_size: u32,
 autorelease_pool: ?*objc.AutoreleasePool = null,
 
 pub fn init(alloc: Allocator, opts: rendererpkg.Options) !Metal {
-    comptime switch (builtin.os.tag) {
-        .macos => {},
-        else => unreachable,
-    };
-
     _ = alloc;
 
     // Choose our MTLDevice and create a MTL4CommandQueue for that device.
@@ -72,10 +66,7 @@ pub fn init(alloc: Allocator, opts: rendererpkg.Options) !Metal {
     errdefer queue.release();
 
     // Grab metadata about the device.
-    const default_storage_mode: mtl.MTLResourceOptions.StorageMode = switch (builtin.os.tag) {
-        .macos => if (device.getProperty(bool, "hasUnifiedMemory")) .shared else .managed,
-        else => unreachable,
-    };
+    const default_storage_mode: mtl.MTLResourceOptions.StorageMode = if (device.getProperty(bool, "hasUnifiedMemory")) .shared else .managed;
     const max_texture_size = queryMaxTextureSize(device);
     log.debug(
         "device properties default_storage_mode={} max_texture_size={}",
@@ -110,13 +101,8 @@ pub fn init(alloc: Allocator, opts: rendererpkg.Options) !Metal {
     // Make the NSView "layer-hosting"
     // by assigning it to the view's `layer` property BEFORE
     // setting `wantsLayer` to `true`.
-    switch (builtin.os.tag) {
-        .macos => {
-            info.view.setProperty("layer", layer.layer.value);
-            info.view.setProperty("wantsLayer", true);
-        },
-        else => unreachable,
-    }
+    info.view.setProperty("layer", layer.layer.value);
+    info.view.setProperty("wantsLayer", true);
 
     // Ensure that if our layer is oversized it
     // does not overflow the bounds of the view.
@@ -392,24 +378,21 @@ pub fn warmup() void {
 fn chooseDevice() error{NoMetalDevice}!objc.Object {
     var chosen_device: ?objc.Object = null;
 
-    switch (builtin.os.tag) {
-        .macos => {
-            const devices = objc.Object.fromId(mtl.MTLCopyAllDevices());
-            defer devices.release();
+    {
+        const devices = objc.Object.fromId(mtl.MTLCopyAllDevices());
+        defer devices.release();
 
-            var iter = devices.iterate();
-            while (iter.next()) |device| {
-                // We want a GPU that’s connected to a display.
-                if (device.getProperty(bool, "isHeadless")) continue;
-                chosen_device = device;
-                // If the user has an eGPU plugged in, they probably want
-                // to use it. Otherwise, integrated GPUs are better for
-                // battery life and thermals.
-                if (device.getProperty(bool, "isRemovable") or
-                    device.getProperty(bool, "isLowPower")) break;
-            }
-        },
-        else => unreachable,
+        var iter = devices.iterate();
+        while (iter.next()) |device| {
+            // We want a GPU that’s connected to a display.
+            if (device.getProperty(bool, "isHeadless")) continue;
+            chosen_device = device;
+            // If the user has an eGPU plugged in, they probably want
+            // to use it. Otherwise, integrated GPUs are better for
+            // battery life and thermals.
+            if (device.getProperty(bool, "isRemovable") or
+                device.getProperty(bool, "isLowPower")) break;
+        }
     }
 
     const device = chosen_device orelse return error.NoMetalDevice;

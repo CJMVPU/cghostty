@@ -7,8 +7,8 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: com.cjmvpu.cghostty\n"
-"Report-Msgid-Bugs-To: m@mitchellh.com\n"
-"POT-Creation-Date: 2026-08-10 10:06-0500\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-19 22:55+0800\n"
 "PO-Revision-Date: 2026-08-13 13:40+0300\n"
 "Last-Translator: reo101 <pavel.atanasov2001@gmail.com>\n"
 "Language-Team: Bulgarian <dict@ludost.net>\n"
@@ -17,381 +17,6 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
-
-#: dist/linux/ghostty_nautilus.py:53
-msgid "Open in Ghostty"
-msgstr "Отвори в Ghostty"
-
-#: src/apprt/gtk/ui/1.0/clipboard-confirmation-dialog.blp:12
-#: src/apprt/gtk/ui/1.4/clipboard-confirmation-dialog.blp:12
-#: src/apprt/gtk/class/clipboard_confirmation_dialog.zig:197
-#: src/apprt/gtk/class/clipboard_confirmation_dialog.zig:201
-msgid "Authorize Clipboard Access"
-msgstr "Разрешаване на достъп до клипборда"
-
-#: src/apprt/gtk/ui/1.0/clipboard-confirmation-dialog.blp:17
-#: src/apprt/gtk/ui/1.4/clipboard-confirmation-dialog.blp:17
-msgid "Deny"
-msgstr "Откажи"
-
-#: src/apprt/gtk/ui/1.0/clipboard-confirmation-dialog.blp:18
-#: src/apprt/gtk/ui/1.4/clipboard-confirmation-dialog.blp:18
-msgid "Allow"
-msgstr "Позволи"
-
-#: src/apprt/gtk/ui/1.4/clipboard-confirmation-dialog.blp:92
-msgid "Remember choice for this split"
-msgstr "Запомни избора за това разделяне"
-
-#: src/apprt/gtk/ui/1.4/clipboard-confirmation-dialog.blp:93
-msgid "Reload configuration to show this prompt again"
-msgstr "За да покажеш това съобщение отново, презареди конфигурацията"
-
-#: src/apprt/gtk/ui/1.2/close-confirmation-dialog.blp:7
-#: src/apprt/gtk/ui/1.5/title-dialog.blp:8
-#: src/apprt/gtk/class/application.zig:2263
-msgid "Cancel"
-msgstr "Отказ"
-
-#: src/apprt/gtk/ui/1.2/close-confirmation-dialog.blp:8
-#: src/apprt/gtk/ui/1.2/search-overlay.blp:90
-#: src/apprt/gtk/ui/1.3/surface-child-exited.blp:17
-msgid "Close"
-msgstr "Затвори"
-
-#: src/apprt/gtk/ui/1.2/config-errors-dialog.blp:6
-msgid "Configuration Errors"
-msgstr "Грешки в конфигурацията"
-
-#: src/apprt/gtk/ui/1.2/config-errors-dialog.blp:8
-msgid ""
-"One or more configuration errors were found. Please review the errors below, "
-"and either reload your configuration or ignore these errors."
-msgstr ""
-"Открити са една или повече грешки в конфигурацията. Моля, прегледайте "
-"грешките по-долу и или презаредете конфигурацията си, или ги игнорирайте."
-
-#: src/apprt/gtk/ui/1.2/config-errors-dialog.blp:12
-msgid "Ignore"
-msgstr "Игнорирай"
-
-#: src/apprt/gtk/ui/1.2/config-errors-dialog.blp:13
-#: src/apprt/gtk/ui/1.2/surface.blp:439 src/apprt/gtk/ui/1.5/window.blp:318
-msgid "Reload Configuration"
-msgstr "Презареди конфигурацията"
-
-#: src/apprt/gtk/ui/1.2/debug-warning.blp:7
-#: src/apprt/gtk/ui/1.3/debug-warning.blp:6
-msgid ""
-"⚠️ You're running a debug build of Ghostty! Performance will be degraded."
-msgstr ""
-"⚠️ Използвате дебъг версия на Ghostty! Производителността ще бъде намалена."
-
-#: src/apprt/gtk/ui/1.5/inspector-window.blp:5
-msgid "Ghostty: Terminal Inspector"
-msgstr "Ghostty: Инспектор на терминала"
-
-#: src/apprt/gtk/ui/1.2/search-overlay.blp:29
-msgid "Find…"
-msgstr "Намери…"
-
-#: src/apprt/gtk/ui/1.2/search-overlay.blp:69
-msgid "Previous Match"
-msgstr "Предишно съвпадение"
-
-#: src/apprt/gtk/ui/1.2/search-overlay.blp:79
-msgid "Next Match"
-msgstr "Следващо съвпадение"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:7
-msgid "Oh, no."
-msgstr "О, не."
-
-#: src/apprt/gtk/ui/1.2/surface.blp:8
-msgid "Unable to acquire an OpenGL context for rendering."
-msgstr "Неуспешно придобиване на OpenGL контекст за рендиране."
-
-#: src/apprt/gtk/ui/1.2/surface.blp:101
-msgid ""
-"This terminal is in read-only mode. You can still view, select, and scroll "
-"through the content, but no input events will be sent to the running "
-"application."
-msgstr ""
-"Този терминал е режим само за четене. Все още можете да преглеждате, "
-"селектирате и превъртате съдържанието, но към работещото приложение няма да "
-"бъдат изпращани входни събития."
-
-#: src/apprt/gtk/ui/1.2/surface.blp:112
-msgid "Read-only"
-msgstr "Само за четене"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:316 src/apprt/gtk/ui/1.5/window.blp:203
-msgid "Copy"
-msgstr "Копирай"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:321 src/apprt/gtk/ui/1.5/window.blp:208
-msgid "Paste"
-msgstr "Постави"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:326
-msgid "Notify on Next Command Finish"
-msgstr "Уведомяване при завършване на следващата команда"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:333 src/apprt/gtk/ui/1.5/window.blp:281
-msgid "Clear"
-msgstr "Изчисти"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:338 src/apprt/gtk/ui/1.5/window.blp:286
-msgid "Reset"
-msgstr "Нулирай"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:345 src/apprt/gtk/ui/1.5/window.blp:250
-msgid "Split"
-msgstr "Раздели"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:348 src/apprt/gtk/ui/1.5/window.blp:253
-msgid "Change Title…"
-msgstr "Промени заглавие…"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:353 src/apprt/gtk/ui/1.5/window.blp:180
-#: src/apprt/gtk/ui/1.5/window.blp:258 src/input/command.zig:487
-msgid "Split Up"
-msgstr "Раздели нагоре"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:359 src/apprt/gtk/ui/1.5/window.blp:185
-#: src/apprt/gtk/ui/1.5/window.blp:263 src/input/command.zig:492
-msgid "Split Down"
-msgstr "Раздели надолу"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:365 src/apprt/gtk/ui/1.5/window.blp:190
-#: src/apprt/gtk/ui/1.5/window.blp:268 src/input/command.zig:477
-msgid "Split Left"
-msgstr "Раздели наляво"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:371 src/apprt/gtk/ui/1.5/window.blp:195
-#: src/apprt/gtk/ui/1.5/window.blp:273 src/input/command.zig:482
-msgid "Split Right"
-msgstr "Раздели надясно"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:377
-msgid "Close Split"
-msgstr "Затвори разделянето"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:383
-msgid "Tab"
-msgstr "Раздел"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:386 src/apprt/gtk/ui/1.5/window.blp:232
-#: src/apprt/gtk/ui/1.5/window.blp:339 src/input/command.zig:464
-msgid "Change Tab Title…"
-msgstr "Промени заглавието на раздела…"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:391 src/apprt/gtk/ui/1.5/window.blp:60
-#: src/apprt/gtk/ui/1.5/window.blp:110 src/apprt/gtk/ui/1.5/window.blp:237
-#: src/input/command.zig:427
-msgid "New Tab"
-msgstr "Нов раздел"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:396 src/apprt/gtk/ui/1.5/window.blp:242
-#: src/input/command.zig:613
-msgid "Close Tab"
-msgstr "Затвори раздел"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:403
-msgid "Window"
-msgstr "Прозорец"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:406 src/apprt/gtk/ui/1.5/window.blp:215
-msgid "Change Window Title…"
-msgstr "Промени заглавието на прозореца…"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:411 src/apprt/gtk/ui/1.5/window.blp:220
-#: src/input/command.zig:421
-msgid "New Window"
-msgstr "Нов прозорец"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:416 src/apprt/gtk/ui/1.5/window.blp:225
-#: src/input/command.zig:630
-msgid "Close Window"
-msgstr "Затвори прозорец"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:424 src/apprt/gtk/ui/1.5/window.blp:303
-msgid "Config"
-msgstr "Конфигурация"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:427 src/apprt/gtk/ui/1.5/window.blp:306
-msgid "Open Configuration in OS Editor"
-msgstr "Отвори конфигурацията в редактора на операционната система"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:433 src/apprt/gtk/ui/1.5/window.blp:312
-msgid "Open Configuration in New Window"
-msgstr "Отвори конфигурацията в нов прозорец"
-
-#: src/apprt/gtk/ui/1.5/title-dialog.blp:5
-msgid "Leave blank to restore the default title."
-msgstr "Оставете празно за възстановяване на заглавието по подразбиране."
-
-#: src/apprt/gtk/ui/1.5/title-dialog.blp:9
-msgid "OK"
-msgstr "ОК"
-
-#: src/apprt/gtk/ui/1.5/window.blp:61 src/apprt/gtk/ui/1.5/window.blp:111
-msgid "New Split"
-msgstr "Ново разделяне"
-
-#: src/apprt/gtk/ui/1.5/window.blp:71 src/apprt/gtk/ui/1.5/window.blp:129
-msgid "View Open Tabs"
-msgstr "Преглед на отворените раздели"
-
-#: src/apprt/gtk/ui/1.5/window.blp:81 src/apprt/gtk/ui/1.5/window.blp:143
-msgid "Main Menu"
-msgstr "Главно меню"
-
-#: src/apprt/gtk/ui/1.5/window.blp:293
-msgid "Command Palette"
-msgstr "Командна палитра"
-
-#: src/apprt/gtk/ui/1.5/window.blp:298
-msgid "Terminal Inspector"
-msgstr "Инспектор на терминала"
-
-#: src/apprt/gtk/ui/1.5/window.blp:326 src/apprt/gtk/class/window.zig:1991
-msgid "About Ghostty"
-msgstr "За Ghostty"
-
-#: src/apprt/gtk/ui/1.5/window.blp:331 src/input/command.zig:702
-msgid "Quit"
-msgstr "Изход"
-
-#: src/apprt/gtk/ui/1.5/command-palette.blp:17
-msgid "Execute a command…"
-msgstr "Изпълни команда…"
-
-#: src/apprt/gtk/class/application.zig:1767
-msgid "The keybind was revoked by the system."
-msgstr "Клавишната комбинация е отменена от системата."
-
-#: src/apprt/gtk/class/application.zig:1769
-msgid "The keybind was denied by the system."
-msgstr "Клавишната комбинация е отказана от системата."
-
-#: src/apprt/gtk/class/application.zig:1780
-msgid "Global keybind unavailable"
-msgstr "Глобалната клавишна комбинация не е достъпна"
-
-#: src/apprt/gtk/class/application.zig:2259
-msgid "Export Terminal IO Events"
-msgstr "Експортиране на входно-изходните събития на терминала"
-
-#: src/apprt/gtk/class/application.zig:2262
-msgid "Export"
-msgstr "Експортирай"
-
-#: src/apprt/gtk/class/application.zig:2783
-msgid "Editing configuration file"
-msgstr "Редактиране на конфигурационния файл"
-
-#: src/apprt/gtk/class/clipboard_confirmation_dialog.zig:198
-msgid ""
-"An application is attempting to write to the clipboard. The current "
-"clipboard contents are shown below."
-msgstr ""
-"Приложение се опитва да запише в клипборда. Текущото съдържание на клипборда "
-"е показано по-долу."
-
-#: src/apprt/gtk/class/clipboard_confirmation_dialog.zig:202
-msgid ""
-"An application is attempting to read from the clipboard. The current "
-"clipboard contents are shown below."
-msgstr ""
-"Приложение се опитва да чете от клипборда. Текущото съдържание на клипборда "
-"е показано по-долу."
-
-#: src/apprt/gtk/class/clipboard_confirmation_dialog.zig:205
-msgid "Warning: Potentially Unsafe Paste"
-msgstr "Предупреждение: Потенциално опасно поставяне"
-
-#: src/apprt/gtk/class/clipboard_confirmation_dialog.zig:206
-msgid ""
-"Pasting this text into the terminal may be dangerous as it looks like some "
-"commands may be executed."
-msgstr ""
-"Поставянето на този текст в терминала може да е опасно, тъй като изглежда, "
-"че може да бъдат изпълнени някои команди."
-
-#: src/apprt/gtk/class/close_confirmation_dialog.zig:184
-msgid "Quit Ghostty?"
-msgstr "Изход от Ghostty?"
-
-#: src/apprt/gtk/class/close_confirmation_dialog.zig:185
-msgid "Close Tab?"
-msgstr "Затваряне на раздела?"
-
-#: src/apprt/gtk/class/close_confirmation_dialog.zig:186
-msgid "Close Window?"
-msgstr "Затваряне на прозореца?"
-
-#: src/apprt/gtk/class/close_confirmation_dialog.zig:187
-msgid "Close Split?"
-msgstr "Затваряне на разделянето?"
-
-#: src/apprt/gtk/class/close_confirmation_dialog.zig:193
-msgid "All terminal sessions will be terminated."
-msgstr "Всички терминални сесии ще бъдат прекратени."
-
-#: src/apprt/gtk/class/close_confirmation_dialog.zig:194
-msgid "All terminal sessions in this tab will be terminated."
-msgstr "Всички терминални сесии в този раздел ще бъдат прекратени."
-
-#: src/apprt/gtk/class/close_confirmation_dialog.zig:195
-msgid "All terminal sessions in this window will be terminated."
-msgstr "Всички терминални сесии в този прозорец ще бъдат прекратени."
-
-#: src/apprt/gtk/class/close_confirmation_dialog.zig:196
-msgid "The currently running process in this split will be terminated."
-msgstr "Текущият процес в това разделяне ще бъде прекратен."
-
-#: src/apprt/gtk/class/surface.zig:1181
-msgid "Command Finished"
-msgstr "Командата завърши"
-
-#: src/apprt/gtk/class/surface.zig:1182
-#: src/apprt/gtk/class/surface_child_exited.zig:109
-msgid "Command Succeeded"
-msgstr "Командата завърши успешно"
-
-#: src/apprt/gtk/class/surface.zig:1183
-#: src/apprt/gtk/class/surface_child_exited.zig:113
-msgid "Command Failed"
-msgstr "Командата завърши неуспешно"
-
-#: src/apprt/gtk/class/title_dialog.zig:227
-msgid "Change Terminal Title"
-msgstr "Промяна на заглавието на терминала"
-
-#: src/apprt/gtk/class/title_dialog.zig:228
-msgid "Change Tab Title"
-msgstr "Промяна на заглавието на раздела"
-
-#: src/apprt/gtk/class/title_dialog.zig:229
-msgid "Change Window Title"
-msgstr "Промяна на заглавието на прозореца"
-
-#: src/apprt/gtk/class/window.zig:1153
-msgid "Reloaded the configuration"
-msgstr "Конфигурацията е презаредена"
-
-#: src/apprt/gtk/class/window.zig:1830
-msgid "Copied to clipboard"
-msgstr "Копирано в клипборда"
-
-#: src/apprt/gtk/class/window.zig:1832
-msgid "Cleared clipboard"
-msgstr "Клипбордът е изчистен"
-
-#: src/apprt/gtk/class/window.zig:1972
-msgid "Ghostty Developers"
-msgstr "Разработчици на Ghostty"
 
 #: src/input/command.zig:149
 msgid "Reset Terminal"
@@ -809,9 +434,17 @@ msgstr ""
 "Избраното съдържание се записва във временен файл с ANSI форматиране, който "
 "след това се отваря."
 
+#: src/input/command.zig:421
+msgid "New Window"
+msgstr "Нов прозорец"
+
 #: src/input/command.zig:422
 msgid "Open a new window."
 msgstr "Отваряне на нов прозорец."
+
+#: src/input/command.zig:427
+msgid "New Tab"
+msgstr "Нов раздел"
 
 #: src/input/command.zig:428
 msgid "Open a new tab."
@@ -857,21 +490,41 @@ msgstr "Промяна на заглавието на терминала…"
 msgid "Prompt for a new title for the current terminal."
 msgstr "Показване на подкана за ново заглавие на текущия терминал."
 
+#: src/input/command.zig:464
+msgid "Change Tab Title…"
+msgstr "Промени заглавието на раздела…"
+
 #: src/input/command.zig:465
 msgid "Prompt for a new title for the current tab."
 msgstr "Показване на подкана за ново заглавие на текущия раздел."
+
+#: src/input/command.zig:477
+msgid "Split Left"
+msgstr "Раздели наляво"
 
 #: src/input/command.zig:478
 msgid "Split the terminal to the left."
 msgstr "Разделяне на терминала наляво."
 
+#: src/input/command.zig:482
+msgid "Split Right"
+msgstr "Раздели надясно"
+
 #: src/input/command.zig:483
 msgid "Split the terminal to the right."
 msgstr "Разделяне на терминала надясно."
 
+#: src/input/command.zig:487
+msgid "Split Up"
+msgstr "Раздели нагоре"
+
 #: src/input/command.zig:488
 msgid "Split the terminal up."
 msgstr "Разделяне на терминала нагоре."
+
+#: src/input/command.zig:492
+msgid "Split Down"
+msgstr "Раздели надолу"
 
 #: src/input/command.zig:493
 msgid "Split the terminal down."
@@ -1032,6 +685,10 @@ msgstr "Затваряне на терминала"
 msgid "Close the current terminal."
 msgstr "Затваряне на текущия терминал."
 
+#: src/input/command.zig:613
+msgid "Close Tab"
+msgstr "Затвори раздел"
+
 #: src/input/command.zig:614
 msgid "Close the current tab."
 msgstr "Затваряне на текущия раздел."
@@ -1051,6 +708,10 @@ msgstr "Затваряне на разделите отдясно"
 #: src/input/command.zig:624
 msgid "Close all tabs to the right of the current one."
 msgstr "Затваряне на всички раздели вдясно от текущия."
+
+#: src/input/command.zig:630
+msgid "Close Window"
+msgstr "Затвори прозорец"
 
 #: src/input/command.zig:631
 msgid "Close the current window."
@@ -1148,6 +809,10 @@ msgstr "Повтаряне"
 #: src/input/command.zig:697
 msgid "Redo the last undone action."
 msgstr "Повтаряне на последното отменено действие."
+
+#: src/input/command.zig:702
+msgid "Quit"
+msgstr "Изход"
 
 #: src/input/command.zig:703
 msgid "Quit the application."

@@ -601,11 +601,9 @@ const Subprocess = struct {
             });
             try env.put("TERMINFO", dir);
         } else {
-            if (comptime builtin.target.os.tag.isDarwin()) {
-                log.warn("ghostty terminfo not found, using xterm-256color", .{});
-                log.warn("the terminfo SHOULD exist on macos, please ensure", .{});
-                log.warn("you're using a valid app bundle.", .{});
-            }
+            log.warn("ghostty terminfo not found, using xterm-256color", .{});
+            log.warn("the terminfo SHOULD exist on macos, please ensure", .{});
+            log.warn("you're using a valid app bundle.", .{});
 
             try env.put("TERM", "xterm-256color");
             try env.put("COLORTERM", "truecolor");
@@ -613,8 +611,6 @@ const Subprocess = struct {
 
         // Add our binary to the path if we can find it.
         ghostty_path: {
-            // Skip this for flatpak since host cannot reach them
-
             var exe_buf: [std.fs.max_path_bytes]u8 = undefined;
             const exe_bin_path = exe_buf[0 .. std.process.executablePath(
                 global.io(),
@@ -652,7 +648,7 @@ const Subprocess = struct {
 
         // On macOS, export additional data directories from our
         // application bundle.
-        if (comptime builtin.target.os.tag.isDarwin()) darwin: {
+        darwin: {
             const resources_dir = cfg.resources_dir orelse break :darwin;
 
             var buf: [std.fs.max_path_bytes]u8 = undefined;
@@ -702,10 +698,7 @@ const Subprocess = struct {
         // Setup our shell integration, if we can.
         const shell_command: configpkg.Command = shell: {
             const default_shell_command: configpkg.Command =
-                cfg.command orelse .{ .shell = switch (builtin.os.tag) {
-                    .macos => "sh",
-                    else => unreachable,
-                } };
+                cfg.command orelse .{ .shell = "sh" };
 
             // Always set up shell features (GHOSTTY_SHELL_FEATURES). These are
             // used by both automatic and manual shell integrations.
@@ -781,10 +774,7 @@ const Subprocess = struct {
 
                 // The comptime here is important to ensure the full slice
                 // is put into the binary data and not the stack.
-                break :oom comptime switch (builtin.os.tag) {
-                    .macos => &.{"/bin/sh"},
-                    else => unreachable,
-                };
+                break :oom comptime &.{"/bin/sh"};
             },
 
             // This logs on its own, this is a bad error.
@@ -913,21 +903,18 @@ const Subprocess = struct {
                 .handle = pty.slave,
                 .flags = .{ .nonblocking = false },
             },
-            .os_pre_exec = switch (builtin.os.tag) {
-                .macos => f: {
-                    const f = struct {
-                        fn callback(cmd: *Command) ?u8 {
-                            const sp = cmd.getData(Subprocess) orelse unreachable;
-                            sp.childPreExec() catch |err| log.err(
-                                "error initializing child: {}",
-                                .{err},
-                            );
-                            return null;
-                        }
-                    };
-                    break :f f.callback;
-                },
-                else => unreachable,
+            .os_pre_exec = f: {
+                const f = struct {
+                    fn callback(cmd: *Command) ?u8 {
+                        const sp = cmd.getData(Subprocess) orelse unreachable;
+                        sp.childPreExec() catch |err| log.err(
+                            "error initializing child: {}",
+                            .{err},
+                        );
+                        return null;
+                    }
+                };
+                break :f f.callback;
             },
             .rt_pre_exec = if (comptime @hasDecl(apprt.runtime, "pre_exec")) apprt.runtime.pre_exec.preExec else null,
             .rt_pre_exec_info = self.rt_pre_exec_info,
@@ -957,12 +944,9 @@ const Subprocess = struct {
         log.info("started subcommand path={s} pid={?}", .{ self.args[0], cmd.pid });
 
         self.process = .{ .fork_exec = cmd };
-        return switch (builtin.os.tag) {
-            .macos => .{
-                .read = pty.master,
-                .write = pty.master,
-            },
-            else => unreachable,
+        return .{
+            .read = pty.master,
+            .write = pty.master,
         };
     }
 
@@ -1025,10 +1009,7 @@ const Subprocess = struct {
     /// exit code.
     fn killCommand(command: *Command) !void {
         if (command.pid) |pid| {
-            switch (builtin.os.tag) {
-                .macos => try killPid(pid),
-                else => unreachable,
-            }
+            try killPid(pid);
         }
     }
 
@@ -1046,9 +1027,7 @@ const Subprocess = struct {
             switch (posix.errno(c.killpg(pgid, c.SIGHUP))) {
                 .SUCCESS => log.debug("process group killed pgid={}", .{pgid}),
                 else => |err| killpg: {
-                    if ((comptime builtin.target.os.tag.isDarwin()) and
-                        err == .PERM)
-                    {
+                    if (err == .PERM) {
                         log.debug("killpg failed with EPERM, expected on Darwin and ignoring", .{});
                         break :killpg;
                     }
@@ -1270,10 +1249,8 @@ pub const ReadThread = struct {
         // Right now, on Darwin, `std.Thread.setName` can only name the current
         // thread, and we have no way to get the current thread from within it,
         // so instead we use this code to name the thread instead.
-        if (builtin.os.tag.isDarwin()) {
-            internal_os.macos.pthread_setname_np(&"io-reader".*);
-            setQosClass();
-        }
+        internal_os.macos.pthread_setname_np(&"io-reader".*);
+        setQosClass();
 
         // Set the fd to non-blocking so the gather stage can drain it
         // in a tight loop and fall back to poll for readiness. The
@@ -1318,9 +1295,6 @@ pub const ReadThread = struct {
             return;
         };
         defer gather_thread.join();
-        if (comptime !builtin.os.tag.isDarwin()) {
-            gather_thread.setName(global.io(), "io-gather") catch {};
-        }
 
         // This thread is the parse stage. We consume batches in ring
         // order until the gather stage reports the stream is over and
@@ -1371,10 +1345,8 @@ pub const ReadThread = struct {
     /// and publishes each batch to the parse stage. This thread owns
     /// all fd monitoring, including the quit fd.
     fn gatherMainPosix(fd: posix.fd_t, quit: posix.fd_t, pipeline: *Pipeline) void {
-        if (builtin.os.tag.isDarwin()) {
-            internal_os.macos.pthread_setname_np(&"io-gather".*);
-            setQosClass();
-        }
+        internal_os.macos.pthread_setname_np(&"io-gather".*);
+        setQosClass();
 
         // However we exit, tell the parse stage the stream is over so
         // it drains the ring and joins us.
@@ -1646,7 +1618,7 @@ fn execCommand(
     // If we're on macOS, we have to use `login(1)` to get all of
     // the proper environment variables set, a login shell, and proper
     // hushlogin behavior.
-    if (comptime builtin.target.os.tag.isDarwin()) darwin: {
+    darwin: {
         const passwd = passwdpkg.get(alloc) catch |err| {
             log.warn("failed to read passwd, not using a login shell err={}", .{err});
             break :darwin;
@@ -1828,8 +1800,6 @@ pub fn getProcessInfo(self: *Exec, comptime info: ProcessInfo) ?ProcessInfo.Type
 }
 
 test "execCommand darwin: shell command" {
-    if (comptime !builtin.os.tag.isDarwin()) return error.SkipZigTest;
-
     const testing = std.testing;
     var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
@@ -1855,8 +1825,6 @@ test "execCommand darwin: shell command" {
 }
 
 test "execCommand darwin: direct command" {
-    if (comptime !builtin.os.tag.isDarwin()) return error.SkipZigTest;
-
     const testing = std.testing;
     var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();

@@ -94,8 +94,7 @@ const vec_bytes = @min(128, 2 * (std.simd.suggestVectorLength(u8) orelse 8));
 /// Whether the `dc zva` fast path for large zero fills is available.
 /// `dc zva` zeroes a whole cacheline per instruction without moving data
 /// through the store pipeline. Based on musl.
-const zva_enabled = builtin.cpu.arch == .aarch64 and
-    builtin.os.tag != .freestanding;
+const zva_enabled = builtin.cpu.arch == .aarch64;
 
 /// Only use `dc zva` at or above this many bytes. Below this our
 /// plain vector loop measures faster. Empirically mesaured.

@@ -1,8 +1,6 @@
 //! The "os" package contains utilities for interfacing with the operating
-//! system. These aren't restricted to syscalls or low-level operations, butos/main.zig
+//! system. These aren't restricted to syscalls or low-level operations, but
 //! also OS-specific features and conventions.
-
-const builtin = @import("builtin");
 
 const desktop = @import("desktop.zig");
 const file = @import("file.zig");
@@ -30,7 +28,6 @@ pub const uri = @import("uri.zig");
 pub const CFReleaseThread = @import("cf_release_thread.zig");
 pub const TempDir = @import("TempDir.zig");
 pub const launchedFromDesktop = desktop.launchedFromDesktop;
-pub const desktopEnvironment = desktop.desktopEnvironment;
 pub const rlimit = file.rlimit;
 pub const fixMaxFiles = file.fixMaxFiles;
 pub const restoreMaxFiles = file.restoreMaxFiles;
@@ -40,7 +37,6 @@ pub const expandHome = homedir.expandHome;
 pub const ensureLocale = locale.ensureLocale;
 pub const clickInterval = mouse.clickInterval;
 pub const open = openpkg.open;
-pub const OpenType = openpkg.Type;
 pub const pipe = pipepkg.pipe;
 pub const resourcesDir = resourcesdir.resourcesDir;
 pub const ResourcesDir = resourcesdir.ResourcesDir;
@@ -49,6 +45,8 @@ pub const getConfigEditCommand = edit.getConfigEditCommand;
 
 test {
     _ = file;
+    _ = hostname;
+    _ = openpkg;
     _ = stderr;
     _ = edit;
     _ = i18n;

@@ -18,12 +18,10 @@ pub fn ensureLocale() !void {
     // When launching the .app, LANG is not set so we must query it from the
     // OS. When launching from the CLI, LANG is usually set by the parent
     // process.
-    if (comptime builtin.target.os.tag.isDarwin()) {
-        // Set the lang if it is not set or if its empty.
-        const lang = std.posix.system.getenv("LANG");
-        if (lang == null or lang.?[0] == 0) {
-            setLangFromCocoa();
-        }
+    // Set the lang if it is not set or if its empty.
+    const inherited_lang = std.posix.system.getenv("LANG");
+    if (inherited_lang == null or inherited_lang.?[0] == 0) {
+        setLangFromCocoa();
     }
 
     // Set the locale to whatever is set in env vars.

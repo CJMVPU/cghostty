@@ -1,4 +1,5 @@
 *.log
+*.profraw
 .DS_Store
 .vscode/
 zig-cache/

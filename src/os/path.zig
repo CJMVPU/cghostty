@@ -1,5 +1,4 @@
 const std = @import("std");
-const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const testing = std.testing;
 
@@ -63,15 +62,7 @@ pub fn expand(
 }
 
 fn isExecutable(perms: std.Io.File.Permissions) bool {
-    return switch (builtin.os.tag) {
-        .macos => posix: {
-            break :posix switch (std.posix.mode_t) {
-                u0 => true,
-                else => perms.toMode() & 0o0111 != 0,
-            };
-        },
-        else => unreachable,
-    };
+    return perms.toMode() & 0o0111 != 0;
 }
 
 // `uname -n` is the *nix equivalent of `hostname.exe` on Windows

@@ -14,7 +14,6 @@ pub const embedded = @import("apprt/embedded.zig");
 pub const surface = @import("apprt/surface.zig");
 
 pub const Action = action.Action;
-pub const Runtime = @import("apprt/runtime.zig").Runtime;
 pub const Target = action.Target;
 
 pub const ContentScale = structs.ContentScale;
@@ -33,9 +32,7 @@ pub const SurfaceSize = structs.SurfaceSize;
 /// so that every build has exactly one application runtime implementation.
 /// Most callers use the App and Surface aliases below.
 pub const runtime = switch (build_config.artifact) {
-    .exe => switch (build_config.app_runtime) {
-        .none => none,
-    },
+    .exe => none,
     .lib => embedded,
 };
 
@@ -43,7 +40,6 @@ pub const App = runtime.App;
 pub const Surface = runtime.Surface;
 
 test {
-    _ = Runtime;
     _ = runtime;
     _ = action;
     _ = structs;

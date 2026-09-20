@@ -6,9 +6,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const options = @import("build_options");
 const assert = std.debug.assert;
-const apprt = @import("apprt.zig");
 const font = @import("font/main.zig");
-const rendererpkg = @import("renderer.zig");
 const BuildConfig = @import("build/Config.zig");
 
 pub const ReleaseChannel = BuildConfig.ReleaseChannel;
@@ -36,9 +34,7 @@ pub const artifact = Artifact.detect();
 /// comments in BuildConfig for details on each.
 const config = BuildConfig.fromOptions();
 pub const exe_entrypoint = config.exe_entrypoint;
-pub const app_runtime: apprt.Runtime = config.app_runtime;
 pub const font_backend: font.Backend = config.font_backend;
-pub const renderer: rendererpkg.Backend = config.renderer;
 pub const i18n: bool = config.i18n;
 
 /// The bundle ID for the app. This is used in many places and is currently
@@ -47,8 +43,6 @@ pub const i18n: bool = config.i18n;
 ///
 /// On macOS, this must match the App bundle ID. We can get that dynamically
 /// via an API but I don't want to pay the cost of that at runtime.
-///
-/// On GTK, this should match the various folders with resources.
 ///
 /// There are many places that don't use this variable so simply swapping
 /// this variable is NOT ENOUGH to change the bundle ID. I just wanted to

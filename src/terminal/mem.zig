@@ -71,51 +71,36 @@ pub fn decommit(
     // retaining its mapping. Zero mode clears its dirty prefix first because
     // the kernel may preserve the contents. Strict mode avoids that write
     // because its caller will replace the entire mapping after recommit.
-    if (comptime builtin.os.tag.isDarwin()) {
-        if (comptime mode == .zero) @memset(memory[0..dirty_len], 0);
+    if (comptime mode == .zero) @memset(memory[0..dirty_len], 0);
 
-        if (std.posix.madvise(
-            memory.ptr,
-            memory.len,
-            std.posix.MADV.FREE_REUSABLE,
-        )) |_| return true else |err| {
-            switch (mode) {
-                .strict => {
-                    log.warn("madvise(FREE_REUSABLE) failed err={}", .{err});
-                    return false;
-                },
+    if (std.posix.madvise(
+        memory.ptr,
+        memory.len,
+        std.posix.MADV.FREE_REUSABLE,
+    )) |_| return true else |err| {
+        switch (mode) {
+            .strict => {
+                log.warn("madvise(FREE_REUSABLE) failed err={}", .{err});
+                return false;
+            },
 
-                .zero => {
-                    // Plain FREE can still reclaim the already-zero mapping
-                    // under pressure and does not require a reuse pairing.
-                    std.posix.madvise(
-                        memory.ptr,
-                        memory.len,
-                        std.posix.MADV.FREE,
-                    ) catch {};
-                    return false;
-                },
-            }
+            .zero => {
+                // Plain FREE can still reclaim the already-zero mapping
+                // under pressure and does not require a reuse pairing.
+                std.posix.madvise(
+                    memory.ptr,
+                    memory.len,
+                    std.posix.MADV.FREE,
+                ) catch {};
+                return false;
+            },
         }
     }
-
-    // DiscardVirtualMemory releases the physical pages behind the range but
-    // leaves it committed, so the commit charge stays with the process and a
-    // later access finds a zero page or the old contents instead of faulting.
-    // Zero mode clears its dirty prefix first, as on Darwin: the bytes read
-    // as zero afterward whether or not the discard took. Strict mode skips
-    // that write because its caller replaces the entire mapping after
-    // recommit. The call reports failure through its return value rather
-    // than the thread's last error.
-
-    if (comptime mode == .zero) @memset(memory[0..dirty_len], 0);
-    return false;
 }
 
 /// Prepare a mapping previously passed to decommit for reuse.
 ///
-/// Linux, Windows, and test builds need no explicit operation because their
-/// mappings stay committed through decommit. Darwin pairs FREE_REUSABLE with
+/// Test builds need no operation. macOS pairs FREE_REUSABLE with
 /// FREE_REUSE so pages touched by the caller are accounted to the process
 /// again. Failure does not invalidate the retained mapping, so reuse can
 /// continue after logging the accounting failure.
@@ -125,15 +110,13 @@ pub fn recommit(memory: []align(std.heap.page_size_min) u8) void {
     assert(memory.len % std.heap.page_size_min == 0);
 
     if (comptime builtin.is_test) return;
-    if (comptime builtin.os.tag.isDarwin()) {
-        std.posix.madvise(
-            memory.ptr,
-            memory.len,
-            std.posix.MADV.FREE_REUSE,
-        ) catch |err| {
-            log.warn("madvise(FREE_REUSE) failed err={}", .{err});
-        };
-    }
+    std.posix.madvise(
+        memory.ptr,
+        memory.len,
+        std.posix.MADV.FREE_REUSE,
+    ) catch |err| {
+        log.warn("madvise(FREE_REUSE) failed err={}", .{err});
+    };
 }
 
 test "decommit with zero fallback clears the dirty prefix" {

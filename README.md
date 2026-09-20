@@ -1,6 +1,6 @@
 # cghostty
 
-cghostty 是基于 [Ghostty](https://github.com/ghostty-org/ghostty) 的个人终端应用分支，交付范围为 **macOS 27+ / Apple Silicon（arm64）**。
+cghostty 是基于 [Ghostty](https://github.com/ghostty-org/ghostty) 独立维护的个人终端应用，交付范围为 **macOS 27+ / Apple Silicon（arm64）**。
 
 保留 Swift 6 / AppKit / SwiftUI 原生界面、Zig 终端核心、Metal 4 命令体系与 MSL 4.1 渲染、CoreText 字体、PTY 子进程、shell 集成、主题、分屏、标签页、快速终端和 AppleScript。所有原生构建配置启用完整并发检查与 Swift warnings-as-errors。Linux、Windows、BSD、iOS、WASM、Intel Mac、独立终端库 SDK 及其示例不属于本项目。
 
@@ -51,7 +51,7 @@ window-vsync = true
 - 正式应用 ID：`com.cjmvpu.cghostty`；调试版：`com.cjmvpu.cghostty.debug`。
 - 正式版默认配置：`~/Library/Application Support/com.cjmvpu.cghostty/config.ghostty`；调试版使用 `.debug` 目录。
 - 也支持 `$XDG_CONFIG_HOME/cghostty/config.ghostty`（默认 `~/.config/cghostty/config.ghostty`）及对应目录下的兼容文件名 `config`。正式版和调试版共享显式 XDG 配置。
-- 版本从 `build.zig.zon` 管理，初始版本 `0.1.0-dev`。发布时可通过 `--version 0.1.0` 覆盖。
+- 版本从 `build.zig.zon` 管理；发布时可通过 `--version 0.1.1` 显式指定。构建不再从 Git 分支或标签推导版本。
 - “检查更新”打开本仓库 Releases；无上游自动更新和 Sentry 上报。
 
 `TERM=xterm-ghostty`、终端协议、shell 集成的内部函数名和 `ghostty_*` C 接口保持兼容。`GhosttyKit.xcframework` 是 Swift 应用所需的内部静态桥接产物，仅含 macOS arm64，不作为独立 SDK 发布。公共依赖仍引用其现有上游归档与哈希；独立身份不意味着迁移所有第三方源码托管。

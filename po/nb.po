@@ -9,8 +9,8 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: com.cjmvpu.cghostty\n"
-"Report-Msgid-Bugs-To: m@mitchellh.com\n"
-"POT-Creation-Date: 2026-08-10 10:06-0500\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-19 22:55+0800\n"
 "PO-Revision-Date: 2026-08-12 21:34+0200\n"
 "Last-Translator: Uzair Aftab <u@uzaaft.me>\n"
 "Language-Team: Norwegian Bokmal <l10n-no@lister.huftis.org>\n"
@@ -19,380 +19,6 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
-
-#: dist/linux/ghostty_nautilus.py:53
-msgid "Open in Ghostty"
-msgstr "Åpne i Ghostty"
-
-#: src/apprt/gtk/ui/1.0/clipboard-confirmation-dialog.blp:12
-#: src/apprt/gtk/ui/1.4/clipboard-confirmation-dialog.blp:12
-#: src/apprt/gtk/class/clipboard_confirmation_dialog.zig:197
-#: src/apprt/gtk/class/clipboard_confirmation_dialog.zig:201
-msgid "Authorize Clipboard Access"
-msgstr "Gi tilgang til utklippstavlen"
-
-#: src/apprt/gtk/ui/1.0/clipboard-confirmation-dialog.blp:17
-#: src/apprt/gtk/ui/1.4/clipboard-confirmation-dialog.blp:17
-msgid "Deny"
-msgstr "Avslå"
-
-#: src/apprt/gtk/ui/1.0/clipboard-confirmation-dialog.blp:18
-#: src/apprt/gtk/ui/1.4/clipboard-confirmation-dialog.blp:18
-msgid "Allow"
-msgstr "Tillat"
-
-#: src/apprt/gtk/ui/1.4/clipboard-confirmation-dialog.blp:92
-msgid "Remember choice for this split"
-msgstr "Husk valget for dette delte vinduet"
-
-#: src/apprt/gtk/ui/1.4/clipboard-confirmation-dialog.blp:93
-msgid "Reload configuration to show this prompt again"
-msgstr "Last inn konfigurasjonen på nytt for å vise denne meldingen igjen"
-
-#: src/apprt/gtk/ui/1.2/close-confirmation-dialog.blp:7
-#: src/apprt/gtk/ui/1.5/title-dialog.blp:8
-#: src/apprt/gtk/class/application.zig:2263
-msgid "Cancel"
-msgstr "Avbryt"
-
-#: src/apprt/gtk/ui/1.2/close-confirmation-dialog.blp:8
-#: src/apprt/gtk/ui/1.2/search-overlay.blp:90
-#: src/apprt/gtk/ui/1.3/surface-child-exited.blp:17
-msgid "Close"
-msgstr "Lukk"
-
-#: src/apprt/gtk/ui/1.2/config-errors-dialog.blp:6
-msgid "Configuration Errors"
-msgstr "Konfigurasjonsfeil"
-
-#: src/apprt/gtk/ui/1.2/config-errors-dialog.blp:8
-msgid ""
-"One or more configuration errors were found. Please review the errors below, "
-"and either reload your configuration or ignore these errors."
-msgstr ""
-"Det ble funnet én eller flere konfigurasjonsfeil. Se gjennom feilene nedenfor, "
-"og last inn konfigurasjonen din på nytt eller ignorer feilene."
-
-#: src/apprt/gtk/ui/1.2/config-errors-dialog.blp:12
-msgid "Ignore"
-msgstr "Ignorer"
-
-#: src/apprt/gtk/ui/1.2/config-errors-dialog.blp:13
-#: src/apprt/gtk/ui/1.2/surface.blp:439 src/apprt/gtk/ui/1.5/window.blp:318
-msgid "Reload Configuration"
-msgstr "Last inn konfigurasjonen på nytt"
-
-#: src/apprt/gtk/ui/1.2/debug-warning.blp:7
-#: src/apprt/gtk/ui/1.3/debug-warning.blp:6
-msgid ""
-"⚠️ You're running a debug build of Ghostty! Performance will be degraded."
-msgstr "⚠️ Du kjører et debug-bygg av Ghostty. Debug-bygg har redusert ytelse."
-
-#: src/apprt/gtk/ui/1.5/inspector-window.blp:5
-msgid "Ghostty: Terminal Inspector"
-msgstr "Ghostty: Terminalinspektør"
-
-#: src/apprt/gtk/ui/1.2/search-overlay.blp:29
-msgid "Find…"
-msgstr "Finn…"
-
-#: src/apprt/gtk/ui/1.2/search-overlay.blp:69
-msgid "Previous Match"
-msgstr "Forrige treff"
-
-#: src/apprt/gtk/ui/1.2/search-overlay.blp:79
-msgid "Next Match"
-msgstr "Neste treff"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:7
-msgid "Oh, no."
-msgstr "Å, nei."
-
-#: src/apprt/gtk/ui/1.2/surface.blp:8
-msgid "Unable to acquire an OpenGL context for rendering."
-msgstr "Kan ikke hente en OpenGL-kontekst for rendering."
-
-#: src/apprt/gtk/ui/1.2/surface.blp:101
-msgid ""
-"This terminal is in read-only mode. You can still view, select, and scroll "
-"through the content, but no input events will be sent to the running "
-"application."
-msgstr ""
-"Denne terminalen er i skrivebeskyttet modus. Du kan fortsatt se, markere og "
-"bla gjennom innholdet, men ingen inndatahendelser vil bli sendt til den "
-"kjørende applikasjonen."
-
-#: src/apprt/gtk/ui/1.2/surface.blp:112
-msgid "Read-only"
-msgstr "Skrivebeskyttet"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:316 src/apprt/gtk/ui/1.5/window.blp:203
-msgid "Copy"
-msgstr "Kopier"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:321 src/apprt/gtk/ui/1.5/window.blp:208
-msgid "Paste"
-msgstr "Lim inn"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:326
-msgid "Notify on Next Command Finish"
-msgstr "Varsle når neste kommando fullføres"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:333 src/apprt/gtk/ui/1.5/window.blp:281
-msgid "Clear"
-msgstr "Tøm"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:338 src/apprt/gtk/ui/1.5/window.blp:286
-msgid "Reset"
-msgstr "Nullstill"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:345 src/apprt/gtk/ui/1.5/window.blp:250
-msgid "Split"
-msgstr "Del vindu"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:348 src/apprt/gtk/ui/1.5/window.blp:253
-msgid "Change Title…"
-msgstr "Endre tittel…"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:353 src/apprt/gtk/ui/1.5/window.blp:180
-#: src/apprt/gtk/ui/1.5/window.blp:258 src/input/command.zig:487
-msgid "Split Up"
-msgstr "Del oppover"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:359 src/apprt/gtk/ui/1.5/window.blp:185
-#: src/apprt/gtk/ui/1.5/window.blp:263 src/input/command.zig:492
-msgid "Split Down"
-msgstr "Del nedover"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:365 src/apprt/gtk/ui/1.5/window.blp:190
-#: src/apprt/gtk/ui/1.5/window.blp:268 src/input/command.zig:477
-msgid "Split Left"
-msgstr "Del til venstre"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:371 src/apprt/gtk/ui/1.5/window.blp:195
-#: src/apprt/gtk/ui/1.5/window.blp:273 src/input/command.zig:482
-msgid "Split Right"
-msgstr "Del til høyre"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:377
-msgid "Close Split"
-msgstr "Lukk delt vindu"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:383
-msgid "Tab"
-msgstr "Fane"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:386 src/apprt/gtk/ui/1.5/window.blp:232
-#: src/apprt/gtk/ui/1.5/window.blp:339 src/input/command.zig:464
-msgid "Change Tab Title…"
-msgstr "Endre fanetittel…"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:391 src/apprt/gtk/ui/1.5/window.blp:60
-#: src/apprt/gtk/ui/1.5/window.blp:110 src/apprt/gtk/ui/1.5/window.blp:237
-#: src/input/command.zig:427
-msgid "New Tab"
-msgstr "Ny fane"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:396 src/apprt/gtk/ui/1.5/window.blp:242
-#: src/input/command.zig:613
-msgid "Close Tab"
-msgstr "Lukk fane"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:403
-msgid "Window"
-msgstr "Vindu"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:406 src/apprt/gtk/ui/1.5/window.blp:215
-msgid "Change Window Title…"
-msgstr "Endre vindustittel…"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:411 src/apprt/gtk/ui/1.5/window.blp:220
-#: src/input/command.zig:421
-msgid "New Window"
-msgstr "Nytt vindu"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:416 src/apprt/gtk/ui/1.5/window.blp:225
-#: src/input/command.zig:630
-msgid "Close Window"
-msgstr "Lukk vindu"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:424 src/apprt/gtk/ui/1.5/window.blp:303
-msgid "Config"
-msgstr "Konfigurasjon"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:427 src/apprt/gtk/ui/1.5/window.blp:306
-msgid "Open Configuration in OS Editor"
-msgstr "Åpne konfigurasjonen i OS-editoren"
-
-#: src/apprt/gtk/ui/1.2/surface.blp:433 src/apprt/gtk/ui/1.5/window.blp:312
-msgid "Open Configuration in New Window"
-msgstr "Åpne konfigurasjonen i et nytt vindu"
-
-#: src/apprt/gtk/ui/1.5/title-dialog.blp:5
-msgid "Leave blank to restore the default title."
-msgstr "Blank verdi gjenoppretter standardtittelen."
-
-#: src/apprt/gtk/ui/1.5/title-dialog.blp:9
-msgid "OK"
-msgstr "OK"
-
-#: src/apprt/gtk/ui/1.5/window.blp:61 src/apprt/gtk/ui/1.5/window.blp:111
-msgid "New Split"
-msgstr "Del opp vindu"
-
-#: src/apprt/gtk/ui/1.5/window.blp:71 src/apprt/gtk/ui/1.5/window.blp:129
-msgid "View Open Tabs"
-msgstr "Se åpne faner"
-
-#: src/apprt/gtk/ui/1.5/window.blp:81 src/apprt/gtk/ui/1.5/window.blp:143
-msgid "Main Menu"
-msgstr "Hovedmeny"
-
-#: src/apprt/gtk/ui/1.5/window.blp:293
-msgid "Command Palette"
-msgstr "Kommandopalett"
-
-#: src/apprt/gtk/ui/1.5/window.blp:298
-msgid "Terminal Inspector"
-msgstr "Terminalinspektør"
-
-#: src/apprt/gtk/ui/1.5/window.blp:326 src/apprt/gtk/class/window.zig:1991
-msgid "About Ghostty"
-msgstr "Om Ghostty"
-
-#: src/apprt/gtk/ui/1.5/window.blp:331 src/input/command.zig:702
-msgid "Quit"
-msgstr "Avslutt"
-
-#: src/apprt/gtk/ui/1.5/command-palette.blp:17
-msgid "Execute a command…"
-msgstr "Kjør en kommando…"
-
-#: src/apprt/gtk/class/application.zig:1767
-msgid "The keybind was revoked by the system."
-msgstr "Tastatursnarveien ble tilbakekalt av systemet."
-
-#: src/apprt/gtk/class/application.zig:1769
-msgid "The keybind was denied by the system."
-msgstr "Tastatursnarveien ble avvist av systemet."
-
-#: src/apprt/gtk/class/application.zig:1780
-msgid "Global keybind unavailable"
-msgstr "Global tastatursnarvei er utilgjengelig"
-
-#: src/apprt/gtk/class/application.zig:2259
-msgid "Export Terminal IO Events"
-msgstr "Eksporter terminalens IO-hendelser"
-
-#: src/apprt/gtk/class/application.zig:2262
-msgid "Export"
-msgstr "Eksporter"
-
-#: src/apprt/gtk/class/application.zig:2783
-msgid "Editing configuration file"
-msgstr "Redigerer konfigurasjonsfilen"
-
-#: src/apprt/gtk/class/clipboard_confirmation_dialog.zig:198
-msgid ""
-"An application is attempting to write to the clipboard. The current "
-"clipboard contents are shown below."
-msgstr ""
-"En applikasjon forsøker å skrive til utklippstavlen. Gjeldende "
-"utklippstavleinnhold er vist nedenfor."
-
-#: src/apprt/gtk/class/clipboard_confirmation_dialog.zig:202
-msgid ""
-"An application is attempting to read from the clipboard. The current "
-"clipboard contents are shown below."
-msgstr ""
-"En applikasjon forsøker å lese fra utklippstavlen. Gjeldende "
-"utklippstavleinnhold er vist nedenfor."
-
-#: src/apprt/gtk/class/clipboard_confirmation_dialog.zig:205
-msgid "Warning: Potentially Unsafe Paste"
-msgstr "Adarsel: Innliming kan være utrygt"
-
-#: src/apprt/gtk/class/clipboard_confirmation_dialog.zig:206
-msgid ""
-"Pasting this text into the terminal may be dangerous as it looks like some "
-"commands may be executed."
-msgstr ""
-"Det ser ut som at kommandoer vil bli kjørt hvis du limer inn dette, vurder "
-"om du mener det er trygt."
-
-#: src/apprt/gtk/class/close_confirmation_dialog.zig:184
-msgid "Quit Ghostty?"
-msgstr "Avslutt Ghostty?"
-
-#: src/apprt/gtk/class/close_confirmation_dialog.zig:185
-msgid "Close Tab?"
-msgstr "Lukk fane?"
-
-#: src/apprt/gtk/class/close_confirmation_dialog.zig:186
-msgid "Close Window?"
-msgstr "Lukk vindu?"
-
-#: src/apprt/gtk/class/close_confirmation_dialog.zig:187
-msgid "Close Split?"
-msgstr "Lukk delt vindu?"
-
-#: src/apprt/gtk/class/close_confirmation_dialog.zig:193
-msgid "All terminal sessions will be terminated."
-msgstr "Alle terminaløkter vil bli avsluttet."
-
-#: src/apprt/gtk/class/close_confirmation_dialog.zig:194
-msgid "All terminal sessions in this tab will be terminated."
-msgstr "Alle terminaløkter i denne fanen vil bli avsluttet."
-
-#: src/apprt/gtk/class/close_confirmation_dialog.zig:195
-msgid "All terminal sessions in this window will be terminated."
-msgstr "Alle terminaløkter i dette vinduet vil bli avsluttet."
-
-#: src/apprt/gtk/class/close_confirmation_dialog.zig:196
-msgid "The currently running process in this split will be terminated."
-msgstr "Den kjørende prosessen for denne splitten vil bli avsluttet."
-
-#: src/apprt/gtk/class/surface.zig:1181
-msgid "Command Finished"
-msgstr "Kommando fullført"
-
-#: src/apprt/gtk/class/surface.zig:1182
-#: src/apprt/gtk/class/surface_child_exited.zig:109
-msgid "Command Succeeded"
-msgstr "Kommandoen lyktes"
-
-#: src/apprt/gtk/class/surface.zig:1183
-#: src/apprt/gtk/class/surface_child_exited.zig:113
-msgid "Command Failed"
-msgstr "Kommandoen mislyktes"
-
-#: src/apprt/gtk/class/title_dialog.zig:227
-msgid "Change Terminal Title"
-msgstr "Endre terminaltittel"
-
-#: src/apprt/gtk/class/title_dialog.zig:228
-msgid "Change Tab Title"
-msgstr "Endre fanetittel"
-
-#: src/apprt/gtk/class/title_dialog.zig:229
-msgid "Change Window Title"
-msgstr "Endre vindustittel"
-
-#: src/apprt/gtk/class/window.zig:1153
-msgid "Reloaded the configuration"
-msgstr "Konfigurasjonen ble lastet på nytt"
-
-#: src/apprt/gtk/class/window.zig:1830
-msgid "Copied to clipboard"
-msgstr "Kopiert til utklippstavlen"
-
-#: src/apprt/gtk/class/window.zig:1832
-msgid "Cleared clipboard"
-msgstr "Utklippstavle tømt"
-
-#: src/apprt/gtk/class/window.zig:1972
-msgid "Ghostty Developers"
-msgstr "Ghostty-utviklere"
 
 #: src/input/command.zig:149
 msgid "Reset Terminal"
@@ -426,7 +52,8 @@ msgstr "Kopier markeringen som ANSI-skiftesekvenser til utklippstavlen"
 
 #: src/input/command.zig:164
 msgid "Copy the selected text as ANSI escape sequences to the clipboard."
-msgstr "Kopier den merkede teksten som ANSI-skiftesekvenser til utklippstavlen."
+msgstr ""
+"Kopier den merkede teksten som ANSI-skiftesekvenser til utklippstavlen."
 
 #: src/input/command.zig:167
 msgid "Copy Selection as HTML to Clipboard"
@@ -600,7 +227,9 @@ msgstr "Kopier skjerminnhold til en midlertidig fil og kopier filstien"
 msgid ""
 "Copy the screen contents to a temporary file and copy the path to the "
 "clipboard."
-msgstr "Kopier skjerminnholdet til en midlertidig fil og kopier filstien til utklippstavlen."
+msgstr ""
+"Kopier skjerminnholdet til en midlertidig fil og kopier filstien til "
+"utklippstavlen."
 
 #: src/input/command.zig:291
 msgid "Copy Screen to Temporary File and Paste Path"
@@ -621,23 +250,28 @@ msgstr "Kopier skjerminnholdet til en midlertidig fil og åpne filen."
 
 #: src/input/command.zig:305
 msgid "Copy Screen as HTML to Temporary File and Copy Path"
-msgstr "Kopier skjerminnhold som HTML til en midlertidig fil og kopier filstien"
+msgstr ""
+"Kopier skjerminnhold som HTML til en midlertidig fil og kopier filstien"
 
 #: src/input/command.zig:306
 msgid ""
 "Copy the screen contents as HTML to a temporary file and copy the path to "
 "the clipboard."
-msgstr "Kopier skjerminnholdet som HTML til en midlertidig fil og kopier filstien til utklippstavlen."
+msgstr ""
+"Kopier skjerminnholdet som HTML til en midlertidig fil og kopier filstien "
+"til utklippstavlen."
 
 #: src/input/command.zig:313
 msgid "Copy Screen as HTML to Temporary File and Paste Path"
-msgstr "Kopier skjerminnhold som HTML til en midlertidig fil og lim inn filstien"
+msgstr ""
+"Kopier skjerminnhold som HTML til en midlertidig fil og lim inn filstien"
 
 #: src/input/command.zig:314
 msgid ""
 "Copy the screen contents as HTML to a temporary file and paste the path to "
 "the file."
-msgstr "Kopier skjerminnholdet som HTML til en midlertidig fil og lim inn filstien."
+msgstr ""
+"Kopier skjerminnholdet som HTML til en midlertidig fil og lim inn filstien."
 
 #: src/input/command.zig:321
 msgid "Copy Screen as HTML to Temporary File and Open"
@@ -678,8 +312,8 @@ msgstr ""
 #: src/input/command.zig:346
 msgid "Copy Screen as ANSI Sequences to Temporary File and Open"
 msgstr ""
-"Kopier skjerminnhold som ANSI-skiftesekvenser til en midlertidig fil og "
-"åpne filen"
+"Kopier skjerminnhold som ANSI-skiftesekvenser til en midlertidig fil og åpne "
+"filen"
 
 #: src/input/command.zig:347
 msgid ""
@@ -739,7 +373,8 @@ msgstr "Kopier markeringen som HTML til en midlertidig fil og lim inn filstien"
 msgid ""
 "Copy the selection contents as HTML to a temporary file and paste the path "
 "to the file."
-msgstr "Kopier markeringen som HTML til en midlertidig fil og lim inn filstien."
+msgstr ""
+"Kopier markeringen som HTML til en midlertidig fil og lim inn filstien."
 
 #: src/input/command.zig:389
 msgid "Copy Selection as HTML to Temporary File and Open"
@@ -760,14 +395,14 @@ msgid ""
 "Copy the selection contents as ANSI escape sequences to a temporary file and "
 "copy the path to the clipboard."
 msgstr ""
-"Kopier markeringen som ANSI-skiftesekvenser til en midlertidig fil og "
-"kopier filstien til utklippstavlen."
+"Kopier markeringen som ANSI-skiftesekvenser til en midlertidig fil og kopier "
+"filstien til utklippstavlen."
 
 #: src/input/command.zig:406
 msgid "Copy Selection as ANSI Sequences to Temporary File and Paste Path"
 msgstr ""
-"Kopier markeringen som ANSI-skiftesekvenser til en midlertidig fil og lim inn "
-"filstien"
+"Kopier markeringen som ANSI-skiftesekvenser til en midlertidig fil og lim "
+"inn filstien"
 
 #: src/input/command.zig:407
 msgid ""
@@ -791,9 +426,17 @@ msgstr ""
 "Kopier markeringen som ANSI-skiftesekvenser til en midlertidig fil og åpne "
 "filen."
 
+#: src/input/command.zig:421
+msgid "New Window"
+msgstr "Nytt vindu"
+
 #: src/input/command.zig:422
 msgid "Open a new window."
 msgstr "Åpne et nytt vindu."
+
+#: src/input/command.zig:427
+msgid "New Tab"
+msgstr "Ny fane"
 
 #: src/input/command.zig:428
 msgid "Open a new tab."
@@ -839,21 +482,41 @@ msgstr "Endre terminaltittel…"
 msgid "Prompt for a new title for the current terminal."
 msgstr "Be om en ny tittel for den aktive terminalen."
 
+#: src/input/command.zig:464
+msgid "Change Tab Title…"
+msgstr "Endre fanetittel…"
+
 #: src/input/command.zig:465
 msgid "Prompt for a new title for the current tab."
 msgstr "Be om en ny tittel for den aktive fanen."
+
+#: src/input/command.zig:477
+msgid "Split Left"
+msgstr "Del til venstre"
 
 #: src/input/command.zig:478
 msgid "Split the terminal to the left."
 msgstr "Del terminalen til venstre."
 
+#: src/input/command.zig:482
+msgid "Split Right"
+msgstr "Del til høyre"
+
 #: src/input/command.zig:483
 msgid "Split the terminal to the right."
 msgstr "Del terminalen til høyre."
 
+#: src/input/command.zig:487
+msgid "Split Up"
+msgstr "Del oppover"
+
 #: src/input/command.zig:488
 msgid "Split the terminal up."
 msgstr "Del terminalen oppover."
+
+#: src/input/command.zig:492
+msgid "Split Down"
+msgstr "Del nedover"
 
 #: src/input/command.zig:493
 msgid "Split the terminal down."
@@ -1011,6 +674,10 @@ msgstr "Lukk terminal"
 msgid "Close the current terminal."
 msgstr "Lukk den aktive terminalen."
 
+#: src/input/command.zig:613
+msgid "Close Tab"
+msgstr "Lukk fane"
+
 #: src/input/command.zig:614
 msgid "Close the current tab."
 msgstr "Lukk den aktive fanen."
@@ -1030,6 +697,10 @@ msgstr "Lukk faner til høyre"
 #: src/input/command.zig:624
 msgid "Close all tabs to the right of the current one."
 msgstr "Lukk alle fanene til høyre for den aktive."
+
+#: src/input/command.zig:630
+msgid "Close Window"
+msgstr "Lukk vindu"
 
 #: src/input/command.zig:631
 msgid "Close the current window."
@@ -1097,8 +768,7 @@ msgstr "Veksle bakgrunnens opasitet"
 
 #: src/input/command.zig:679
 msgid "Toggle the background opacity of a window that started transparent."
-msgstr ""
-"Veksle bakgrunnens opasitet for et vindu som startet gjennomsiktig."
+msgstr "Veksle bakgrunnens opasitet for et vindu som startet gjennomsiktig."
 
 #: src/input/command.zig:684
 msgid "Check for Updates"
@@ -1123,6 +793,10 @@ msgstr "Gjør om"
 #: src/input/command.zig:697
 msgid "Redo the last undone action."
 msgstr "Gjør om den siste angrede handlingen."
+
+#: src/input/command.zig:702
+msgid "Quit"
+msgstr "Avslutt"
 
 #: src/input/command.zig:703
 msgid "Quit the application."

@@ -1,10 +1,7 @@
 const GhosttyLib = @This();
 
 const std = @import("std");
-const builtin = @import("builtin");
-const RunStep = std.Build.Step.Run;
-const CombineArchivesStep = @import("CombineArchivesStep.zig");
-const Config = @import("Config.zig");
+const LibtoolStep = @import("LibtoolStep.zig");
 const LibsystemOverrideStep = @import("LibsystemOverrideStep.zig");
 const SharedDeps = @import("SharedDeps.zig");
 
@@ -13,9 +10,6 @@ step: *std.Build.Step,
 
 /// The final static library file
 output: std.Build.LazyPath,
-dsym: ?std.Build.LazyPath,
-pkg_config: ?std.Build.LazyPath,
-pkg_config_static: ?std.Build.LazyPath,
 
 pub fn initStatic(
     b: *std.Build,
@@ -28,12 +22,12 @@ pub fn initStatic(
             .target = deps.config.target,
             .optimize = deps.config.optimize,
             .strip = deps.config.strip,
-            .omit_frame_pointer = deps.config.omitFramePointer(),
+            .omit_frame_pointer = false,
             .unwind_tables = if (deps.config.strip) .none else .sync,
             .link_libc = true,
         }),
 
-        // Fails on self-hosted x86_64 on macOS
+        // Use LLVM for the internal native archive.
         .use_llvm = true,
     });
 
@@ -47,28 +41,25 @@ pub fn initStatic(
     var lib_list = try deps.add(lib);
     try lib_list.append(b.allocator, lib.getEmittedBin());
 
-    // Combine all archives into a single fat static library so
-    // consumers only need to link one file.
-    const combined = CombineArchivesStep.create(b, deps.config.target, "ghostty-internal", lib_list.items);
+    // Combine the arm64 archives into one file for the Swift bridge.
+    const combined = LibtoolStep.create(b, .{
+        .name = "ghostty-internal",
+        .out_name = "libghostty-internal-combined.a",
+        .sources = lib_list.items,
+    });
     combined.step.dependOn(&lib.step);
 
     // On Darwin, prefer libSystem's libc/libm over the bundled
     // compiler-rt for consumers of this archive. See
-    // libsystem_override.sh for details. This is a no-op elsewhere.
+    // libsystem_override.sh for details.
     const override = LibsystemOverrideStep.create(
         b,
-        deps.config.target,
         combined.output,
         "libghostty-internal.a",
     );
 
     return .{
-        .step = override.step orelse combined.step,
+        .step = override.step,
         .output = override.output,
-
-        // Static libraries cannot have dSYMs because they aren't linked.
-        .dsym = null,
-        .pkg_config = null,
-        .pkg_config_static = null,
     };
 }

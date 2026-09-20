@@ -1,7 +1,5 @@
 const std = @import("std");
-const assert = @import("../quirks.zig").inlineAssert;
 const Allocator = std.mem.Allocator;
-const builtin = @import("builtin");
 const OptionAsAlt = @import("config.zig").OptionAsAlt;
 
 /// Aliases for modifier names.
@@ -132,7 +130,7 @@ pub const Mods = packed struct(Mods.Backing) {
         var result = self;
 
         // macos-option-as-alt for darwin
-        if (comptime builtin.target.os.tag.isDarwin()) alt: {
+        alt: {
             // Alt has to be set only on the correct side
             switch (option_as_alt) {
                 .false => break :alt,
@@ -148,12 +146,9 @@ pub const Mods = packed struct(Mods.Backing) {
         return result;
     }
 
-    /// Checks to see if super is on (MacOS) or ctrl.
+    /// Check whether Command is pressed.
     pub fn ctrlOrSuper(self: Mods) bool {
-        if (comptime builtin.target.os.tag.isDarwin()) {
-            return self.super;
-        }
-        return self.ctrl;
+        return self.super;
     }
 
     // For our own understanding
@@ -167,8 +162,6 @@ pub const Mods = packed struct(Mods.Backing) {
     }
 
     test "translation macos-option-as-alt" {
-        if (comptime !builtin.target.os.tag.isDarwin()) return error.SkipZigTest;
-
         const testing = std.testing;
 
         // Unset

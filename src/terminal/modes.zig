@@ -8,8 +8,6 @@
 //! to ensure all our various types and logic remain in sync.
 
 const std = @import("std");
-const builtin = @import("builtin");
-const build_options = @import("terminal_options");
 const testing = std.testing;
 
 /// A struct that maintains the state of all the settable modes.
@@ -349,9 +347,6 @@ const entries: []const ModeEntry = &.{
     .{
         .name = "kitty_paste_events",
         .value = 5522,
-        // The macOS app and libghostty-vt can both serve the follow-up
-        // Kitty clipboard read that a paste event grants.
-        .disabled = build_options.artifact != .lib and builtin.os.tag != .macos,
     },
 };
 

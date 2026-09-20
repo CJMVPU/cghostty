@@ -1,5 +1,4 @@
 const std = @import("std");
-const builtin = @import("builtin");
 const posix = std.posix;
 const assert = @import("quirks.zig").inlineAssert;
 
@@ -15,10 +14,7 @@ pub const winsize = extern struct {
     ws_ypixel: u16 = 600,
 };
 
-pub const Pty = switch (builtin.os.tag) {
-    .macos => PosixPty,
-    else => unreachable,
-};
+pub const Pty = PosixPty;
 
 /// The modes of a pty. Not all of these modes are supported on
 /// all platforms but all platforms share the same mode struct.
@@ -223,37 +219,27 @@ const PosixPty = struct {
     pub fn getProcessInfo(self: *PosixPty, comptime info: ProcessInfo) ?ProcessInfo.Type(info) {
         return switch (info) {
             .foreground_pid => {
-                switch (builtin.os.tag) {
-                    .macos => {
-                        const rc = c.tcgetpgrp(self.master);
-                        if (rc < 0) return null;
-                        return @intCast(rc);
-                    },
-                    else => unreachable,
-                }
+                const rc = c.tcgetpgrp(self.master);
+                if (rc < 0) return null;
+                return @intCast(rc);
             },
             .tty_name => {
                 if (self.tty_name) |tty_name| return tty_name;
 
-                switch (builtin.os.tag) {
-                    .macos => {
-                        // The macOS TIOCPTYGNAME ioctl does not allow us to
-                        // specify the length of the buffer passed to it, but
-                        // expects it to be at least 128 bytes long.
-                        assert(self.tty_name_buf.len >= 128);
-                        switch (posix.errno(c.ioctl(self.master, c.TIOCPTYGNAME, @intFromPtr(&self.tty_name_buf)))) {
-                            .SUCCESS => {
-                                const tty_name: [:0]const u8 = std.mem.sliceTo(&self.tty_name_buf, 0);
-                                self.tty_name = tty_name;
-                                return tty_name;
-                            },
-                            else => |err| {
-                                log.err("error getting name of slave PTY errno={t}", .{err});
-                                return null;
-                            },
-                        }
+                // The macOS TIOCPTYGNAME ioctl does not allow us to
+                // specify the length of the buffer passed to it, but
+                // expects it to be at least 128 bytes long.
+                assert(self.tty_name_buf.len >= 128);
+                switch (posix.errno(c.ioctl(self.master, c.TIOCPTYGNAME, @intFromPtr(&self.tty_name_buf)))) {
+                    .SUCCESS => {
+                        const tty_name: [:0]const u8 = std.mem.sliceTo(&self.tty_name_buf, 0);
+                        self.tty_name = tty_name;
+                        return tty_name;
                     },
-                    else => unreachable,
+                    else => |err| {
+                        log.err("error getting name of slave PTY errno={t}", .{err});
+                        return null;
+                    },
                 }
             },
         };
@@ -280,8 +266,5 @@ test {
     try pty.setSize(ws);
     try testing.expectEqual(ws, try pty.getSize());
 
-    switch (builtin.os.tag) {
-        .macos => try testing.expect(std.mem.startsWith(u8, pty.getProcessInfo(.tty_name).?, "/dev/")),
-        else => unreachable,
-    }
+    try testing.expect(std.mem.startsWith(u8, pty.getProcessInfo(.tty_name).?, "/dev/"));
 }

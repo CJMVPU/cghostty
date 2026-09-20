@@ -16,7 +16,7 @@ pub const Options = struct {
     out_name: []const u8,
 
     /// Library files (.a) to combine.
-    sources: []LazyPath,
+    sources: []const LazyPath,
 };
 
 /// The step to depend on.

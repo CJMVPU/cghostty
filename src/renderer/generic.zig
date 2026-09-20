@@ -1,5 +1,4 @@
 const std = @import("std");
-const builtin = @import("builtin");
 const global = @import("../global.zig");
 const xev = global.xev;
 const wuffs = @import("wuffs");
@@ -33,15 +32,9 @@ const getConstraint = @import("../font/nerd_font_attributes.zig").getConstraint;
 
 const FileType = @import("../file_type.zig").FileType;
 
-const macos = switch (builtin.os.tag) {
-    .macos => @import("macos"),
-    else => unreachable,
-};
+const macos = @import("macos");
 
-const DisplayLink = switch (builtin.os.tag) {
-    .macos => *macos.video.DisplayLink,
-    else => unreachable,
-};
+const DisplayLink = *macos.video.DisplayLink;
 
 const log = std.log.scoped(.generic_renderer);
 
@@ -1425,13 +1418,13 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                 // If we're on macOS and have glass styles, we remove
                 // the background opacity because the glass effect handles
                 // it.
-                if (comptime builtin.os.tag == .macos) switch (self.config.background_blur) {
+                switch (self.config.background_blur) {
                     .@"macos-glass-regular",
                     .@"macos-glass-clear",
                     => self.uniforms.bg_color[3] = 0,
 
                     else => {},
-                };
+                }
 
                 // Prepare our overlay image for upload (or unload). This
                 // has to use our general allocator since it modifies

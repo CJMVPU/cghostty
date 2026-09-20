@@ -1,5 +1,4 @@
 const std = @import("std");
-const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const internal_os = @import("../os/main.zig");
 const cli = @import("../cli.zig");
@@ -41,10 +40,7 @@ pub const Location = enum {
                     // We need to do some comptime tricks to get the right
                     // error set since some platforms don't support some
                     // error types.
-                    const Error = @TypeOf(err) || switch (builtin.os.tag) {
-                        .macos => error{},
-                        else => unreachable,
-                    };
+                    const Error = @TypeOf(err) || error{};
 
                     switch (@as(Error, err)) {
                         error.OutOfMemory => return error.OutOfMemory,

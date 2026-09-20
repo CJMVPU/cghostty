@@ -56,6 +56,7 @@ jobs:
       - name: Core regression tests
         run: |
           zig build test -Dtest-filter=renderer -Dtest-filter=config -Dtest-filter=Command -Dtest-filter=Terminal \
+            -Dtest-filter=input -Dtest-filter=os. -Dtest-filter=termio -Dtest-filter=pty \
             2>&1 | tee macos/build/ci-logs/core-tests.log
       - name: Build and test native app
         run: |

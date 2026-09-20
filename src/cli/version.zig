@@ -3,7 +3,6 @@ const build_options = @import("build_options");
 const Allocator = std.mem.Allocator;
 const builtin = @import("builtin");
 const build_config = @import("../build_config.zig");
-const internal_os = @import("../os/main.zig");
 const xev = @import("../global.zig").xev;
 const renderer = @import("../renderer.zig");
 const global = @import("../global.zig");
@@ -39,7 +38,7 @@ pub fn run(_: Allocator) !u8 {
     try stdout.print("Build Config\n", .{});
     try stdout.print("  - Zig version   : {s}\n", .{builtin.zig_version_string});
     try stdout.print("  - build mode    : {}\n", .{builtin.mode});
-    try stdout.print("  - app runtime   : {}\n", .{build_config.app_runtime});
+    try stdout.print("  - app runtime   : {s}\n", .{if (build_config.artifact == .lib) "embedded" else "cli"});
     try stdout.print("  - font engine   : {}\n", .{build_config.font_backend});
     try stdout.print("  - renderer      : {}\n", .{renderer.Renderer});
     try stdout.print("  - libxev        : {t}\n", .{xev.backend});

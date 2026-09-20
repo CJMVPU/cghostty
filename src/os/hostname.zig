@@ -1,5 +1,4 @@
 const std = @import("std");
-const builtin = @import("builtin");
 const posix = std.posix;
 
 pub const LocalHostnameValidationError = error{
@@ -15,14 +14,9 @@ pub fn isLocal(hostname: []const u8) LocalHostnameValidationError!bool {
     if (std.mem.eql(u8, "localhost", hostname)) return true;
 
     // If hostname is not "localhost" it must match our hostname.
-    switch (builtin.os.tag) {
-        .macos => {
-            var buf: [posix.HOST_NAME_MAX]u8 = undefined;
-            const ourHostname = try posix.gethostname(&buf);
-            return std.mem.eql(u8, hostname, ourHostname);
-        },
-        else => unreachable,
-    }
+    var buf: [posix.HOST_NAME_MAX]u8 = undefined;
+    const ourHostname = try posix.gethostname(&buf);
+    return std.mem.eql(u8, hostname, ourHostname);
 }
 
 test "isLocal returns true when provided hostname is localhost" {
@@ -30,14 +24,9 @@ test "isLocal returns true when provided hostname is localhost" {
 }
 
 test "isLocal returns true when hostname is local" {
-    switch (builtin.os.tag) {
-        .macos => {
-            var buf: [posix.HOST_NAME_MAX]u8 = undefined;
-            const localHostname = try posix.gethostname(&buf);
-            try std.testing.expect(try isLocal(localHostname));
-        },
-        else => unreachable,
-    }
+    var buf: [posix.HOST_NAME_MAX]u8 = undefined;
+    const localHostname = try posix.gethostname(&buf);
+    try std.testing.expect(try isLocal(localHostname));
 }
 
 test "isLocal returns false when hostname is not local" {

@@ -340,7 +340,7 @@ pub const Page = struct {
     /// runtime safety is enabled. This is a no-op when runtime safety is
     /// disabled or the target is freestanding. This uses the libc allocator.
     pub inline fn assertIntegrity(self: *const Page) void {
-        if (comptime build_options.slow_runtime_safety and builtin.os.tag != .freestanding) {
+        if (comptime build_options.slow_runtime_safety) {
             var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
             defer _ = debug_allocator.deinit();
             const alloc = debug_allocator.allocator();
