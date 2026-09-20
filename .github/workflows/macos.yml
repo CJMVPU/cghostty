@@ -1,7 +1,6 @@
 name: cghostty macOS arm64
 on:
   push:
-    branches: [main]
     tags: ['v*']
   pull_request:
   workflow_dispatch:
