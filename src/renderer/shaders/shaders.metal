@@ -24,13 +24,13 @@ struct Uniforms {
   bool use_display_p3;
   bool use_linear_blending;
   bool use_linear_correction;
-  float2 smooth_front;
-  float2 smooth_rear;
+  float2 smooth_corners[4];
   float2 smooth_target;
   float2 smooth_half_size;
   uchar4 smooth_color;
   float smooth_effect;
   uint smooth_block;
+  uint smooth_corner_count;
 };
 
 //-------------------------------------------------------------------
@@ -552,17 +552,16 @@ struct CellTextVertexIn {
   uint8_t bools [[attribute(6)]];
 };
 
-// Coverage of the convex hull of two native-sized cursor rectangles.
+// Convex outline of the four independently animated corners. The CPU orders
+// the outline so quick reversals cannot produce a crossed or inverted quad.
 float smooth_cursor_coverage(float2 p, constant Uniforms& u) {
-  float2 segment = u.smooth_front - u.smooth_rear;
-  float2 q = p - (u.smooth_front + u.smooth_rear) * 0.5;
-  float2 bounds = u.smooth_half_size + abs(segment) * 0.5;
-  float2 edges = abs(q) - bounds;
-  float distance = max(edges.x, edges.y);
-  float len = length(segment);
-  if (len > 0.0001) {
-    float2 normal = float2(-segment.y, segment.x) / len;
-    distance = max(distance, abs(dot(q, normal)) - dot(abs(normal), u.smooth_half_size));
+  float distance = -INFINITY;
+  for (uint i = 0; i < u.smooth_corner_count; i++) {
+    float2 a = u.smooth_corners[i];
+    float2 b = u.smooth_corners[(i + 1) % u.smooth_corner_count];
+    float2 edge = b - a;
+    float2 outward = float2(edge.y, -edge.x) / max(length(edge), 0.0001);
+    distance = max(distance, dot(p - a, outward));
   }
   float coverage = 1 - smoothstep(-0.65, 0.65, distance);
   float2 local = p - u.smooth_target;
@@ -573,8 +572,14 @@ float smooth_cursor_coverage(float2 p, constant Uniforms& u) {
 struct SmoothCursorVertexOut { float4 position [[position]]; };
 vertex SmoothCursorVertexOut smooth_cursor_vertex(uint vid [[vertex_id]], constant Uniforms& u [[buffer(1)]]) {
   // One triangle bounds both the moving silhouette and the native handoff.
-  float2 lo = min(min(u.smooth_front, u.smooth_rear), u.smooth_target) - u.smooth_half_size - 1;
-  float2 hi = max(max(u.smooth_front, u.smooth_rear), u.smooth_target) + u.smooth_half_size + 1;
+  float2 lo = u.smooth_target - u.smooth_half_size;
+  float2 hi = u.smooth_target + u.smooth_half_size;
+  for (uint i = 0; i < u.smooth_corner_count; i++) {
+    lo = min(lo, u.smooth_corners[i]);
+    hi = max(hi, u.smooth_corners[i]);
+  }
+  lo -= 1;
+  hi += 1;
   float2 uv = float2((vid << 1) & 2, vid & 2);
   return { u.projection_matrix * float4(lo + uv * (hi - lo), 0, 1) };
 }

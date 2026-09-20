@@ -2910,11 +2910,14 @@ keybind: Keybinds = .{},
 /// need KAM, you don't need it.
 @"vt-kam-allowed": bool = false,
 
-/// Native cursor effect. `smooth` uses a solid, dual-end stretch with
-/// distance-based timing. Interrupted moves continue from the displayed
-/// endpoints without repeatedly delaying the rear. Opaque block, bar, and
-/// underline cursors animate. A size change resets motion; hidden, unfocused,
-/// hollow, and lock cursors use the normal cursor.
+/// Native cursor effect. `smooth` animates four corners according to the
+/// direction of travel, with a slight leading-edge expansion that recovers
+/// on arrival. Distance-based response times keep the rear following during
+/// key repeat. Interrupted moves continue from the displayed corners.
+/// Opaque block, bar, and underline cursors animate; thin cursors retain their
+/// thickness. A size change resets motion. Hidden cursors are not drawn, but
+/// retain motion across application redraws. Unfocused, hollow, and lock
+/// cursors use the normal cursor.
 /// Set to `none` to disable. No external shader files are loaded.
 @"cursor-effect": enum { none, smooth } = .smooth,
 

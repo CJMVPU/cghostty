@@ -2026,14 +2026,25 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
         fn updateSmoothCursor(self: *Self) void {
             if (self.cursor_reset_pending.swap(false, .acq_rel)) self.smooth_cursor.reset();
             self.uniforms.smooth_effect = 0;
+            if (!self.config.cursor_effect or !self.focused or !self.visible or self.api.reduceMotion()) {
+                self.smooth_cursor.reset();
+                self.cursor_animation_running.store(false, .release);
+                return;
+            }
             const cursor = self.cells.getCursorGlyph();
+            // Vim hides the cursor while redrawing between search matches.
+            // Respect that visibility, but retain the last motion so the next
+            // visible position can animate instead of initializing from rest.
+            if (cursor == null) {
+                self.smooth_cursor.hide();
+                self.cursor_animation_running.store(false, .release);
+                return;
+            }
             const supported = if (self.cells.cursor_style) |style| switch (style) {
                 .block, .bar, .underline => true,
                 .block_hollow, .lock => false,
             } else false;
-            if (!self.config.cursor_effect or !self.focused or !self.visible or self.api.reduceMotion() or
-                !supported or cursor == null or cursor.?.color[3] != 255)
-            {
+            if (!supported or cursor.?.color[3] != 255) {
                 self.smooth_cursor.reset();
                 self.cursor_animation_running.store(false, .release);
                 return;
@@ -2051,9 +2062,14 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             const target: SmoothCursor.Vec = .{ x + size[0] * 0.5, y + size[1] * 0.5 };
             // A thin insert-mode bar must not turn one cell into a long move.
             const timing_width: f32 = if (self.cells.cursor_style == .bar) @floatFromInt(self.size.cell.width) else size[0];
-            const pose = self.smooth_cursor.update(target, size, timing_width, now);
-            self.uniforms.smooth_front = pose.front;
-            self.uniforms.smooth_rear = pose.rear;
+            const pose = self.smooth_cursor.update(target, size, timing_width, now, switch (self.cells.cursor_style.?) {
+                .bar => .bar,
+                .underline => .underline,
+                else => .block,
+            });
+            const outline = pose.outline(size);
+            for (outline.corners, &self.uniforms.smooth_corners) |corner, *uniform| uniform.* = corner;
+            self.uniforms.smooth_corner_count = outline.count;
             self.uniforms.smooth_target = target;
             self.uniforms.smooth_half_size = size * @as(SmoothCursor.Vec, @splat(0.5));
             self.uniforms.smooth_color = c.color;

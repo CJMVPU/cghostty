@@ -82,7 +82,7 @@ Metal 编译通过 `xcrun --toolchain Metal` 调用安装的工具链。缺失�
 
 ## 渲染与光标回归
 
-`zig build test -Dtest-filter=renderer -Dtest-filter=config` 覆盖光标距离分档、曲线单调性、中断时两个端点连续、尾端收拢和配置迁移提示。
+`zig build test -Dtest-filter=renderer -Dtest-filter=config` 覆盖光标距离分档、八方向前后角关系、前沿展开和恢复、中断时四角连续、持续按键与隐藏/显示交替、Vim 模式切换和细线厚度、快速反向的凸轮廓，以及配置迁移提示。
 Metal 4 每个在途帧独占可复用的命令缓冲区、分配器、参数表与 residency set，GPU 完成后才允许重用。
 开启 `MTL_DEBUG_LAYER=1` 运行应用可检查 Metal API；交互验收需覆盖单步、快速输入、连续导航、斜向移动、中文宽字符、选区、失焦和缩放。
 CI 使用 GitHub `xcode-27` arm64 预览镜像，并在运行测试前验证系统为 macOS 27+。
