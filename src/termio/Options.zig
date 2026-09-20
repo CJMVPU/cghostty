@@ -18,7 +18,7 @@ full_config: *const Config,
 config: termio.Termio.DerivedConfig,
 
 /// The backend for termio that implements where reads/writes are sourced.
-backend: termio.Backend,
+backend: termio.Exec,
 
 /// The mailbox for the terminal. This is how messages are delivered.
 /// If you're using termio.Thread this MUST be "mailbox".

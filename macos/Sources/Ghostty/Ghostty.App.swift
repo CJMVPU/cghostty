@@ -291,9 +291,7 @@ extension Ghostty {
 
         static func closeSurface(_ userdata: UnsafeMutableRawPointer?, processAlive: Bool) {
             let surface = self.surfaceUserdata(from: userdata)
-            NotificationCenter.default.post(name: Notification.ghosttyCloseSurface, object: surface, userInfo: [
-                "process_alive": processAlive,
-            ])
+            BaseTerminalController.controller(owning: surface)?.closeSurface(surface, withConfirmation: processAlive)
         }
 
         static func readClipboard(
@@ -572,6 +570,10 @@ extension Ghostty {
         static private func appState(fromView view: SurfaceView) -> App? {
             guard let surface = view.surface else { return nil }
             guard let app = ghostty_surface_app(surface) else { return nil }
+            return appState(from: app)
+        }
+
+        static private func appState(from app: ghostty_app_t) -> App? {
             guard let app_ud = ghostty_app_userdata(app) else { return nil }
             return Unmanaged<App>.fromOpaque(app_ud).takeUnretainedValue()
         }
@@ -926,25 +928,14 @@ extension Ghostty {
         }
 
         private static func newWindow(_ app: ghostty_app_t, target: ghostty_target_s) {
+            guard let appState = appState(from: app) else { return }
             switch target.tag {
             case GHOSTTY_TARGET_APP:
-                NotificationCenter.default.post(
-                    name: Notification.ghosttyNewWindow,
-                    object: nil,
-                    userInfo: [:]
-                )
-
+                _ = TerminalController.newWindow(appState)
             case GHOSTTY_TARGET_SURFACE:
                 guard let surface = target.target.surface else { return }
-                guard let surfaceView = self.surfaceView(from: surface) else { return }
-                NotificationCenter.default.post(
-                    name: Notification.ghosttyNewWindow,
-                    object: surfaceView,
-                    userInfo: [
-                        Notification.NewSurfaceConfigKey: SurfaceConfiguration(from: ghostty_surface_inherited_config(surface, GHOSTTY_SURFACE_CONTEXT_WINDOW)),
-                    ]
-                )
-
+                let config = SurfaceConfiguration(from: ghostty_surface_inherited_config(surface, GHOSTTY_SURFACE_CONTEXT_WINDOW))
+                _ = TerminalController.newWindow(appState, withBaseConfig: config)
             default:
                 assertionFailure()
             }
@@ -953,11 +944,7 @@ extension Ghostty {
         private static func newTab(_ app: ghostty_app_t, target: ghostty_target_s) {
             switch target.tag {
             case GHOSTTY_TARGET_APP:
-                NotificationCenter.default.post(
-                    name: Notification.ghosttyNewTab,
-                    object: nil,
-                    userInfo: [:]
-                )
+                return
 
             case GHOSTTY_TARGET_SURFACE:
                 guard let surface = target.target.surface else { return }
@@ -973,13 +960,8 @@ extension Ghostty {
                     return
                 }
 
-                NotificationCenter.default.post(
-                    name: Notification.ghosttyNewTab,
-                    object: surfaceView,
-                    userInfo: [
-                        Notification.NewSurfaceConfigKey: SurfaceConfiguration(from: ghostty_surface_inherited_config(surface, GHOSTTY_SURFACE_CONTEXT_TAB)),
-                    ]
-                )
+                let config = SurfaceConfiguration(from: ghostty_surface_inherited_config(surface, GHOSTTY_SURFACE_CONTEXT_TAB))
+                BaseTerminalController.controller(owning: surfaceView)?.requestNewTab(from: surfaceView, baseConfig: config)
 
             default:
                 assertionFailure()
@@ -1000,14 +982,16 @@ extension Ghostty {
                 guard let surface = target.target.surface else { return }
                 guard let surfaceView = self.surfaceView(from: surface) else { return }
 
-                NotificationCenter.default.post(
-                    name: Notification.ghosttyNewSplit,
-                    object: surfaceView,
-                    userInfo: [
-                        "direction": direction,
-                        Notification.NewSurfaceConfigKey: SurfaceConfiguration(from: ghostty_surface_inherited_config(surface, GHOSTTY_SURFACE_CONTEXT_SPLIT)),
-                    ]
-                )
+                let splitDirection: SplitTree<Ghostty.SurfaceView>.NewDirection
+                switch direction {
+                case GHOSTTY_SPLIT_DIRECTION_RIGHT: splitDirection = .right
+                case GHOSTTY_SPLIT_DIRECTION_LEFT: splitDirection = .left
+                case GHOSTTY_SPLIT_DIRECTION_DOWN: splitDirection = .down
+                case GHOSTTY_SPLIT_DIRECTION_UP: splitDirection = .up
+                default: return
+                }
+                let config = SurfaceConfiguration(from: ghostty_surface_inherited_config(surface, GHOSTTY_SURFACE_CONTEXT_SPLIT))
+                BaseTerminalController.controller(owning: surfaceView)?.newSplit(at: surfaceView, direction: splitDirection, baseConfig: config)
 
             default:
                 assertionFailure()
@@ -1026,10 +1010,8 @@ extension Ghostty {
                 guard let surface = target.target.surface else { return false }
                 guard let surfaceView = self.surfaceView(from: surface) else { return false }
 
-                NotificationCenter.default.post(
-                    name: Notification.ghosttyPresentTerminal,
-                    object: surfaceView
-                )
+                guard let controller = BaseTerminalController.controller(owning: surfaceView) else { return false }
+                controller.presentTerminal(surfaceView)
                 return true
 
             default:
@@ -1050,24 +1032,15 @@ extension Ghostty {
 
                 switch mode {
                 case GHOSTTY_ACTION_CLOSE_TAB_MODE_THIS:
-                    NotificationCenter.default.post(
-                        name: .ghosttyCloseTab,
-                        object: surfaceView
-                    )
+                    (BaseTerminalController.controller(owning: surfaceView) as? TerminalController)?.closeTab(surfaceView)
                     return
 
                 case GHOSTTY_ACTION_CLOSE_TAB_MODE_OTHER:
-                    NotificationCenter.default.post(
-                        name: .ghosttyCloseOtherTabs,
-                        object: surfaceView
-                    )
+                    (BaseTerminalController.controller(owning: surfaceView) as? TerminalController)?.closeOtherTabs(surfaceView)
                     return
 
                 case GHOSTTY_ACTION_CLOSE_TAB_MODE_RIGHT:
-                    NotificationCenter.default.post(
-                        name: .ghosttyCloseTabsOnTheRight,
-                        object: surfaceView
-                    )
+                    (BaseTerminalController.controller(owning: surfaceView) as? TerminalController)?.closeTabsOnTheRight(surfaceView)
                     return
 
                 default:
@@ -1089,10 +1062,7 @@ extension Ghostty {
                 guard let surface = target.target.surface else { return }
                 guard let surfaceView = self.surfaceView(from: surface) else { return }
 
-                NotificationCenter.default.post(
-                    name: .ghosttyCloseWindow,
-                    object: surfaceView
-                )
+                BaseTerminalController.controller(owning: surfaceView)?.closeWindow(surfaceView)
 
             default:
                 assertionFailure()
@@ -1120,13 +1090,7 @@ extension Ghostty {
                     Ghostty.logger.warning("unknown fullscreen mode raw=\(raw.rawValue, privacy: .public)")
                     return
                 }
-                NotificationCenter.default.post(
-                    name: Notification.ghosttyToggleFullscreen,
-                    object: surfaceView,
-                    userInfo: [
-                        Notification.FullscreenModeKey: mode,
-                    ]
-                )
+                BaseTerminalController.controller(owning: surfaceView)?.requestFullscreen(from: surfaceView, mode: mode)
 
             default:
                 assertionFailure()
@@ -1144,10 +1108,7 @@ extension Ghostty {
             case GHOSTTY_TARGET_SURFACE:
                 guard let surface = target.target.surface else { return }
                 guard let surfaceView = self.surfaceView(from: surface) else { return }
-                NotificationCenter.default.post(
-                    name: .ghosttyCommandPaletteDidToggle,
-                    object: surfaceView
-                )
+                BaseTerminalController.controller(owning: surfaceView)?.toggleCommandPalette(from: surfaceView)
 
             default:
                 assertionFailure()
@@ -1166,10 +1127,7 @@ extension Ghostty {
             case GHOSTTY_TARGET_SURFACE:
                 guard let surface = target.target.surface else { return }
                 guard let surfaceView = self.surfaceView(from: surface) else { return }
-                NotificationCenter.default.post(
-                    name: .ghosttyMaximizeDidToggle,
-                    object: surfaceView
-                )
+                BaseTerminalController.controller(owning: surfaceView)?.toggleMaximize(from: surfaceView)
 
             default:
                 assertionFailure()
@@ -1270,13 +1228,8 @@ extension Ghostty {
                     // See gotoTab for notes on this check.
                     guard (surfaceView.window?.tabGroup?.windows.count ?? 0) > 1 else { return false }
 
-                    NotificationCenter.default.post(
-                        name: .ghosttyMoveTab,
-                        object: surfaceView,
-                        userInfo: [
-                            SwiftUI.Notification.Name.GhosttyMoveTabKey: Action.MoveTab(c: move),
-                        ]
-                    )
+                    guard let controller = BaseTerminalController.controller(owning: surfaceView) as? TerminalController else { return false }
+                    controller.moveTab(from: surfaceView, action: Action.MoveTab(c: move))
 
                 default:
                     assertionFailure()
@@ -1327,13 +1280,8 @@ extension Ghostty {
                     // we should make this more accurate later.
                     guard (surfaceView.window?.tabGroup?.windows.count ?? 0) > 1 else { return false }
 
-                    NotificationCenter.default.post(
-                        name: Notification.ghosttyGotoTab,
-                        object: surfaceView,
-                        userInfo: [
-                            Notification.GotoTabKey: tab,
-                        ]
-                    )
+                    guard let controller = BaseTerminalController.controller(owning: surfaceView) as? TerminalController else { return false }
+                    controller.gotoTab(from: surfaceView, tab: tab)
 
                 default:
                     assertionFailure()
@@ -1354,7 +1302,7 @@ extension Ghostty {
                 case GHOSTTY_TARGET_SURFACE:
                     guard let surface = target.target.surface else { return false }
                     guard let surfaceView = self.surfaceView(from: surface) else { return false }
-                    guard let controller = surfaceView.window?.windowController as? BaseTerminalController else { return false }
+                    guard let controller = BaseTerminalController.controller(owning: surfaceView) else { return false }
 
                     // If the window has no splits, the action is not performable
                     guard controller.surfaceTree.isSplit else { return false }
@@ -1373,14 +1321,8 @@ extension Ghostty {
                         return false
                     }
 
-                    // We have a valid target, post the notification to perform the navigation
-                    NotificationCenter.default.post(
-                        name: Notification.ghosttyFocusSplit,
-                        object: surfaceView,
-                        userInfo: [
-                            Notification.SplitDirectionKey: splitDirection as Any,
-                        ]
-                    )
+                    // We have a valid target, perform the navigation.
+                    controller.focusSplit(from: surfaceView, direction: splitDirection)
 
                     return true
 
@@ -1460,20 +1402,13 @@ extension Ghostty {
                 case GHOSTTY_TARGET_SURFACE:
                     guard let surface = target.target.surface else { return false }
                     guard let surfaceView = self.surfaceView(from: surface) else { return false }
-                    guard let controller = surfaceView.window?.windowController as? BaseTerminalController else { return false }
+                    guard let controller = BaseTerminalController.controller(owning: surfaceView) else { return false }
 
                     // If the window has no splits, the action is not performable
                     guard controller.surfaceTree.isSplit else { return false }
 
                     guard let resizeDirection = SplitResizeDirection.from(direction: resize.direction) else { return false }
-                    NotificationCenter.default.post(
-                        name: Notification.didResizeSplit,
-                        object: surfaceView,
-                        userInfo: [
-                            Notification.ResizeSplitDirectionKey: resizeDirection,
-                            Notification.ResizeSplitAmountKey: resize.amount,
-                        ]
-                    )
+                    controller.resizeSplit(from: surfaceView, direction: resizeDirection, amount: resize.amount)
                     return true
 
                 default:
@@ -1493,10 +1428,7 @@ extension Ghostty {
             case GHOSTTY_TARGET_SURFACE:
                 guard let surface = target.target.surface else { return }
                 guard let surfaceView = self.surfaceView(from: surface) else { return }
-                NotificationCenter.default.post(
-                    name: Notification.didEqualizeSplits,
-                    object: surfaceView
-                )
+                BaseTerminalController.controller(owning: surfaceView)?.equalizeSplits(from: surfaceView)
 
             default:
                 assertionFailure()
@@ -1514,15 +1446,12 @@ extension Ghostty {
             case GHOSTTY_TARGET_SURFACE:
                 guard let surface = target.target.surface else { return false }
                 guard let surfaceView = self.surfaceView(from: surface) else { return false }
-                guard let controller = surfaceView.window?.windowController as? BaseTerminalController else { return false }
+                guard let controller = BaseTerminalController.controller(owning: surfaceView) else { return false }
 
                 // If the window has no splits, the action is not performable
                 guard controller.surfaceTree.isSplit else { return false }
 
-                NotificationCenter.default.post(
-                    name: Notification.didToggleSplitZoom,
-                    object: surfaceView
-                )
+                controller.toggleSplitZoom(on: surfaceView)
                 return true
 
             default:
@@ -2067,10 +1996,7 @@ extension Ghostty {
             case GHOSTTY_TARGET_SURFACE:
                 guard let surface = target.target.surface else { return }
                 guard let surfaceView = self.surfaceView(from: surface) else { return }
-                NotificationCenter.default.post(
-                    name: .ghosttyResetWindowSize,
-                    object: surfaceView
-                )
+                (BaseTerminalController.controller(owning: surfaceView) as? TerminalController)?.returnToDefaultSize(nil)
 
             default:
                 assertionFailure()

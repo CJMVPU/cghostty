@@ -31,7 +31,7 @@ pub const MutexState = enum { locked, unlocked };
 alloc: Allocator,
 
 /// This is the implementation responsible for io.
-backend: termio.Backend,
+backend: termio.Exec,
 
 /// The derived configuration for this termio implementation.
 config: DerivedConfig,
@@ -442,7 +442,7 @@ pub inline fn queueWrite(
 }
 
 /// Update the configuration.
-pub fn changeConfig(self: *Termio, td: *ThreadData, config: *DerivedConfig) !void {
+pub fn changeConfig(self: *Termio, config: *DerivedConfig) !void {
     // The remainder of this function is modifying terminal state or
     // the read thread data, all of which requires holding the renderer
     // state lock.
@@ -458,7 +458,6 @@ pub fn changeConfig(self: *Termio, td: *ThreadData, config: *DerivedConfig) !voi
     // renderer mutex so this is safe to do despite being executed
     // from another thread.
     self.terminal_stream.handler.changeConfig(&self.config);
-    td.backend.changeConfig(&self.config);
 
     // Update the configuration that we know about.
     //
@@ -811,7 +810,7 @@ pub const ThreadData = struct {
     surface_mailbox: apprt.surface.Mailbox,
 
     /// Data associated with the backend implementation (i.e. pty/exec state)
-    backend: termio.backend.ThreadData,
+    backend: termio.Exec.ThreadData,
     mailbox: *termio.Mailbox,
 
     pub fn deinit(self: *ThreadData) void {

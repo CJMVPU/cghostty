@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The current cghostty application icon.
-struct CyclingIconView: View {
+struct AppIconView: View {
     var body: some View {
         Image(nsImage: NSApp.applicationIconImage)
             .resizable()

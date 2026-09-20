@@ -20,18 +20,13 @@ extension Ghostty {
         var loaded: Bool { config != nil }
 
         /// Return the errors found while loading the configuration.
-        var errors: [String] {
-            guard let cfg = self.config else { return [] }
+        var errors: [String] { Self.diagnostics(config) }
 
-            var diags: [String] = []
-            let diagsCount = ghostty_config_diagnostics_count(cfg)
-            for i in 0..<diagsCount {
-                let diag = ghostty_config_get_diagnostic(cfg, UInt32(i))
-                let message = String(cString: diag.message)
-                diags.append(message)
+        private static func diagnostics(_ config: ghostty_config_t?) -> [String] {
+            guard let config else { return [] }
+            return (0..<ghostty_config_diagnostics_count(config)).map { index in
+                String(cString: ghostty_config_get_diagnostic(config, UInt32(index)).message)
             }
-
-            return diags
         }
 
         init(config: ghostty_config_t?) {
@@ -80,24 +75,16 @@ extension Ghostty {
 
             ghostty_config_load_recursive_files(cfg)
 
-            // TODO: we'd probably do some config loading here... for now we'd
-            // have to do this synchronously. When we support config updating we can do
-            // this async and update later.
-
             if finalize {
                 // Finalize will make our defaults available.
                 ghostty_config_finalize(cfg)
             }
             // Log any configuration errors. These will be automatically shown in a
             // pop-up window too.
-            let diagsCount = ghostty_config_diagnostics_count(cfg)
-            if diagsCount > 0 {
-                logger.warning("config error: \(diagsCount, privacy: .public) configuration errors on reload")
-                var diags: [String] = []
-                for i in 0..<diagsCount {
-                    let diag = ghostty_config_get_diagnostic(cfg, UInt32(i))
-                    let message = String(cString: diag.message)
-                    diags.append(message)
+            let errors = diagnostics(cfg)
+            if !errors.isEmpty {
+                logger.warning("config error: \(errors.count, privacy: .public) configuration errors on reload")
+                for message in errors {
                     logger.warning("config error: \(message, privacy: .public)")
                 }
             }
@@ -390,57 +377,6 @@ extension Ghostty {
             let key = "macos-window-shadow"
             _ = ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8)))
             return v
-        }
-
-        var macosIcon: MacOSIcon {
-            let defaultValue = MacOSIcon.official
-            guard let config = self.config else { return defaultValue }
-            var v: UnsafePointer<Int8>?
-            let key = "macos-icon"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return defaultValue }
-            guard let ptr = v else { return defaultValue }
-            let str = String(cString: ptr)
-            return MacOSIcon(rawValue: str) ?? defaultValue
-        }
-
-        var macosCustomIcon: String {
-            let defaultValue = NSString("~/.config/cghostty/cghostty.icns").expandingTildeInPath
-            guard let config = self.config else { return defaultValue }
-            var v: UnsafePointer<Int8>?
-            let key = "macos-custom-icon"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return defaultValue }
-            guard let ptr = v else { return defaultValue }
-            guard let path = NSString(utf8String: ptr) else { return defaultValue }
-            return path.expandingTildeInPath
-        }
-
-        var macosIconFrame: MacOSIconFrame {
-            let defaultValue = MacOSIconFrame.aluminum
-            guard let config = self.config else { return defaultValue }
-            var v: UnsafePointer<Int8>?
-            let key = "macos-icon-frame"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return defaultValue }
-            guard let ptr = v else { return defaultValue }
-            let str = String(cString: ptr)
-            return MacOSIconFrame(rawValue: str) ?? defaultValue
-        }
-
-        var macosIconGhostColor: NSColor? {
-            guard let config = self.config else { return nil }
-            var v: ghostty_config_color_s = .init()
-            let key = "macos-icon-ghost-color"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return nil }
-            return .init(ghostty: v)
-        }
-
-        var macosIconScreenColor: [NSColor]? {
-            guard let config = self.config else { return nil }
-            var v: ghostty_config_color_list_s = .init()
-            let key = "macos-icon-screen-color"
-            guard ghostty_config_get(config, &v, key, UInt(key.lengthOfBytes(using: .utf8))) else { return nil }
-            guard v.len > 0 else { return nil }
-            let buffer = UnsafeBufferPointer(start: v.colors, count: v.len)
-            return buffer.map { .init(ghostty: $0) }
         }
 
         var macosHidden: MacHidden {

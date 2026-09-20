@@ -135,8 +135,8 @@ pub fn threadEnter(
     );
     read_thread.setName(global.io(), "io-reader") catch {};
 
-    // Setup our threadata backend state to be our own
-    td.backend = .{ .exec = .{
+    // Initialize the IO thread's subprocess state.
+    td.backend = .{
         .start = process_start,
         .write_stream = stream,
         .process = process,
@@ -144,24 +144,22 @@ pub fn threadEnter(
         .read_thread_pipe = pipe[1],
         .read_thread_fd = pty_fds.read,
         .termios_timer = termios_timer,
-    } };
+    };
 
     // Start our process watcher. If we have an xev.Process use it.
     if (process) |*p| p.wait(
         td.loop,
-        &td.backend.exec.process_wait_c,
+        &td.backend.process_wait_c,
         termio.Termio.ThreadData,
         td,
         processExit,
     );
 
-    // Start our termios timer. We don't support this on Windows.
-    // Fundamentally, we could support this on Windows so we're just
-    // waiting for someone to implement it.
+    // Start polling terminal attributes.
     {
         termios_timer.run(
             td.loop,
-            &td.backend.exec.termios_timer_c,
+            &td.backend.termios_timer_c,
             TERMIOS_POLL_MS,
             termio.Termio.ThreadData,
             td,
@@ -171,8 +169,7 @@ pub fn threadEnter(
 }
 
 pub fn threadExit(self: *Exec, td: *termio.Termio.ThreadData) void {
-    assert(td.backend == .exec);
-    const exec = &td.backend.exec;
+    const exec = &td.backend;
 
     if (exec.exited) self.subprocess.externalExit();
     self.subprocess.stop();
@@ -203,10 +200,7 @@ pub fn focusGained(
 ) !void {
     _ = self;
 
-    assert(td.backend == .exec);
-    const execdata = &td.backend.exec;
-
-    // Windows has no termios, so there is nothing to poll.
+    const execdata = &td.backend;
 
     if (!focused) {
         // Flag the timer to end on the next iteration. This is
@@ -238,8 +232,7 @@ pub fn resize(
 }
 
 fn processExitCommon(td: *termio.Termio.ThreadData, exit_code: u32) void {
-    assert(td.backend == .exec);
-    const execdata = &td.backend.exec;
+    const execdata = &td.backend;
     execdata.exited = true;
 
     // Determine how long the process was running for.
@@ -294,8 +287,7 @@ fn termiosTimer(
     };
 
     const td = td_.?;
-    assert(td.backend == .exec);
-    const exec = &td.backend.exec;
+    const exec = &td.backend;
 
     // This is kind of hacky but we rebuild a Pty struct to get the
     // termios data.
@@ -361,7 +353,7 @@ pub fn queueWrite(
     linefeed: bool,
 ) !void {
     _ = self;
-    const exec = &td.backend.exec;
+    const exec = &td.backend;
 
     // If our process is exited then we don't send any more writes.
     if (exec.exited) return;
@@ -924,10 +916,7 @@ const Subprocess = struct {
         };
 
         cmd.start(alloc) catch |err| {
-            // We have to do this because start on Windows can't
-            // ever return ExecFailedInChild
-            const StartError = error{ExecFailedInChild} || @TypeOf(err);
-            switch (@as(StartError, err)) {
+            switch (err) {
                 // If we fail in our child we need to flag it so our
                 // errdefers don't run.
                 error.ExecFailedInChild => {
@@ -1107,7 +1096,7 @@ const Subprocess = struct {
 ///   io-reader:  hand each filled buffer to processOutput (terminal
 ///               lock, VT parse, state update, render scheduling).
 ///
-/// This used to be a single serial loop (and still is on Windows):
+/// This used to be a single serial loop:
 ///
 ///   while (true) { blocking_read(); exit_if_eof(); process(); }
 ///

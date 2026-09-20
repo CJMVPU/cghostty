@@ -310,7 +310,7 @@ fn drainMailbox(
             .crash => @panic("crash request, crashing intentionally"),
             .change_config => |config| {
                 defer config.alloc.destroy(config.ptr);
-                try io.changeConfig(data, config.ptr);
+                try io.changeConfig(config.ptr);
             },
             .inspector => |v| self.flags.has_inspector = v,
             .resize => |v| self.handleResize(cb, v),

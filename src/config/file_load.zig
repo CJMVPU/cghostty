@@ -35,26 +35,7 @@ pub fn legacyDefaultXdgPath(alloc: Allocator) ![]const u8 {
 /// Preferred default path for the XDG home configuration file.
 /// Returned value must be freed by the caller.
 pub fn preferredXdgPath(alloc: Allocator) ![]const u8 {
-    // If the XDG path exists, use that.
-    const xdg_path = try defaultXdgPath(alloc);
-    if (open(global.io(), xdg_path)) |f| {
-        f.close(global.io());
-        return xdg_path;
-    } else |_| {}
-
-    // Try the legacy path
-    errdefer alloc.free(xdg_path);
-    const legacy_xdg_path = try legacyDefaultXdgPath(alloc);
-    if (open(global.io(), legacy_xdg_path)) |f| {
-        f.close(global.io());
-        alloc.free(xdg_path);
-        return legacy_xdg_path;
-    } else |_| {}
-
-    // Legacy path and XDG path both don't exist. Return the
-    // new one.
-    alloc.free(legacy_xdg_path);
-    return xdg_path;
+    return preferredPath(alloc, defaultXdgPath, legacyDefaultXdgPath);
 }
 
 /// Default path for the macOS Application Support configuration file.
@@ -72,26 +53,32 @@ pub fn legacyDefaultAppSupportPath(alloc: Allocator) ![]const u8 {
 /// Preferred default path for the macOS Application Support configuration file.
 /// Returned value must be freed by the caller.
 pub fn preferredAppSupportPath(alloc: Allocator) ![]const u8 {
-    // If the app support path exists, use that.
-    const app_support_path = try defaultAppSupportPath(alloc);
-    if (open(global.io(), app_support_path)) |f| {
-        f.close(global.io());
-        return app_support_path;
-    } else |_| {}
+    return preferredPath(alloc, defaultAppSupportPath, legacyDefaultAppSupportPath);
+}
 
-    // Try the legacy path
-    errdefer alloc.free(app_support_path);
-    const legacy_app_support_path = try legacyDefaultAppSupportPath(alloc);
-    if (open(global.io(), legacy_app_support_path)) |f| {
-        f.close(global.io());
-        alloc.free(app_support_path);
-        return legacy_app_support_path;
-    } else |_| {}
+/// Resolve lazily so an existing modern config does not need a legacy path.
+fn preferredPath(
+    alloc: Allocator,
+    comptime currentPath: fn (Allocator) anyerror![]const u8,
+    comptime legacyPath: fn (Allocator) anyerror![]const u8,
+) ![]const u8 {
+    const current = try currentPath(alloc);
+    errdefer alloc.free(current);
+    if (isReadableConfig(global.io(), current)) return current;
 
-    // Legacy path and app support path both don't exist. Return the
-    // new one.
-    alloc.free(legacy_app_support_path);
-    return app_support_path;
+    const legacy = try legacyPath(alloc);
+    if (isReadableConfig(global.io(), legacy)) {
+        alloc.free(current);
+        return legacy;
+    }
+    alloc.free(legacy);
+    return current;
+}
+
+fn isReadableConfig(io: std.Io, path: []const u8) bool {
+    const file = open(io, path) catch return false;
+    file.close(io);
+    return true;
 }
 
 /// Returns the path to the preferred default configuration file.

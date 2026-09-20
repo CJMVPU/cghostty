@@ -539,12 +539,6 @@ typedef struct {
   uint8_t b;
 } ghostty_config_color_s;
 
-// config.ColorList
-typedef struct {
-  const ghostty_config_color_s* colors;
-  size_t len;
-} ghostty_config_color_list_s;
-
 // config.RepeatableCommand
 typedef struct {
   const ghostty_command_s* commands;

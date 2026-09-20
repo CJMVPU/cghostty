@@ -10,6 +10,7 @@
 - 独立 libghostty-vt 的构建、C API 头文件和导出实现、WASM 库、示例、模糊测试包及独立 CMake / pkg-config SDK 安装入口。
 - Flatpak、Snap、Nix 和 Linux 发行版打包；上游 Docker 构建、源代码发行包和网站数据生成流程。
 - `+boo` 动画彩蛋、帧数据生成器及原始帧；v2/v3 图标草稿和未引用的图标素材。
+- 运行时备用/自定义图标、图层合成与配色配置、Dock 图标插件；应用统一使用固定 cghostty 图标。
 - 上游社区 issue/PR 模板、人员/赞助/机器人工作流、上游发布工作流、Sparkle 更新与 Sentry 上传。
 
 保留的内容：

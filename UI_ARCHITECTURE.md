@@ -26,6 +26,12 @@ protocol behavior remain product requirements.
 - Observation streams may coalesce presentation changes. Clipboard requests and
   other commands must use explicit event delivery with cancellation and identity
   checks. They are not inferred from a coalesced UI snapshot.
+- Internal window, tab and split commands resolve the surface's current owner via
+  `BaseTerminalController.controller(owning:)` and invoke typed controller methods.
+  Ownership follows split-tree changes even while a surface is detached from its
+  AppKit window. These commands do not use global notification broadcasts or
+  string-keyed payloads. System notifications and shared configuration events keep
+  their existing notification delivery.
 - Controller-owned asynchronous observation tasks use weak captures, cancel when
   changing targets, and end during teardown. Models never retain their controllers.
 
@@ -46,6 +52,13 @@ protocol behavior remain product requirements.
   About, configuration-error and clipboard windows host SwiftUI content in
   programmatic AppKit windows. Main-menu and terminal-window XIBs still supply
   native window/menu configuration.
+- Native titlebar tabs keep AppKit's tab bar and buttons. `NativeTitlebarTabLayout`
+  owns only the constraints that position its accessory in the toolbar, reuses
+  them during resize, and releases them before detachment or zero-size transitions.
+  Frame events coalesce into a main-queue layout pass. Tab reordering uses
+  `NSWindowTabGroup.insertWindow` without removing and rebuilding the tab group.
+  The standalone split-zoom button is a toolbar item; native tabs keep their own
+  button. Their content shares the same observable window state.
 - Native consumers use cancellable `Observations` streams. Combine remains for
   native event streams such as debounced accessibility notifications; there is
   no `ObservableObject` presentation layer or parallel state synchronization.
@@ -55,7 +68,8 @@ protocol behavior remain product requirements.
 Native tests cover read-dependent invalidation, stable terminal/core identity,
 controller release, focused title changes, search cancellation and clipboard
 completion/window content. Opt-in desktop tests exercise split/search/palette
-flows and tab session state. See `HACKING.md` for the test commands.
+flows and tab session state, plus titlebar geometry during fullscreen, tab moves,
+cross-window dragging and merging. See `HACKING.md` for the test commands.
 
 Baseline logs and final acceptance evidence belong in VALIDATION.md. Building or
 passing unit tests alone does not establish real input-method or UI acceptance.

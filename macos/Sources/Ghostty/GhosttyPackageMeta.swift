@@ -1,9 +1,7 @@
 import Foundation
 import os
 
-// This defines the minimal information required so all other files can do
-// `extension Ghostty` to add more to it. This purposely has minimal
-// dependencies so things like our dock tile plugin can use it.
+// Shared namespace and logging for the native application and its core bridge.
 enum Ghostty {
     // The primary logger used by the GhosttyKit libraries.
     nonisolated static let logger = Logger(

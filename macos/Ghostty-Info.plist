@@ -4,8 +4,6 @@
 <dict>
 	<key>NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac</key>
 	<true/>
-	<key>NSDockTilePlugIn</key>
-	<string>DockTilePlugin.plugin</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -19,7 +17,7 @@
 				<string>pl</string>
 			</array>
 			<key>CFBundleTypeIconFile</key>
-			<string>AppIcon.icns</string>
+			<string>cghostty.icns</string>
 			<key>CFBundleTypeName</key>
 			<string>Terminal scripts</string>
 			<key>CFBundleTypeRole</key>

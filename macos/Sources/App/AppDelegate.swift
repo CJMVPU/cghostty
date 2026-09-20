@@ -160,8 +160,6 @@ class AppDelegate: NSObject,
     /// Signals
     private var signals: [DispatchSourceSignal] = []
 
-    private let appIconUpdater = AppIconUpdater()
-
     @MainActor private lazy var menuShortcutManager = Ghostty.MenuShortcutManager()
 
     override init() {
@@ -270,16 +268,6 @@ class AppDelegate: NSObject,
             name: .terminalWindowBellDidChangeNotification,
             object: nil
         )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(ghosttyNewWindow(_:)),
-            name: Ghostty.Notification.ghosttyNewWindow,
-            object: nil)
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(ghosttyNewTab(_:)),
-            name: Ghostty.Notification.ghosttyNewTab,
-            object: nil)
 
         // Configure user notifications
         let actions = [
@@ -710,26 +698,6 @@ class AppDelegate: NSObject,
         }
     }
 
-    @objc private func ghosttyNewWindow(_ notification: Notification) {
-        let configAny = notification.userInfo?[Ghostty.Notification.NewSurfaceConfigKey]
-        let config = configAny as? Ghostty.SurfaceConfiguration
-        _ = TerminalController.newWindow(ghostty, withBaseConfig: config)
-    }
-
-    @objc private func ghosttyNewTab(_ notification: Notification) {
-        guard let surfaceView = notification.object as? Ghostty.SurfaceView else { return }
-        guard let window = surfaceView.window else { return }
-
-        // We only want to listen to new tabs if the focused parent is
-        // a regular terminal controller.
-        guard window.windowController is TerminalController else { return }
-
-        let configAny = notification.userInfo?[Ghostty.Notification.NewSurfaceConfigKey]
-        let config = configAny as? Ghostty.SurfaceConfiguration
-
-        _ = TerminalController.newTab(ghostty, from: window, withBaseConfig: config)
-    }
-
     private func setDockBadge() {
         let bellCount = NSApp.windows
             .compactMap { $0.windowController as? BaseTerminalController }
@@ -805,18 +773,11 @@ class AppDelegate: NSObject,
             GlobalEventTap.shared.disable()
         }
 
-        updateAppIcon(from: config)
     }
 
     /// Sync the appearance of our app with the theme specified in the config.
     private func syncAppearance(config: Ghostty.Config) {
         NSApplication.shared.appearance = .init(ghosttyConfig: config)
-    }
-
-    private func updateAppIcon(from config: Ghostty.Config) {
-        Task.detached {
-            await self.appIconUpdater.update(icon: AppIcon(config: config))
-        }
     }
 
     // MARK: - Restorable State

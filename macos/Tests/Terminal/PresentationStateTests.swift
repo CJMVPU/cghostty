@@ -158,9 +158,92 @@ import Testing
         controller.close()
     }
 
+    @Test func coreCommandsReachOnlyTheOwningWindow() async throws {
+        let app = Ghostty.App(configPath: "/dev/null")
+        let core = try #require(app.app)
+        let first = Ghostty.SurfaceView(core, baseConfig: isolatedSurfaceConfiguration)
+        let second = Ghostty.SurfaceView(core, baseConfig: isolatedSurfaceConfiguration)
+        let owner = CommandWindowController(app, surfaceTree: .init(view: first))
+        let other = CommandWindowController(app, surfaceTree: .init(view: second))
+        #expect(first.window == nil)
+        #expect(try binding("close_window", on: first))
+        #expect(owner.closeRequests == 1)
+        #expect(other.closeRequests == 0)
+        #expect(try binding("toggle_command_palette", on: first))
+        #expect(owner.commandPaletteIsShowing)
+        #expect(!other.commandPaletteIsShowing)
+        await drainMainQueue()
+        withExtendedLifetime(app) {}
+    }
+
+    @Test func splitCommandsWorkWhileSurfaceIsDetached() async throws {
+        let app = Ghostty.App(configPath: "/dev/null")
+        let surface = Ghostty.SurfaceView(try #require(app.app), baseConfig: isolatedSurfaceConfiguration)
+        let controller = CommandWindowController(app, surfaceTree: .init(view: surface))
+        #expect(try binding("new_split:right", on: surface))
+        #expect(controller.surfaceTree.isSplit)
+        let sibling = try #require(controller.surfaceTree.first(where: { $0 !== surface }))
+        #expect(BaseTerminalController.controller(owning: sibling) === controller)
+        #expect(try binding("toggle_split_zoom", on: surface))
+        #expect(controller.surfaceTree.zoomed == controller.surfaceTree.root?.node(view: surface))
+        #expect(try binding("goto_split:right", on: surface))
+        #expect(controller.surfaceTree.zoomed == nil)
+        #expect(try binding("equalize_splits", on: surface))
+        if case .split(let split) = controller.surfaceTree.root {
+            #expect(split.ratio == 0.5)
+        } else {
+            Issue.record("Expected a split tree")
+        }
+        controller.closeSurface(sibling, withConfirmation: false)
+        #expect(!controller.surfaceTree.isSplit)
+        #expect(controller.surfaceTree.first === surface)
+        #expect(BaseTerminalController.controller(owning: sibling) == nil)
+        await drainMainQueue()
+        withExtendedLifetime(app) {}
+    }
+
+    @Test func commandsFollowSurfaceOwnershipAfterMovingBetweenWindows() async throws {
+        let app = Ghostty.App(configPath: "/dev/null")
+        let core = try #require(app.app)
+        let moving = Ghostty.SurfaceView(core, baseConfig: isolatedSurfaceConfiguration)
+        let other = Ghostty.SurfaceView(core, baseConfig: isolatedSurfaceConfiguration)
+        let source = CommandWindowController(app, surfaceTree: .init(view: moving))
+        let destination = CommandWindowController(app, surfaceTree: .init(view: other))
+        source.surfaceTree = .init()
+        destination.surfaceTree = try destination.surfaceTree.inserting(view: moving, at: other, direction: .right)
+        #expect(BaseTerminalController.controller(owning: moving) === destination)
+        #expect(try binding("close_window", on: moving))
+        #expect(source.closeRequests == 0)
+        #expect(destination.closeRequests == 1)
+        // A stale controller cannot mutate the moved surface.
+        source.closeSurface(moving, withConfirmation: false)
+        #expect(destination.surfaceTree.contains(moving))
+        Ghostty.App.closeSurface(Unmanaged.passUnretained(moving).toOpaque(), processAlive: false)
+        #expect(!destination.surfaceTree.contains(moving))
+        #expect(destination.surfaceTree.contains(other))
+        await drainMainQueue()
+        withExtendedLifetime(app) {}
+    }
+
+    private func binding(_ action: String, on surface: Ghostty.SurfaceView) throws -> Bool {
+        let core = try #require(surface.surface)
+        return ghostty_surface_binding_action(core, action, UInt(action.utf8.count))
+    }
+
     private func drainMainQueue() async {
         await withCheckedContinuation { continuation in
             DispatchQueue.main.async { continuation.resume() }
         }
+    }
+}
+
+private class CommandWindowController: BaseTerminalController {
+    // The test's short-lived core must not leave surfaces in the host app's undo stack.
+    override var undoManager: ExpiringUndoManager? { nil }
+
+    var closeRequests = 0
+
+    override func closeWindow(_ sender: Any) {
+        closeRequests += 1
     }
 }

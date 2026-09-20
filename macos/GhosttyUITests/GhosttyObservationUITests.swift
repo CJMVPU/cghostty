@@ -11,6 +11,8 @@ final class GhosttyObservationUITests: GhosttyCustomConfigCase {
         shell-integration = none
         confirm-close-surface = false
         macos-titlebar-style = tabs
+        keybind = ctrl+alt+shift+m=move_tab:-1
+        keybind = ctrl+alt+shift+b=move_tab:1
         """)
     }
 
@@ -73,6 +75,27 @@ final class GhosttyObservationUITests: GhosttyCustomConfigCase {
         XCTAssertTrue(app.windows.firstMatch.wait(for: \.title, toEqual: "First session", timeout: 5))
         app.groups["Terminal pane"].firstMatch.typeKey("2", modifierFlags: .command)
         XCTAssertTrue(app.windows.firstMatch.wait(for: \.title, toEqual: "Second session", timeout: 5))
+
+        // Reorder both directions repeatedly without detaching either session.
+        for _ in 0..<3 {
+            app.windows.firstMatch.typeKey("m", modifierFlags: [.control, .option, .shift])
+            app.windows.firstMatch.typeKey("1", modifierFlags: .command)
+            XCTAssertTrue(app.windows.firstMatch.wait(for: \.title, toEqual: "Second session", timeout: 5))
+            app.windows.firstMatch.typeKey("b", modifierFlags: [.control, .option, .shift])
+            app.windows.firstMatch.typeKey("2", modifierFlags: .command)
+            XCTAssertTrue(app.windows.firstMatch.wait(for: \.title, toEqual: "Second session", timeout: 5))
+        }
+        app.windows.firstMatch.typeKey("w", modifierFlags: .command)
+        XCTAssertTrue(app.windows.firstMatch.wait(for: \.title, toEqual: "First session", timeout: 5))
+        XCTAssertEqual(app.textViews.count, 1)
+
+        app.windows.firstMatch.typeKey("n", modifierFlags: .command)
+        XCTAssertTrue(app.wait(for: \.windows.count, toEqual: 2, timeout: 5))
+        paste("printf '\\033]0;Separate window\\007'\n", into: app.windows.firstMatch, app: app)
+        XCTAssertTrue(app.windows.firstMatch.wait(for: \.title, toEqual: "Separate window", timeout: 5))
+        app.windows.firstMatch.typeKey("w", modifierFlags: [.command, .shift])
+        XCTAssertTrue(app.wait(for: \.windows.count, toEqual: 1, timeout: 5))
+        XCTAssertTrue(app.windows.firstMatch.wait(for: \.title, toEqual: "First session", timeout: 5))
     }
 
     /// Keep text literal regardless of the active input method, and restore

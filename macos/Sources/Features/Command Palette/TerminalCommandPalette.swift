@@ -127,10 +127,7 @@ struct TerminalCommandPaletteView: View {
                     leadingColor: displayColor?.displayColor.map { Color($0) },
                     sortKey: ObjectIdentifier(surface)
                 ) {
-                    NotificationCenter.default.post(
-                        name: Ghostty.Notification.ghosttyPresentTerminal,
-                        object: surface
-                    )
+                    BaseTerminalController.controller(owning: surface)?.presentTerminal(surface)
                 }
             }
         }

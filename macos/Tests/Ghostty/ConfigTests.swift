@@ -126,16 +126,6 @@ struct ConfigTests {
         #expect(config.resizeOverlayPosition == .center)
     }
 
-    @Test func macosIconDefaultsToOfficial() throws {
-        let config = try TemporaryConfig("")
-        #expect(config.macosIcon == .official)
-    }
-
-    @Test func macosIconFrameDefaultsToAluminum() throws {
-        let config = try TemporaryConfig("")
-        #expect(config.macosIconFrame == .aluminum)
-    }
-
     @Test func macosWindowButtonsDefaultsToVisible() throws {
         let config = try TemporaryConfig("")
         #expect(config.macosWindowButtons == .visible)
@@ -202,6 +192,15 @@ struct ConfigTests {
     @Test func errorsReportedForInvalidConfig() throws {
         let config = try TemporaryConfig("not-a-real-key = value")
         #expect(!config.errors.isEmpty)
+    }
+
+    @Test func diagnosticsAreReplacedAfterReload() throws {
+        let config = try TemporaryConfig("not-a-real-key = value")
+        #expect(config.errors.count == 1)
+        #expect(config.errors[0].contains("not-a-real-key"))
+        try config.reload("title = Valid configuration")
+        #expect(config.errors.isEmpty)
+        #expect(config.title == "Valid configuration")
     }
 
     // MARK: - Multiple Config Lines

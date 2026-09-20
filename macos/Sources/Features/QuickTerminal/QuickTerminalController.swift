@@ -67,24 +67,8 @@ class QuickTerminalController: BaseTerminalController {
             object: nil)
         center.addObserver(
             self,
-            selector: #selector(onToggleFullscreen(notification:)),
-            name: Ghostty.Notification.ghosttyToggleFullscreen,
-            object: nil)
-        center.addObserver(
-            self,
             selector: #selector(ghosttyConfigDidChange(_:)),
             name: .ghosttyConfigDidChange,
-            object: nil)
-        center.addObserver(
-            self,
-            selector: #selector(closeWindow(_:)),
-            name: .ghosttyCloseWindow,
-            object: nil
-        )
-        center.addObserver(
-            self,
-            selector: #selector(onNewTab),
-            name: Ghostty.Notification.ghosttyNewTab,
             object: nil)
         center.addObserver(
             self,
@@ -688,8 +672,7 @@ class QuickTerminalController: BaseTerminalController {
         hiddenDock = nil
     }
 
-    @objc private func onToggleFullscreen(notification: SwiftUI.Notification) {
-        guard let target = notification.object as? Ghostty.SurfaceView else { return }
+    override func requestFullscreen(from target: Ghostty.SurfaceView, mode: FullscreenMode) {
         guard target == self.focusedSurface else { return }
         onToggleFullscreen()
     }
@@ -734,11 +717,8 @@ class QuickTerminalController: BaseTerminalController {
         terminalViewContainer?.ghosttyConfigDidChange(config, preferredBackgroundColor: nil)
     }
 
-    @objc private func onNewTab(notification: SwiftUI.Notification) {
-        guard let surfaceView = notification.object as? Ghostty.SurfaceView else { return }
-        guard let window = surfaceView.window else { return }
-        guard window.windowController is QuickTerminalController else { return }
-        // Tabs aren't supported with Quick Terminals or derivatives
+    override func requestNewTab(from target: Ghostty.SurfaceView, baseConfig: Ghostty.SurfaceConfiguration) {
+        guard surfaceTree.contains(target) else { return }
         showNoNewTabAlert()
     }
 

@@ -1,3 +1,28 @@
+## 0.1.3 原生标签栏布局重构与发布前验证（2026-09-20）
+
+- `NativeTitlebarTabLayout` 统一持有定位原生标签附件的 8 条约束；调整窗口尺寸时复用，在附件转移、关闭、脱离窗口或工具栏临时零尺寸时解除，并恢复 AppKit 原有 autoresizing 行为。帧变化在主队列合并处理，不使用轮询或固定等待。
+- 标签排序直接使用 `NSWindowTabGroup.insertWindow`，删除先拆组再重建的分支和临时 workaround，保留选中标签及焦点。原生标签行按添加按钮的实际尺寸稳定高度；独立窗口的分屏缩放按钮由工具栏布局，避免硬编码顶部间距造成标题和按钮错位。
+- 首次扩展几何验证发现标签高度反馈变化和缩放按钮对齐问题；修正实现后，保留原有 1 像素容差重新验证通过，没有通过放宽断言掩盖问题。包含普通窗口、全屏、跨窗口拖动、三窗口合并，以及连续三轮左右排序后的会话状态。
+- 最终完整原生测试 **242 项通过、1 项跳过、0 项失败**，参数化展开后 361 次执行通过；跳过的是现有 Benchmarks 示例。桌面交互 **2/2**、标签栏几何 **5/5** 通过；三份结果包的 `runtimeWarnings` 均为空，之前移动标签出现的 7 条布局警告没有重现。
+- 结果包：`/private/tmp/cghostty-013-native.xcresult`、`/private/tmp/cghostty-013-ui.xcresult`、`/private/tmp/cghostty-013-geometry.xcresult`；对应 `-summary.json` 保存精确测试数量。仍不将这些流程等同于所有输入法和系统恢复场景的穷举验收。
+- 最终严格 SwiftLint 检查 **178 个文件、0 个问题**；Zig 格式、依赖版本记录、Swift 6、源码范围、actionlint 和 diff 空白检查通过。核心和 IO 的清理验证见下节，本次布局改动没有改变 Zig 核心行为。
+- 从新的目录完整构建 ReleaseLocal **成功，构建日志无 warning/error**。最终应用版本 `0.1.3`、构建号 `3`，最低 macOS `27.0`、主程序仅 arm64，资源和 ad-hoc 签名检查通过；本地 ZIP 完整性校验通过。
+- 本地应用：`/private/tmp/cghostty-013-release/ReleaseLocal/cghostty.app`；本地验证包：`/private/tmp/cghostty-013-package/cghostty-0.1.3-macos-arm64.zip`。日志：`/private/tmp/cghostty-013-release.log`、`/private/tmp/cghostty-013-scope.log`、`/private/tmp/cghostty-013-swiftlint.log`。本地 ZIP SHA-256 为 `ffda01dcebd0ba67f06bc65589a9d7135749a8c0f1f5d040734a7315b449c8cf`；远程 CI 会重新构建，正式下载请以 Release 附带的校验文件为准。
+- 版本记录、打包示例和发行说明同步为 0.1.3。发行继续使用 ad-hoc 签名，没有配置 Developer ID 或 Apple 公证；本次没有替换 `/Applications` 中的已安装应用。
+
+## 无调用代码、IO、窗口命令与图标设施清理（2026-09-20）
+
+- 删除无调用的 Swift 视图包装、调试视图树打印、字符串截断和旧图标辅助代码。终端 IO 直接使用 `Exec` 与其线程数据，删除只有 `exec` 一个分支的 backend 联合类型、转发方法及空的配置更新调用。
+- 配置诊断统一读取；XDG 和 Application Support 的新旧文件选择共用一份实现。保留新文件优先、旧文件后备、两者不存在时返回新路径，以及延迟解析旧路径的语义。新增配置错误在有效重载后清空的行为测试。
+- 内部窗口、标签、分屏、命令面板和全屏命令复用现有 Surface 所有权查找，直接调用控制器方法，删除 19 个通知名称及字典参数。保留焦点要求、配置继承、关闭确认和快速终端差异；关闭普通窗口不再广播给快速终端。
+- 新增核心调用到所属控制器、脱离窗口的分屏操作、跨窗口移动后归属三个行为测试。测试夹具不使用宿主应用的全局撤销栈，避免临时核心结束后仍被撤销记录持有 Surface；排空主队列后再释放临时 App。
+- 整套备用/自定义图标设施已移除：Swift 实现、Dock 插件目标和嵌入/签名步骤、五个配置字段、专属颜色列表 C 桥接、图层合成、专属测试，以及 36 个资源文件（5,592,453 字节）。没有新增长期维护的“旧图标不存在”检查。固定图标使用用户确认的暗银纹理、圆角与右上光照版本；文档图标引用同步到实际生成的 `cghostty.icns`。
+- 核心相关验证 **1,361 项通过、1 项跳过**；最后的 IO 错误分支简化后，Command/termio 定向验证 **133/133 通过**。日志：`/private/tmp/cghostty-cleanup3-core-final.log`、`/private/tmp/cghostty-cleanup3-io-final.log`。
+- 完整原生测试 **240 项通过、1 项跳过、0 项失败**；参数化展开后通过 359 次执行，运行时警告为 0。结果：`/private/tmp/cghostty-cleanup3-native-v4.xcresult`；摘要：`/private/tmp/cghostty-cleanup3-native-v4-summary.json`。
+- 桌面测试 **2/2 通过、0 项跳过**：分屏、搜索、命令面板后的输入、标签切换/移动/关闭，以及独立窗口创建/关闭后保留原会话。结果：`/private/tmp/cghostty-cleanup3-ui.xcresult`。新增的标签移动流程记录 **7 条 AppKit 标签栏约束警告**，涉及原生标签栏临时零尺寸；功能断言通过。本轮未修改该布局实现，不能将桌面结果描述为零警告，也未据此宣称全部全屏、输入法与恢复场景均经过验收。
+- 使用新的临时构建目录执行完整 ReleaseLocal 构建，随后对最终源码执行增量确认。最终构建日志无编译警告或错误，严格 SwiftLint 检查改动的 18 个 Swift 文件无问题。macOS/arm64、实际应用资源及签名检查通过；一次性检查产物的插件目录和 Info.plist，确认 Dock 插件不再嵌入。Swift 6 检查覆盖剩余 3 个 target 的 9 个配置，Xcode 工程无悬空对象引用。日志：`/private/tmp/cghostty-cleanup3-release-final.log`、`/private/tmp/cghostty-cleanup3-scope-final.log`。
+- 验证应用：`/private/tmp/cghostty-cleanup3-release/ReleaseLocal/cghostty.app`；本地验证包：`/private/tmp/cghostty-cleanup3-package/cghostty-0.1.2-macos-arm64.zip`。沿用当前源码版本号和 ad-hoc 签名，本轮不代表新版本发布或已安装应用更新。
+
 # 本地交付验证
 
 日期：2026-09-20。环境：Apple Silicon macOS 27.0（26A428）、Zig 0.16.0、Xcode 27、Nushell 0.115.1、SwiftLint 0.65.1。

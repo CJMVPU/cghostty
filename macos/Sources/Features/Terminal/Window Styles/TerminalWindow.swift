@@ -23,9 +23,6 @@ class TerminalWindow: NSWindow {
     /// Reset split zoom button in titlebar
     private let resetZoomAccessory = NSTitlebarAccessoryViewController()
 
-    /// Update notification UI in titlebar
-    private let updateAccessory = NSTitlebarAccessoryViewController()
-
     /// Visual indicator that mirrors the selected tab color.
     private lazy var tabColorIndicator: NSHostingView<TabColorIndicatorView> = {
         let view = NSHostingView(rootView: TabColorIndicatorView(tabColor: tabColor))
@@ -63,16 +60,17 @@ class TerminalWindow: NSWindow {
         }
     }
 
-    // MARK: NSWindow Overrides
+    /// Titlebar-tab windows place controls in their native toolbar row.
+    var usesToolbarForAccessories: Bool { false }
 
-    override var toolbar: NSToolbar? {
-        didSet {
-            DispatchQueue.main.async {
-                // When we have a toolbar, our SwiftUI view needs to know for layout
-                self.viewModel.hasToolbar = self.toolbar != nil
-            }
-        }
+    func makeResetZoomView(inToolbar: Bool = false) -> NSView {
+        NSHostingView(rootView: ResetZoomAccessoryView(viewModel: viewModel, inToolbar: inToolbar) { [weak self] in
+            guard let self else { return }
+            self.terminalController?.splitZoom(self)
+        })
     }
+
+    // MARK: NSWindow Overrides
 
     nonisolated override func awakeFromNib() {
         MainActor.assumeIsolated { configureAfterLoading() }
@@ -133,18 +131,11 @@ class TerminalWindow: NSWindow {
 
         // Create our reset zoom titlebar accessory. We have to have a title
         // to do this or AppKit triggers an assertion.
-        if styleMask.contains(.titled) {
+        if styleMask.contains(.titled) && !usesToolbarForAccessories {
             resetZoomAccessory.layoutAttribute = .right
-            resetZoomAccessory.view = NSHostingView(rootView: ResetZoomAccessoryView(
-                viewModel: viewModel,
-                action: { [weak self] in
-                    guard let self else { return }
-                    self.terminalController?.splitZoom(self)
-                }))
+            resetZoomAccessory.view = makeResetZoomView()
             addTitlebarAccessoryViewController(resetZoomAccessory)
             resetZoomAccessory.view.translatesAutoresizingMaskIntoConstraints = false
-
-            // Create update notification accessory
 
         }
 
@@ -295,6 +286,7 @@ class TerminalWindow: NSWindow {
     }
 
     private func tabBarDidAppear() {
+        viewModel.hasTabBar = true
         // Remove our reset zoom accessory. For some reason having a SwiftUI
         // titlebar accessory causes our content view scaling to be wrong.
         // Removing it fixes it, we just need to remember to add it again later.
@@ -302,12 +294,11 @@ class TerminalWindow: NSWindow {
             removeTitlebarAccessoryViewController(at: idx)
         }
 
-        // We don't need to do this with the update accessory. I don't know why but
-        // everything works fine.
     }
 
     private func tabBarDidDisappear() {
-        if styleMask.contains(.titled) {
+        viewModel.hasTabBar = false
+        if styleMask.contains(.titled) && !usesToolbarForAccessories {
             if titlebarAccessoryViewControllers.firstIndex(of: resetZoomAccessory) == nil {
                 addTitlebarAccessoryViewController(resetZoomAccessory)
             }
@@ -672,22 +663,19 @@ class TerminalWindow: NSWindow {
 extension TerminalWindow {
     @MainActor @Observable final class ViewModel {
         var isSurfaceZoomed: Bool = false
-        var hasToolbar: Bool = false
+        var hasTabBar: Bool = false
         var isMainWindow: Bool = true
 
-        /// Calculates the top padding based on toolbar visibility
-        fileprivate var accessoryTopPadding: CGFloat {
-            return hasToolbar ? 10 : 5
-        }
     }
 
     struct ResetZoomAccessoryView: View {
         let viewModel: ViewModel
+        var inToolbar = false
         let action: () -> Void
 
         var body: some View {
-            if viewModel.isSurfaceZoomed {
-                VStack {
+            Group {
+                if viewModel.isSurfaceZoomed && (!inToolbar || !viewModel.hasTabBar) {
                     Button(action: action) {
                         Image("ResetZoom")
                             .foregroundColor(viewModel.isMainWindow ? .accentColor : .secondary)
@@ -695,18 +683,15 @@ extension TerminalWindow {
                     .buttonStyle(.plain)
                     .help("Reset Split Zoom")
                     .frame(width: 20, height: 20)
-                    Spacer()
+                } else if inToolbar {
+                    // Keep a stable toolbar item size while split zoom changes.
+                    Color.clear.frame(width: 20, height: 20)
                 }
-                // With a toolbar, the window title is taller, so we need more padding
-                // to properly align.
-                .padding(.top, viewModel.accessoryTopPadding)
-                // We always need space at the end of the titlebar
-                .padding(.trailing, 10)
             }
+            .padding(.top, inToolbar ? 0 : 5)
+            .padding(.trailing, inToolbar ? 0 : 10)
         }
     }
-
-    /// A pill-shaped button that displays update status and provides access to update actions.
 
 }
 

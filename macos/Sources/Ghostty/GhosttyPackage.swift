@@ -292,25 +292,6 @@ extension Notification.Name {
     static let ghosttyColorDidChange = Notification.Name("com.cjmvpu.cghostty.ghosttyColorDidChange")
     static let GhosttyColorChangeKey = ghosttyColorDidChange.rawValue
 
-    /// Goto tab. Has tab index in the userinfo.
-    static let ghosttyMoveTab = Notification.Name("com.cjmvpu.cghostty.moveTab")
-    static let GhosttyMoveTabKey = ghosttyMoveTab.rawValue
-
-    /// Close tab
-    static let ghosttyCloseTab = Notification.Name("com.cjmvpu.cghostty.closeTab")
-
-    /// Close other tabs
-    static let ghosttyCloseOtherTabs = Notification.Name("com.cjmvpu.cghostty.closeOtherTabs")
-
-    /// Close tabs to the right of the focused tab
-    static let ghosttyCloseTabsOnTheRight = Notification.Name("com.cjmvpu.cghostty.closeTabsOnTheRight")
-
-    /// Close window
-    static let ghosttyCloseWindow = Notification.Name("com.cjmvpu.cghostty.closeWindow")
-
-    /// Resize the window to a default size.
-    static let ghosttyResetWindowSize = Notification.Name("com.cjmvpu.cghostty.resetWindowSize")
-
     /// Ring the bell
     static let ghosttyBellDidRing = Notification.Name("com.cjmvpu.cghostty.ghosttyBellDidRing")
 
@@ -320,10 +301,6 @@ extension Notification.Name {
     /// Readonly mode changed
     static let ghosttyDidChangeReadonly = Notification.Name("com.cjmvpu.cghostty.didChangeReadonly")
     static let ReadonlyKey = ghosttyDidChangeReadonly.rawValue + ".readonly"
-    static let ghosttyCommandPaletteDidToggle = Notification.Name("com.cjmvpu.cghostty.commandPaletteDidToggle")
-
-    /// Toggle maximize of current window
-    static let ghosttyMaximizeDidToggle = Notification.Name("com.cjmvpu.cghostty.maximizeDidToggle")
 
     /// Notification sent when scrollbar updates
     nonisolated static let ghosttyDidUpdateScrollbar = Notification.Name("com.cjmvpu.cghostty.didUpdateScrollbar")
@@ -336,39 +313,6 @@ extension Notification.Name {
 // NOTE: I am moving all of these to Notification.Name extensions over time. This
 // namespace was the old namespace.
 extension Ghostty.Notification {
-    /// Used to pass a configuration along when creating a new tab/window/split.
-    static let NewSurfaceConfigKey = "com.cjmvpu.cghostty.newSurfaceConfig"
-
-    /// Posted when a new split is requested. The sending object will be the surface that had focus. The
-    /// userdata has one key "direction" with the direction to split to.
-    static let ghosttyNewSplit = Notification.Name("com.cjmvpu.cghostty.newSplit")
-
-    /// Close the calling surface.
-    static let ghosttyCloseSurface = Notification.Name("com.cjmvpu.cghostty.closeSurface")
-
-    /// Focus previous/next split. Has a SplitFocusDirection in the userinfo.
-    static let ghosttyFocusSplit = Notification.Name("com.cjmvpu.cghostty.focusSplit")
-    static let SplitDirectionKey = ghosttyFocusSplit.rawValue
-
-    /// Goto tab. Has tab index in the userinfo.
-    static let ghosttyGotoTab = Notification.Name("com.cjmvpu.cghostty.gotoTab")
-    static let GotoTabKey = ghosttyGotoTab.rawValue
-
-    /// New tab. Has base surface config requested in userinfo.
-    static let ghosttyNewTab = Notification.Name("com.cjmvpu.cghostty.newTab")
-
-    /// New window. Has base surface config requested in userinfo.
-    static let ghosttyNewWindow = Notification.Name("com.cjmvpu.cghostty.newWindow")
-
-    /// Present terminal. Bring the surface's window to focus without activating the app.
-    static let ghosttyPresentTerminal = Notification.Name("com.cjmvpu.cghostty.presentTerminal")
-
-    /// Toggle fullscreen of current window
-    static let ghosttyToggleFullscreen = Notification.Name("com.cjmvpu.cghostty.toggleFullscreen")
-    static let FullscreenModeKey = ghosttyToggleFullscreen.rawValue
-
-    /// Notification sent to toggle split maximize/unmaximize.
-    static let didToggleSplitZoom = Notification.Name("com.cjmvpu.cghostty.didToggleSplitZoom")
 
     /// Notification
     static let didReceiveInitialWindowFrame = Notification.Name("com.cjmvpu.cghostty.didReceiveInitialWindowFrame")
@@ -379,14 +323,6 @@ extension Ghostty.Notification {
 
     /// Notification to show/hide the inspector
     static let didControlInspector = Notification.Name("com.cjmvpu.cghostty.didControlInspector")
-
-    /// Notification sent to the active split view to resize the split.
-    static let didResizeSplit = Notification.Name("com.cjmvpu.cghostty.didResizeSplit")
-    static let ResizeSplitDirectionKey = didResizeSplit.rawValue + ".direction"
-    static let ResizeSplitAmountKey = didResizeSplit.rawValue + ".amount"
-
-    /// Notification sent to the split root to equalize split sizes
-    static let didEqualizeSplits = Notification.Name("com.cjmvpu.cghostty.didEqualizeSplits")
 
     /// Notification that renderer health changed
     static let didUpdateRendererHealth = Notification.Name("com.cjmvpu.cghostty.didUpdateRendererHealth")

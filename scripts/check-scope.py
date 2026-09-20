@@ -82,7 +82,7 @@ if args.app:
     check(info['CFBundleExecutable'] == 'cghostty', 'Executable name mismatch')
     check(info['LSMinimumSystemVersion'] == '27.0', 'App must require macOS 27')
     check('SUFeedURL' not in info and 'SUPublicEDKey' not in info, 'Upstream updater metadata remains')
-    executables = [app / 'Contents/MacOS/cghostty', app / 'Contents/PlugIns/DockTilePlugin.plugin/Contents/MacOS/DockTilePlugin']
+    executables = [app / 'Contents/MacOS/cghostty']
     for binary in executables:
         arch = subprocess.check_output(['lipo', '-archs', str(binary)], text=True).strip()
         check(arch == 'arm64', f'{binary} has unexpected architecture: {arch}')

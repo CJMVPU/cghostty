@@ -14,7 +14,6 @@ output_dir="$(cd "$output_dir" && pwd)"
 archive="$output_dir/cghostty-$version-macos-arm64.zip"
 # Optional Developer ID distribution. Certificates/profile must already exist in the user's keychain.
 if [[ -n "${CGHOSTTY_SIGN_IDENTITY:-}" ]]; then
-    codesign --force --options runtime --timestamp --sign "$CGHOSTTY_SIGN_IDENTITY" "$app/Contents/PlugIns/DockTilePlugin.plugin"
     codesign --force --options runtime --timestamp --entitlements "$repo_dir/macos/Ghostty.entitlements" --sign "$CGHOSTTY_SIGN_IDENTITY" "$app"
 fi
 codesign --verify --deep --strict "$app"

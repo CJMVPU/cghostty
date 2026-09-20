@@ -76,42 +76,6 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         let center = NotificationCenter.default
         center.addObserver(
             self,
-            selector: #selector(onToggleFullscreen),
-            name: Ghostty.Notification.ghosttyToggleFullscreen,
-            object: nil)
-        center.addObserver(
-            self,
-            selector: #selector(onMoveTab),
-            name: .ghosttyMoveTab,
-            object: nil)
-        center.addObserver(
-            self,
-            selector: #selector(onGotoTab),
-            name: Ghostty.Notification.ghosttyGotoTab,
-            object: nil)
-        center.addObserver(
-            self,
-            selector: #selector(onCloseTab),
-            name: .ghosttyCloseTab,
-            object: nil)
-        center.addObserver(
-            self,
-            selector: #selector(onCloseOtherTabs),
-            name: .ghosttyCloseOtherTabs,
-            object: nil)
-        center.addObserver(
-            self,
-            selector: #selector(onCloseTabsOnTheRight),
-            name: .ghosttyCloseTabsOnTheRight,
-            object: nil)
-        center.addObserver(
-            self,
-            selector: #selector(onResetWindowSize),
-            name: .ghosttyResetWindowSize,
-            object: nil
-        )
-        center.addObserver(
-            self,
             selector: #selector(ghosttyConfigDidChange(_:)),
             name: .ghosttyConfigDidChange,
             object: nil
@@ -121,12 +85,6 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
             selector: #selector(onFrameDidChange),
             name: NSView.frameDidChangeNotification,
             object: nil)
-        center.addObserver(
-            self,
-            selector: #selector(onCloseWindow),
-            name: .ghosttyCloseWindow,
-            object: nil
-        )
     }
 
     required init?(coder: NSCoder) {
@@ -1493,15 +1451,17 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         }
     }
 
-    // MARK: - Notifications
+    override func requestNewTab(from target: Ghostty.SurfaceView, baseConfig: Ghostty.SurfaceConfiguration) {
+        guard surfaceTree.contains(target), let window else { return }
+        _ = Self.newTab(ghostty, from: window, withBaseConfig: baseConfig)
+    }
 
-    @objc private func onMoveTab(notification: SwiftUI.Notification) {
-        guard let target = notification.object as? Ghostty.SurfaceView else { return }
+    // MARK: - Window commands
+
+    func moveTab(from target: Ghostty.SurfaceView, action: Ghostty.Action.MoveTab) {
         guard target == self.focusedSurface else { return }
         guard let window = self.window else { return }
 
-        // Get the move action
-        guard let action = notification.userInfo?[Notification.Name.GhosttyMoveTabKey] as? Ghostty.Action.MoveTab else { return }
         guard action.amount != 0 else { return }
 
         // Determine our current selected index
@@ -1524,47 +1484,18 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         // If our index is the same we do nothing
         guard finalIndex != selectedIndex else { return }
 
-        // Get our target window
-        let targetWindow = tabbedWindows[finalIndex]
-
-        // Moving tabs on macOS 26 RC causes very nasty visual glitches in the titlebar tabs.
-        // I believe this is due to messed up constraints for our hacky tab bar. I'd like to
-        // find a better workaround. For now, this improves things dramatically.
-        //
-        // Reproduction: titlebar tabs, create two tabs, "move tab left"
-        if window is TitlebarTabsTahoeTerminalWindow {
-            tabGroup.removeWindow(selectedWindow)
-            targetWindow.addTabbedWindowSafely(selectedWindow, ordered: action.amount < 0 ? .below : .above)
-            DispatchQueue.main.async {
-                selectedWindow.makeKey()
-            }
-
-            return
-        }
-
-        // Begin a group of window operations to minimize visual updates
-        NSAnimationContext.beginGrouping()
-        NSAnimationContext.current.duration = 0
-
-        // Remove and re-add the window in the correct position
-        tabGroup.removeWindow(selectedWindow)
-        targetWindow.addTabbedWindowSafely(selectedWindow, ordered: action.amount < 0 ? .below : .above)
-
-        // Ensure our window remains selected
+        // Let AppKit reorder the existing group in one operation. Explicitly
+        // removing the selected window first tears down a two-tab group's bar.
+        tabGroup.insertWindow(selectedWindow, at: finalIndex)
+        tabGroup.selectedWindow = selectedWindow
         selectedWindow.makeKey()
-
-        NSAnimationContext.endGrouping()
     }
 
-    @objc private func onGotoTab(notification: SwiftUI.Notification) {
-        guard let target = notification.object as? Ghostty.SurfaceView else { return }
+    func gotoTab(from target: Ghostty.SurfaceView, tab: ghostty_action_goto_tab_e) {
         guard target == self.focusedSurface else { return }
         guard let window = self.window else { return }
 
-        // Get the tab index from the notification
-        guard let tabEnumAny = notification.userInfo?[Ghostty.Notification.GotoTabKey] else { return }
-        guard let tabEnum = tabEnumAny as? ghostty_action_goto_tab_e else { return }
-        let tabIndex: Int32 = tabEnum.rawValue
+        let tabIndex: Int32 = tab.rawValue
 
         guard let windowController = window.windowController else { return }
         guard let tabGroup = windowController.window?.tabGroup else { return }
@@ -1606,53 +1537,6 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         guard finalIndex >= 0 else { return }
         let targetWindow = tabbedWindows[finalIndex]
         targetWindow.makeKeyAndOrderFront(nil)
-    }
-
-    @objc private func onCloseTab(notification: SwiftUI.Notification) {
-        guard let target = notification.object as? Ghostty.SurfaceView else { return }
-        guard surfaceTree.contains(target) else { return }
-        closeTab(self)
-    }
-
-    @objc private func onCloseOtherTabs(notification: SwiftUI.Notification) {
-        guard let target = notification.object as? Ghostty.SurfaceView else { return }
-        guard surfaceTree.contains(target) else { return }
-        closeOtherTabs(self)
-    }
-
-    @objc private func onCloseTabsOnTheRight(notification: SwiftUI.Notification) {
-        guard let target = notification.object as? Ghostty.SurfaceView else { return }
-        guard surfaceTree.contains(target) else { return }
-        closeTabsOnTheRight(self)
-    }
-
-    @objc private func onCloseWindow(notification: SwiftUI.Notification) {
-        guard let target = notification.object as? Ghostty.SurfaceView else { return }
-        guard surfaceTree.contains(target) else { return }
-        closeWindow(self)
-    }
-
-    @objc private func onResetWindowSize(notification: SwiftUI.Notification) {
-        guard let target = notification.object as? Ghostty.SurfaceView else { return }
-        guard surfaceTree.contains(target) else { return }
-        returnToDefaultSize(nil)
-    }
-
-    @objc private func onToggleFullscreen(notification: SwiftUI.Notification) {
-        guard let target = notification.object as? Ghostty.SurfaceView else { return }
-        guard target == self.focusedSurface else { return }
-
-        // Get the fullscreen mode we want to toggle
-        let fullscreenMode: FullscreenMode
-        if let any = notification.userInfo?[Ghostty.Notification.FullscreenModeKey],
-           let mode = any as? FullscreenMode {
-            fullscreenMode = mode
-        } else {
-            Ghostty.logger.warning("no fullscreen mode specified or invalid mode, doing nothing")
-            return
-        }
-
-        toggleFullscreen(mode: fullscreenMode)
     }
 
     struct DerivedConfig {

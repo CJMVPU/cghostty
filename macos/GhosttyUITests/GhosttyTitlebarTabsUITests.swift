@@ -14,6 +14,9 @@ final class GhosttyTitlebarTabsUITests: GhosttyCustomConfigCase {
         try updateConfig(
             """
             macos-titlebar-style = tabs
+            command = /bin/zsh -f
+            shell-integration = none
+            confirm-close-surface = false
             title = "GhosttyTitlebarTabsUITests"
             """
         )
@@ -21,8 +24,11 @@ final class GhosttyTitlebarTabsUITests: GhosttyCustomConfigCase {
 
     @MainActor
     func testCustomTitlebar() throws {
-        let app = try ghosttyApplication()
+        let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         app.launch()
+        app.activate()
+        defer { app.terminate() }
+        XCTAssertTrue(app.groups["Terminal pane"].firstMatch.waitForExistence(timeout: 10))
         // create a split
         app.groups["Terminal pane"].typeKey("d", modifierFlags: .command)
         app.typeKey("\n", modifierFlags: [.command, .shift])
@@ -35,8 +41,11 @@ final class GhosttyTitlebarTabsUITests: GhosttyCustomConfigCase {
 
     @MainActor
     func testTabsGeometryInNormalWindow() throws {
-        let app = try ghosttyApplication()
+        let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         app.launch()
+        app.activate()
+        defer { app.terminate() }
+        XCTAssertTrue(app.groups["Terminal pane"].firstMatch.waitForExistence(timeout: 10))
         app.groups["Terminal pane"].typeKey("t", modifierFlags: .command)
         XCTAssertEqual(app.tabs.count, 2, "There should be 2 tabs")
         checkTabsGeometry(app.windows.firstMatch)
@@ -44,8 +53,11 @@ final class GhosttyTitlebarTabsUITests: GhosttyCustomConfigCase {
 
     @MainActor
     func testTabsGeometryInFullscreen() throws {
-        let app = try ghosttyApplication()
+        let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         app.launch()
+        app.activate()
+        defer { app.terminate() }
+        XCTAssertTrue(app.groups["Terminal pane"].firstMatch.waitForExistence(timeout: 10))
         app.typeKey("f", modifierFlags: [.command, .control])
         // using app to type ⌘+t might not be able to create tabs
         app.groups["Terminal pane"].typeKey("t", modifierFlags: .command)
@@ -55,8 +67,11 @@ final class GhosttyTitlebarTabsUITests: GhosttyCustomConfigCase {
 
     @MainActor
     func testTabsGeometryAfterMovingTabs() throws {
-        let app = try ghosttyApplication()
+        let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         app.launch()
+        app.activate()
+        defer { app.terminate() }
+        XCTAssertTrue(app.groups["Terminal pane"].firstMatch.waitForExistence(timeout: 10))
         XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 1), "Main window should exist")
         // create another 2 tabs
         app.groups["Terminal pane"].typeKey("t", modifierFlags: .command)
@@ -93,8 +108,11 @@ final class GhosttyTitlebarTabsUITests: GhosttyCustomConfigCase {
 
     @MainActor
     func testTabsGeometryAfterMergingAllWindows() throws {
-        let app = try ghosttyApplication()
+        let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         app.launch()
+        app.activate()
+        defer { app.terminate() }
+        XCTAssertTrue(app.groups["Terminal pane"].firstMatch.waitForExistence(timeout: 10))
         XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 1), "Main window should exist")
 
         // create another 2 windows

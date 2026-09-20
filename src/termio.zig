@@ -1,32 +1,19 @@
-//! Termio is responsible for "terminal IO." Specifically, this is the
-//! reading and writing of bytes for the underlying pty or pty-like device.
+//! Terminal IO connects the macOS subprocess and PTY to the terminal state.
 //!
-//! Termio is constructed of a few components:
-//!   - Termio - The main shared struct that has common logic across all
-//!     backends and mailboxes (defined below).
-//!   - Backend - Responsible for the actual physical IO. For example, one
-//!     implementation creates a subprocess, allocates and assigns a pty,
-//!     and sets up a read thread on the pty.
-//!   - Mailbox - Responsible for storing/dispensing event messages to
-//!     the backend. This exists separately from backends because termio
-//!     is built to be both single and multi-threaded.
-//!
-//! Termio supports (and recommends) multi-threaded operation. Multi-threading
-//! enables the read/writes to generally happen on separate threads and
-//! almost always improves throughput and latency under heavy IO load. To
-//! enable threading, use the Thread struct. This wraps a Termio, requires
-//! specific backend/mailbox capabilities, and sets up the necessary threads.
+//! - Termio owns the terminal stream handler and coordinates IO state.
+//! - Exec launches the subprocess, owns its PTY and handles reads and writes.
+//! - Mailbox carries input, resize and configuration messages to the IO thread.
+//! - Thread runs Termio's event loop; Exec's gather and read threads drain PTY
+//!   output without blocking terminal input or rendering.
 
 const stream_handler = @import("termio/stream_handler.zig");
 
 const message = @import("termio/message.zig");
-pub const backend = @import("termio/backend.zig");
 pub const mailbox = @import("termio/mailbox.zig");
 pub const Exec = @import("termio/Exec.zig");
 pub const Options = @import("termio/Options.zig");
 pub const Termio = @import("termio/Termio.zig");
 pub const Thread = @import("termio/Thread.zig");
-pub const Backend = backend.Backend;
 pub const DerivedConfig = Termio.DerivedConfig;
 pub const Mailbox = mailbox.Mailbox;
 pub const Message = message.Message;

@@ -53,10 +53,10 @@ C/C++ 依赖版本表直接从 `pkg/*/build.zig.zon` 生成，见 `pkg/README.md
 
 ## Swift 6 并发约定
 
-所有原生 target 的 Debug、Release、ReleaseLocal 均使用 Swift 6 语言模式、完整并发检查和 Swift warnings-as-errors。主应用和单元测试默认隔离到 MainActor，启用 Approachable Concurrency；Dock 插件与 XCTest UI 测试保留非隔离默认值，UI 测试的界面入口显式标记 MainActor。CI 的 `scripts/check-swift6.py` 读取 Xcode 项目检查这些构建约束。迁移原则参考 [Swift 官方并发迁移指南](https://www.swift.org/migration/documentation/swift-6-concurrency-migration-guide/incrementaladoption/)。
+所有原生 target 的 Debug、Release、ReleaseLocal 均使用 Swift 6 语言模式、完整并发检查和 Swift warnings-as-errors。主应用和单元测试默认隔离到 MainActor，启用 Approachable Concurrency；XCTest UI 测试保留非隔离默认值，UI 测试的界面入口显式标记 MainActor。CI 的 `scripts/check-swift6.py` 读取 Xcode 项目检查这些构建约束。迁移原则参考 [Swift 官方并发迁移指南](https://www.swift.org/migration/documentation/swift-6-concurrency-migration-guide/incrementaladoption/)。
 
 - UI 状态、窗口恢复、定时器和 UI 析构留在 MainActor；析构使用 `isolated deinit`，不假定任意线程释放对象都安全。
-- 颜色转换、图标编码和输入枚举等纯值操作显式 `nonisolated`。图标更新仍由独立 actor 串行执行，未移到 UI 线程。
+- 颜色转换和输入枚举等纯值操作显式 `nonisolated`。
 - 核心的 `wakeup_cb` 是明确非隔离的 Sendable C 回调，只负责把 tick 排入主队列。其他 UI 回调遵守核心主线程调用约定。通知权限等系统后台回调必须主动切回主线程。
 - `MainActor.assumeIsolated` 只用于已注册在主运行循环/主队列的同步回调，以及 AppKit 的同步加载、Cocoa scripting 入口。少量 `nonisolated(unsafe)` 局部引用用于传递尚无隔离标注的 Objective-C 参数/返回值；作用域只覆盖同步调用，配合运行时主线程断言，不声明这些系统对象可以任意跨线程共享。
 - 拖放提供器通过 `Mutex` 保护异步加载结果，再完成 AppKit 要求的同步返回。终端详情通过 Zip 同时订阅标题和路径，保留两个独立的超时回退。
@@ -102,6 +102,8 @@ Observation 模型；窗口由 `TerminalWindowState` 保存共享显示状态，
 
 状态观察使用可取消的 Observation 任务；搜索任务在查询替换、关闭和释放时取消。
 剪贴板确认是有一次性完成语义的请求，通过原生操作入口递送，不从合并后的显示状态推断。
+窗口、标签和分屏命令通过 `BaseTerminalController.controller(owning:)` 找到当前归属，
+再调用有明确参数类型的控制器方法；不广播内部窗口命令，不使用字符串字典传参。
 Combine 仅用于仍有必要的原生通知/控件事件。不要引入新旧状态互相同步的兼容层。
 
 `--ui-tests` 显式包含桌面测试，`--only-testing` 接受 Xcode 的目标/套件/测试标识；
@@ -109,3 +111,12 @@ Combine 仅用于仍有必要的原生通知/控件事件。不要引入新旧�
 主菜单、主终端窗口样式和快捷终端仍使用实际承担 AppKit 初始化的 XIB。
 桌面测试要求解锁的交互会话及已处理的系统提示。测试命令使用粘贴避免输入法转换，
 随后恢复原剪贴板内容；测试期间不要操作键盘鼠标。
+
+## 应用图标
+
+应用固定使用 `images/cghostty.icon` 中的 Icon Composer 图标；设计说明和导出图位于
+`images/cghostty-icon-v4`，应用内静态展示使用 `AppIconImage.imageset`。
+不再提供运行时图标切换、自定义图层配色或 Dock 图标插件。
+旧配置中的 `macos-icon`、`macos-custom-icon`、`macos-icon-frame`、
+`macos-icon-ghost-color`、`macos-icon-screen-color` 已不支持；仍保留这些字段的用户配置
+会显示未知选项诊断，应删除相应行。
