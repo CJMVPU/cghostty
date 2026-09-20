@@ -105,4 +105,9 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
+          # A locally verified release may already have been published for this tag.
+          if gh release view "$RELEASE_TAG" --json url; then
+            echo "Release already exists; preserving its assets and publication state."
+            exit 0
+          fi
           gh release create "$RELEASE_TAG" artifacts/* --verify-tag --draft --title "cghostty $RELEASE_TAG" --notes 'Apple Silicon macOS build. This automated package uses ad-hoc signing; Developer ID signing and notarization are not configured in CI.'

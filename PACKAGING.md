@@ -1,14 +1,14 @@
 # cghostty 打包与发布
 
-仅生成 macOS Apple Silicon 应用和 ZIP。项目版本为 `build.zig.zon` 的 `.version`；发布标签使用 `v<语义版本>`，例如 `v0.1.0`。本地发布构建示例：
+仅生成 macOS Apple Silicon 应用和 ZIP。项目版本为 `build.zig.zon` 的 `.version`；发布标签使用 `v<语义版本>`，例如 `v0.1.1`。本地发布构建示例：
 
 ```sh
-nu macos/build.nu --configuration ReleaseLocal --version 0.1.0
+nu macos/build.nu --configuration ReleaseLocal --version 0.1.1
 python3 scripts/check-scope.py --app macos/build/ReleaseLocal/cghostty.app
 bash macos/package.sh
 ```
 
-打包脚本验证 Bundle ID、主程序 arm64 架构和完整签名，然后输出 `artifacts/cghostty-0.1.0-macos-arm64.zip` 及 `.sha256`。`CFBundleShortVersionString` 保留 macOS 要求的三段数字，完整语义版本保存在 `CGhosttyVersion`，并用于“关于”、`+version` 和 ZIP 名称，例如 `cghostty-0.1.0-dev-macos-arm64.zip`。
+打包脚本验证 Bundle ID、主程序 arm64 架构和完整签名，然后输出 `artifacts/cghostty-0.1.1-macos-arm64.zip` 及 `.sha256`。`CFBundleShortVersionString` 保留 macOS 要求的三段数字，完整语义版本保存在 `CGhosttyVersion`，并用于“关于”、`+version` 和 ZIP 名称，例如 `cghostty-0.1.1-dev-macos-arm64.zip`。
 
 默认包使用 ad-hoc 签名，适合本机构建验证。面向其他用户分发时，先在自己的钥匙串配置 Developer ID 证书与 notarytool profile，再使用：
 
