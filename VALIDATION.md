@@ -1,8 +1,9 @@
 ## 0.1.4 方向光标与 Vim 连续搜索（2026-09-20）
 
+- 追加回归覆盖新目标在旧目标后方、但仍在当前显示位置前方的情况：按实际显示位置判断领跑方向，计时仍采用本次逻辑输入距离。
 - 从两个矩形端点的包络改为四角动画；按移动方向分配前后响应，横向、竖向与四个斜向均有对应的领跑角。前沿沿垂直移动方向展开后恢复，轴向最大约 15%；记录并限制既有展开量，避免持续输入时叠加膨胀。快速反向使用实际角点的凸轮廓，避免交叉四边形。
 - Vim 搜索的 PTY 记录：100 次 `n`，每次均发送 DECTCEM 隐藏与显示光标。隐藏帧现在只停止绘制/刷新请求，保留运动状态；后端使用始终较慢的响应时间，不再因连续输入消耗完延迟而与前端合并。
-- 光标专项 **9/9**；最终渲染器/配置回归 **295/295**。覆盖每 8/16/33ms 连续移动或循环搜索 500 次、八方向的前后关系、展开上限与恢复、打断位置连续、Vim 模式切换、1–4 像素细边保护，以及随机快速反向的凸轮廓。日志：`/private/tmp/cghostty-directional-cursor-tests.log`。
+- 光标专项 **10/10**；最终渲染器/配置回归 **296/296**。覆盖每 8/16/33ms 连续移动或循环搜索 500 次、八方向的前后关系、展开上限与恢复、打断位置连续、Vim 模式切换、1–4 像素细边保护，以及随机快速反向的凸轮廓。日志：`/private/tmp/cghostty-directional-cursor-tests.log`。
 - 最终 ReleaseLocal 构建通过，版本 **0.1.4（4）**，编译无 warning/error；原生 MSL 4.1、macOS/arm64 范围、资源和签名检查通过。日志：`/private/tmp/cghostty-directional-build-final.log`、`/private/tmp/cghostty-directional-scope.log`。
 - 独立 Bundle ID 的测试副本通过应用 CLI 指定临时 Vim 文件，以 16ms 定时输入路径完成 **1,200 次搜索跳转**；运行中截图观察到绿色光标拉伸，插入模式连续输入后仍显示细线光标。开启 `MTL_DEBUG_LAYER=1`，stderr 未报告 Metal 校验错误。计数：`/private/tmp/cghostty-directional-vim-search-result.txt`；日志：`/private/tmp/cghostty-directional-runtime-stdio.log`。
 - 桌面观察是运行中截图和 Vim 定时输入；未将其宣称为物理键盘长按、所有帧的像素分析或所有 Vim/Neovim 配置的穷举验证。初次后台启动的副本没有终端窗口，界面读取超时；明确指定测试命令后可正常访问，采样未发现主线程阻塞。

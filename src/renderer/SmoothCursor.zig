@@ -154,7 +154,13 @@ pub fn update(self: *Self, target: Vec, size: Vec, timing_width: f32, now: f64, 
         // always has a slower response; key repeat must not consume this lag.
         const delta = target - self.target;
         const motion = timing(delta, timing_width);
-        const direction = delta / @as(Vec, @splat(length(delta)));
+        // Input distance still controls timing, but the leading edge belongs
+        // to the actual on-screen travel. A new target behind the old target
+        // can remain ahead of the displayed cursor while it is catching up.
+        var center: Vec = @splat(0);
+        for (displayed.corners) |corner| center += corner * @as(Vec, @splat(0.25));
+        const travel = if (length(target - center) >= 0.5) target - center else delta;
+        const direction = travel / @as(Vec, @splat(length(travel)));
         self.normal = .{ -direction[1], direction[0] };
         const span = @abs(direction[0]) + @abs(direction[1]);
         for (&self.lead, signs) |*lead, sign| {
@@ -381,4 +387,19 @@ test "SmoothCursor held key cannot accumulate leading edge expansion" {
         const end = state.update(state.target, state.size, 10, state.began + 1, .block);
         try std.testing.expectEqual(Sample.rectangle(state.target, state.size), end);
     }
+}
+
+test "SmoothCursor retarget chooses the front from displayed travel" {
+    var state: Self = .{};
+    _ = state.update(.{ 0, 0 }, .{ 10, 20 }, 10, 0, .block);
+    _ = state.update(.{ 100, 0 }, state.size, 10, 1, .block);
+    const before = state.sample(1.04);
+    // The logical target moves left, but the displayed cursor must still
+    // travel right. Its right edge must remain the faster edge.
+    _ = state.update(.{ 80, 0 }, state.size, 10, 1.04, .block);
+    const after = state.sample(1.05);
+    const left = (after.corners[0][0] - before.corners[0][0]) / (75 - before.corners[0][0]);
+    const right = (after.corners[1][0] - before.corners[1][0]) / (85 - before.corners[1][0]);
+    try std.testing.expect(right > left);
+    try std.testing.expectEqual(timing(.{ -20, 0 }, 10).duration, state.duration);
 }
