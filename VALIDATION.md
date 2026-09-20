@@ -13,6 +13,7 @@
 - 最终桌面测试 **2/2 项通过**，无运行时警告：`/private/tmp/cghostty-012-ui.xcresult`。覆盖标签切换、标题、分屏、搜索、命令面板及焦点恢复。
 - 13:50 起至验证结束的 TCC 日志没有新的 `SystemPolicyDocumentsFolder` 记录：`/private/tmp/cghostty-012-tcc-final.log`。这证明本轮隔离测试没有触发该访问；不代表用户命令访问文稿文件可绕过系统权限。
 - 首次远程 CI 在空依赖缓存下暴露 PCRE2 懒加载问题：封装尚未生成库就被根构建读取。改为显式必需依赖，保留上层按需加载；全新全局/本地缓存下绑定测试 3/3 通过，与 CI 相同的根构建命令也正常报告已删除选项无效，不再发生 artifact panic。日志：`/private/tmp/cghostty-012-pcre2-cold.log`、`/private/tmp/cghostty-012-root-cold.log`。
+- 第二次远程测试进程崩溃在 Xcode `HarnessEventHandler.testCaseEnded` / `Test.id.getter`，并非断言失败；测试计划改为串行，避免共享 NSApp、窗口和系统剪贴板的用例并发执行。本地完整复验仍为 249 通过、1 跳过、0 失败，运行时警告为空：`/private/tmp/cghostty-012-native-serial.xcresult`。CI 另输出 xcresult JSON 摘要，保留失败诊断。
 - 核心回归 **1,364 项通过、1 项跳过**，85/85 构建步骤通过；PCRE2 绑定 **3/3 项通过**。日志：`/private/tmp/cghostty-012-core-summary.log`、`/private/tmp/cghostty-012-pcre2.log`。
 - SwiftLint 严格检查 188 文件、0 问题；Zig 格式、依赖版本记录、Swift 6 配置、actionlint 和 diff 空白检查通过。
 - 图标使用 imagegen 为现有角色添加银色边框，规范为 1024 像素源画布，重新导出 1024/512/64 像素 macOS 图标并同步 Dock 插件。实际导出目视确认边框完整。

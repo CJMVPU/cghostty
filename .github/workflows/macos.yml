@@ -70,9 +70,17 @@ jobs:
         working-directory: pkg/pcre2
         run: zig build test 2>&1 | tee ../../macos/build/ci-logs/pcre2-tests.log
       - name: Build and test native app
+        id: native-tests
         run: |
           nu macos/build.nu --action test --result-bundle macos/build/TestResults.xcresult \
             2>&1 | tee macos/build/ci-logs/native-tests.log
+      - name: Summarize native test results
+        if: always() && steps.native-tests.outcome != 'skipped'
+        run: |
+          if [[ -d macos/build/TestResults.xcresult ]]; then
+            xcrun xcresulttool get test-results summary --path macos/build/TestResults.xcresult --format json \
+              | tee macos/build/ci-logs/native-summary.json
+          fi
       - name: Build release
         shell: bash
         run: |

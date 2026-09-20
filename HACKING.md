@@ -35,6 +35,8 @@ python3 scripts/check-scope.py
 python3 scripts/check-scope.py --app macos/build/ReleaseLocal/cghostty.app
 ```
 
+原生测试共享 `NSApp`、窗口与系统剪贴板，测试计划采用串行执行；桌面测试同样使用单一交互会话。
+
 `--action test` 默认将应用、测试 runner 和 DerivedData 放到 `$TMPDIR/cghostty-tests-<checkout-hash>`，避免运行时读取文稿目录中的构建资源。`--build-dir /absolute/path` 可覆盖产物目录；测试配置及工作目录也使用非受保护路径。源码仍可留在文稿目录。Xcode 直接运行使用用户主目录作为工作目录；日常使用请运行安装到“应用程序”的发行版。终端命令主动读取文稿中的项目仍受 macOS 权限管理，若不希望授权，请将项目放在 `~/Developer` 等非受保护目录。
 
 `zig build` 也可作为根入口，会调用同一个 `macos/build.nu`。日常应用开发直接使用 Nushell 脚本。`--skip-core` 只适用于版本和优化模式均匹配的已有核心；切换 Debug / ReleaseLocal 时重新构建完整应用。
