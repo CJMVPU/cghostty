@@ -22,7 +22,10 @@ flowchart TD
     App --> Core[Zig App]
     Handle --> Surface[Zig Surface]
     Surface --> IO[Termio and IO thread]
-    Surface --> Render[Renderer and render thread]
+    Surface --> Render[RenderSession]
+    Render --> Renderer[Renderer and render thread]
+    Render --> Shared[Shared render state and mutex]
+    Surface --> Search[SearchSession and search thread]
 ```
 
 Solid arrows represent ownership, not callback direction. Surface handles keep
@@ -186,6 +189,44 @@ Search query bytes are copied into the core search mailbox before returning.
 Clearing the query preserves native search UI; ending search requests its closure.
 SearchState still owns debounce and cancellation.
 
+`surface/SearchSession.zig` owns the core search worker's stable callback
+context, startup, copied queries, result navigation and stop/join/release.
+Surface publishes the session only after successful startup and retains only
+the optional session pointer. Worker callbacks use fixed renderer and surface
+mailbox destinations, without reading mutable Surface fields. Search stops
+before Surface stops the renderer or releases terminal state. Clear/end destroy
+the worker; starting another query creates a fresh session. Final surface release
+also destroys an active session, including pending allocated queries.
+
+Search result highlights are copied into owned arenas before transfer to the
+renderer queue. After enqueue, a failed wakeup cannot release those arenas;
+the receiving renderer owns them. Partial copies and startup failures unwind
+locally. Search algorithms, matching rules and the native search UI remain in
+their existing layers.
+
+`surface/RenderSession.zig` owns the renderer, render-thread manager, OS thread,
+shared render state and its mutex at one stable heap address. Creation initializes
+resources without starting the worker; only successful initialization publishes
+the session. The renderer's derived configuration transfers on successful
+renderer creation. A failed worker spawn leaves a ready session, and stop/join
+is idempotent. A stopped session cannot restart an already stopped event loop.
+
+Surface retains the terminal/IO owner and coordinates dependencies: stop/join
+search and IO producers while the renderer can still consume their messages,
+then stop/join rendering before freeing terminal state. Session destruction
+releases the renderer, disposes pending owning messages, frees preedit storage
+and the shared state, and finally releases the stable allocation. Pending font
+transfers release old grids after renderer destruction; Surface releases its
+current font grid afterward. Renderer destruction also handles decoded background
+images when startup failed before threadExit could run.
+
+Surface startup rolls back each started worker before freeing its dependencies,
+including IO-spawn failure after render startup and errors after both workers
+start. IO-loop cleanup uses its stable Surface field rather than its pre-start
+copy. Initial font references are also released when surface creation fails.
+Surface still owns IO startup, input coordination and effective configuration;
+those boundaries have not yet been replaced with separate sessions.
+
 ## Rendering and change boundaries
 
 Terminal semantics, frame preparation, motion geometry and Metal resource
@@ -194,12 +235,23 @@ terminal/frame updates and retain deadlines; a Boolean 'animate' flag is not
 enough for Kitty animations and cursor movement to coexist. Native window/tab
 animations stay in AppKit/SwiftUI.
 
+`renderer/CursorMotion.zig` owns cursor motion lifecycle: draw-lock-owned
+geometry and atomic invalidation/activity at the thread boundary. Terminal
+hide/show preserves motion; focus, visibility, configuration and size changes
+invalidate it. `SmoothCursor.zig` keeps position and leading-edge expansion
+separate. Expansion carries both its value and velocity across retargets,
+holds while the rear catches up, then settles. Diagonal expansion points
+outward on both leading edges; thin bars retain their native thickness.
+
 `renderer/FrameScheduler.zig` contains the pure policy for the next animation
-wake and whether visible pending work needs DisplayLink. The renderer supplies
-the clock sample, cursor activity and absolute Kitty deadline. Renderer Thread
-continues to own timer arm/cancellation and render/update execution; the renderer
-continues to synchronize DisplayLink outside its draw lock. There is no second
-scheduler, motion plugin registry or independent animation event loop.
+wake, pending timer deadlines and whether visible work needs DisplayLink.
+Continuous input retains an earlier pending wake instead of postponing it.
+The renderer supplies the clock sample, cursor activity and absolute Kitty
+deadline. Renderer Thread owns actual timer arm/cancellation and render/update
+execution, cancels animation wakes when hidden, and publishes visibility before
+drawing on return. DisplayLink draws also refresh the timer policy; DisplayLink
+itself remains synchronized outside the draw lock. There is no second scheduler,
+motion plugin registry or independent animation event loop.
 
 The terminal parser must not depend on native window controllers or Swift
 presentation concepts. New product policy belongs in the native app or Surface

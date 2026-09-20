@@ -119,6 +119,12 @@ pub fn deinit(self: *Thread) void {
     self.wakeup.deinit();
     self.stop.deinit();
     self.loop.deinit();
+    // This also handles partial startup and early event-loop failure. Queued
+    // needles own their bytes even when the worker never consumed them.
+    while (self.mailbox.pop(global.io())) |message| switch (message) {
+        .change_needle => |needle| needle.deinit(),
+        .select => {},
+    };
     // Nothing can possibly access the mailbox anymore, destroy it.
     self.mailbox.destroy(self.alloc);
 
@@ -179,12 +185,8 @@ fn threadMain_(self: *Thread) !void {
     // with our xev loop so that we can try to make forward search progress
     // while also listening for messages.
     while (true) {
-        // If our loop is canceled then we drain our messages and quit.
+        // Pending messages are released by deinit after the owner joins us.
         if (self.loop.stopped()) {
-            while (self.mailbox.pop(global.io())) |message| {
-                log.debug("mailbox message ignored during shutdown={}", .{message});
-            }
-
             return;
         }
 

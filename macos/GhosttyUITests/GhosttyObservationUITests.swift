@@ -98,6 +98,57 @@ final class GhosttyObservationUITests: GhosttyCustomConfigCase {
         XCTAssertTrue(app.windows.firstMatch.wait(for: \.title, toEqual: "First session", timeout: 5))
     }
 
+    @MainActor func testSearchCountsNavigateClearRestartAndClose() throws {
+        let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
+        app.launch()
+        app.activate()
+        defer { app.terminate() }
+        let pane = app.groups["Terminal pane"].firstMatch
+        XCTAssertTrue(pane.waitForExistence(timeout: 10))
+        pane.click()
+        paste("printf '\\033[2J\\033[Hsessionneedle one\\nsessionneedle two\\nsessionneedle three\\n\\033]0;Search session ready\\007'\n", into: pane, app: app)
+        XCTAssertTrue(app.windows.firstMatch.wait(for: \.title, toEqual: "Search session ready", timeout: 5))
+        pane.typeKey("f", modifierFlags: .command)
+        let search = app.textFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        let count = app.staticTexts.matching(NSPredicate(format: "value MATCHES '[1-3]/3'")).firstMatch
+        let total = app.staticTexts.matching(NSPredicate(format: "value == '-/3' OR value MATCHES '[1-3]/3'")).firstMatch
+        for _ in 0..<2 {
+            search.click()
+            app.menuItems["Select All"].firstMatch.click()
+            paste("sessionneedle", into: search, app: app, submit: false)
+            XCTAssertTrue(total.waitForExistence(timeout: 5))
+            search.typeKey(.return, modifierFlags: [])
+            XCTAssertTrue(count.waitForExistence(timeout: 5))
+            let initial = try XCTUnwrap(count.value as? String)
+            search.typeKey(.return, modifierFlags: [])
+            let changed = NSPredicate { _, _ in
+                MainActor.assumeIsolated { count.exists && (count.value as? String) != initial }
+            }
+            XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: changed, object: nil)], timeout: 5), .completed)
+            search.typeKey(.return, modifierFlags: .shift)
+            XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "value == %@", initial)).firstMatch.waitForExistence(timeout: 5))
+            app.menuItems["Select All"].firstMatch.click()
+            paste("no-matches-in-this-session", into: search, app: app, submit: false)
+            let empty = app.staticTexts.matching(NSPredicate(format: "value == '-/0'")).firstMatch
+            XCTAssertTrue(empty.waitForExistence(timeout: 5))
+            app.menuItems["Select All"].firstMatch.click()
+            search.typeKey(.delete, modifierFlags: [])
+            XCTAssertTrue(empty.waitForNonExistence(timeout: 5))
+            XCTAssertTrue(search.exists)
+        }
+        paste("sessionneedle", into: search, app: app, submit: false)
+        XCTAssertTrue(total.waitForExistence(timeout: 5))
+        // Closing the pane with active search leaves the other shell usable.
+        app.windows.firstMatch.typeKey("d", modifierFlags: .command)
+        XCTAssertTrue(app.wait(for: \.textViews.count, toEqual: 2, timeout: 5))
+        app.groups["Left pane"].click()
+        app.windows.firstMatch.typeKey("w", modifierFlags: .command)
+        XCTAssertTrue(app.wait(for: \.textViews.count, toEqual: 1, timeout: 5))
+        paste("printf '\\033]0;Search session closed\\007'\n", into: app.groups["Terminal pane"].firstMatch, app: app)
+        XCTAssertTrue(app.windows.firstMatch.wait(for: \.title, toEqual: "Search session closed", timeout: 5))
+    }
+
     /// Keep text literal regardless of the active input method, and restore
     /// every pasteboard representation after the target consumes it.
     @MainActor private func paste(_ text: String, into target: XCUIElement, app: XCUIApplication, submit: Bool = true) {

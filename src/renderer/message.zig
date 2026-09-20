@@ -105,6 +105,18 @@ pub const Message = union(enum) {
                 v.alloc.destroy(v.thread);
             },
 
+            .search_viewport_matches => |v| {
+                var arena = v.arena;
+                arena.deinit();
+            },
+            .search_selected_match => |v| if (v) |match| {
+                var arena = match.arena;
+                arena.deinit();
+            },
+            // Surface has already adopted new_key. Once the renderer is
+            // destroyed, discarding a pending transfer releases old_key.
+            .font_grid => |v| v.set.deref(v.old_key),
+
             else => {},
         }
     }

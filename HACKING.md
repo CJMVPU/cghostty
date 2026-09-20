@@ -82,13 +82,47 @@ Xcode scheme 和 Swift 模块仍为 `Ghostty`，C 桥接模块为 `GhosttyKit`�
 
 Metal 编译通过 `xcrun --toolchain Metal` 调用安装的工具链。缺失时先执行 `xcodebuild -downloadComponent MetalToolchain`。无需 Linux 容器、Nix、Flatpak、Snap、独立 CMake SDK 或网站数据生成环境。
 
+## Surface 渲染会话回归
+
+`zig build test -Dtest-filter=RenderSession -Dtest-filter=renderer -Dtest-filter=SearchSession`
+验证线程创建失败、启动后停止/join、重复停止、禁止重复启动，以及未启动时
+队列中配置、搜索结果和连续字体切换引用的回收。`RenderSession` 拥有稳定地址，
+将资源创建、线程启动、停止和最终释放分开；Surface 负责先停止搜索/IO 生产者，
+再停止渲染，之后才释放终端和共享状态。
+
+原生 `renderSessionReleasesAfterQueuedFontAndDisplayChanges` 验证连续字体、尺寸、
+可见性与焦点切换后立即释放。桌面 `GhosttyCursorMotionUITests` 和
+`GhosttySurfaceLifecycleUITests` 分别验证实际绘制与标签/分屏撤销后的会话连续性。
+
+## Surface 搜索会话回归
+
+`zig build test -Dtest-filter=SearchSession -Dtest-filter=terminal.search`
+检查搜索会话初始化、分配失败回收、查询字节与结果快照的所有权，以及既有搜索算法。
+`SearchSession` 独立管理搜索线程，`Surface` 只协调开始、清空、结束和导航；
+工作线程先停止并 join，再释放终端和结果队列所依赖的对象。
+
+原生 `activeSearchReleasesWithSurfaceAfterReplacingLongQueries` 检查长查询替换、
+清空重启和活动搜索随最终 Surface 释放。桌面
+`GhosttyObservationUITests/testSearchCountsNavigateClearRestartAndClose` 检查结果计数、
+前后导航、无结果、清空后重启及关闭搜索所在分屏后继续输入。
+
 ## 渲染与光标回归
 
 `zig build test -Dtest-filter=FrameScheduler` 验证独立帧调度策略：空闲停帧、
-光标与 Kitty 动画竞争、绝对截止时间、过期帧和可见性。计时器、DisplayLink
+光标与 Kitty 动画竞争、绝对截止时间、过期帧、持续输入不推迟已有唤醒、
+同期限更新优先和隐藏取消。计时器、DisplayLink
 启停及锁仍由原渲染对象管理，不由策略模块创建。
 
 `zig build test -Dtest-filter=renderer -Dtest-filter=config` 覆盖光标距离分档、八方向前后角关系、前沿展开和恢复、中断时四角连续、持续按键与隐藏/显示交替、Vim 模式切换和细线厚度、快速反向的凸轮廓，以及配置迁移提示。
+`CursorMotion` 集中隐藏、失效与活动状态；`SmoothCursor` 单独维护位置与展开量。
+新目标继承当前展开量及变化速度，持续输入不会重新播放宽度脉冲；前沿展开保留到
+后沿追上，再平滑收回。四个斜向的展开均向外，细线光标不扩张其厚度。
+连续输入测试覆盖 8、16、33、60ms 间隔，逐次检查四角、展开量及展开速度接续。
+
+`nu macos/build.nu --action test --ui-tests --only-testing GhosttyUITests/GhosttyCursorMotionUITests`
+用受控 PTY 的隐藏/移动/显示序列检查真实 Metal 像素：右移与下移前沿更宽、
+最小化后恢复、切换细线后恢复原生形状，分别覆盖垂直同步开关。
+它不替代实际 Vim 按键长按、输入法及不同显示器的手动验收。
 Metal 4 每个在途帧独占可复用的命令缓冲区、分配器、参数表与 residency set，GPU 完成后才允许重用。
 开启 `MTL_DEBUG_LAYER=1` 运行应用可检查 Metal API；交互验收需覆盖单步、快速输入、连续导航、斜向移动、中文宽字符、选区、失焦和缩放。
 CI 使用 GitHub `xcode-27` arm64 预览镜像，并在运行测试前验证系统为 macOS 27+。

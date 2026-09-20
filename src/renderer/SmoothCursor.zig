@@ -76,6 +76,33 @@ shape: Shape = .block,
 began: f64 = 0,
 duration: f32 = 0,
 lag: f32 = 0,
+flare_start: [4]Vec = .{@as(Vec, @splat(0))} ** 4,
+flare_velocity: [4]Vec = .{@as(Vec, @splat(0))} ** 4,
+flare_goal: [4]Vec = .{@as(Vec, @splat(0))} ** 4,
+
+// Independent width response: key repeat extends the hold without restarting
+// a pulse. A critically damped response preserves width and its velocity.
+const flare_rate: f32 = 110;
+const flare_settle: f32 = 0.14;
+const Flare = struct { value: Vec, velocity: Vec };
+
+fn spring(start: Vec, velocity: Vec, goal: Vec, elapsed: f32) Flare {
+    const offset = start - goal;
+    const rate: Vec = @splat(flare_rate);
+    const slope = velocity + rate * offset;
+    const time: Vec = @splat(elapsed);
+    const decay: Vec = @splat(@exp(-flare_rate * elapsed));
+    return .{
+        .value = goal + (offset + slope * time) * decay,
+        .velocity = (velocity - rate * slope * time) * decay,
+    };
+}
+
+fn flareAt(self: Self, i: usize, elapsed: f32) Flare {
+    const hold = self.duration + self.lag;
+    const opening = spring(self.flare_start[i], self.flare_velocity[i], self.flare_goal[i], @min(elapsed, hold));
+    return if (elapsed <= hold) opening else spring(opening.value, opening.velocity, @splat(0), elapsed - hold);
+}
 
 /// Nonzero initial slope prevents repeated retargeting from restarting a
 /// slow acceleration phase. Zero arrival slope restores the resting shape.
@@ -101,34 +128,19 @@ pub fn timing(delta: Vec, width: f32) struct { duration: f32, lag: f32 } {
 
 pub fn sample(self: Self, now: f64) Sample {
     const destination = Sample.rectangle(self.target, self.size);
-    if (!self.running) return destination;
+    if (!self.running or now - self.began >= @as(f64, self.duration + self.lag + flare_settle)) return destination;
     const elapsed: f32 = @floatCast(@max(0, now - self.began));
+    if (elapsed == 0) return self.start;
     var result: Sample = .{ .corners = undefined };
     for (&result.corners, 0..) |*corner, i| {
         const duration = self.duration + self.lag * (1 - self.lead[i]);
         const p = progress(elapsed / duration);
-        corner.* = self.start.corners[i] + (destination.corners[i] - self.start.corners[i]) * @as(Vec, @splat(p));
-
-        // Open the leading edge perpendicular to travel, then restore it.
-        // Thin bars/underlines keep their native thickness. The expansion is
-        // zero at both endpoints, including the exact instant of a retarget.
-        const envelope = 4 * p * (1 - p);
-        const amount = 0.15 * self.lead[i] * envelope;
-        const half = self.size * @as(Vec, @splat(0.5));
-        const across = @reduce(.Add, signs[i] * half * self.normal);
-        // Carry the previous flare separately: repeated retargets must not
-        // stack expansions and inflate the cursor beyond the intended size.
-        const retained = self.start.expansion[i] * @as(Vec, @splat(1 - p));
-        const limit = half * @as(Vec, @splat(0.15));
-        var expansion = retained + self.normal * @as(Vec, @splat(across * amount));
-        expansion = @min(limit, @max(-limit, expansion));
-        inline for (0..2) |axis| {
-            if (self.size[axis] <= 3 or
-                (self.shape == .bar and axis == 0) or
-                (self.shape == .underline and axis == 1)) expansion[axis] = 0;
-        }
+        // Position and expansion have separate state. Removing the carried
+        // expansion from the positional origin prevents repeat accumulation.
+        const origin = self.start.corners[i] - self.start.expansion[i];
+        const expansion = self.flareAt(i, elapsed).value;
         result.expansion[i] = expansion;
-        corner.* += expansion - retained;
+        corner.* = origin + (destination.corners[i] - origin) * @as(Vec, @splat(p)) + expansion;
     }
     return result;
 }
@@ -166,6 +178,20 @@ pub fn update(self: *Self, target: Vec, size: Vec, timing_width: f32, now: f64, 
         for (&self.lead, signs) |*lead, sign| {
             lead.* = std.math.clamp(0.5 + 0.5 * @reduce(.Add, sign * direction) / span, 0, 1);
         }
+        const elapsed: f32 = @floatCast(@max(0, now - self.began));
+        for (signs, 0..) |sign, i| {
+            const previous = if (self.running) self.flareAt(i, elapsed) else Flare{ .value = @splat(0), .velocity = @splat(0) };
+            self.flare_start[i] = displayed.expansion[i];
+            self.flare_velocity[i] = previous.velocity;
+            // Expand outwards on both leading edges in diagonal travel.
+            // A signed normal projection can push the leading corner inward.
+            var goal = sign * size * @as(Vec, @splat(0.075 * self.lead[i])) * @abs(self.normal);
+            inline for (0..2) |axis| {
+                if (size[axis] <= 3 or (shape == .bar and axis == 0) or
+                    (shape == .underline and axis == 1)) goal[axis] = 0;
+            }
+            self.flare_goal[i] = goal;
+        }
         self.start = displayed;
         self.target = target;
         self.began = now;
@@ -173,7 +199,7 @@ pub fn update(self: *Self, target: Vec, size: Vec, timing_width: f32, now: f64, 
         self.lag = motion.lag;
         self.running = true;
     }
-    if (now - self.began >= @as(f64, self.duration + self.lag)) self.running = false;
+    if (now - self.began >= @as(f64, self.duration + self.lag + flare_settle)) self.running = false;
     return self.sample(now);
 }
 
@@ -182,7 +208,7 @@ pub fn effect(self: Self, now: f64) f32 {
     if (!self.running or self.hidden) return 0;
     const elapsed: f32 = @floatCast(@max(0, now - self.began));
     const handoff = @min(@as(f32, 0.020), self.duration * 0.25);
-    const x = std.math.clamp((elapsed - (self.duration + self.lag - handoff)) / handoff, 0, 1);
+    const x = std.math.clamp((elapsed - (self.duration + self.lag + flare_settle - handoff)) / handoff, 0, 1);
     const fade = x * x * x * (x * (x * 6 - 15) + 10);
     const pose = self.sample(now);
     const destination = Sample.rectangle(self.target, self.size);
@@ -220,8 +246,8 @@ test "SmoothCursor eight directions lead with the correct edges and corners" {
             for (signs, 0..) |b, j| {
                 const lead_a = @reduce(.Add, a * direction);
                 const lead_b = @reduce(.Add, b * direction);
-                const travel_a = @reduce(.Add, (pose.corners[i] - initial.corners[i]) * direction);
-                const travel_b = @reduce(.Add, (pose.corners[j] - initial.corners[j]) * direction);
+                const travel_a = @reduce(.Add, (pose.corners[i] - pose.expansion[i] - initial.corners[i]) * direction);
+                const travel_b = @reduce(.Add, (pose.corners[j] - pose.expansion[j] - initial.corners[j]) * direction);
                 if (lead_a > lead_b) try std.testing.expect(travel_a > travel_b);
                 if (lead_a == lead_b) try std.testing.expectApproxEqAbs(travel_a, travel_b, 0.001);
             }
@@ -402,4 +428,66 @@ test "SmoothCursor retarget chooses the front from displayed travel" {
     const right = (after.corners[1][0] - before.corners[1][0]) / (85 - before.corners[1][0]);
     try std.testing.expect(right > left);
     try std.testing.expectEqual(timing(.{ -20, 0 }, 10).duration, state.duration);
+}
+
+test "SmoothCursor front stays wider while the trailing edge catches up" {
+    const size: Vec = .{ 10, 20 };
+    for ([_]Vec{ .{ 1, 0 }, .{ -1, 0 }, .{ 0, 1 }, .{ 0, -1 } }) |direction| {
+        var state: Self = .{};
+        _ = state.update(.{ 0, 0 }, size, 10, 0, .block);
+        _ = state.update(direction * @as(Vec, @splat(100)), size, 10, 1, .block);
+        const pose = state.sample(1 + state.duration + state.lag * 0.5);
+        for (signs, 0..) |sign, i| {
+            const leading = @reduce(.Add, sign * direction) > 0;
+            const axis: usize = if (direction[0] != 0) 1 else 0;
+            const outward = if (axis == 1) pose.expansion[i][1] * sign[1] else pose.expansion[i][0] * sign[0];
+            if (leading) {
+                try std.testing.expect(outward > (if (axis == 1) size[1] else size[0]) * 0.07);
+            } else try std.testing.expectApproxEqAbs(@as(f32, 0), outward, 0.001);
+        }
+    }
+}
+
+test "SmoothCursor diagonal leading corners expand outward on both axes" {
+    for ([_]Vec{ .{ 1, 1 }, .{ -1, 1 }, .{ -1, -1 }, .{ 1, -1 } }) |direction| {
+        var state: Self = .{};
+        _ = state.update(.{ 0, 0 }, .{ 10, 20 }, 10, 0, .block);
+        _ = state.update(direction * @as(Vec, @splat(100)), state.size, 10, 1, .block);
+        const pose = state.sample(1.06);
+        for (signs, 0..) |sign, i| {
+            inline for (0..2) |axis| {
+                try std.testing.expect(pose.expansion[i][axis] * sign[axis] >= 0);
+                if (state.lead[i] > 0) try std.testing.expect(pose.expansion[i][axis] * sign[axis] > 0);
+            }
+        }
+    }
+}
+
+test "SmoothCursor held key preserves width velocity and settles after release" {
+    for ([_]f64{ 0.008, 0.016, 0.033, 0.060 }) |interval| {
+        for ([_]Vec{ .{ 10, 0 }, .{ -10, 0 }, .{ 0, 20 }, .{ 0, -20 } }) |step| {
+            var state: Self = .{};
+            _ = state.update(.{ 0, 0 }, .{ 10, 20 }, 10, 0, .block);
+            for (1..101) |i| {
+                const now = @as(f64, @floatFromInt(i)) * interval;
+                const before = state.sample(now);
+                var velocity: [4]Vec = undefined;
+                for (&velocity, 0..) |*v, k| v.* = if (state.running)
+                    state.flareAt(k, @floatCast(now - state.began)).velocity
+                else
+                    @splat(0);
+                const after = state.update(step * @as(Vec, @splat(@floatFromInt(i))), state.size, 10, now, .block);
+                try std.testing.expectEqual(before, after);
+                for (0..4) |k| inline for (0..2) |axis| {
+                    try std.testing.expectApproxEqAbs(velocity[k][axis], state.flareAt(k, 0).velocity[axis], 0.001);
+                    if (i > 10 and interval <= 0.033 and state.lead[k] == 1 and
+                        ((step[0] != 0 and axis == 1) or (step[1] != 0 and axis == 0)))
+                        try std.testing.expect(@abs(after.expansion[k][axis]) > state.size[axis] * 0.07);
+                };
+            }
+            const final = state.update(state.target, state.size, 10, state.began + 1, .block);
+            try std.testing.expectEqual(Sample.rectangle(state.target, state.size), final);
+            try std.testing.expect(!state.running);
+        }
+    }
 }

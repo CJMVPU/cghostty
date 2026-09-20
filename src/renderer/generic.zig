@@ -22,6 +22,7 @@ const imagepkg = @import("image.zig");
 const ImageState = imagepkg.State;
 const SmoothCursor = @import("SmoothCursor.zig");
 const FrameScheduler = @import("FrameScheduler.zig");
+const CursorMotion = @import("CursorMotion.zig");
 const assert = @import("../quirks.zig").inlineAssert;
 const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
@@ -164,9 +165,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
         /// The current GPU uniform values.
         uniforms: shaderpkg.Uniforms,
 
-        smooth_cursor: SmoothCursor = .{},
-        cursor_reset_pending: std.atomic.Value(bool) = .init(false),
-        cursor_animation_running: std.atomic.Value(bool) = .init(false),
+        cursor_motion: CursorMotion = .{},
 
         /// The font structures.
         font_grid: *font.SharedGrid,
@@ -644,6 +643,12 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             // and does not free GPU resources like the swap chain and
             // shaders. Those are freed with `releaseGpuResources`.
 
+            // A background image can be decoded during init, before a worker
+            // exists. Spawn/thread-entry failure skips threadExit, so dispose
+            // remaining images here too (normal threadExit clears them).
+            self.images.deinit(self.alloc);
+            if (self.bg_image) |img| img.deinit(self.alloc);
+
             if (self.overlay) |*overlay| overlay.deinit(self.alloc);
             self.terminal_state.deinit(self.alloc);
             if (self.search_selected_match) |*m| m.arena.deinit();
@@ -870,6 +875,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
         ///
         /// Must be called on the render thread.
         pub fn animationWake(self: *const Self) ?AnimationWake {
+            if (!self.visible) return null;
             var now_ms: u64 = 0;
             const deadline: ?u64 = if (self.kitty_animation_clock) |base| deadline: {
                 if (self.kitty_animation_next_ms == null) break :deadline null;
@@ -879,7 +885,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             } else null;
             return FrameScheduler.nextWake(
                 now_ms,
-                self.cursor_animation_running.load(.acquire),
+                self.cursor_motion.isActive(),
                 deadline,
             );
         }
@@ -901,8 +907,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
 
             self.focused = focus;
 
-            self.cursor_reset_pending.store(true, .release);
-            self.cursor_animation_running.store(false, .release);
+            self.cursor_motion.invalidate();
 
             self.syncDisplayLink(null, null);
         }
@@ -911,8 +916,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
         ///
         /// Must be called on the render thread.
         pub fn setVisible(self: *Self, visible: bool) void {
-            self.cursor_reset_pending.store(true, .release);
-            self.cursor_animation_running.store(false, .release);
+            self.cursor_motion.invalidate();
             self.visible = visible;
             self.syncDisplayLink(null, null);
 
@@ -1866,8 +1870,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                     config.bg_image != null;
 
             const old_blending = self.config.blending;
-            self.smooth_cursor.reset();
-            self.cursor_animation_running.store(false, .release);
+            self.cursor_motion.reset();
 
             self.config.deinit();
             self.config = config.*;
@@ -1902,8 +1905,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             self.draw_mutex.lockUncancelable(global.io());
             defer self.draw_mutex.unlock(global.io());
 
-            self.smooth_cursor.reset();
-            self.cursor_animation_running.store(false, .release);
+            self.cursor_motion.reset();
             self.size = size;
             self.updateScreenSizeUniforms();
 
@@ -1989,58 +1991,49 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
 
         /// Update under draw_mutex, from the actual native cursor geometry.
         fn updateSmoothCursor(self: *Self) void {
-            if (self.cursor_reset_pending.swap(false, .acq_rel)) self.smooth_cursor.reset();
             self.uniforms.smooth_effect = 0;
+            const now: f64 = @as(f64, @floatFromInt(std.Io.Timestamp.now(global.io(), .awake).nanoseconds)) / std.time.ns_per_s;
             if (!self.config.cursor_effect or !self.focused or !self.visible or self.api.reduceMotion()) {
-                self.smooth_cursor.reset();
-                self.cursor_animation_running.store(false, .release);
+                _ = self.cursor_motion.sample(false, null, now);
                 return;
             }
-            const cursor = self.cells.getCursorGlyph();
-            // Vim hides the cursor while redrawing between search matches.
-            // Respect that visibility, but retain the last motion so the next
-            // visible position can animate instead of initializing from rest.
-            if (cursor == null) {
-                self.smooth_cursor.hide();
-                self.cursor_animation_running.store(false, .release);
+            const c = self.cells.getCursorGlyph() orelse {
+                _ = self.cursor_motion.sample(true, null, now);
+                return;
+            };
+            const shape: SmoothCursor.Shape = switch (self.cells.cursor_style orelse .block_hollow) {
+                .block => .block,
+                .bar => .bar,
+                .underline => .underline,
+                .block_hollow, .lock => {
+                    _ = self.cursor_motion.sample(false, null, now);
+                    return;
+                },
+            };
+            if (c.color[3] != 255) {
+                _ = self.cursor_motion.sample(false, null, now);
                 return;
             }
-            const supported = if (self.cells.cursor_style) |style| switch (style) {
-                .block, .bar, .underline => true,
-                .block_hollow, .lock => false,
-            } else false;
-            if (!supported or cursor.?.color[3] != 255) {
-                self.smooth_cursor.reset();
-                self.cursor_animation_running.store(false, .release);
-                return;
-            }
-            const c = cursor.?;
             const size: SmoothCursor.Vec = .{ @floatFromInt(c.glyph_size[0]), @floatFromInt(c.glyph_size[1]) };
-            if (size[0] <= 0 or size[1] <= 0) {
-                self.smooth_cursor.reset();
-                self.cursor_animation_running.store(false, .release);
-                return;
-            }
             const x: f32 = @floatFromInt(@as(i64, c.grid_pos[0]) * self.size.cell.width + self.size.padding.left + c.bearings[0]);
             const y: f32 = @floatFromInt(@as(i64, c.grid_pos[1]) * self.size.cell.height + self.size.padding.top + self.size.cell.height - c.bearings[1]);
-            const now: f64 = @as(f64, @floatFromInt(std.Io.Timestamp.now(global.io(), .awake).nanoseconds)) / std.time.ns_per_s;
             const target: SmoothCursor.Vec = .{ x + size[0] * 0.5, y + size[1] * 0.5 };
             // A thin insert-mode bar must not turn one cell into a long move.
             const timing_width: f32 = if (self.cells.cursor_style == .bar) @floatFromInt(self.size.cell.width) else size[0];
-            const pose = self.smooth_cursor.update(target, size, timing_width, now, switch (self.cells.cursor_style.?) {
-                .bar => .bar,
-                .underline => .underline,
-                else => .block,
-            });
-            const outline = pose.outline(size);
+            const frame = self.cursor_motion.sample(true, .{
+                .center = target,
+                .size = size,
+                .timing_width = timing_width,
+                .shape = shape,
+            }, now) orelse return;
+            const outline = frame.pose.outline(size);
             for (outline.corners, &self.uniforms.smooth_corners) |corner, *uniform| uniform.* = corner;
             self.uniforms.smooth_corner_count = outline.count;
             self.uniforms.smooth_target = target;
             self.uniforms.smooth_half_size = size * @as(SmoothCursor.Vec, @splat(0.5));
             self.uniforms.smooth_color = c.color;
-            self.uniforms.smooth_effect = self.smooth_cursor.effect(now);
+            self.uniforms.smooth_effect = frame.effect;
             self.uniforms.smooth_block = if (self.cells.cursor_style == .block) 1 else 0;
-            self.cursor_animation_running.store(self.smooth_cursor.running, .release);
         }
 
         /// Build the overlay as configured. Returns null if there is no

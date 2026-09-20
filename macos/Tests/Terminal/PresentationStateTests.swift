@@ -301,6 +301,55 @@ import Testing
         #expect(app.config.snapshot.windowTheme == original.windowTheme)
     }
 
+    @Test func activeSearchReleasesWithSurfaceAfterReplacingLongQueries() async throws {
+        let app = Ghostty.App(configPath: "/dev/null")
+        for round in 0..<3 {
+            var view: Ghostty.SurfaceView? = Ghostty.SurfaceView(app, baseConfig: isolatedSurfaceConfiguration)
+            var surface = view?.surfaceModel
+            #expect(surface != nil)
+            weak let weakView = view
+            weak let weakSurface = surface
+            let query = String(repeating: "搜索-\(round)", count: 128)
+            for index in 0..<4 {
+                #expect(surface?.search(query + String(index)) == true)
+            }
+            #expect(surface?.search("") == true)
+            #expect(surface?.navigateSearch(.next) == false)
+            #expect(surface?.search(query) == true)
+            // Leave the worker running. Final core release must stop and join it.
+            view = nil
+            surface = nil
+            await drainMainQueue()
+            #expect(weakView == nil)
+            #expect(weakSurface == nil)
+        }
+    }
+
+    @Test func renderSessionReleasesAfterQueuedFontAndDisplayChanges() async throws {
+        let app = Ghostty.App(configPath: "/dev/null")
+        for _ in 0..<3 {
+            var view: Ghostty.SurfaceView? = Ghostty.SurfaceView(app, baseConfig: isolatedSurfaceConfiguration)
+            var surface = view?.surfaceModel
+            #expect(surface != nil)
+            weak let weakView = view
+            weak let weakSurface = surface
+            for size in [640, 720, 800] {
+                #expect(surface?.changeFontSize(by: 1) == true)
+                surface?.setSize(width: UInt32(size), height: 480)
+                surface?.setVisible(false)
+                surface?.setVisible(true)
+                surface?.setFocus(false)
+                surface?.setFocus(true)
+            }
+            // Release while render messages can still be pending.
+            view = nil
+            surface = nil
+            await drainMainQueue()
+            #expect(weakView == nil)
+            #expect(weakSurface == nil)
+        }
+    }
+
     private func binding(_ action: String, on surface: Ghostty.SurfaceView) throws -> Bool {
         let core = try #require(surface.surfaceModel)
         return core.perform(action: action)

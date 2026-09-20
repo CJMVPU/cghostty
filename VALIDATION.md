@@ -1,3 +1,46 @@
+## 0.1.6 本地安装包（2026-09-21，未发布）
+
+- README 按功能、安装、配置、构建与开发重新编写，采用短句与短行；最长行按中文双宽计算为 64 列，本地文档链接均有效。
+- 项目版本提升至 **0.1.6**，三个应用构建配置的构建号均为 **6**。完整重建 ReleaseFast Zig 核心和 ReleaseLocal 原生应用成功；日志 `/private/tmp/cghostty-0.1.6-release-build.log` 无 `warning:` / `error:` 诊断。
+- 应用位于 `macos/build/ReleaseLocal/cghostty.app`。平台范围、生成配置桥、126 个原生文件的桥接边界、应用资源、arm64 架构和完整签名检查通过：`/private/tmp/cghostty-0.1.6-release-scope.log`。修改的 Zig / Swift 文件格式、Swift 6、依赖版本与 diff 检查通过。
+- 安装包 `artifacts/cghostty-0.1.6-macos-arm64.zip`，**12,667,823 字节**；同名 `.sha256` 校验通过。SHA-256：`501e799421dadb629c4e062b891ea70ef664effcb5f51191eec95f07cd24e247`。
+- ZIP 完整性检查通过。解压后再次验证签名、arm64、最低 macOS 27.0、应用版本 0.1.6、构建号 6 和 CLI `+version`；解压后主程序与构建产物的 SHA-256 相同。验证记录：`/private/tmp/cghostty-0.1.6-package-verification.json`。
+- 包含下方光标连续变形、帧调度、SearchSession 和 RenderSession 改动。功能回归沿用本次版本修改前同一工作树的最终结果：Zig **128/128**、原生 **277 通过 / 1 跳过**、Metal 光标与关闭撤销桌面回归 **4/4**；本轮版本与文档修改后重新构建发行版并校验包，未重复全部功能测试。
+- 使用 ad-hoc 签名，未进行 Developer ID 公证。安装包及校验文件保存在被 Git 忽略的 `artifacts/`，不提交二进制；源码提交与本地附注标签 `v0.1.6` 对应。未推送、创建 GitHub Release 或替换已安装应用。
+
+## Surface 渲染会话拆分（2026-09-21，未发布）
+
+- 新增 `src/surface/RenderSession.zig`，集中持有渲染器、渲染线程管理器、OS 线程、共享渲染状态和互斥锁。会话采用稳定堆地址，资源创建完成后才交给 Surface；线程启动与资源创建分开，启动失败保持 ready，停止/join 可重复调用，已停止会话禁止重启。
+- Surface 只协调跨子系统依赖：先停止搜索和 IO 生产者，再停止/join 渲染线程，最后释放终端与渲染会话。构造失败路径补齐渲染启动后 IO 创建失败、两个线程启动后的后续失败回滚；IO 清理使用 Surface 中的稳定字段，避免释放线程运行前的旧副本；初始字体引用在创建失败时回收。
+- 渲染线程释放未消费消息中的配置、搜索高亮 arena 和旧字体引用；先销毁渲染器，再回收排队的旧字体引用，最后由 Surface 释放当前字体。渲染器析构同时回收线程尚未启动时已经解码的背景图片，覆盖未进入 threadExit 的清理路径。
+- 最终 Zig 定向回归 **128/128 通过，89/89 构建步骤**，覆盖 RenderSession、renderer 和 SearchSession：`/private/tmp/cghostty-render-session-core-final-v2.log`。新增回归注入线程创建失败，使用真实线程与事件循环验证停止/join、重复停止及重复启动拒绝；未启动队列回收测试同时验证配置、搜索快照与连续字体切换，确认只保留 Surface 当前字体引用。测试分配器未报告泄漏。日志含系统 hiservices 连接提示，退出码为 0。
+- 重建最终 Debug 核心和原生应用后，完整原生回归 **277 通过、1 项现有基准测试跳过、0 失败**。新增测试连续三轮创建会话、改变字体/尺寸/可见性/焦点后立即释放，验证视图和最后一个 handle 均释放。结果：`/private/tmp/cghostty-render-session-native-final.xcresult`；摘要：`/private/tmp/cghostty-render-session-native-summary.json`。
+- 最终桌面回归 **4/4 通过**：实际 Metal 光标前沿扩宽、细线恢复、最小化恢复及垂直同步开关 **2/2**（`/private/tmp/cghostty-render-session-motion-ui-final.xcresult`）；关闭标签和分屏后撤销，保留原 shell 会话并恢复输入焦点 **2/2**（`/private/tmp/cghostty-render-session-lifecycle-ui.xcresult`）。本轮原生与两组桌面结果摘要的运行时警告列表均为空，不将此结果视为此前搜索 UI 的 QoS 警告已被定位或修复。
+- Zig 格式、严格 SwiftLint、Swift 6、依赖版本、平台范围、生成配置桥、126 个原生文件的桥接边界和 diff 检查通过。架构与维护文档已同步。最新调试应用：`/private/tmp/cghostty-render-session-build/Debug/cghostty.app`。
+- IO 启停、输入协调与有效配置仍由 Surface 管理。本轮未穷举真实 OS 资源耗尽、Metal/GPU 分配失败或物理按键长按 Vim 的验收，也未测量 GPU 性能。版本仍为 **0.1.5**；保留前序光标及搜索修改，未提交、推送、发布或覆盖旧发布包，既有 0.1.5 ZIP 不包含这些后续修改。
+
+## Surface 搜索会话拆分（2026-09-20，未发布）
+
+- 新增 `src/surface/SearchSession.zig`，集中搜索线程的稳定地址、创建、查询更新、结果导航、回调转发、停止/join 与释放。`Surface.zig` 净减少 169 行搜索相关实现，只保留可选会话及 UI 命令协调；终端搜索算法与匹配语义未修改。创建成功后才发布会话，创建失败不会在 Surface 留下已释放的工作线程状态。
+- 结果回调使用固定 mailbox 依赖，不再读取整个 Surface。高亮先复制为独立 arena，再交给 renderer；复制失败本地回收，入队后的唤醒失败不再误释放已经转交的数据。工作线程 deinit 统一释放未消费查询，覆盖正常停止、未启动和早期错误；原来的停止分支丢弃长查询消息而未释放其缓冲区。
+- 新增 2 项 Zig 回归，逐个注入分配失败，验证未启动状态回收、长查询复制及待处理消息释放、多份高亮快照独立和部分复制失败回收。搜索会话及既有 `terminal.search` 回归 **150/150 通过，89/89 构建步骤**：`/private/tmp/cghostty-search-session-core-v2.log`。日志含系统 hiservices 服务连接提示，构建退出码为 0，不将该提示称为断言失败。
+- 已重新构建 Debug Zig 核心。新增原生活动搜索释放回归，连续三轮替换长查询、清空并重启，再释放视图和最后一个 handle，验证对象释放且不崩溃。完整原生回归 **276 通过、1 项现有基准测试跳过、0 失败**：`/private/tmp/cghostty-search-session-native-v2.xcresult`，摘要 `/private/tmp/cghostty-search-session-native-summary.json`，运行时警告列表为空。
+- 新增桌面搜索回归 **1/1 通过**：结果计数、回车开始选中、前后导航、无结果、两轮清空重启，以及关闭带搜索的分屏后在另一分屏输入。结果 `/private/tmp/cghostty-search-session-ui-v2.xcresult`，摘要 `/private/tmp/cghostty-search-session-ui-summary.json`。既有标签会话/焦点与分屏搜索/命令面板回归 **2/2 通过**，记录在首轮 `/private/tmp/cghostty-search-session-ui.xcresult`；首轮新增测试错误假设搜索自动选中、并读取 label 而非 value，实际 UI 为 `-/3`，修正测试后通过，产品搜索语义未为测试改变。
+- 最终桌面回归有 **1 条运行时 QoS 优先级等待警告**，出现在 XCTest 合成 Edit/Select All 菜单事件期间；没有断言失败，应用标准输出未记录同样警告。已检查测试活动、详情与导出诊断，未取得可归因的完整等待栈，保留诊断 `/private/tmp/cghostty-search-session-ui-diagnostics/`，不宣称已经证明与产品无关或完成性能验收。
+- 严格 SwiftLint、Zig 格式、Swift 6、依赖版本、平台范围、生成配置桥和 diff 检查通过。调试应用位于 `/private/tmp/cghostty-search-session-build/Debug/cghostty.app`。架构与维护文档已同步搜索会话的生命周期及测试入口。
+- 这只是 Surface 子系统化的搜索阶段；渲染/IO 启停、输入协调和配置仍由 Surface 管理。本轮保留上一轮光标修改，版本仍为 **0.1.5**，未提交、推送、发布或覆盖已有发布包。
+
+## 光标前沿扩宽、连续变形与帧调度（2026-09-20，未发布）
+
+- 修复前沿先到达后提前收窄的问题：位置与展开分别维护；前沿展开保持到后沿追上，再用临界阻尼响应收回。斜向展开改为两轴向外，避免法线投影把领跑角推向内部。轴向展开目标约为原边长的 15%，细线光标保留原生厚度。
+- 连续重定向继承当前角点、展开量及展开速度，不再每个输入重播宽度脉冲。新增四轴、8/16/33/60ms 输入间隔的连续性测试；既有八方向、薄线、快速反向、凸轮廓和隐藏/显示回归继续通过。停止后回到精确的原生矩形。仅保证展开速度接续，不将原来的位置插值描述为速度连续。
+- 新增 `CursorMotion` 集中几何生命周期、跨线程失效与活动状态。Vim 式 DECTCEM 隐藏保留运动，窗口隐藏/失焦、配置或形状/尺寸变化按原契约重置。`FrameScheduler.Timer` 保留较早的待执行截止时间，避免持续终端更新反复推迟绘制；隐藏取消动画计时器，返回前先更新可见状态；DisplayLink 绘制后同步调度状态。
+- 最终核心 renderer 回归 **124/124 通过，89/89 构建步骤**：`/private/tmp/cghostty-motion-core-final.log`。完整原生回归 **275 通过、1 项现有基准测试跳过、0 失败**：`/private/tmp/cghostty-motion-native.xcresult`，摘要 `/private/tmp/cghostty-motion-native-summary.json`。
+- 新增真实 Metal 像素桌面回归 **2/2 通过**，分别启用和关闭垂直同步，验证右移/下移的前沿比后沿更宽、最小化后恢复，以及细线模式停止后恢复原生尺寸。受控 PTY 每 32ms 移动并周期性隐藏/显示光标；开启 `MTL_DEBUG_LAYER=1`。结果 `/private/tmp/cghostty-motion-ui-v3.xcresult`，摘要 `/private/tmp/cghostty-motion-ui-summary.json`，截图 `/private/tmp/cghostty-motion-captures-final/`。两份最终摘要的运行时警告列表均为空。
+- 桌面测量首次将原生绿色全屏按钮纳入掩码，改为只截取终端内容；第二次发现竖向单行移动的测试错误要求长度增长 50%，修正为实际位移及前沿横向宽度断言，额外要求前沿超过静止宽度。最终两种绘制路径均通过，不把早期失败轮次当作通过证据。
+- Zig 格式、严格 SwiftLint、Swift 6、依赖版本、平台范围、生成配置桥、126 个原生文件的桥接边界及 diff 检查通过。测试构建有 AppIntents 元数据提取提示；原生日志包含系统 autoShortcut 服务连接失败及故意无效配置测试输出，不宣称整份日志没有 warning/error。
+- 已重新构建 Debug 核心与原生应用；本轮没有更新版本、发布或覆盖既有 0.1.5 ZIP。以上验证不代表实际 Vim 物理按键长按、所有输入法/显示器组合或 GPU 性能测量已经完成。
+
 ## 0.1.5 本地构建与发布包（2026-09-20，交由用户发布）
 
 - 项目版本提升至 **0.1.5**，三个应用构建配置的构建号均提升至 **5**。完整重建 ReleaseFast Zig 核心及 ReleaseLocal 原生应用成功；日志 `/private/tmp/cghostty-0.1.5-release-build.log` 无 warning/error。应用路径 `macos/build/ReleaseLocal/cghostty.app`。

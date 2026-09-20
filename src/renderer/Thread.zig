@@ -49,7 +49,7 @@ render_c_cancel: xev.Completion = .{},
 
 /// The kind of work the currently scheduled animation wake needs,
 /// stored when the timer is armed.
-animation_wake: rendererpkg.Renderer.AnimationWake.Kind = .draw,
+animation_timer: rendererpkg.FrameScheduler.Timer = .{},
 
 /// This async is used to force a draw immediately. This does not
 /// coalesce like the wakeup does.
@@ -182,6 +182,10 @@ pub fn deinit(self: *Thread) void {
         self.compression.deinit();
     self.loop.deinit();
 
+    // Producers must have stopped and this worker must have joined. Startup
+    // failure and shutdown can both leave owning messages unconsumed.
+    while (self.mailbox.pop(global.io())) |message| message.deinit();
+
     // Nothing can possibly access the mailbox anymore, destroy it.
     self.mailbox.destroy(self.alloc);
 }
@@ -301,17 +305,17 @@ fn drainMailbox(self: *Thread) !void {
                 // draw. Going through renderCallback also reschedules
                 // any Kitty graphics animation wakeup that lapsed
                 // while we were invisible.
-                if (v) _ = renderCallback(self, undefined, undefined, {});
-
-                // Notify the renderer so it can update any state.
+                // Publish visibility before drawing so returning to a window
+                // samples/reset motion with the new state and re-arms wakes.
                 self.renderer.setVisible(v);
+                if (v) {
+                    _ = renderCallback(self, undefined, undefined, {});
+                } else {
+                    self.armAnimationTimer();
+                }
 
-                // Note that we're explicitly today not stopping any
-                // cursor timers, draw timers, etc. These things have very
-                // little resource cost and properly maintaining their active
-                // state across different transitions is going to be bug-prone,
-                // so its easier to just let them keep firing and have them
-                // check the visible state themselves to control their behavior.
+                // Animation wakes stop while hidden. The independent cursor
+                // blink timer retains its existing visibility checks.
             },
 
             .focus => |v| focus: {
@@ -342,7 +346,7 @@ fn drainMailbox(self: *Thread) !void {
                             &self.cursor_c_cancel,
                             void,
                             null,
-                            cursorCancelCallback,
+                            timerCancelCallback,
                         );
                     }
                 } else {
@@ -511,6 +515,9 @@ fn drawNowCallback(
     // Draw immediately
     const t = self_.?;
     t.drawFrame(true);
+    // Sampling can start or finish motion on a DisplayLink draw, independently
+    // of terminal updates. Keep the timer policy in sync with that result.
+    t.armAnimationTimer();
 
     return .rearm;
 }
@@ -570,22 +577,29 @@ fn renderCallback(
 /// wake, if it needs one.
 ///
 /// This is called after every frame update or animation draw and
-/// whenever the wake inputs change (focus, config, visibility
-/// regain). Resetting a pending timer is always safe: every call
-/// recomputes the wake, so the deadline only ever moves toward the
-/// actual next wake.
+/// whenever the wake inputs change. Keep an earlier pending deadline rather
+/// than postponing motion forever while terminal updates continue to arrive.
 fn armAnimationTimer(self: *Thread) void {
-    const wake = self.renderer.animationWake() orelse return;
-    self.animation_wake = wake.kind;
-    self.render_h.reset(
-        &self.loop,
-        &self.render_c,
-        &self.render_c_cancel,
-        wake.delay_ms,
-        Thread,
-        self,
-        animationTimerCallback,
-    );
+    const now = std.Io.Timestamp.now(global.io(), .awake);
+    const now_ms: u64 = @intCast(@divTrunc(now.nanoseconds, std.time.ns_per_ms));
+    const wake = if (self.flags.visible) self.renderer.animationWake() else null;
+    switch (self.animation_timer.request(now_ms, wake)) {
+        .keep => {},
+        .cancel => {
+            if (self.render_c.state() == .active and self.render_c_cancel.state() == .dead) {
+                self.render_h.cancel(&self.loop, &self.render_c, &self.render_c_cancel, void, null, timerCancelCallback);
+            }
+        },
+        .arm => |next| self.render_h.reset(
+            &self.loop,
+            &self.render_c,
+            &self.render_c_cancel,
+            next.delay_ms,
+            Thread,
+            self,
+            animationTimerCallback,
+        ),
+    }
 }
 
 fn animationTimerCallback(
@@ -609,9 +623,10 @@ fn animationTimerCallback(
 
     // Animations pause entirely while we're invisible; the .visible
     // mailbox message re-arms us when we can be seen again.
+    const kind = t.animation_timer.fired() orelse return .disarm;
     if (!t.flags.visible) return .disarm;
 
-    switch (t.animation_wake) {
+    switch (kind) {
         // Frame data must be updated (a Kitty animation frame is
         // due). renderCallback updates, draws, and re-arms us.
         .update => return renderCallback(
@@ -668,7 +683,7 @@ fn cursorTimerCallback(
     return .disarm;
 }
 
-fn cursorCancelCallback(
+fn timerCancelCallback(
     _: ?*void,
     _: *xev.Loop,
     _: *xev.Completion,
@@ -686,7 +701,7 @@ fn cursorCancelCallback(
         error.Canceled => {}, // success
         error.NotFound => {}, // completed before it could cancel
         else => {
-            log.warn("error in cursor cancel callback err={}", .{err});
+            log.warn("error in timer cancel callback err={}", .{err});
             unreachable;
         },
     };

@@ -188,6 +188,8 @@ test {
     _ = @import("input.zig");
     _ = @import("cli.zig");
     _ = @import("surface_mouse.zig");
+    _ = @import("surface/SearchSession.zig");
+    _ = @import("surface/RenderSession.zig");
 
     // Libraries
     _ = @import("tripwire.zig");
