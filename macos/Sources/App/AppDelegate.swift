@@ -162,7 +162,7 @@ class AppDelegate: NSObject,
     @MainActor private lazy var menuShortcutManager = Ghostty.MenuShortcutManager()
 
     override init() {
-#if DEBUG
+#if DEBUG || CGHOSTTY_TESTING
         ghostty = Ghostty.App(configPath: ProcessInfo.processInfo.environment["CGHOSTTY_CONFIG_PATH"])
 #else
         ghostty = Ghostty.App()

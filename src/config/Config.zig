@@ -2913,8 +2913,9 @@ keybind: Keybinds = .{},
 
 /// Native cursor effect. `smooth` moves a stable body with a connected trailing
 /// follower, uniformly enlarges the body by up to 12%, and softly rounds it.
-/// The follower offset follows travel without a length cap and never
-/// compresses the body. Repeated input retains the shape across short gaps;
+/// Long moves accelerate from rest; short input remains responsive. The
+/// trail connects recent submitted draw positions without a length cap and
+/// never compresses the body. Repeated input retains the shape across gaps;
 /// after movement stops, the native size
 /// and shape return. Block, bar, and underline cursors share the effect.
 /// Shape and size changes reset motion. Hidden cursors are not drawn, but

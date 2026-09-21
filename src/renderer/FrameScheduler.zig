@@ -31,6 +31,28 @@ pub fn nextWake(now_ms: u64, cursor_active: bool, kitty_deadline_ms: ?u64) ?Wake
     return null;
 }
 
+/// DisplayLink owns cursor-only draws while it is actually running. Kitty
+/// deadlines still need a timer to update image content before display.
+pub fn timerWake(now_ms: u64, cursor_active: bool, kitty_deadline_ms: ?u64, vsync_running: bool) ?Wake {
+    return nextWake(now_ms, cursor_active and !vsync_running, kitty_deadline_ms);
+}
+
+test "FrameScheduler vsync owns motion but not Kitty deadlines and fallback takes over" {
+    const t = std.testing;
+    try t.expectEqual(@as(?Wake, null), timerWake(0, true, null, true));
+    try t.expectEqual(@as(u64, 8), timerWake(0, true, null, false).?.delay_ms);
+    try t.expectEqual(@as(u64, 40), timerWake(0, true, 40, true).?.delay_ms);
+    try t.expectEqual(Wake.Kind.update, timerWake(0, true, 40, true).?.kind);
+    try t.expectEqual(Wake.Kind.draw, timerWake(0, true, 40, false).?.kind);
+    var timer: Timer = .{};
+    _ = timer.request(0, timerWake(0, true, null, false));
+    try t.expect(timer.request(1, timerWake(1, true, null, true)) == .cancel);
+    try t.expect(timer.request(2, timerWake(2, true, null, false)) == .arm);
+    try t.expect(timer.request(3, null) == .cancel);
+    try t.expect(timer.request(4, timerWake(4, true, 44, true)) == .arm);
+    try t.expectEqual(@as(u64, 44), timer.pending.?.deadline_ms);
+}
+
 pub fn needsDisplayLink(visible: bool, cells_rebuilt: bool, wake: ?Wake) bool {
     return visible and (cells_rebuilt or wake != null);
 }

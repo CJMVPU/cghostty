@@ -235,22 +235,44 @@ terminal/frame updates and retain deadlines; a Boolean 'animate' flag is not
 enough for Kitty animations and cursor movement to coexist. Native window/tab
 animations stay in AppKit/SwiftUI.
 
+Each swap-chain slot tracks its own uploaded cell revision and foreground
+count (`CellUpload`). A content rebuild advances the revision; a draw-only
+frame reuses both cell buffers once that slot has caught up. Both uploads must
+succeed before committing the revision. Resizing/recreating a frame invalidates
+its cache, and revision wrap invalidates all slots. Uniforms remain per-frame.
+GPU and presentation failures share one health result (`Presentation`), with
+the frame-slot semaphore released exactly once by the existing completion path.
+Opt-in `CGHOSTTY_RENDER_TRACE` writes per-surface timing/count CSVs without
+terminal text. Normal launches do not collect timings or write trace files.
+
 `renderer/CursorMotion.zig` owns cursor motion lifecycle: draw-lock-owned
 geometry and atomic invalidation/activity at the thread boundary. Terminal
 hide/show preserves motion; focus, visibility, configuration and size changes
 invalidate it. `SmoothCursor.zig` translates a stable body and uniformly scales
-both dimensions by up to 12%. A separate follower arrives 40ms after the body;
-its offset is the difference between the body and follower progress, without
-a cell-width or cursor-stroke cap. Equal-length horizontal, vertical and
-diagonal travel uses the same timing and offset magnitude for every shape.
-Retargets preserve the displayed center, follower
-offset and shape. A separate burst envelope holds through input gaps up to
-120ms (and at least until the follower arrives), then releases over 100ms.
-Shape/size changes restore native geometry. The Metal shader blends the body
-toward a fourth-power ellipse and unions it with a connected tapered follower
-along the entire offset, including long jumps. The tail
-can only add coverage, never compress or cut the body. Text recoloring uses
-the same coverage as the cursor.
+both dimensions by up to 12%. Body travel takes 24–220ms. Long moves from rest
+use smooth acceleration/deceleration; one-cell input keeps its fast response.
+Bounded Hermite tangents carry velocity into retargets without changing arrival
+deadlines. Forward velocity is bounded against overshoot, lateral drift is at
+most a quarter cell, and strong reversals discard wrong-way inertia. Velocity
+is preserved when these bounds allow it, not unconditionally through reversals.
+A fixed-capacity history stores up to 32 submitted body positions. Sampling
+alone and aborted encoding do not add points; recording follows Metal command
+submission, not a claim that every frame was displayed by the compositor.
+GPU execution or presentation failure invalidates this history. A 40–60ms history window
+forms the tail, always retaining the previous submitted position even after
+a delayed draw. Ordered segments preserve turns. The oldest endpoint slides
+between samples as the history expires; there is no pixel-length cap.
+Straight intermediate samples are compacted with less than 0.032px cumulative
+local error over 32 points; the previous frame and reversals remain. Tail width
+uses arc length, not sample index, so sampling density does not change taper.
+Normalized segment endpoints and radii are computed once on the CPU.
+Equal-length travel in all directions and all shapes uses the same rules.
+The burst envelope holds through input gaps up to 120ms and until the trail
+can drain after the submitted arrival frame, then releases over 100ms.
+Shape/size changes restore native geometry and clear history. The Metal shader
+unions a mildly rounded body with the tapered history segments; the trail can
+only add coverage. Text recoloring uses the same coverage. Shared bounds skip
+unrelated fragments and include every history point when drawing the cursor.
 Cursor bounds already include padding and map directly from screen pixels to
 clip space; applying the grid projection again would offset and clip the body.
 Block, bar and underline share the effect; the default native cursor stroke
@@ -260,7 +282,10 @@ is three physical pixels and metric modifiers still apply.
 wake, pending timer deadlines and whether visible work needs DisplayLink.
 Continuous input retains an earlier pending wake instead of postponing it.
 The renderer supplies the clock sample, cursor activity and absolute Kitty
-deadline. Renderer Thread owns actual timer arm/cancellation and render/update
+deadline. A running DisplayLink suppresses cursor-only timers while Kitty
+update deadlines remain scheduled; fallback timers resume when it is absent.
+Blink timers run only when a blink phase can change the visible cursor style.
+Renderer Thread owns actual timer arm/cancellation and render/update
 execution, cancels animation wakes when hidden, and publishes visibility before
 drawing on return. DisplayLink draws also refresh the timer policy; DisplayLink
 itself remains synchronized outside the draw lock. There is no second scheduler,

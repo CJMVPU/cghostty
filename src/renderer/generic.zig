@@ -23,6 +23,8 @@ const ImageState = imagepkg.State;
 const SmoothCursor = @import("SmoothCursor.zig");
 const FrameScheduler = @import("FrameScheduler.zig");
 const CursorMotion = @import("CursorMotion.zig");
+const Trace = @import("Trace.zig");
+const CellUpload = @import("CellUpload.zig");
 const assert = @import("../quirks.zig").inlineAssert;
 const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
@@ -161,6 +163,10 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
         /// to determine if any possible changes have been made to the
         /// cells for the draw call.
         cells_rebuilt: bool = false,
+        cells_revision: u64 = 0,
+        /// Render-thread-owned; reflects whether blink phase changes pixels.
+        cursor_blink_needed: bool = false,
+        trace: Trace = .{},
 
         /// The current GPU uniform values.
         uniforms: shaderpkg.Uniforms,
@@ -313,6 +319,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
         ///
         /// This is used to implement double/triple buffering.
         const FrameState = struct {
+            cell_upload: CellUpload = .{},
             uniforms: UniformBuffer,
             cells: CellTextBuffer,
             cells_bg: CellBgBuffer,
@@ -635,10 +642,13 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             result.updateBgImageBuffer();
             try result.prepBackgroundImage();
 
+            result.trace = Trace.init(alloc);
+
             return result;
         }
 
         pub fn deinit(self: *Self) void {
+            self.trace.deinit();
             // This only deinitializes and frees CPU-side state
             // and does not free GPU resources like the swap chain and
             // shaders. Those are freed with `releaseGpuResources`.
@@ -875,6 +885,14 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
         ///
         /// Must be called on the render thread.
         pub fn animationWake(self: *const Self) ?AnimationWake {
+            return self.animationWakeFor(false);
+        }
+
+        pub fn animationTimerWake(self: *const Self) ?AnimationWake {
+            return self.animationWakeFor(self.hasVsync());
+        }
+
+        fn animationWakeFor(self: *const Self, vsync_running: bool) ?AnimationWake {
             if (!self.visible) return null;
             var now_ms: u64 = 0;
             const deadline: ?u64 = if (self.kitty_animation_clock) |base| deadline: {
@@ -883,10 +901,11 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                 now_ms = @intCast(@divTrunc(base.durationTo(now).nanoseconds, std.time.ns_per_ms));
                 break :deadline self.kitty_animation_next_ms;
             } else null;
-            return FrameScheduler.nextWake(
+            return FrameScheduler.timerWake(
                 now_ms,
                 self.cursor_motion.isActive(),
                 deadline,
+                vsync_running,
             );
         }
 
@@ -1332,6 +1351,11 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             // From this point forward no more errors.
             errdefer comptime unreachable;
 
+            self.cursor_blink_needed = renderer.cursorNeedsBlink(&self.terminal_state, .{
+                .preedit = critical.preedit != null,
+                .focused = self.focused,
+            });
+
             // Reset our dirty state after updating.
             defer self.terminal_state.dirty = .false;
 
@@ -1500,7 +1524,9 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                 // display link at this point.
                 return true;
             }
-            self.cells_rebuilt = false;
+            const trace_start = if (self.trace.file != null) Trace.clock() else 0;
+            var copied_bytes: usize = 0;
+            defer if (trace_start != 0) self.trace.emit("draw", Trace.clock() - trace_start, copied_bytes, self.uniforms.smooth_trail_count);
 
             // Wait for a frame to be available.
             const frame = swap_chain.nextFrame();
@@ -1539,6 +1565,7 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                     self.size.screen.width,
                     self.size.screen.height,
                 );
+                frame.cell_upload.invalidate();
                 frame.target_config_modified = self.target_config_modified;
             }
 
@@ -1548,12 +1575,17 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             // Upload the background image to the GPU as necessary.
             try self.uploadBackgroundImage();
 
-            self.updateSmoothCursor();
+            const cursor_frame = self.updateSmoothCursor();
 
             // Setup our frame data
             try frame.uniforms.sync(&.{self.uniforms});
-            try frame.cells_bg.sync(self.cells.bg_cells);
-            const fg_count = try frame.cells.syncFromArrayLists(self.cells.fg_rows);
+            if (frame.cell_upload.needed(self.cells_revision)) {
+                try frame.cells_bg.sync(self.cells.bg_cells);
+                const count = try frame.cells.syncFromArrayLists(self.cells.fg_rows);
+                frame.cell_upload.commit(self.cells_revision, count);
+                copied_bytes = self.cells.bg_cells.len * @sizeOf(shaderpkg.CellBg) + count * @sizeOf(shaderpkg.CellText);
+            }
+            const fg_count = frame.cell_upload.foreground_count;
 
             // If our background image buffer has changed, sync it.
             if (frame.bg_image_buffer_modified != self.bg_image_buffer_modified) {
@@ -1582,7 +1614,11 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
 
             // Get a frame context from the graphics API.
             var frame_ctx = try self.api.beginFrame(self, &frame.target, &frame.commands);
-            defer frame_ctx.complete(sync);
+            defer {
+                frame_ctx.complete(sync);
+                self.cells_rebuilt = false;
+                if (cursor_frame) |cursor| self.cursor_motion.recordFrame(cursor);
+            }
 
             {
                 var pass = frame_ctx.renderPass(&.{.{
@@ -1703,6 +1739,8 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             self: *Self,
             health: Health,
         ) void {
+            // A failed GPU submission must not seed the next visible trail.
+            if (health == .unhealthy) self.cursor_motion.invalidate();
             // If our health value hasn't changed, then we do nothing. We don't
             // do a cmpxchg here because strict atomicity isn't important.
             if (self.health.load(.seq_cst) != health) {
@@ -1990,16 +2028,16 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
         }
 
         /// Update under draw_mutex, from the actual native cursor geometry.
-        fn updateSmoothCursor(self: *Self) void {
+        fn updateSmoothCursor(self: *Self) ?CursorMotion.Frame {
             self.uniforms.smooth_effect = 0;
             const now: f64 = @as(f64, @floatFromInt(std.Io.Timestamp.now(global.io(), .awake).nanoseconds)) / std.time.ns_per_s;
             if (!self.config.cursor_effect or !self.focused or !self.visible or self.api.reduceMotion()) {
                 _ = self.cursor_motion.sample(false, null, now);
-                return;
+                return null;
             }
             const c = self.cells.getCursorGlyph() orelse {
                 _ = self.cursor_motion.sample(true, null, now);
-                return;
+                return null;
             };
             const shape: SmoothCursor.Shape = switch (self.cells.cursor_style orelse .block_hollow) {
                 .block => .block,
@@ -2007,12 +2045,12 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                 .underline => .underline,
                 .block_hollow, .lock => {
                     _ = self.cursor_motion.sample(false, null, now);
-                    return;
+                    return null;
                 },
             };
             if (c.color[3] != 255) {
                 _ = self.cursor_motion.sample(false, null, now);
-                return;
+                return null;
             }
             const size: SmoothCursor.Vec = .{ @floatFromInt(c.glyph_size[0]), @floatFromInt(c.glyph_size[1]) };
             const x: f32 = @floatFromInt(@as(i64, c.grid_pos[0]) * self.size.cell.width + self.size.padding.left + c.bearings[0]);
@@ -2025,9 +2063,17 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
                 .size = size,
                 .timing_width = timing_width,
                 .shape = shape,
-            }, now) orelse return;
+            }, now) orelse return null;
             self.uniforms.smooth_center = frame.pose.center;
-            self.uniforms.smooth_tail_offset = frame.pose.tail_offset;
+            self.uniforms.smooth_trail_count = frame.pose.trail_len;
+            for (frame.pose.trail[0..frame.pose.trail_len], 0..) |point, i| {
+                self.uniforms.smooth_trail[i] = .{
+                    point[0] / @max(frame.pose.size[0] * 0.5, 0.001),
+                    point[1] / @max(frame.pose.size[1] * 0.5, 0.001),
+                    frame.pose.trail_radii[i],
+                    0,
+                };
+            }
             self.uniforms.smooth_target = target;
             self.uniforms.smooth_half_size = frame.pose.size * @as(SmoothCursor.Vec, @splat(0.5));
             self.uniforms.smooth_native_half_size = size * @as(SmoothCursor.Vec, @splat(0.5));
@@ -2035,6 +2081,20 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             self.uniforms.smooth_color = c.color;
             self.uniforms.smooth_effect = frame.effect;
             self.uniforms.smooth_block = if (self.cells.cursor_style == .block) 1 else 0;
+            const half = frame.pose.size * @as(SmoothCursor.Vec, @splat(0.5));
+            var lo = frame.pose.center - half;
+            var hi = frame.pose.center + half;
+            for (frame.pose.trail[0..frame.pose.trail_len]) |offset| {
+                lo = @min(lo, frame.pose.center + offset - half);
+                hi = @max(hi, frame.pose.center + offset + half);
+            }
+            if (frame.effect < 1) {
+                lo = @min(lo, target - size * @as(SmoothCursor.Vec, @splat(0.5)));
+                hi = @max(hi, target + size * @as(SmoothCursor.Vec, @splat(0.5)));
+            }
+            self.uniforms.smooth_bounds_min = lo - @as(SmoothCursor.Vec, @splat(1));
+            self.uniforms.smooth_bounds_max = hi + @as(SmoothCursor.Vec, @splat(1));
+            return frame;
         }
 
         /// Build the overlay as configured. Returns null if there is no
@@ -2116,6 +2176,13 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             cursor_style_: ?renderer.CursorStyle,
             links: *const terminal.RenderState.CellSet,
         ) Allocator.Error!void {
+            // Invalidate even if a later allocation fails after mutating cells.
+            self.cells_revision +%= 1;
+            if (self.cells_revision == 0) {
+                if (self.swap_chain) |*chain| for (&chain.frames) |*frame| {
+                    frame.cell_upload.invalidate();
+                };
+            }
             const state: *terminal.RenderState = &self.terminal_state;
 
             const grid_size_diff =

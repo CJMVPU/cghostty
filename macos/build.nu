@@ -61,6 +61,11 @@ def main [
     }
     let skip_testing = if $action == "test" and not $ui_tests { [-skip-testing GhosttyUITests] } else { [] }
     let test_selection = if $only_testing == "" { [] } else { [-only-testing $only_testing] }
+    # ReleaseLocal benchmarks still build the unit-test target, whose imports
+    # require testability. This only affects test actions, never release builds.
+    let test_settings = if $action == "test" {
+        ["ENABLE_TESTABILITY=YES" "SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) CGHOSTTY_TESTING"]
+    } else { [] }
     let result_args = if $result_bundle == "" { [] } else {
         [-resultBundlePath ($result_bundle | path expand)]
     }
@@ -71,6 +76,6 @@ def main [
         -destination "platform=macOS,arch=arm64"
         -derivedDataPath ($build_dir | path join "DerivedData")
         $"SYMROOT=($build_dir)" "ARCHS=arm64" "ONLY_ACTIVE_ARCH=YES"
-        $"MARKETING_VERSION=($marketing_version)" $"CGHOSTTY_VERSION=($app_version)" ...$skip_testing ...$test_selection ...$result_args $action)
+        $"MARKETING_VERSION=($marketing_version)" $"CGHOSTTY_VERSION=($app_version)" ...$test_settings ...$skip_testing ...$test_selection ...$result_args $action)
     if $env.LAST_EXIT_CODE != 0 { exit $env.LAST_EXIT_CODE }
 }

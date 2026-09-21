@@ -25,7 +25,10 @@ struct Uniforms {
   bool use_linear_blending;
   bool use_linear_correction;
   float2 smooth_center;
-  float2 smooth_tail_offset;
+  float4 smooth_trail[32];
+  uint smooth_trail_count;
+  float2 smooth_bounds_min;
+  float2 smooth_bounds_max;
   float2 smooth_target;
   float2 smooth_half_size;
   float2 smooth_native_half_size;
@@ -557,6 +560,7 @@ struct CellTextVertexIn {
 // One uniformly scaled body. A fourth-power ellipse softly rounds the
 // rectangle without pinching its middle or stretching it along travel.
 float smooth_cursor_coverage(float2 p, constant Uniforms& u) {
+  if (any(p < u.smooth_bounds_min) || any(p > u.smooth_bounds_max)) return 0;
   float2 normalized = (p - u.smooth_center) / max(u.smooth_half_size, float2(0.001));
   float2 local = abs(normalized);
   float rectangle = max(local.x, local.y) - 1;
@@ -567,14 +571,19 @@ float smooth_cursor_coverage(float2 p, constant Uniforms& u) {
   float coverage = 1 - smoothstep(-aa, aa, distance);
   // Union a connected tapered follower with the complete body. The tail can add
   // coverage but never remove pixels from or squeeze the moving body.
-  float2 tail = u.smooth_tail_offset / max(u.smooth_half_size, float2(0.001));
-  float tail_length_squared = dot(tail, tail);
-  if (tail_length_squared > 0.000001) {
-    float t = clamp(dot(normalized, tail) / tail_length_squared, 0.0, 1.0);
-    float tail_distance = length(normalized - tail * t) - mix(0.9, 0.75, t);
+  float2 start = float2(0);
+  float start_radius = 0.9;
+  for (uint i = 0; i < u.smooth_trail_count; ++i) {
+    float2 end = u.smooth_trail[i].xy;
+    float2 segment = end - start;
+    float end_radius = u.smooth_trail[i].z;
+    float t = clamp(dot(normalized - start, segment) / max(dot(segment, segment), 0.000001), 0.0, 1.0);
+    float tail_distance = length(normalized - start - segment * t) - mix(start_radius, end_radius, t);
     float tail_aa = max(0.5 * fwidth(tail_distance), 0.0001);
     float tail_coverage = 1 - smoothstep(-tail_aa, tail_aa, tail_distance);
     coverage = max(coverage, tail_coverage);
+    start = end;
+    start_radius = end_radius;
   }
   float2 native_local = p - u.smooth_target;
   float native = all(native_local >= -u.smooth_native_half_size) &&
@@ -584,11 +593,8 @@ float smooth_cursor_coverage(float2 p, constant Uniforms& u) {
 
 struct SmoothCursorVertexOut { float4 position [[position]]; };
 vertex SmoothCursorVertexOut smooth_cursor_vertex(uint vid [[vertex_id]], constant Uniforms& u [[buffer(1)]]) {
-  float2 lo = min(u.smooth_center - u.smooth_half_size, u.smooth_target - u.smooth_native_half_size) - 1;
-  float2 hi = max(u.smooth_center + u.smooth_half_size, u.smooth_target + u.smooth_native_half_size) + 1;
-  float2 tail_center = u.smooth_center + u.smooth_tail_offset;
-  lo = min(lo, tail_center - u.smooth_half_size - 1);
-  hi = max(hi, tail_center + u.smooth_half_size + 1);
+  float2 lo = u.smooth_bounds_min;
+  float2 hi = u.smooth_bounds_max;
   float2 uv = float2((vid << 1) & 2, vid & 2);
   // Cursor bounds are already in screen pixels (including grid padding).
   // The cell projection would add padding again and clip the top/left of

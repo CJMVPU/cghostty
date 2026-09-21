@@ -84,7 +84,7 @@ flags: packed struct {
     /// This is true when a blinking cursor should be visible and false
     /// when it should not be visible. This is toggled on a timer by the
     /// thread automatically.
-    cursor_blink_visible: bool = false,
+    cursor_blink_visible: bool = true,
 
     /// This is true when the inspector is active.
     has_inspector: bool = false,
@@ -227,15 +227,7 @@ fn threadMain_(self: *Thread) !void {
     // Send an initial wakeup message so that we render right away.
     try self.wakeup.notify();
 
-    // Start blinking the cursor.
-    self.cursor_h.run(
-        &self.loop,
-        &self.cursor_c,
-        cursorBlinkInterval(),
-        Thread,
-        self,
-        cursorTimerCallback,
-    );
+    // The first content update decides whether the cursor actually blinks.
 
     // Arm the animation timer in case the renderer already needs
     // animation wakes (e.g. an active Kitty image).
@@ -311,6 +303,7 @@ fn drainMailbox(self: *Thread) !void {
                 if (v) {
                     _ = renderCallback(self, undefined, undefined, {});
                 } else {
+                    self.armCursorBlinkTimer();
                     self.armAnimationTimer();
                 }
 
@@ -335,35 +328,8 @@ fn drainMailbox(self: *Thread) !void {
                 // the animation timer for the new state.
                 self.armAnimationTimer();
 
-                if (!v) {
-                    // If we're not focused, then we stop the cursor blink
-                    if (self.cursor_c.state() == .active and
-                        self.cursor_c_cancel.state() == .dead)
-                    {
-                        self.cursor_h.cancel(
-                            &self.loop,
-                            &self.cursor_c,
-                            &self.cursor_c_cancel,
-                            void,
-                            null,
-                            timerCancelCallback,
-                        );
-                    }
-                } else {
-                    // If we're focused, we immediately show the cursor again
-                    // and then restart the timer.
-                    if (self.cursor_c.state() != .active) {
-                        self.flags.cursor_blink_visible = true;
-                        self.cursor_h.run(
-                            &self.loop,
-                            &self.cursor_c,
-                            cursorBlinkInterval(),
-                            Thread,
-                            self,
-                            cursorTimerCallback,
-                        );
-                    }
-                }
+                if (v) self.flags.cursor_blink_visible = true;
+                self.armCursorBlinkTimer();
             },
 
             .reset_cursor_blink => {
@@ -422,6 +388,7 @@ fn drainMailbox(self: *Thread) !void {
             .macos_display_id => |v| {
                 if (@hasDecl(rendererpkg.Renderer, "setMacOSDisplayID")) {
                     try self.renderer.setMacOSDisplayID(v, &self.draw_now);
+                    self.armAnimationTimer();
                 }
             },
         }
@@ -568,6 +535,7 @@ fn renderCallback(
     t.drawFrame(false);
 
     // Schedule the next animation wake, if the renderer needs one.
+    t.armCursorBlinkTimer();
     t.armAnimationTimer();
 
     return .disarm;
@@ -582,7 +550,7 @@ fn renderCallback(
 fn armAnimationTimer(self: *Thread) void {
     const now = std.Io.Timestamp.now(global.io(), .awake);
     const now_ms: u64 = @intCast(@divTrunc(now.nanoseconds, std.time.ns_per_ms));
-    const wake = if (self.flags.visible) self.renderer.animationWake() else null;
+    const wake = if (self.flags.visible) self.renderer.animationTimerWake() else null;
     switch (self.animation_timer.request(now_ms, wake)) {
         .keep => {},
         .cancel => {
@@ -624,6 +592,7 @@ fn animationTimerCallback(
     // Animations pause entirely while we're invisible; the .visible
     // mailbox message re-arms us when we can be seen again.
     const kind = t.animation_timer.fired() orelse return .disarm;
+    t.renderer.trace.emit("timer", @intFromBool(kind == .update), @intFromBool(t.renderer.hasVsync()), 0);
     if (!t.flags.visible) return .disarm;
 
     switch (kind) {
@@ -645,6 +614,26 @@ fn animationTimerCallback(
             return .disarm;
         },
     }
+}
+
+fn armCursorBlinkTimer(self: *Thread) void {
+    if (!self.flags.visible or !self.flags.focused or !self.renderer.cursor_blink_needed) {
+        self.flags.cursor_blink_visible = true;
+        if (self.cursor_c.state() == .active and self.cursor_c_cancel.state() == .dead) {
+            self.cursor_h.cancel(&self.loop, &self.cursor_c, &self.cursor_c_cancel, Thread, self, cursorBlinkCancelCallback);
+        }
+        return;
+    }
+    if (self.cursor_c.state() == .dead and self.cursor_c_cancel.state() == .dead) {
+        self.cursor_h.run(&self.loop, &self.cursor_c, cursorBlinkInterval(), Thread, self, cursorTimerCallback);
+    }
+}
+
+fn cursorBlinkCancelCallback(self: ?*Thread, _: *xev.Loop, _: *xev.Completion, result: xev.Timer.CancelError!void) xev.CallbackAction {
+    _ = result catch {};
+    // Reconsider a new blink request arriving while cancellation was pending.
+    if (self) |t| t.wakeup.notify() catch {};
+    return .disarm;
 }
 
 fn cursorTimerCallback(
@@ -669,6 +658,10 @@ fn cursorTimerCallback(
         return .disarm;
     };
 
+    if (!t.flags.visible or !t.flags.focused or !t.renderer.cursor_blink_needed) {
+        t.flags.cursor_blink_visible = true;
+        return .disarm;
+    }
     t.flags.cursor_blink_visible = !t.flags.cursor_blink_visible;
     t.wakeup.notify() catch {};
 

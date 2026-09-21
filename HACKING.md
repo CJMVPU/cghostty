@@ -116,9 +116,11 @@ Metal 编译通过 `xcrun --toolchain Metal` 调用安装的工具链。缺失�
 `zig build test -Dtest-filter=renderer -Dtest-filter=config -Dtest-filter=Metrics -Dtest-filter="full height cursor sprites"`
 覆盖八方向逐帧尺寸边界、整体等比例放大 12%、单格持续输入、快速改向、
 隐藏/显示、Vim 形状切换及默认 3 像素笔画。`CursorMotion` 集中失效与活动状态；
-`SmoothCursor` 分别维护主体、尾部偏移和形变包络。
-验证主体到达后尾部继续收拢，长距离跳转与改向保留当前偏移。
-尾部不设长度上限；八方向等长移动与三种光标均验证相同的自然峰值偏移。
+`SmoothCursor` 维护主体、已提交绘制帧的位置历史和形变包络。
+长距离从静止逐渐加速，单格输入保持快速响应，主体最长 220ms。
+尾部使用最近 40–60ms 的历史位置，最多保留 32 个记录；不设像素长度上限。
+检查 30/60/120/240Hz 下八方向、三种光标的连续帧轨迹接回上一帧主体，
+以及快速转向、绘制中断、未提交采样不记入历史、恢复后收拢和形状切换清空。
 连续输入覆盖 8、16、33、60、100ms 间隔；每段检查整个时间序列，
 而非只检查重定向时的位置连续或某一帧前沿更宽。
 
@@ -130,8 +132,40 @@ Metal 编译通过 `xcrun --toolchain Metal` 调用安装的工具链。缺失�
 同时检查快速重复输入时实际出现尾部。
 长距离横向、竖向、斜向跳转逐帧检查像素连通，尾部不得与主体脱离；
 三种光标均须拍到超过旧长度上限的尾部。
+增加每 32ms 转向的连续跳转，检查历史轨迹转弯处的真实 Metal 连通性。
+跨帧连接由核心的连续提交序列验证；桌面截图不是逐显示帧录像。
 细线和下划线均验证原生 3 像素、移动时放大和停止后精确恢复。
 它不替代实际 Vim 物理按键、输入法及不同显示器的手动验收。
+
+同向重定向检查速度接续、到达期限与无过冲；强反向取消旧方向惯性，
+转弯侧向偏移限制在四分之一个单元格宽度以内。
+尾部渐细按路径长度计算，直线中间点压缩后仍保留上一帧位置和转折。
+帧缓存回归检查每个轮换槽独立更新、上传失败不提交版本和资源重建失效；
+桌面像素回归交替修改文字/背景颜色，并检查闪烁与常亮切换。
+
+### 渲染性能对比
+
+使用相同的 ReleaseLocal 配置运行优化前后负载：
+
+```sh
+nu macos/build.nu --configuration ReleaseLocal --action test --ui-tests \
+  --only-testing GhosttyUITests/GhosttyRendererPerformanceUITests \
+  --result-bundle /private/tmp/renderer-perf.xcresult
+xcrun xcresulttool export attachments \
+  --path /private/tmp/renderer-perf.xcresult \
+  --output-path /private/tmp/renderer-perf-attachments
+python3 scripts/summarize-render-trace.py /private/tmp/renderer-perf-attachments
+```
+
+测试依次运行静止、持续输入、长跳、Kitty 动图并行和随后新增分屏。
+每场景预热 1 秒、观测 6 秒；等待窗口标题与窗格就绪后才计时。
+测试动作启用 `CGHOSTTY_TESTING`，隔离配置和偏好；普通发布构建不启用。
+记录 draw 路径墙钟耗时（包含等待帧槽，不是进程 CPU 使用率）、
+Metal GPU 执行时间、帧间隔、复制字节、尾部段数和动画定时器唤醒。
+诊断开销也在结果中，单次 GPU/CPU 波动不能用于承诺耗电或全面提速。
+`CGHOSTTY_RENDER_TRACE` 指定已有绝对目录可单独启用记录，正常运行关闭。
+报告见 `RENDERER_PERFORMANCE.md`。
+
 Metal 4 每个在途帧独占可复用的命令缓冲区、分配器、参数表与 residency set，GPU 完成后才允许重用。
 开启 `MTL_DEBUG_LAYER=1` 运行应用可检查 Metal API；交互验收需覆盖单步、快速输入、连续导航、斜向移动、中文宽字符、选区、失焦和缩放。
 CI 使用 GitHub `xcode-27` arm64 预览镜像，并在运行测试前验证系统为 macOS 27+。

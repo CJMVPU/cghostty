@@ -2,6 +2,104 @@ import AppKit
 import XCTest
 
 final class GhosttyCursorMotionUITests: GhosttyCustomConfigCase {
+    @MainActor func testCellCacheRefreshAndBlinkTransitions() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let control = directory.appendingPathComponent("mode")
+        let script = directory.appendingPathComponent("cache.py")
+        try "red".write(to: control, atomically: true, encoding: .utf8)
+        try """
+        import pathlib, sys, time
+        control = pathlib.Path(sys.argv[1])
+        mode, tick = '', 0
+        while True:
+            requested = control.read_text()
+            if requested != mode:
+                mode = requested
+                color = '1' if mode == 'red' else '4'
+                sys.stdout.write('\\033[0m\\033[2J\\033[1;1H\\033[3' + color + 'mMMMMMMMM')
+                sys.stdout.write('\\033[2;1H\\033[4' + color + 'm          \\033[0m\\033[3;8H')
+                sys.stdout.write('\\033[' + ('5' if mode == 'blink' else '6') + ' q')
+                sys.stdout.write('\\033]0;Cache ' + mode + '\\007')
+            if mode in ['red', 'blue']:
+                sys.stdout.write('\\033[3;%dH' % (8 + (tick % 2) * 30))
+            sys.stdout.flush()
+            tick += 1
+            time.sleep(0.160)
+        """.write(to: script, atomically: true, encoding: .utf8)
+        try updateConfig("""
+        command = /usr/bin/python3 -u \(script.path) \(control.path)
+        shell-integration = none
+        confirm-close-surface = false
+        background = #000000
+        cursor-color = #00ff00
+        cursor-effect = smooth
+        palette = 1=#ff0000
+        palette = 4=#0000ff
+        """)
+        let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
+        app.launchEnvironment["MTL_DEBUG_LAYER"] = "1"
+        app.launch()
+        app.activate()
+        defer { app.terminate() }
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.wait(for: \.title, toEqual: "Cache red", timeout: 10))
+        for mode in ["red", "blue", "red", "blue"] {
+            try mode.write(to: control, atomically: true, encoding: .utf8)
+            XCTAssertTrue(window.wait(for: \.title, toEqual: "Cache \(mode)", timeout: 5))
+            let ready = NSPredicate { _, _ in
+                let colors = Self.colorCounts(window.textViews.firstMatch.screenshot().image)
+                return mode == "red" ? colors.red > 500 && colors.blue == 0 : colors.blue > 500 && colors.red == 0
+            }
+            let status = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: ready, object: nil)], timeout: 5)
+            let snapshot = window.textViews.firstMatch.screenshot()
+            let attachment = XCTAttachment(screenshot: snapshot)
+            attachment.name = "Cell cache \(mode)"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            XCTAssertEqual(status, .completed, "\(Self.colorCounts(snapshot.image))")
+            for _ in 0..<8 {
+                let colors = Self.colorCounts(window.textViews.firstMatch.screenshot().image)
+                XCTAssertTrue(mode == "red" ? colors.red > 500 && colors.blue == 0 : colors.blue > 500 && colors.red == 0)
+            }
+        }
+        try "blink".write(to: control, atomically: true, encoding: .utf8)
+        XCTAssertTrue(window.wait(for: \.title, toEqual: "Cache blink", timeout: 5))
+        var seenVisible = false
+        var seenHidden = false
+        let blinking = NSPredicate { _, _ in
+            let visible = Self.colorCounts(window.textViews.firstMatch.screenshot().image).green > 10
+            seenVisible = seenVisible || visible
+            seenHidden = seenHidden || !visible
+            return seenVisible && seenHidden
+        }
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: blinking, object: nil)], timeout: 6), .completed)
+        try "steady".write(to: control, atomically: true, encoding: .utf8)
+        XCTAssertTrue(window.wait(for: \.title, toEqual: "Cache steady", timeout: 5))
+        for _ in 0..<10 {
+            XCTAssertGreaterThan(Self.colorCounts(window.textViews.firstMatch.screenshot().image).green, 10)
+        }
+    }
+
+    private static func colorCounts(_ image: NSImage) -> (red: Int, blue: Int, green: Int) {
+        guard let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff) else { return (0, 0, 0) }
+        var result = (red: 0, blue: 0, green: 0)
+        // Sparse sampling keeps screenshot inspection inexpensive.
+        for y in stride(from: 0, to: bitmap.pixelsHigh, by: 2) {
+            for x in stride(from: 0, to: bitmap.pixelsWide, by: 2) {
+                guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
+                // Screenshot color profiles need not encode pure primaries as
+                // exact 0/1 device RGB. Classify dominant channels instead.
+                let red = color.redComponent, green = color.greenComponent, blue = color.blueComponent
+                if red > 0.6 && red > blue + 0.3 && red > green + 0.3 { result.red += 1 }
+                if blue > 0.6 && blue > red + 0.3 && blue > green + 0.3 { result.blue += 1 }
+                if green > 0.6 && green > red + 0.3 && green > blue + 0.3 { result.green += 1 }
+            }
+        }
+        return result
+    }
+
     @MainActor func testStableBodyAndTailThroughMetal() throws {
         try runMotion(vsync: true)
     }
@@ -44,6 +142,7 @@ final class GhosttyCursorMotionUITests: GhosttyCustomConfigCase {
                     if direction == 'jumpright': col += side * 52
                     if direction == 'jumpdown': row += side * 20
                     if direction == 'jumpdiagonal': row, col = row + side * 18, col + side * 30
+                    if direction == 'jumpturn': row, col = [(4, 8), (4, 60), (24, 60), (24, 8)][tick % 4]
             sys.stdout.write('\\033[?25l')
             sys.stdout.flush()
             if tick % 7 == 0: time.sleep(0.005)
@@ -111,8 +210,8 @@ final class GhosttyCursorMotionUITests: GhosttyCustomConfigCase {
     }
 
     @MainActor private func assertLongTravel(in window: XCUIElement, control: URL, native: Mask, block: Mask, shape: String) throws {
-        for direction in ["jumpright", "jumpdown", "jumpdiagonal"] {
-            let mode = "\(shape)-\(direction)-160"
+        for direction in ["jumpright", "jumpdown", "jumpdiagonal", "jumpturn"] {
+            let mode = "\(shape)-\(direction)-\(direction == "jumpturn" ? 32 : 160)"
             try setMode(mode, control: control, window: window)
             // A rendered extension beyond one whole cell proves that neither
             // the old cell-width cap nor a thin-stroke cap remains active.

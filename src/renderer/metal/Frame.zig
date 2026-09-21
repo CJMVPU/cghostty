@@ -8,6 +8,7 @@ const Renderer = @import("../generic.zig").Renderer(Metal);
 const Target = @import("Target.zig");
 const RenderPass = @import("RenderPass.zig");
 const Health = @import("../../renderer.zig").Health;
+const Presentation = @import("../Presentation.zig");
 const log = std.log.scoped(.metal);
 
 pub fn object(class: [:0]const u8) objc.Object {
@@ -92,21 +93,22 @@ fn bufferCompleted(block: *const CompletionBlock.Context, feedback_id: objc.c.id
     const feedback = objc.Object.fromId(feedback_id);
     const err = feedback.getProperty(?*anyopaque, "error");
     const health: Health = if (err == null) .healthy else .unhealthy;
+    if (block.renderer.trace.file != null) {
+        const elapsed = feedback.getProperty(f64, "GPUEndTime") - feedback.getProperty(f64, "GPUStartTime");
+        if (std.math.isFinite(elapsed) and elapsed > 0)
+            block.renderer.trace.emit("gpu", @intFromFloat(elapsed * std.time.ns_per_s), @intFromBool(health == .healthy), 0);
+    }
     if (block.sync) {
         block.commands.health = health;
         block.commands.completed.post(global.io());
         return;
     }
-    if (health == .healthy) {
-        block.renderer.api.present(block.target.*, block.sync) catch |failure| {
-            log.err("Failed to present render target: {}", .{failure});
-        };
-    } else {
+    if (health == .unhealthy) {
         const description = objc.Object.fromId(err.?).getProperty(objc.Object, "localizedDescription");
         const message = description.msgSend([*:0]const u8, "UTF8String", .{});
         log.err("Metal 4 submission failed: {s}", .{message});
     }
-    block.renderer.frameCompleted(health);
+    block.renderer.frameCompleted(Presentation.finish(&block.renderer.api, block.target.*, false, health));
 }
 
 pub fn renderPass(self: *const Self, attachments: []const RenderPass.Options.Attachment) RenderPass {
@@ -128,9 +130,6 @@ pub fn complete(self: *Self, sync: bool) void {
         c.completed.waitUncancelable(global.io());
         // Core Animation's synchronous display callback must present on its
         // caller, never on the Metal feedback queue while the caller waits.
-        if (c.health == .healthy) self.block.renderer.api.present(self.block.target.*, true) catch |err| {
-            log.err("Failed to present synchronous frame: {}", .{err});
-        };
-        self.block.renderer.frameCompleted(c.health);
+        self.block.renderer.frameCompleted(Presentation.finish(&self.block.renderer.api, self.block.target.*, true, c.health));
     }
 }

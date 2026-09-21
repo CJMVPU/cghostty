@@ -220,7 +220,10 @@ pub const Uniforms = extern struct {
     },
 
     smooth_center: [2]f32 align(8) = .{ 0, 0 },
-    smooth_tail_offset: [2]f32 align(8) = .{ 0, 0 },
+    smooth_trail: [32][4]f32 align(16) = .{.{ 0, 0, 0, 0 }} ** 32,
+    smooth_trail_count: u32 align(4) = 0,
+    smooth_bounds_min: [2]f32 align(8) = .{ 0, 0 },
+    smooth_bounds_max: [2]f32 align(8) = .{ 0, 0 },
     smooth_target: [2]f32 align(8) = .{ 0, 0 },
     smooth_half_size: [2]f32 align(8) = .{ 0, 0 },
     smooth_native_half_size: [2]f32 align(8) = .{ 0, 0 },

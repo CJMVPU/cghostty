@@ -31,6 +31,33 @@ pub const StyleOptions = struct {
     blink_visible: bool = false,
 };
 
+/// Schedule blinking only when a blink phase can change the visible style.
+pub fn needsBlink(state: *const terminal.RenderState, opts: StyleOptions) bool {
+    var visible = opts;
+    visible.blink_visible = true;
+    var hidden = opts;
+    hidden.blink_visible = false;
+    return style(state, visible) != style(state, hidden);
+}
+
+test "cursor: blink scheduling follows actual visibility and overrides" {
+    const t = std.testing;
+    var term = try terminal.Terminal.init(t.io, t.allocator, .{ .cols = 10, .rows = 10 });
+    defer term.deinit(t.allocator);
+    term.modes.set(.cursor_blinking, true);
+    var state: terminal.RenderState = .empty;
+    defer state.deinit(t.allocator);
+    try state.update(t.allocator, &term);
+    try t.expect(needsBlink(&state, .{ .focused = true }));
+    try t.expect(!needsBlink(&state, .{ .focused = false }));
+    try t.expect(!needsBlink(&state, .{ .focused = true, .preedit = true }));
+    state.cursor.visible = false;
+    try t.expect(!needsBlink(&state, .{ .focused = true }));
+    state.cursor.visible = true;
+    state.cursor.blinking = false;
+    try t.expect(!needsBlink(&state, .{ .focused = true }));
+}
+
 /// Returns the cursor style to use for the current render state or null
 /// if a cursor should not be rendered at all.
 pub fn style(

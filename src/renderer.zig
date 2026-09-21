@@ -9,8 +9,11 @@ const cursor = @import("renderer/cursor.zig");
 const message = @import("renderer/message.zig");
 const size = @import("renderer/size.zig");
 pub const FrameScheduler = @import("renderer/FrameScheduler.zig");
+pub const CellUpload = @import("renderer/CellUpload.zig");
+pub const Presentation = @import("renderer/Presentation.zig");
 pub const CursorMotion = @import("renderer/CursorMotion.zig");
 pub const SmoothCursor = @import("renderer/SmoothCursor.zig");
+pub const CursorTrail = @import("renderer/CursorTrail.zig");
 pub const GenericRenderer = @import("renderer/generic.zig").Renderer;
 pub const Metal = @import("renderer/Metal.zig");
 pub const Options = @import("renderer/Options.zig");
@@ -26,6 +29,7 @@ pub const ScreenSize = size.ScreenSize;
 pub const GridSize = size.GridSize;
 pub const Padding = size.Padding;
 pub const cursorStyle = cursor.style;
+pub const cursorNeedsBlink = cursor.needsBlink;
 pub const lib = @import("lib/main.zig");
 
 /// The native Metal renderer.
@@ -49,7 +53,10 @@ test {
     _ = cursor;
     _ = message;
     _ = SmoothCursor;
+    _ = CursorTrail;
     _ = FrameScheduler;
+    _ = CellUpload;
+    _ = Presentation;
     _ = size;
     _ = Thread;
     _ = State;
