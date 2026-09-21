@@ -31,10 +31,10 @@ window-vsync = true
 `GhosttyKit.xcframework` 仅供应用内部桥接
 保留 `TERM=xterm-ghostty` 及必要的协议兼容名称
 
-架构见 [ARCHITECTURE.md]
-开发与测试见 [HACKING.md]
-交付范围见 [SCOPE.md]
-验证记录见 [VALIDATION.md]
+架构见 [ARCHITECTURE.md]<br>
+开发与测试见 [HACKING.md]<br>
+交付范围见 [SCOPE.md]<br>
+验证记录见 [VALIDATION.md<br>]
 基于 [MIT 许可](LICENSE)，保留上游版权声明
 
 [Ghostty]: https://github.com/ghostty-org/ghostty
