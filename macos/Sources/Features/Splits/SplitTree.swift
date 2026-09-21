@@ -1,7 +1,7 @@
 import AppKit
 
 /// SplitTree represents a tree of views that can be divided.
-struct SplitTree<ViewType: NSView & Codable & Identifiable> {
+struct SplitTree<ViewType: NSView & Identifiable> {
     /// The root of the tree. This can be nil to indicate the tree is empty.
     let root: Node?
 
@@ -11,11 +11,11 @@ struct SplitTree<ViewType: NSView & Codable & Identifiable> {
 
     /// A single node in the tree is either a leaf node (a view) or a split (has a
     /// left/right or top/bottom).
-    indirect enum Node: Codable {
+    indirect enum Node {
         case leaf(view: ViewType)
         case split(Split)
 
-        struct Split: Equatable, Codable {
+        struct Split: Equatable {
             let direction: Direction
             let ratio: Double
             let left: Node
@@ -23,18 +23,18 @@ struct SplitTree<ViewType: NSView & Codable & Identifiable> {
         }
     }
 
-    enum Direction: Codable {
+    enum Direction {
         case horizontal // Splits are laid out left and right
         case vertical // Splits are laid out top and bottom
     }
 
     /// The path to a specific node in the tree.
-    struct Path: Codable {
+    struct Path {
         let path: [Component]
 
         var isEmpty: Bool { path.isEmpty }
 
-        enum Component: Codable {
+        enum Component {
             case left
             case right
         }
@@ -338,60 +338,6 @@ extension SplitTree {
     func viewBounds() -> CGSize {
         guard let root else { return .zero }
         return root.viewBounds()
-    }
-}
-
-// MARK: SplitTree Codable
-
-private enum CodingKeys: String, CodingKey {
-    case version
-    case root
-    case zoomed
-
-    static let currentVersion: Int = 1
-}
-
-extension SplitTree: Codable {
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-
-        // Check version
-        let version = try container.decode(Int.self, forKey: .version)
-        guard version == CodingKeys.currentVersion else {
-            throw DecodingError.dataCorrupted(
-                DecodingError.Context(
-                    codingPath: decoder.codingPath,
-                    debugDescription: "Unsupported SplitTree version: \(version)"
-                )
-            )
-        }
-
-        // Decode root
-        self.root = try container.decodeIfPresent(Node.self, forKey: .root)
-
-        // Zoomed is encoded as its path. Get the path and then find it.
-        if let zoomedPath = try container.decodeIfPresent(Path.self, forKey: .zoomed),
-           let root = self.root {
-            self.zoomed = root.node(at: zoomedPath)
-        } else {
-            self.zoomed = nil
-        }
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-
-        // Encode version
-        try container.encode(CodingKeys.currentVersion, forKey: .version)
-
-        // Encode root
-        try container.encodeIfPresent(root, forKey: .root)
-
-        // Zoomed is encoded as its path since its a reference type. This lets us
-        // map it on decode back to the correct node in root.
-        if let zoomed, let path = root?.path(to: zoomed) {
-            try container.encode(path, forKey: .zoomed)
-        }
     }
 }
 
@@ -1118,46 +1064,6 @@ extension SplitTree.Node: Equatable {
 
         default:
             return false
-        }
-    }
-}
-
-// MARK: SplitTree Codable
-
-extension SplitTree.Node {
-    enum CodingKeys: String, CodingKey {
-        case view
-        case split
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-
-        if container.contains(.view) {
-            let view = try container.decode(ViewType.self, forKey: .view)
-            self = .leaf(view: view)
-        } else if container.contains(.split) {
-            let split = try container.decode(Split.self, forKey: .split)
-            self = .split(split)
-        } else {
-            throw DecodingError.dataCorrupted(
-                DecodingError.Context(
-                    codingPath: decoder.codingPath,
-                    debugDescription: "No valid node type found"
-                )
-            )
-        }
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-
-        switch self {
-        case .leaf(let view):
-            try container.encode(view, forKey: .view)
-
-        case .split(let split):
-            try container.encode(split, forKey: .split)
         }
     }
 }

@@ -10,7 +10,7 @@ pub const GhosttyDocs = @import("GhosttyDocs.zig");
 pub const GhosttyLib = @import("GhosttyLib.zig");
 pub const GhosttyResources = @import("GhosttyResources.zig");
 pub const GhosttyI18n = @import("GhosttyI18n.zig");
-pub const GhosttyXCFramework = @import("GhosttyXCFramework.zig");
+
 pub const HelpStrings = @import("HelpStrings.zig");
 pub const SharedDeps = @import("SharedDeps.zig");
 pub const UnicodeTables = @import("UnicodeTables.zig");
@@ -18,7 +18,6 @@ pub const UnicodeTables = @import("UnicodeTables.zig");
 // Steps
 pub const LibtoolStep = @import("LibtoolStep.zig");
 pub const MetallibStep = @import("MetallibStep.zig");
-pub const XCFrameworkStep = @import("XCFrameworkStep.zig");
 
 // Helpers
 pub const requireZig = @import("zig.zig").requireZig;

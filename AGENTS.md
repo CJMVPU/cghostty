@@ -20,7 +20,7 @@ A file for [guiding coding agents](https://agents.md/).
 
 - Only macOS 27+ on Apple Silicon arm64 is supported.
 - Core: `src/`; native app: `macos/`.
-- Internal `GhosttyKit.xcframework` bridges the app; no standalone library SDK.
+- Internal `GhosttyKit` C module and static archive bridge the app; no standalone library SDK.
 - App build: `nu macos/build.nu`; tests: `nu macos/build.nu --action test`.
 - Scope checks: `python3 scripts/check-scope.py`.
 - See `SCOPE.md`, `HACKING.md`, and `PACKAGING.md`.

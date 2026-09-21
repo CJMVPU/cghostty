@@ -33,8 +33,8 @@ struct TerminalRestorableTests {
 
         #expect(state.focusedSurface == "123")
         #expect(state.screenStateEntries.isEmpty)
-        #expect(state.surfaceTree.contains(where: { $0.id.uuidString == "2F2F2D93-944C-474A-83BA-4DC1868C3EB9" }))
-        #expect(state.surfaceTree.contains(where: { $0.id.uuidString == "994C673F-B4C5-49EE-B044-65006652636D" }))
+        #expect(state.surfaceTree.leaves.contains(where: { $0.id.uuidString == "2F2F2D93-944C-474A-83BA-4DC1868C3EB9" }))
+        #expect(state.surfaceTree.leaves.contains(where: { $0.id.uuidString == "994C673F-B4C5-49EE-B044-65006652636D" }))
     }
 
     // To generate old data: created a dummy class, archive, and copy the printed result
@@ -58,8 +58,8 @@ struct TerminalRestorableTests {
         #expect(v5.effectiveFullscreenMode == nil)
         #expect(v5.tabColor == nil)
         #expect(v5.titleOverride == nil)
-        #expect(v5.surfaceTree.contains(where: { $0.id.uuidString == "926F3F2A-824C-40C9-87CA-2CDCA4E11049" }))
-        #expect(v5.surfaceTree.contains(where: { $0.id.uuidString == "AC5E829B-85FD-4C69-B196-2EE469C72A90" }))
+        #expect(v5.surfaceTree.leaves.contains(where: { $0.id.uuidString == "926F3F2A-824C-40C9-87CA-2CDCA4E11049" }))
+        #expect(v5.surfaceTree.leaves.contains(where: { $0.id.uuidString == "AC5E829B-85FD-4C69-B196-2EE469C72A90" }))
 
 //        let tree = try SplitTreeTests.makeHorizontalSplit()
 //        let state = DummyTerminalRestorableState(
@@ -81,8 +81,8 @@ struct TerminalRestorableTests {
         #expect(v7.effectiveFullscreenMode == .native)
         #expect(v7.tabColor == .green)
         #expect(v7.titleOverride == "1.3.0")
-        #expect(v7.surfaceTree.contains(where: { $0.id.uuidString == "5D580A7A-81EA-47C6-BB9A-AD4B1783E478" }))
-        #expect(v7.surfaceTree.contains(where: { $0.id.uuidString == "96EA1189-7482-41BC-A6CD-26E5190E4BFA" }))
+        #expect(v7.surfaceTree.leaves.contains(where: { $0.id.uuidString == "5D580A7A-81EA-47C6-BB9A-AD4B1783E478" }))
+        #expect(v7.surfaceTree.leaves.contains(where: { $0.id.uuidString == "96EA1189-7482-41BC-A6CD-26E5190E4BFA" }))
 
 //        let tree = try SplitTreeTests.makeHorizontalSplit()
 //        let state = DummyTerminalRestorableState(
@@ -106,8 +106,8 @@ struct TerminalRestorableTests {
         #expect(v7Generic.effectiveFullscreenMode == .native)
         #expect(v7Generic.tabColor == .green)
         #expect(v7Generic.titleOverride == "tip")
-        #expect(v7Generic.surfaceTree.contains(where: { $0.id.uuidString == "953CE952-D91D-4D36-AC72-9D0F1F6BCE73" }))
-        #expect(v7Generic.surfaceTree.contains(where: { $0.id.uuidString == "D3223569-2E01-4BC5-9DB2-DBFC3AFF46D1" }))
+        #expect(v7Generic.surfaceTree.leaves.contains(where: { $0.id.uuidString == "953CE952-D91D-4D36-AC72-9D0F1F6BCE73" }))
+        #expect(v7Generic.surfaceTree.leaves.contains(where: { $0.id.uuidString == "D3223569-2E01-4BC5-9DB2-DBFC3AFF46D1" }))
     }
 }
 

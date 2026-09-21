@@ -31,8 +31,8 @@ extension Ghostty.SurfaceView: Transferable {
 
     @MainActor
     static func find(uuid: UUID) -> Self? {
-        guard let del = NSApp.delegate as? Ghostty.Delegate else { return nil }
-        return del.ghosttySurface(id: uuid) as? Self
+        guard let del = NSApp.delegate as? GhosttyAppDelegate else { return nil }
+        return del.findSurface(forUUID: uuid) as? Self
     }
 }
 

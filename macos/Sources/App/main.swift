@@ -30,4 +30,10 @@ if ghostty_init(UInt(CommandLine.argc), CommandLine.unsafeArgv) != GHOSTTY_SUCCE
 // action is a command starting with a `+`, such as `cghostty +help`.
 ghostty_cli_try_action()
 
-_ = NSApplicationMain(CommandLine.argc, CommandLine.unsafeArgv)
+let application = NSApplication.shared
+let delegate = AppDelegate()
+application.delegate = delegate
+delegate.installMainMenu()
+withExtendedLifetime(delegate) {
+    application.run()
+}

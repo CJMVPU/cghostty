@@ -5,9 +5,8 @@ const wuffs = @import("wuffs");
 const terminal = @import("../terminal/main.zig");
 const global = @import("../global.zig");
 
-const Renderer = @import("../renderer.zig").Renderer;
-const GraphicsAPI = Renderer.API;
-const Texture = GraphicsAPI.Texture;
+const Metal = @import("Metal.zig");
+const Texture = Metal.Texture;
 const CellSize = @import("size.zig").CellSize;
 const Overlay = @import("Overlay.zig");
 
@@ -65,7 +64,7 @@ pub const State = struct {
     pub fn upload(
         self: *State,
         alloc: Allocator,
-        api: *GraphicsAPI,
+        api: *Metal,
     ) bool {
         var success: bool = true;
         var image_it = self.images.iterator();
@@ -104,9 +103,9 @@ pub const State = struct {
     /// graphics API errors during drawing are also ignored.
     pub fn draw(
         self: *State,
-        api: *GraphicsAPI,
-        pipeline: GraphicsAPI.Pipeline,
-        pass: *GraphicsAPI.RenderPass,
+        api: *Metal,
+        pipeline: Metal.Pipeline,
+        pass: *Metal.RenderPass,
         placement_type: DrawPlacements,
     ) void {
         const placements: []const Placement = switch (placement_type) {
@@ -136,7 +135,7 @@ pub const State = struct {
 
             // Create our vertex buffer, which is always exactly one item.
             // future(mitchellh): we can group rendering multiple instances of a single image
-            var buf = GraphicsAPI.Buffer(GraphicsAPI.shaders.Image).initFill(
+            var buf = Metal.Buffer(Metal.shaders.Image).initFill(
                 api.imageBufferOptions(),
                 &.{.{
                     .grid_pos = .{
@@ -1072,7 +1071,7 @@ pub const Image = union(enum) {
     pub fn upload(
         self: *Image,
         alloc: Allocator,
-        api: *const GraphicsAPI,
+        api: *const Metal,
     ) (wuffs.Error || error{
         /// Texture creation failed, usually a GPU memory issue.
         UploadFailed,

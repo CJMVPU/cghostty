@@ -15,9 +15,6 @@ extension Ghostty {
         // Maintain whether our view has focus or not
         @FocusState private var surfaceFocus: Bool
 
-        // Maintain whether our window has focus (is key) or not
-        @State private var windowFocus: Bool = true
-
         // Observe SecureInput to detect when its enabled
         private let secureInput = SecureInput.shared
 
@@ -29,33 +26,16 @@ extension Ghostty {
         }
 
         var body: some View {
-            let center = NotificationCenter.default
-
             ZStack {
                 // We use a GeometryReader to get the frame bounds so that our metal surface
                 // is up to date. See TerminalSurfaceView for why we don't use the NSView
                 // resize callback.
                 GeometryReader { geo in
-                    let pubBecomeKey = center.publisher(for: NSWindow.didBecomeKeyNotification)
-                    let pubResign = center.publisher(for: NSWindow.didResignKeyNotification)
-
                     SurfaceRepresentable(view: surfaceView, size: geo.size)
                         .focused($surfaceFocus)
                         .focusedValue(\.ghosttySurfacePwd, surfaceView.state.pwd)
                         .focusedValue(\.ghosttySurfaceView, surfaceView)
                         .focusedValue(\.ghosttySurfaceCellSize, surfaceView.state.cellSize)
-                        .onReceive(pubBecomeKey) { notification in
-                            guard let window = notification.object as? NSWindow else { return }
-                            guard let surfaceWindow = surfaceView.window else { return }
-                            windowFocus = surfaceWindow == window
-                        }
-                        .onReceive(pubResign) { notification in
-                            guard let window = notification.object as? NSWindow else { return }
-                            guard let surfaceWindow = surfaceView.window else { return }
-                            if surfaceWindow == window {
-                                windowFocus = false
-                            }
-                        }
 
                     // If our geo size changed then we show the resize overlay as configured.
                     if let surfaceSize = surfaceView.state.surfaceSize {
@@ -115,7 +95,7 @@ extension Ghostty {
                 if ghostty.config.secureInputIndication &&
                     secureInput.enabled &&
                     surfaceFocus &&
-                    windowFocus {
+                    surfaceView.state.windowFocused {
                     SecureInputOverlay()
                 }
 
@@ -335,6 +315,7 @@ extension Ghostty {
         @State private var corner: Corner = .topRight
         @State private var dragOffset: CGSize = .zero
         @State private var barSize: CGSize = .zero
+        @State private var focusOwner = UUID()
         @FocusState private var isSearchFieldFocused: Bool
 
         private let padding: CGFloat = 8
@@ -372,15 +353,6 @@ extension Ghostty {
                     }
                     .onChange(of: searchState.needle.text) { _, _ in
                         searchState.writePasteboardNeedle()
-                    }
-                    .onReceive(
-                        NotificationCenter.default.publisher(
-                            for: NSApplication.didBecomeActiveNotification
-                        )
-                    ) { _ in
-                        // When the app becomes active, we want to check for external changes
-                        // to our synced needle.
-                        searchState.readPasteboardNeedle()
                     }
                     .onSubmit {
                         _ = surfaceView.navigateSearchToNext()
@@ -425,13 +397,11 @@ extension Ghostty {
                 .shadow(radius: 4)
                 .onAppear {
                     isSearchFieldFocused = true
-                }
-                .onReceive(NotificationCenter.default.publisher(for: .ghosttySearchFocus)) { notification in
-                    guard notification.object as? SurfaceView === surfaceView else { return }
-                    DispatchQueue.main.async {
-                        isSearchFieldFocused = true
+                    searchState.attachFocusRequest(owner: focusOwner) {
+                        DispatchQueue.main.async { isSearchFieldFocused = true }
                     }
                 }
+                .onDisappear { searchState.detachFocusRequest(owner: focusOwner) }
                 .background(
                     GeometryReader { barGeo in
                         Color.clear.onAppear {

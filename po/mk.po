@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: com.cjmvpu.cghostty\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-19 22:55+0800\n"
+"POT-Creation-Date: 2026-09-21 16:28+0800\n"
 "PO-Revision-Date: 2026-08-30 12:23+0200\n"
 "Last-Translator: Andrej Daskalov <andrej.daskalov@gmail.com>\n"
 "Language-Team: Macedonian\n"
@@ -477,354 +477,330 @@ msgid "Move the current tab to a new window."
 msgstr "Премести го тековното јазиче во нов прозор."
 
 #: src/input/command.zig:452
-msgid "Toggle Tab Overview"
-msgstr "Вклучи или исклучи го прегледот на јазичиња"
-
-#: src/input/command.zig:453
-msgid "Toggle the tab overview."
-msgstr "Вклучи или исклучи го прегледот на јазичиња."
-
-#: src/input/command.zig:458
 msgid "Change Terminal Title…"
 msgstr "Промени наслов на терминал…"
 
-#: src/input/command.zig:459
+#: src/input/command.zig:453
 msgid "Prompt for a new title for the current terminal."
 msgstr "Побарај нов наслов за тековниот терминал."
 
-#: src/input/command.zig:464
+#: src/input/command.zig:458
 msgid "Change Tab Title…"
 msgstr "Промени наслов на јазиче…"
 
-#: src/input/command.zig:465
+#: src/input/command.zig:459
 msgid "Prompt for a new title for the current tab."
 msgstr "Побарај нов наслов за тековното јазиче."
 
-#: src/input/command.zig:477
+#: src/input/command.zig:465
 msgid "Split Left"
 msgstr "Подели налево"
 
-#: src/input/command.zig:478
+#: src/input/command.zig:466
 msgid "Split the terminal to the left."
 msgstr "Подели го терминалот налево."
 
-#: src/input/command.zig:482
+#: src/input/command.zig:470
 msgid "Split Right"
 msgstr "Подели надесно"
 
-#: src/input/command.zig:483
+#: src/input/command.zig:471
 msgid "Split the terminal to the right."
 msgstr "Подели го терминалот надесно."
 
-#: src/input/command.zig:487
+#: src/input/command.zig:475
 msgid "Split Up"
 msgstr "Подели нагоре"
 
-#: src/input/command.zig:488
+#: src/input/command.zig:476
 msgid "Split the terminal up."
 msgstr "Подели го терминалот нагоре."
 
-#: src/input/command.zig:492
+#: src/input/command.zig:480
 msgid "Split Down"
 msgstr "Подели надолу"
 
-#: src/input/command.zig:493
+#: src/input/command.zig:481
 msgid "Split the terminal down."
 msgstr "Подели го терминалот надолу."
 
-#: src/input/command.zig:500
+#: src/input/command.zig:488
 msgid "Focus Split: Previous"
 msgstr "Фокусирај поделба: претходна"
 
-#: src/input/command.zig:501
+#: src/input/command.zig:489
 msgid "Focus the previous split, if any."
 msgstr "Фокусирај ја претходната поделба, ако постои."
 
-#: src/input/command.zig:505
+#: src/input/command.zig:493
 msgid "Focus Split: Next"
 msgstr "Фокусирај поделба: следна"
 
-#: src/input/command.zig:506
+#: src/input/command.zig:494
 msgid "Focus the next split, if any."
 msgstr "Фокусирај ја следната поделба, ако постои."
 
-#: src/input/command.zig:510
+#: src/input/command.zig:498
 msgid "Focus Split: Left"
 msgstr "Фокусирај поделба: лево"
 
-#: src/input/command.zig:511
+#: src/input/command.zig:499
 msgid "Focus the split to the left, if it exists."
 msgstr "Фокусирај ја поделбата одлево, ако постои."
 
-#: src/input/command.zig:515
+#: src/input/command.zig:503
 msgid "Focus Split: Right"
 msgstr "Фокусирај поделба: десно"
 
-#: src/input/command.zig:516
+#: src/input/command.zig:504
 msgid "Focus the split to the right, if it exists."
 msgstr "Фокусирај ја поделбата оддесно, ако постои."
 
-#: src/input/command.zig:520
+#: src/input/command.zig:508
 msgid "Focus Split: Up"
 msgstr "Фокусирај поделба: горе"
 
-#: src/input/command.zig:521
+#: src/input/command.zig:509
 msgid "Focus the split above, if it exists."
 msgstr "Фокусирај ја поделбата погоре, ако постои."
 
-#: src/input/command.zig:525
+#: src/input/command.zig:513
 msgid "Focus Split: Down"
 msgstr "Фокусирај поделба: долу"
 
-#: src/input/command.zig:526
+#: src/input/command.zig:514
 msgid "Focus the split below, if it exists."
 msgstr "Фокусирај ја поделбата подолу, ако постои."
 
-#: src/input/command.zig:533
+#: src/input/command.zig:521
 msgid "Focus Window: Previous"
 msgstr "Фокусирај прозор: претходен"
 
-#: src/input/command.zig:534
+#: src/input/command.zig:522
 msgid "Focus the previous window, if any."
 msgstr "Фокусирај го претходниот прозор, ако постои."
 
-#: src/input/command.zig:538
+#: src/input/command.zig:526
 msgid "Focus Window: Next"
 msgstr "Фокусирај прозор: следен"
 
-#: src/input/command.zig:539
+#: src/input/command.zig:527
 msgid "Focus the next window, if any."
 msgstr "Фокусирај го следниот прозор, ако постои."
 
-#: src/input/command.zig:545
+#: src/input/command.zig:533
 msgid "Toggle Split Zoom"
 msgstr "Вклучи или исклучи зумирање на поделбата"
 
-#: src/input/command.zig:546
+#: src/input/command.zig:534
 msgid "Toggle the zoom state of the current split."
 msgstr "Вклучи или исклучи ја зумираната состојба на тековната поделба."
 
-#: src/input/command.zig:551
+#: src/input/command.zig:539
 msgid "Toggle Read-Only Mode"
 msgstr "Вклучи или исклучи режим само за читање"
 
-#: src/input/command.zig:552
+#: src/input/command.zig:540
 msgid "Toggle read-only mode for the current surface."
 msgstr "Вклучи или исклучи го режимот само за читање за тековната површина."
 
-#: src/input/command.zig:557
+#: src/input/command.zig:545
 msgid "Equalize Splits"
 msgstr "Изедначи ги поделбите"
 
-#: src/input/command.zig:558
+#: src/input/command.zig:546
 msgid "Equalize the size of all splits."
 msgstr "Изедначи ја големината на сите поделби."
 
-#: src/input/command.zig:563
+#: src/input/command.zig:551
 msgid "Reset Window Size"
 msgstr "Ресетирај ја големината на прозорецот"
 
-#: src/input/command.zig:564
+#: src/input/command.zig:552
 msgid "Reset the window size to the default."
 msgstr "Врати ја големината на прозорецот на стандардната."
 
-#: src/input/command.zig:569
+#: src/input/command.zig:557
 msgid "Toggle Inspector"
 msgstr "Вклучи или исклучи го инспекторот"
 
-#: src/input/command.zig:570
+#: src/input/command.zig:558
 msgid "Toggle the inspector."
 msgstr "Вклучи или исклучи го инспекторот."
 
-#: src/input/command.zig:575
-msgid "Show the GTK Inspector"
-msgstr "Прикажи го GTK-инспекторот"
-
-#: src/input/command.zig:576
-msgid "Show the GTK inspector."
-msgstr "Прикажи го GTK-инспекторот."
-
-#: src/input/command.zig:581
+#: src/input/command.zig:563
 msgid "Show On-Screen Keyboard"
 msgstr "Прикажи тастатура на екранот"
 
-#: src/input/command.zig:582
+#: src/input/command.zig:564
 msgid "Show the on-screen keyboard if present."
 msgstr "Прикажи ја тастатурата на екранот ако е достапна."
 
-#: src/input/command.zig:588
+#: src/input/command.zig:570
 msgid "Open Config Using OS editor"
 msgstr "Отвори ја конфигурацијата со уредувачот на оперативниот систем"
 
-#: src/input/command.zig:589
+#: src/input/command.zig:571
 msgid "Open the config file with the OS's default editor."
 msgstr ""
 "Отвори ја конфигурациската датотека со стандардниот уредувач на оперативниот "
 "систем."
 
-#: src/input/command.zig:593
+#: src/input/command.zig:575
 msgid "Open Config in New Terminal Window"
 msgstr "Отвори ја конфигурацијата во нов терминал прозор"
 
-#: src/input/command.zig:594
+#: src/input/command.zig:576
 msgid "Open the config file in a new window using $EDITOR or $VISUAL."
 msgstr ""
 "Отвори ја конфигурациската датотека во нов прозор користејќи $EDITOR или "
 "$VISUAL."
 
-#: src/input/command.zig:600
+#: src/input/command.zig:582
 msgid "Reload Config"
 msgstr "Одново вчитај ја конфигурацијата"
 
-#: src/input/command.zig:601
+#: src/input/command.zig:583
 msgid "Reload the config file."
 msgstr "Одново вчитај ја конфигурациската датотека."
 
-#: src/input/command.zig:606
+#: src/input/command.zig:588
 msgid "Close Terminal"
 msgstr "Затвори терминал"
 
-#: src/input/command.zig:607
+#: src/input/command.zig:589
 msgid "Close the current terminal."
 msgstr "Затвори го тековниот терминал."
 
-#: src/input/command.zig:613
+#: src/input/command.zig:595
 msgid "Close Tab"
 msgstr "Затвори јазиче"
 
-#: src/input/command.zig:614
+#: src/input/command.zig:596
 msgid "Close the current tab."
 msgstr "Затвори го тековното јазиче."
 
-#: src/input/command.zig:618
+#: src/input/command.zig:600
 msgid "Close Other Tabs"
 msgstr "Затвори ги другите јазичиња"
 
-#: src/input/command.zig:619
+#: src/input/command.zig:601
 msgid "Close all tabs in this window except the current one."
 msgstr "Затвори ги сите јазичиња во овој прозор освен тековното."
 
-#: src/input/command.zig:623
+#: src/input/command.zig:605
 msgid "Close Tabs to the Right"
 msgstr "Затвори ги јазичињата надесно"
 
-#: src/input/command.zig:624
+#: src/input/command.zig:606
 msgid "Close all tabs to the right of the current one."
 msgstr "Затвори ги сите јазичиња десно од тековното."
 
-#: src/input/command.zig:630
+#: src/input/command.zig:612
 msgid "Close Window"
 msgstr "Затвори прозор"
 
-#: src/input/command.zig:631
+#: src/input/command.zig:613
 msgid "Close the current window."
 msgstr "Затвори го тековниот прозор."
 
-#: src/input/command.zig:636
+#: src/input/command.zig:618
 msgid "Close All Windows"
 msgstr "Затвори ги сите прозорци"
 
-#: src/input/command.zig:637
+#: src/input/command.zig:619
 msgid "Close all windows."
 msgstr "Затвори ги сите прозорци."
 
-#: src/input/command.zig:642
+#: src/input/command.zig:624
 msgid "Toggle Maximize"
 msgstr "Вклучи или исклучи максимизирање"
 
-#: src/input/command.zig:643
+#: src/input/command.zig:625
 msgid "Toggle the maximized state of the current window."
 msgstr "Вклучи или исклучи ја максимизираната состојба на тековниот прозор."
 
-#: src/input/command.zig:648
+#: src/input/command.zig:630
 msgid "Toggle Fullscreen"
 msgstr "Вклучи или исклучи цел екран"
 
-#: src/input/command.zig:649
+#: src/input/command.zig:631
 msgid "Toggle the fullscreen state of the current window."
 msgstr "Вклучи или исклучи го приказот на цел екран за тековниот прозор."
 
-#: src/input/command.zig:654
-msgid "Toggle Window Decorations"
-msgstr "Вклучи или исклучи ги декорациите на прозорецот"
-
-#: src/input/command.zig:655
-msgid "Toggle the window decorations."
-msgstr "Вклучи или исклучи ги декорациите на прозорецот."
-
-#: src/input/command.zig:660
+#: src/input/command.zig:636
 msgid "Toggle Float on Top"
 msgstr "Вклучи или исклучи лебдење на врвот"
 
-#: src/input/command.zig:661
+#: src/input/command.zig:637
 msgid "Toggle the float on top state of the current window."
 msgstr ""
 "Вклучи или исклучи го лебдењето на тековниот прозор над другите прозорци."
 
-#: src/input/command.zig:666
+#: src/input/command.zig:642
 msgid "Toggle Secure Input"
 msgstr "Вклучи или исклучи безбеден внес"
 
-#: src/input/command.zig:667
+#: src/input/command.zig:643
 msgid "Toggle secure input mode."
 msgstr "Вклучи или исклучи го режимот за безбеден внес."
 
-#: src/input/command.zig:672
+#: src/input/command.zig:648
 msgid "Toggle Mouse Reporting"
 msgstr "Вклучи или исклучи пријавување на глувчето"
 
-#: src/input/command.zig:673
+#: src/input/command.zig:649
 msgid "Toggle whether mouse events are reported to terminal applications."
 msgstr ""
 "Вклучи или исклучи дали настаните од глувчето се пријавуваат на терминал "
 "апликациите."
 
-#: src/input/command.zig:678
+#: src/input/command.zig:654
 msgid "Toggle Background Opacity"
 msgstr "Вклучи или исклучи непроѕирност на заднината"
 
-#: src/input/command.zig:679
+#: src/input/command.zig:655
 msgid "Toggle the background opacity of a window that started transparent."
 msgstr ""
 "Вклучи или исклучи ја непроѕирноста на заднината на прозорец што е отворен "
 "како проѕирен."
 
-#: src/input/command.zig:684
+#: src/input/command.zig:660
 msgid "Check for Updates"
 msgstr "Провери за ажурирања"
 
-#: src/input/command.zig:685
+#: src/input/command.zig:661
 msgid "Check for updates to the application."
 msgstr "Провери дали има ажурирања за апликацијата."
 
-#: src/input/command.zig:690
+#: src/input/command.zig:666
 msgid "Undo"
 msgstr "Врати"
 
-#: src/input/command.zig:691
+#: src/input/command.zig:667
 msgid "Undo the last action."
 msgstr "Врати го последното дејство."
 
-#: src/input/command.zig:696
+#: src/input/command.zig:672
 msgid "Redo"
 msgstr "Повтори"
 
-#: src/input/command.zig:697
+#: src/input/command.zig:673
 msgid "Redo the last undone action."
 msgstr "Повтори го последното вратено дејство."
 
-#: src/input/command.zig:702
+#: src/input/command.zig:678
 msgid "Quit"
 msgstr "Излез"
 
-#: src/input/command.zig:703
+#: src/input/command.zig:679
 msgid "Quit the application."
 msgstr "Прекини ја апликацијата."
 
-#: src/input/command.zig:708
+#: src/input/command.zig:684
 msgid "Ghostty"
 msgstr "Ghostty"
 
-#: src/input/command.zig:709
+#: src/input/command.zig:685
 msgid "Put a little Ghostty in your terminal."
 msgstr "Внеси мал Ghostty во твојот терминал."

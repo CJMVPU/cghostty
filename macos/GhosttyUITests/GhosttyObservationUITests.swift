@@ -10,6 +10,10 @@ final class GhosttyObservationUITests: GhosttyCustomConfigCase {
         command = /bin/zsh -f
         shell-integration = none
         confirm-close-surface = false
+        # Native text editing shortcuts must be unconditional: performable
+        # terminal bindings are intentionally omitted from menu equivalents.
+        keybind = super+v=paste_from_clipboard
+        keybind = super+a=select_all
         macos-titlebar-style = tabs
         keybind = ctrl+alt+shift+m=move_tab:-1
         keybind = ctrl+alt+shift+b=move_tab:1
@@ -24,7 +28,7 @@ final class GhosttyObservationUITests: GhosttyCustomConfigCase {
         let pane = app.groups["Terminal pane"].firstMatch
         XCTAssertTrue(pane.waitForExistence(timeout: 10))
         pane.click()
-        paste("printf '\\033]0;Observation UI\\007'\n", into: app.groups["Terminal pane"].firstMatch, app: app)
+        paste("printf '\\033]0;Observation UI\\007'\n", into: app.groups["Terminal pane"].firstMatch)
         XCTAssertTrue(app.windows.firstMatch.wait(for: \.title, toEqual: "Observation UI", timeout: 5))
 
         pane.typeKey("d", modifierFlags: .command)
@@ -37,10 +41,10 @@ final class GhosttyObservationUITests: GhosttyCustomConfigCase {
         let search = app.textFields.firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         search.click()
-        app.menuItems["Select All"].firstMatch.click()
-        paste("terminal", into: search, app: app, submit: false)
+        search.typeKey("a", modifierFlags: .command)
+        paste("terminal", into: search, submit: false)
         XCTAssertEqual(search.value as? String, "terminal")
-        app.menuItems["Select All"].firstMatch.click()
+        search.typeKey("a", modifierFlags: .command)
         search.typeKey(.delete, modifierFlags: [])
         XCTAssertEqual(search.value as? String, "")
         search.typeKey(.escape, modifierFlags: [])
@@ -52,7 +56,7 @@ final class GhosttyObservationUITests: GhosttyCustomConfigCase {
         app.windows.firstMatch.typeKey(.escape, modifierFlags: [])
         XCTAssertTrue(clear.waitForNonExistence(timeout: 5))
 
-        paste("printf '\\033]0;Focus restored\\007'\n", into: app.windows.firstMatch, app: app)
+        paste("printf '\\033]0;Focus restored\\007'\n", into: app.windows.firstMatch)
         XCTAssertTrue(app.windows.firstMatch.wait(for: \.title, toEqual: "Focus restored", timeout: 5))
         XCTAssertEqual(panes.count, 2)
     }
@@ -65,11 +69,11 @@ final class GhosttyObservationUITests: GhosttyCustomConfigCase {
         let pane = app.groups["Terminal pane"].firstMatch
         XCTAssertTrue(pane.waitForExistence(timeout: 10))
         pane.click()
-        paste("printf '\\033]0;First session\\007'\n", into: app.groups["Terminal pane"].firstMatch, app: app)
+        paste("printf '\\033]0;First session\\007'\n", into: app.groups["Terminal pane"].firstMatch)
         XCTAssertTrue(app.windows.firstMatch.wait(for: \.title, toEqual: "First session", timeout: 5))
         app.groups["Terminal pane"].firstMatch.typeKey("t", modifierFlags: .command)
         XCTAssertTrue(app.wait(for: \.tabs.count, toEqual: 2, timeout: 5))
-        paste("printf '\\033]0;Second session\\007'\n", into: app.groups["Terminal pane"].firstMatch, app: app)
+        paste("printf '\\033]0;Second session\\007'\n", into: app.groups["Terminal pane"].firstMatch)
         XCTAssertTrue(app.windows.firstMatch.wait(for: \.title, toEqual: "Second session", timeout: 5))
         app.groups["Terminal pane"].firstMatch.typeKey("1", modifierFlags: .command)
         XCTAssertTrue(app.windows.firstMatch.wait(for: \.title, toEqual: "First session", timeout: 5))
@@ -91,7 +95,7 @@ final class GhosttyObservationUITests: GhosttyCustomConfigCase {
 
         app.windows.firstMatch.typeKey("n", modifierFlags: .command)
         XCTAssertTrue(app.wait(for: \.windows.count, toEqual: 2, timeout: 5))
-        paste("printf '\\033]0;Separate window\\007'\n", into: app.windows.firstMatch, app: app)
+        paste("printf '\\033]0;Separate window\\007'\n", into: app.windows.firstMatch)
         XCTAssertTrue(app.windows.firstMatch.wait(for: \.title, toEqual: "Separate window", timeout: 5))
         app.windows.firstMatch.typeKey("w", modifierFlags: [.command, .shift])
         XCTAssertTrue(app.wait(for: \.windows.count, toEqual: 1, timeout: 5))
@@ -106,17 +110,17 @@ final class GhosttyObservationUITests: GhosttyCustomConfigCase {
         let pane = app.groups["Terminal pane"].firstMatch
         XCTAssertTrue(pane.waitForExistence(timeout: 10))
         pane.click()
-        paste("printf '\\033[2J\\033[Hsessionneedle one\\nsessionneedle two\\nsessionneedle three\\n\\033]0;Search session ready\\007'\n", into: pane, app: app)
+        paste("printf '\\033[2J\\033[Hsessionneedle one\\nsessionneedle two\\nsessionneedle three\\n\\033]0;Search session ready\\007'\n", into: pane)
         XCTAssertTrue(app.windows.firstMatch.wait(for: \.title, toEqual: "Search session ready", timeout: 5))
         pane.typeKey("f", modifierFlags: .command)
         let search = app.textFields.firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         let count = app.staticTexts.matching(NSPredicate(format: "value MATCHES '[1-3]/3'")).firstMatch
         let total = app.staticTexts.matching(NSPredicate(format: "value == '-/3' OR value MATCHES '[1-3]/3'")).firstMatch
+        search.click()
         for _ in 0..<2 {
-            search.click()
-            app.menuItems["Select All"].firstMatch.click()
-            paste("sessionneedle", into: search, app: app, submit: false)
+            search.typeKey("a", modifierFlags: .command)
+            paste("sessionneedle", into: search, submit: false)
             XCTAssertTrue(total.waitForExistence(timeout: 5))
             search.typeKey(.return, modifierFlags: [])
             XCTAssertTrue(count.waitForExistence(timeout: 5))
@@ -128,16 +132,16 @@ final class GhosttyObservationUITests: GhosttyCustomConfigCase {
             XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: changed, object: nil)], timeout: 5), .completed)
             search.typeKey(.return, modifierFlags: .shift)
             XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "value == %@", initial)).firstMatch.waitForExistence(timeout: 5))
-            app.menuItems["Select All"].firstMatch.click()
-            paste("no-matches-in-this-session", into: search, app: app, submit: false)
+            search.typeKey("a", modifierFlags: .command)
+            paste("no-matches-in-this-session", into: search, submit: false)
             let empty = app.staticTexts.matching(NSPredicate(format: "value == '-/0'")).firstMatch
             XCTAssertTrue(empty.waitForExistence(timeout: 5))
-            app.menuItems["Select All"].firstMatch.click()
+            search.typeKey("a", modifierFlags: .command)
             search.typeKey(.delete, modifierFlags: [])
             XCTAssertTrue(empty.waitForNonExistence(timeout: 5))
             XCTAssertTrue(search.exists)
         }
-        paste("sessionneedle", into: search, app: app, submit: false)
+        paste("sessionneedle", into: search, submit: false)
         XCTAssertTrue(total.waitForExistence(timeout: 5))
         // Closing the pane with active search leaves the other shell usable.
         app.windows.firstMatch.typeKey("d", modifierFlags: .command)
@@ -145,33 +149,8 @@ final class GhosttyObservationUITests: GhosttyCustomConfigCase {
         app.groups["Left pane"].click()
         app.windows.firstMatch.typeKey("w", modifierFlags: .command)
         XCTAssertTrue(app.wait(for: \.textViews.count, toEqual: 1, timeout: 5))
-        paste("printf '\\033]0;Search session closed\\007'\n", into: app.groups["Terminal pane"].firstMatch, app: app)
+        paste("printf '\\033]0;Search session closed\\007'\n", into: app.groups["Terminal pane"].firstMatch)
         XCTAssertTrue(app.windows.firstMatch.wait(for: \.title, toEqual: "Search session closed", timeout: 5))
-    }
-
-    /// Keep text literal regardless of the active input method, and restore
-    /// every pasteboard representation after the target consumes it.
-    @MainActor private func paste(_ text: String, into target: XCUIElement, app: XCUIApplication, submit: Bool = true) {
-        let pasteboard = NSPasteboard.general
-        let savedItems = (pasteboard.pasteboardItems ?? []).map { item in
-            let saved = NSPasteboardItem()
-            for type in item.types {
-                if let data = item.data(forType: type) { saved.setData(data, forType: type) }
-            }
-            return saved
-        }
-        defer {
-            pasteboard.clearContents()
-            pasteboard.writeObjects(savedItems)
-        }
-        pasteboard.clearContents()
-        pasteboard.setString(text.trimmingCharacters(in: .newlines), forType: .string)
-        if target.elementType == .textField {
-            app.menuItems["Paste"].firstMatch.click()
-        } else {
-            target.typeKey("v", modifierFlags: .command)
-        }
-        if submit { target.typeKey("\n", modifierFlags: []) }
     }
 
 }

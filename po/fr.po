@@ -10,7 +10,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: com.cjmvpu.cghostty\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-19 22:55+0800\n"
+"POT-Creation-Date: 2026-09-21 16:28+0800\n"
 "PO-Revision-Date: 2026-08-22 11:30+0200\n"
 "Last-Translator: flou <flou@proton.me>\n"
 "Language-Team: French <traduc@traduc.org>\n"
@@ -479,353 +479,329 @@ msgid "Move the current tab to a new window."
 msgstr "Déplacer l'onglet actuel dans une nouvelle fenêtre."
 
 #: src/input/command.zig:452
-msgid "Toggle Tab Overview"
-msgstr "Activer/désactiver l'aperçu des onglets"
-
-#: src/input/command.zig:453
-msgid "Toggle the tab overview."
-msgstr "Activer ou désactiver l'aperçu des onglets."
-
-#: src/input/command.zig:458
 msgid "Change Terminal Title…"
 msgstr "Changer le titre du terminal…"
 
-#: src/input/command.zig:459
+#: src/input/command.zig:453
 msgid "Prompt for a new title for the current terminal."
 msgstr "Demander un nouveau titre pour le terminal actuel."
 
-#: src/input/command.zig:464
+#: src/input/command.zig:458
 msgid "Change Tab Title…"
 msgstr "Changer le titre de l'onglet…"
 
-#: src/input/command.zig:465
+#: src/input/command.zig:459
 msgid "Prompt for a new title for the current tab."
 msgstr "Demander un nouveau titre pour l'onglet actuel."
 
-#: src/input/command.zig:477
+#: src/input/command.zig:465
 msgid "Split Left"
 msgstr "Diviser vers la gauche"
 
-#: src/input/command.zig:478
+#: src/input/command.zig:466
 msgid "Split the terminal to the left."
 msgstr "Diviser le terminal vers la gauche."
 
-#: src/input/command.zig:482
+#: src/input/command.zig:470
 msgid "Split Right"
 msgstr "Diviser vers la droite"
 
-#: src/input/command.zig:483
+#: src/input/command.zig:471
 msgid "Split the terminal to the right."
 msgstr "Diviser le terminal vers la droite."
 
-#: src/input/command.zig:487
+#: src/input/command.zig:475
 msgid "Split Up"
 msgstr "Diviser vers le haut"
 
-#: src/input/command.zig:488
+#: src/input/command.zig:476
 msgid "Split the terminal up."
 msgstr "Diviser le terminal vers le haut."
 
-#: src/input/command.zig:492
+#: src/input/command.zig:480
 msgid "Split Down"
 msgstr "Diviser vers le bas"
 
-#: src/input/command.zig:493
+#: src/input/command.zig:481
 msgid "Split the terminal down."
 msgstr "Diviser le terminal vers le bas."
 
-#: src/input/command.zig:500
+#: src/input/command.zig:488
 msgid "Focus Split: Previous"
 msgstr "Donner le focus au panneau : précédent"
 
-#: src/input/command.zig:501
+#: src/input/command.zig:489
 msgid "Focus the previous split, if any."
 msgstr "Donner le focus au panneau précédent, s'il y en a un."
 
-#: src/input/command.zig:505
+#: src/input/command.zig:493
 msgid "Focus Split: Next"
 msgstr "Donner le focus au panneau : suivant"
 
-#: src/input/command.zig:506
+#: src/input/command.zig:494
 msgid "Focus the next split, if any."
 msgstr "Donner le focus au panneau suivant, s'il y en a un."
 
-#: src/input/command.zig:510
+#: src/input/command.zig:498
 msgid "Focus Split: Left"
 msgstr "Donner le focus au panneau : gauche"
 
-#: src/input/command.zig:511
+#: src/input/command.zig:499
 msgid "Focus the split to the left, if it exists."
 msgstr "Donner le focus au panneau à gauche, s'il existe."
 
-#: src/input/command.zig:515
+#: src/input/command.zig:503
 msgid "Focus Split: Right"
 msgstr "Donner le focus au panneau : droite"
 
-#: src/input/command.zig:516
+#: src/input/command.zig:504
 msgid "Focus the split to the right, if it exists."
 msgstr "Donner le focus au panneau à droite, s'il existe."
 
-#: src/input/command.zig:520
+#: src/input/command.zig:508
 msgid "Focus Split: Up"
 msgstr "Donner le focus au panneau : haut"
 
-#: src/input/command.zig:521
+#: src/input/command.zig:509
 msgid "Focus the split above, if it exists."
 msgstr "Donner le focus au panneau au-dessus, s'il existe."
 
-#: src/input/command.zig:525
+#: src/input/command.zig:513
 msgid "Focus Split: Down"
 msgstr "Donner le focus au panneau : bas"
 
-#: src/input/command.zig:526
+#: src/input/command.zig:514
 msgid "Focus the split below, if it exists."
 msgstr "Donner le focus au panneau en dessous, s'il existe."
 
-#: src/input/command.zig:533
+#: src/input/command.zig:521
 msgid "Focus Window: Previous"
 msgstr "Donner le focus à la fenêtre : précédente"
 
-#: src/input/command.zig:534
+#: src/input/command.zig:522
 msgid "Focus the previous window, if any."
 msgstr "Donner le focus à la fenêtre précédente, s'il y en a une."
 
-#: src/input/command.zig:538
+#: src/input/command.zig:526
 msgid "Focus Window: Next"
 msgstr "Donner le focus à la fenêtre : suivante"
 
-#: src/input/command.zig:539
+#: src/input/command.zig:527
 msgid "Focus the next window, if any."
 msgstr "Donner le focus à la fenêtre suivante, s'il y en a une."
 
-#: src/input/command.zig:545
+#: src/input/command.zig:533
 msgid "Toggle Split Zoom"
 msgstr "Activer/désactiver le zoom du panneau"
 
-#: src/input/command.zig:546
+#: src/input/command.zig:534
 msgid "Toggle the zoom state of the current split."
 msgstr "Activer ou désactiver le zoom du panneau actuel."
 
-#: src/input/command.zig:551
+#: src/input/command.zig:539
 msgid "Toggle Read-Only Mode"
 msgstr "Activer/désactiver le mode lecture seule"
 
-#: src/input/command.zig:552
+#: src/input/command.zig:540
 msgid "Toggle read-only mode for the current surface."
 msgstr "Activer ou désactiver le mode lecture seule pour la surface actuelle."
 
-#: src/input/command.zig:557
+#: src/input/command.zig:545
 msgid "Equalize Splits"
 msgstr "Égaliser les panneaux"
 
-#: src/input/command.zig:558
+#: src/input/command.zig:546
 msgid "Equalize the size of all splits."
 msgstr "Égaliser la taille de tous les panneaux."
 
-#: src/input/command.zig:563
+#: src/input/command.zig:551
 msgid "Reset Window Size"
 msgstr "Réinitialiser la taille de la fenêtre"
 
-#: src/input/command.zig:564
+#: src/input/command.zig:552
 msgid "Reset the window size to the default."
 msgstr "Réinitialiser la taille de la fenêtre à sa valeur par défaut."
 
-#: src/input/command.zig:569
+#: src/input/command.zig:557
 msgid "Toggle Inspector"
 msgstr "Afficher/masquer l'inspecteur"
 
-#: src/input/command.zig:570
+#: src/input/command.zig:558
 msgid "Toggle the inspector."
 msgstr "Afficher ou masquer l'inspecteur."
 
-#: src/input/command.zig:575
-msgid "Show the GTK Inspector"
-msgstr "Afficher l'inspecteur GTK"
-
-#: src/input/command.zig:576
-msgid "Show the GTK inspector."
-msgstr "Afficher l'inspecteur GTK."
-
-#: src/input/command.zig:581
+#: src/input/command.zig:563
 msgid "Show On-Screen Keyboard"
 msgstr "Afficher le clavier virtuel"
 
-#: src/input/command.zig:582
+#: src/input/command.zig:564
 msgid "Show the on-screen keyboard if present."
 msgstr "Afficher le clavier virtuel s'il est présent."
 
-#: src/input/command.zig:588
+#: src/input/command.zig:570
 msgid "Open Config Using OS editor"
 msgstr "Ouvrir la configuration avec l'éditeur du système"
 
-#: src/input/command.zig:589
+#: src/input/command.zig:571
 msgid "Open the config file with the OS's default editor."
 msgstr ""
 "Ouvrir le fichier de configuration avec l'éditeur par défaut du système."
 
-#: src/input/command.zig:593
+#: src/input/command.zig:575
 msgid "Open Config in New Terminal Window"
 msgstr "Ouvrir la configuration dans une nouvelle fenêtre de terminal"
 
-#: src/input/command.zig:594
+#: src/input/command.zig:576
 msgid "Open the config file in a new window using $EDITOR or $VISUAL."
 msgstr ""
 "Ouvrir le fichier de configuration dans une nouvelle fenêtre avec $EDITOR ou "
 "$VISUAL."
 
-#: src/input/command.zig:600
+#: src/input/command.zig:582
 msgid "Reload Config"
 msgstr "Recharger la configuration"
 
-#: src/input/command.zig:601
+#: src/input/command.zig:583
 msgid "Reload the config file."
 msgstr "Recharger le fichier de configuration."
 
-#: src/input/command.zig:606
+#: src/input/command.zig:588
 msgid "Close Terminal"
 msgstr "Fermer le terminal"
 
-#: src/input/command.zig:607
+#: src/input/command.zig:589
 msgid "Close the current terminal."
 msgstr "Fermer le terminal actuel."
 
-#: src/input/command.zig:613
+#: src/input/command.zig:595
 msgid "Close Tab"
 msgstr "Fermer l'onglet"
 
-#: src/input/command.zig:614
+#: src/input/command.zig:596
 msgid "Close the current tab."
 msgstr "Fermer l'onglet actuel."
 
-#: src/input/command.zig:618
+#: src/input/command.zig:600
 msgid "Close Other Tabs"
 msgstr "Fermer les autres onglets"
 
-#: src/input/command.zig:619
+#: src/input/command.zig:601
 msgid "Close all tabs in this window except the current one."
 msgstr "Fermer tous les onglets de cette fenêtre sauf l'onglet actuel."
 
-#: src/input/command.zig:623
+#: src/input/command.zig:605
 msgid "Close Tabs to the Right"
 msgstr "Fermer les onglets à droite"
 
-#: src/input/command.zig:624
+#: src/input/command.zig:606
 msgid "Close all tabs to the right of the current one."
 msgstr "Fermer tous les onglets à droite de l'onglet actuel."
 
-#: src/input/command.zig:630
+#: src/input/command.zig:612
 msgid "Close Window"
 msgstr "Fermer la fenêtre"
 
-#: src/input/command.zig:631
+#: src/input/command.zig:613
 msgid "Close the current window."
 msgstr "Fermer la fenêtre actuelle."
 
-#: src/input/command.zig:636
+#: src/input/command.zig:618
 msgid "Close All Windows"
 msgstr "Fermer toutes les fenêtres"
 
-#: src/input/command.zig:637
+#: src/input/command.zig:619
 msgid "Close all windows."
 msgstr "Fermer toutes les fenêtres."
 
-#: src/input/command.zig:642
+#: src/input/command.zig:624
 msgid "Toggle Maximize"
 msgstr "Activer/désactiver l'agrandissement"
 
-#: src/input/command.zig:643
+#: src/input/command.zig:625
 msgid "Toggle the maximized state of the current window."
 msgstr "Activer ou désactiver l'état agrandi de la fenêtre actuelle."
 
-#: src/input/command.zig:648
+#: src/input/command.zig:630
 msgid "Toggle Fullscreen"
 msgstr "Activer/désactiver le plein écran"
 
-#: src/input/command.zig:649
+#: src/input/command.zig:631
 msgid "Toggle the fullscreen state of the current window."
 msgstr "Activer ou désactiver le plein écran de la fenêtre actuelle."
 
-#: src/input/command.zig:654
-msgid "Toggle Window Decorations"
-msgstr "Activer/désactiver les décorations de fenêtre"
-
-#: src/input/command.zig:655
-msgid "Toggle the window decorations."
-msgstr "Activer ou désactiver les décorations de la fenêtre."
-
-#: src/input/command.zig:660
+#: src/input/command.zig:636
 msgid "Toggle Float on Top"
 msgstr "Activer/désactiver le maintien au premier plan"
 
-#: src/input/command.zig:661
+#: src/input/command.zig:637
 msgid "Toggle the float on top state of the current window."
 msgstr ""
 "Activer ou désactiver le maintien de la fenêtre actuelle au premier plan."
 
-#: src/input/command.zig:666
+#: src/input/command.zig:642
 msgid "Toggle Secure Input"
 msgstr "Activer/désactiver la saisie sécurisée"
 
-#: src/input/command.zig:667
+#: src/input/command.zig:643
 msgid "Toggle secure input mode."
 msgstr "Activer ou désactiver le mode de saisie sécurisée."
 
-#: src/input/command.zig:672
+#: src/input/command.zig:648
 msgid "Toggle Mouse Reporting"
 msgstr "Activer/désactiver le rapport de souris"
 
-#: src/input/command.zig:673
+#: src/input/command.zig:649
 msgid "Toggle whether mouse events are reported to terminal applications."
 msgstr ""
 "Activer ou désactiver le signalement des événements de souris aux "
 "applications du terminal."
 
-#: src/input/command.zig:678
+#: src/input/command.zig:654
 msgid "Toggle Background Opacity"
 msgstr "Activer/désactiver l'opacité de l'arrière-plan"
 
-#: src/input/command.zig:679
+#: src/input/command.zig:655
 msgid "Toggle the background opacity of a window that started transparent."
 msgstr ""
 "Activer ou désactiver l'opacité de l'arrière-plan d'une fenêtre qui a "
 "démarré transparente."
 
-#: src/input/command.zig:684
+#: src/input/command.zig:660
 msgid "Check for Updates"
 msgstr "Rechercher des mises à jour"
 
-#: src/input/command.zig:685
+#: src/input/command.zig:661
 msgid "Check for updates to the application."
 msgstr "Rechercher des mises à jour pour l'application."
 
-#: src/input/command.zig:690
+#: src/input/command.zig:666
 msgid "Undo"
 msgstr "Annuler"
 
-#: src/input/command.zig:691
+#: src/input/command.zig:667
 msgid "Undo the last action."
 msgstr "Annuler la dernière action."
 
-#: src/input/command.zig:696
+#: src/input/command.zig:672
 msgid "Redo"
 msgstr "Rétablir"
 
-#: src/input/command.zig:697
+#: src/input/command.zig:673
 msgid "Redo the last undone action."
 msgstr "Rétablir la dernière action annulée."
 
-#: src/input/command.zig:702
+#: src/input/command.zig:678
 msgid "Quit"
 msgstr "Quitter"
 
-#: src/input/command.zig:703
+#: src/input/command.zig:679
 msgid "Quit the application."
 msgstr "Quitter l'application."
 
-#: src/input/command.zig:708
+#: src/input/command.zig:684
 msgid "Ghostty"
 msgstr "Ghostty"
 
-#: src/input/command.zig:709
+#: src/input/command.zig:685
 msgid "Put a little Ghostty in your terminal."
 msgstr "Mettre un petit Ghostty dans votre terminal."

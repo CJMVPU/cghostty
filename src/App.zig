@@ -92,16 +92,9 @@ pub fn create(alloc: Allocator) CreateError!*App {
         }
     }
 
-    // Same for the renderer's graphics API (e.g. Metal), which pays
-    // one-time framework initialization costs on first use.
-    if (comptime @hasDecl(renderer.Renderer.API, "warmup")) {
-        if (std.Thread.spawn(
-            .{},
-            renderer.Renderer.API.warmup,
-            .{},
-        )) |thr| thr.detach() else |err| {
-            log.warn("renderer warmup thread spawn failed err={}", .{err});
-        }
+    // Initialize Metal before the first surface pays the framework startup cost.
+    if (std.Thread.spawn(.{}, renderer.Metal.warmup, .{})) |thr| thr.detach() else |err| {
+        log.warn("renderer warmup thread spawn failed err={}", .{err});
     }
 
     return app;
@@ -456,7 +449,6 @@ pub fn performAction(
         .toggle_quick_terminal => _ = try rt_app.performAction(.app, .toggle_quick_terminal, {}),
         .toggle_visibility => _ = try rt_app.performAction(.app, .toggle_visibility, {}),
         .check_for_updates => _ = try rt_app.performAction(.app, .check_for_updates, {}),
-        .show_gtk_inspector => _ = try rt_app.performAction(.app, .show_gtk_inspector, {}),
         .undo => _ = try rt_app.performAction(.app, .undo, {}),
 
         .redo => _ = try rt_app.performAction(.app, .redo, {}),

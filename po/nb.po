@@ -10,7 +10,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: com.cjmvpu.cghostty\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-19 22:55+0800\n"
+"POT-Creation-Date: 2026-09-21 16:28+0800\n"
 "PO-Revision-Date: 2026-08-12 21:34+0200\n"
 "Last-Translator: Uzair Aftab <u@uzaaft.me>\n"
 "Language-Team: Norwegian Bokmal <l10n-no@lister.huftis.org>\n"
@@ -467,345 +467,321 @@ msgid "Move the current tab to a new window."
 msgstr "Flytt den aktive fanen til et nytt vindu."
 
 #: src/input/command.zig:452
-msgid "Toggle Tab Overview"
-msgstr "Vis/skjul faneoversikten"
-
-#: src/input/command.zig:453
-msgid "Toggle the tab overview."
-msgstr "Vis eller skjul faneoversikten."
-
-#: src/input/command.zig:458
 msgid "Change Terminal Title…"
 msgstr "Endre terminaltittel…"
 
-#: src/input/command.zig:459
+#: src/input/command.zig:453
 msgid "Prompt for a new title for the current terminal."
 msgstr "Be om en ny tittel for den aktive terminalen."
 
-#: src/input/command.zig:464
+#: src/input/command.zig:458
 msgid "Change Tab Title…"
 msgstr "Endre fanetittel…"
 
-#: src/input/command.zig:465
+#: src/input/command.zig:459
 msgid "Prompt for a new title for the current tab."
 msgstr "Be om en ny tittel for den aktive fanen."
 
-#: src/input/command.zig:477
+#: src/input/command.zig:465
 msgid "Split Left"
 msgstr "Del til venstre"
 
-#: src/input/command.zig:478
+#: src/input/command.zig:466
 msgid "Split the terminal to the left."
 msgstr "Del terminalen til venstre."
 
-#: src/input/command.zig:482
+#: src/input/command.zig:470
 msgid "Split Right"
 msgstr "Del til høyre"
 
-#: src/input/command.zig:483
+#: src/input/command.zig:471
 msgid "Split the terminal to the right."
 msgstr "Del terminalen til høyre."
 
-#: src/input/command.zig:487
+#: src/input/command.zig:475
 msgid "Split Up"
 msgstr "Del oppover"
 
-#: src/input/command.zig:488
+#: src/input/command.zig:476
 msgid "Split the terminal up."
 msgstr "Del terminalen oppover."
 
-#: src/input/command.zig:492
+#: src/input/command.zig:480
 msgid "Split Down"
 msgstr "Del nedover"
 
-#: src/input/command.zig:493
+#: src/input/command.zig:481
 msgid "Split the terminal down."
 msgstr "Del terminalen nedover."
 
-#: src/input/command.zig:500
+#: src/input/command.zig:488
 msgid "Focus Split: Previous"
 msgstr "Fokuser forrige delte vindu"
 
-#: src/input/command.zig:501
+#: src/input/command.zig:489
 msgid "Focus the previous split, if any."
 msgstr "Fokuser forrige delte vindu hvis det finnes."
 
-#: src/input/command.zig:505
+#: src/input/command.zig:493
 msgid "Focus Split: Next"
 msgstr "Fokuser neste delte vindu"
 
-#: src/input/command.zig:506
+#: src/input/command.zig:494
 msgid "Focus the next split, if any."
 msgstr "Fokuser neste delte vindu hvis det finnes."
 
-#: src/input/command.zig:510
+#: src/input/command.zig:498
 msgid "Focus Split: Left"
 msgstr "Fokuser det delte vinduet til venstre"
 
-#: src/input/command.zig:511
+#: src/input/command.zig:499
 msgid "Focus the split to the left, if it exists."
 msgstr "Fokuser det delte vinduet til venstre hvis det finnes."
 
-#: src/input/command.zig:515
+#: src/input/command.zig:503
 msgid "Focus Split: Right"
 msgstr "Fokuser det delte vinduet til høyre"
 
-#: src/input/command.zig:516
+#: src/input/command.zig:504
 msgid "Focus the split to the right, if it exists."
 msgstr "Fokuser det delte vinduet til høyre hvis det finnes."
 
-#: src/input/command.zig:520
+#: src/input/command.zig:508
 msgid "Focus Split: Up"
 msgstr "Fokuser det delte vinduet over"
 
-#: src/input/command.zig:521
+#: src/input/command.zig:509
 msgid "Focus the split above, if it exists."
 msgstr "Fokuser det delte vinduet over hvis det finnes."
 
-#: src/input/command.zig:525
+#: src/input/command.zig:513
 msgid "Focus Split: Down"
 msgstr "Fokuser det delte vinduet under"
 
-#: src/input/command.zig:526
+#: src/input/command.zig:514
 msgid "Focus the split below, if it exists."
 msgstr "Fokuser det delte vinduet under hvis det finnes."
 
-#: src/input/command.zig:533
+#: src/input/command.zig:521
 msgid "Focus Window: Previous"
 msgstr "Fokuser forrige vindu"
 
-#: src/input/command.zig:534
+#: src/input/command.zig:522
 msgid "Focus the previous window, if any."
 msgstr "Fokuser forrige vindu hvis det finnes."
 
-#: src/input/command.zig:538
+#: src/input/command.zig:526
 msgid "Focus Window: Next"
 msgstr "Fokuser neste vindu"
 
-#: src/input/command.zig:539
+#: src/input/command.zig:527
 msgid "Focus the next window, if any."
 msgstr "Fokuser neste vindu hvis det finnes."
 
-#: src/input/command.zig:545
+#: src/input/command.zig:533
 msgid "Toggle Split Zoom"
 msgstr "Slå zoom av/på for delt vindu"
 
-#: src/input/command.zig:546
+#: src/input/command.zig:534
 msgid "Toggle the zoom state of the current split."
 msgstr "Slå zoom av eller på for det aktive delte vinduet."
 
-#: src/input/command.zig:551
+#: src/input/command.zig:539
 msgid "Toggle Read-Only Mode"
 msgstr "Slå skrivebeskyttet modus av/på"
 
-#: src/input/command.zig:552
+#: src/input/command.zig:540
 msgid "Toggle read-only mode for the current surface."
 msgstr "Slå skrivebeskyttet modus av eller på for den aktive terminalen."
 
-#: src/input/command.zig:557
+#: src/input/command.zig:545
 msgid "Equalize Splits"
 msgstr "Gjør delte vinduer like store"
 
-#: src/input/command.zig:558
+#: src/input/command.zig:546
 msgid "Equalize the size of all splits."
 msgstr "Gjør alle delte vinduer like store."
 
-#: src/input/command.zig:563
+#: src/input/command.zig:551
 msgid "Reset Window Size"
 msgstr "Tilbakestill vindusstørrelsen"
 
-#: src/input/command.zig:564
+#: src/input/command.zig:552
 msgid "Reset the window size to the default."
 msgstr "Tilbakestill vinduet til standardstørrelsen."
 
-#: src/input/command.zig:569
+#: src/input/command.zig:557
 msgid "Toggle Inspector"
 msgstr "Vis/skjul terminalinspektøren"
 
-#: src/input/command.zig:570
+#: src/input/command.zig:558
 msgid "Toggle the inspector."
 msgstr "Vis eller skjul terminalinspektøren."
 
-#: src/input/command.zig:575
-msgid "Show the GTK Inspector"
-msgstr "Vis GTK-inspektøren"
-
-#: src/input/command.zig:576
-msgid "Show the GTK inspector."
-msgstr "Vis GTK-inspektøren."
-
-#: src/input/command.zig:581
+#: src/input/command.zig:563
 msgid "Show On-Screen Keyboard"
 msgstr "Vis skjermtastatur"
 
-#: src/input/command.zig:582
+#: src/input/command.zig:564
 msgid "Show the on-screen keyboard if present."
 msgstr "Vis skjermtastaturet hvis det er tilgjengelig."
 
-#: src/input/command.zig:588
+#: src/input/command.zig:570
 msgid "Open Config Using OS editor"
 msgstr "Åpne konfigurasjonen i standardprogrammet for tekstfiler"
 
-#: src/input/command.zig:589
+#: src/input/command.zig:571
 msgid "Open the config file with the OS's default editor."
 msgstr "Åpne konfigurasjonsfilen i standardprogrammet for tekstfiler."
 
-#: src/input/command.zig:593
+#: src/input/command.zig:575
 msgid "Open Config in New Terminal Window"
 msgstr "Åpne konfigurasjonen i et nytt terminalvindu"
 
-#: src/input/command.zig:594
+#: src/input/command.zig:576
 msgid "Open the config file in a new window using $EDITOR or $VISUAL."
 msgstr "Åpne konfigurasjonsfilen i et nytt vindu med $EDITOR eller $VISUAL."
 
-#: src/input/command.zig:600
+#: src/input/command.zig:582
 msgid "Reload Config"
 msgstr "Last konfigurasjonen på nytt"
 
-#: src/input/command.zig:601
+#: src/input/command.zig:583
 msgid "Reload the config file."
 msgstr "Last konfigurasjonsfilen på nytt."
 
-#: src/input/command.zig:606
+#: src/input/command.zig:588
 msgid "Close Terminal"
 msgstr "Lukk terminal"
 
-#: src/input/command.zig:607
+#: src/input/command.zig:589
 msgid "Close the current terminal."
 msgstr "Lukk den aktive terminalen."
 
-#: src/input/command.zig:613
+#: src/input/command.zig:595
 msgid "Close Tab"
 msgstr "Lukk fane"
 
-#: src/input/command.zig:614
+#: src/input/command.zig:596
 msgid "Close the current tab."
 msgstr "Lukk den aktive fanen."
 
-#: src/input/command.zig:618
+#: src/input/command.zig:600
 msgid "Close Other Tabs"
 msgstr "Lukk andre faner"
 
-#: src/input/command.zig:619
+#: src/input/command.zig:601
 msgid "Close all tabs in this window except the current one."
 msgstr "Lukk alle fanene i dette vinduet unntatt den aktive."
 
-#: src/input/command.zig:623
+#: src/input/command.zig:605
 msgid "Close Tabs to the Right"
 msgstr "Lukk faner til høyre"
 
-#: src/input/command.zig:624
+#: src/input/command.zig:606
 msgid "Close all tabs to the right of the current one."
 msgstr "Lukk alle fanene til høyre for den aktive."
 
-#: src/input/command.zig:630
+#: src/input/command.zig:612
 msgid "Close Window"
 msgstr "Lukk vindu"
 
-#: src/input/command.zig:631
+#: src/input/command.zig:613
 msgid "Close the current window."
 msgstr "Lukk det aktive vinduet."
 
-#: src/input/command.zig:636
+#: src/input/command.zig:618
 msgid "Close All Windows"
 msgstr "Lukk alle vinduer"
 
-#: src/input/command.zig:637
+#: src/input/command.zig:619
 msgid "Close all windows."
 msgstr "Lukk alle vinduer."
 
-#: src/input/command.zig:642
+#: src/input/command.zig:624
 msgid "Toggle Maximize"
 msgstr "Maksimer/gjenopprett vinduet"
 
-#: src/input/command.zig:643
+#: src/input/command.zig:625
 msgid "Toggle the maximized state of the current window."
 msgstr "Maksimer eller gjenopprett det aktive vinduet."
 
-#: src/input/command.zig:648
+#: src/input/command.zig:630
 msgid "Toggle Fullscreen"
 msgstr "Slå fullskjermmodus av/på"
 
-#: src/input/command.zig:649
+#: src/input/command.zig:631
 msgid "Toggle the fullscreen state of the current window."
 msgstr "Slå fullskjermmodus av eller på for det aktive vinduet."
 
-#: src/input/command.zig:654
-msgid "Toggle Window Decorations"
-msgstr "Vis/skjul vindusdekorasjoner"
-
-#: src/input/command.zig:655
-msgid "Toggle the window decorations."
-msgstr "Vis/skjul vindusdekorasjoner."
-
-#: src/input/command.zig:660
+#: src/input/command.zig:636
 msgid "Toggle Float on Top"
 msgstr "Slå «alltid øverst» av/på"
 
-#: src/input/command.zig:661
+#: src/input/command.zig:637
 msgid "Toggle the float on top state of the current window."
 msgstr "Slå «alltid øverst» av/på for det aktive vinduet."
 
-#: src/input/command.zig:666
+#: src/input/command.zig:642
 msgid "Toggle Secure Input"
 msgstr "Slå sikker tastaturskriving av/på"
 
-#: src/input/command.zig:667
+#: src/input/command.zig:643
 msgid "Toggle secure input mode."
 msgstr "Slå sikker tastaturskriving av/på."
 
-#: src/input/command.zig:672
+#: src/input/command.zig:648
 msgid "Toggle Mouse Reporting"
 msgstr "Aktiver/deaktiver sending av musehendelser"
 
-#: src/input/command.zig:673
+#: src/input/command.zig:649
 msgid "Toggle whether mouse events are reported to terminal applications."
 msgstr "Aktiver/deaktiver sending av musehendelser til terminalprogrammer."
 
-#: src/input/command.zig:678
+#: src/input/command.zig:654
 msgid "Toggle Background Opacity"
 msgstr "Veksle bakgrunnens opasitet"
 
-#: src/input/command.zig:679
+#: src/input/command.zig:655
 msgid "Toggle the background opacity of a window that started transparent."
 msgstr "Veksle bakgrunnens opasitet for et vindu som startet gjennomsiktig."
 
-#: src/input/command.zig:684
+#: src/input/command.zig:660
 msgid "Check for Updates"
 msgstr "Se etter oppdateringer"
 
-#: src/input/command.zig:685
+#: src/input/command.zig:661
 msgid "Check for updates to the application."
 msgstr "Se etter programoppdateringer."
 
-#: src/input/command.zig:690
+#: src/input/command.zig:666
 msgid "Undo"
 msgstr "Angre"
 
-#: src/input/command.zig:691
+#: src/input/command.zig:667
 msgid "Undo the last action."
 msgstr "Angre siste handling."
 
-#: src/input/command.zig:696
+#: src/input/command.zig:672
 msgid "Redo"
 msgstr "Gjør om"
 
-#: src/input/command.zig:697
+#: src/input/command.zig:673
 msgid "Redo the last undone action."
 msgstr "Gjør om den siste angrede handlingen."
 
-#: src/input/command.zig:702
+#: src/input/command.zig:678
 msgid "Quit"
 msgstr "Avslutt"
 
-#: src/input/command.zig:703
+#: src/input/command.zig:679
 msgid "Quit the application."
 msgstr "Avslutt programmet."
 
-#: src/input/command.zig:708
+#: src/input/command.zig:684
 msgid "Ghostty"
 msgstr "Ghostty"
 
-#: src/input/command.zig:709
+#: src/input/command.zig:685
 msgid "Put a little Ghostty in your terminal."
 msgstr "Legg en liten Ghostty i terminalen din."

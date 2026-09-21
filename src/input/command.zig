@@ -447,12 +447,6 @@ fn actionCommands(action: Action.Key) []const Command {
             .description = i18n.N_("Move the current tab to a new window."),
         }},
 
-        .toggle_tab_overview => comptime &.{.{
-            .action = .toggle_tab_overview,
-            .title = i18n.N_("Toggle Tab Overview"),
-            .description = i18n.N_("Toggle the tab overview."),
-        }},
-
         .prompt_surface_title => comptime &.{.{
             .action = .prompt_surface_title,
             .title = i18n.N_("Change Terminal Title…"),
@@ -463,12 +457,6 @@ fn actionCommands(action: Action.Key) []const Command {
             .action = .prompt_tab_title,
             .title = i18n.N_("Change Tab Title…"),
             .description = i18n.N_("Prompt for a new title for the current tab."),
-        }},
-
-        .prompt_window_title => comptime &.{.{
-            .action = .prompt_window_title,
-            .title = "Change Window Title…",
-            .description = "Prompt for a new title for the current window.",
         }},
 
         .new_split => comptime &.{
@@ -570,12 +558,6 @@ fn actionCommands(action: Action.Key) []const Command {
             .description = i18n.N_("Toggle the inspector."),
         }},
 
-        .show_gtk_inspector => comptime &.{.{
-            .action = .show_gtk_inspector,
-            .title = i18n.N_("Show the GTK Inspector"),
-            .description = i18n.N_("Show the GTK inspector."),
-        }},
-
         .show_on_screen_keyboard => comptime &.{.{
             .action = .show_on_screen_keyboard,
             .title = i18n.N_("Show On-Screen Keyboard"),
@@ -647,12 +629,6 @@ fn actionCommands(action: Action.Key) []const Command {
             .action = .toggle_fullscreen,
             .title = i18n.N_("Toggle Fullscreen"),
             .description = i18n.N_("Toggle the fullscreen state of the current window."),
-        }},
-
-        .toggle_window_decorations => comptime &.{.{
-            .action = .toggle_window_decorations,
-            .title = i18n.N_("Toggle Window Decorations"),
-            .description = i18n.N_("Toggle the window decorations."),
         }},
 
         .toggle_window_float_on_top => comptime &.{.{

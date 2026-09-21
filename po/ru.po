@@ -10,7 +10,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: com.cjmvpu.cghostty\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-19 22:55+0800\n"
+"POT-Creation-Date: 2026-09-21 16:28+0800\n"
 "PO-Revision-Date: 2026-09-16 15:45+0200\n"
 "Last-Translator: derVedro <dervedro@googlemail.com>\n"
 "Language-Team: Russian\n"
@@ -456,346 +456,322 @@ msgid "Move the current tab to a new window."
 msgstr "Переместить текущую вкладку в новое окно."
 
 #: src/input/command.zig:452
-msgid "Toggle Tab Overview"
-msgstr "Переключить обзор вкладок"
-
-#: src/input/command.zig:453
-msgid "Toggle the tab overview."
-msgstr "Показать или скрыть обзор вкладок."
-
-#: src/input/command.zig:458
 msgid "Change Terminal Title…"
 msgstr "Переименовать терминал…"
 
-#: src/input/command.zig:459
+#: src/input/command.zig:453
 msgid "Prompt for a new title for the current terminal."
 msgstr "Изменить заголовок текущего терминала."
 
-#: src/input/command.zig:464
+#: src/input/command.zig:458
 msgid "Change Tab Title…"
 msgstr "Переименовать вкладку…"
 
-#: src/input/command.zig:465
+#: src/input/command.zig:459
 msgid "Prompt for a new title for the current tab."
 msgstr "Изменить заголовок текущей вкладки."
 
-#: src/input/command.zig:477
+#: src/input/command.zig:465
 msgid "Split Left"
 msgstr "Разделить влево"
 
-#: src/input/command.zig:478
+#: src/input/command.zig:466
 msgid "Split the terminal to the left."
 msgstr "Разделить терминал влево."
 
-#: src/input/command.zig:482
+#: src/input/command.zig:470
 msgid "Split Right"
 msgstr "Разделить вправо"
 
-#: src/input/command.zig:483
+#: src/input/command.zig:471
 msgid "Split the terminal to the right."
 msgstr "Разделить терминал вправо."
 
-#: src/input/command.zig:487
+#: src/input/command.zig:475
 msgid "Split Up"
 msgstr "Разделить вверх"
 
-#: src/input/command.zig:488
+#: src/input/command.zig:476
 msgid "Split the terminal up."
 msgstr "Разделить терминал вверх."
 
-#: src/input/command.zig:492
+#: src/input/command.zig:480
 msgid "Split Down"
 msgstr "Разделить вниз"
 
-#: src/input/command.zig:493
+#: src/input/command.zig:481
 msgid "Split the terminal down."
 msgstr "Разделить терминал вниз."
 
-#: src/input/command.zig:500
+#: src/input/command.zig:488
 msgid "Focus Split: Previous"
 msgstr "Перейти к предыдущей области"
 
-#: src/input/command.zig:501
+#: src/input/command.zig:489
 msgid "Focus the previous split, if any."
 msgstr "Перейти к предыдущей области."
 
-#: src/input/command.zig:505
+#: src/input/command.zig:493
 msgid "Focus Split: Next"
 msgstr "Перейти к следующей области"
 
-#: src/input/command.zig:506
+#: src/input/command.zig:494
 msgid "Focus the next split, if any."
 msgstr "Перейти к следующей области."
 
-#: src/input/command.zig:510
+#: src/input/command.zig:498
 msgid "Focus Split: Left"
 msgstr "Перейти к области слева"
 
-#: src/input/command.zig:511
+#: src/input/command.zig:499
 msgid "Focus the split to the left, if it exists."
 msgstr "Перейти к области слева."
 
-#: src/input/command.zig:515
+#: src/input/command.zig:503
 msgid "Focus Split: Right"
 msgstr "Перейти к области справа"
 
-#: src/input/command.zig:516
+#: src/input/command.zig:504
 msgid "Focus the split to the right, if it exists."
 msgstr "Перейти к области справа."
 
-#: src/input/command.zig:520
+#: src/input/command.zig:508
 msgid "Focus Split: Up"
 msgstr "Перейти к области сверху"
 
-#: src/input/command.zig:521
+#: src/input/command.zig:509
 msgid "Focus the split above, if it exists."
 msgstr "Перейти к области сверху."
 
-#: src/input/command.zig:525
+#: src/input/command.zig:513
 msgid "Focus Split: Down"
 msgstr "Перейти к области снизу"
 
-#: src/input/command.zig:526
+#: src/input/command.zig:514
 msgid "Focus the split below, if it exists."
 msgstr "Перейти к области снизу."
 
-#: src/input/command.zig:533
+#: src/input/command.zig:521
 msgid "Focus Window: Previous"
 msgstr "Перейти к предыдущему окну"
 
-#: src/input/command.zig:534
+#: src/input/command.zig:522
 msgid "Focus the previous window, if any."
 msgstr "Перейти к предыдущему окну."
 
-#: src/input/command.zig:538
+#: src/input/command.zig:526
 msgid "Focus Window: Next"
 msgstr "Перейти к следующему окну"
 
-#: src/input/command.zig:539
+#: src/input/command.zig:527
 msgid "Focus the next window, if any."
 msgstr "Перейти к следующему окну."
 
-#: src/input/command.zig:545
+#: src/input/command.zig:533
 msgid "Toggle Split Zoom"
 msgstr "Переключить полнооконный режим области"
 
-#: src/input/command.zig:546
+#: src/input/command.zig:534
 msgid "Toggle the zoom state of the current split."
 msgstr "Развернуть область на всё окно или вернуть её прежний размер."
 
-#: src/input/command.zig:551
+#: src/input/command.zig:539
 msgid "Toggle Read-Only Mode"
 msgstr "Переключить режим только для чтения"
 
-#: src/input/command.zig:552
+#: src/input/command.zig:540
 msgid "Toggle read-only mode for the current surface."
 msgstr "Включить или отключить режим только для чтения для текущей области."
 
-#: src/input/command.zig:557
+#: src/input/command.zig:545
 msgid "Equalize Splits"
 msgstr "Выровнять области"
 
-#: src/input/command.zig:558
+#: src/input/command.zig:546
 msgid "Equalize the size of all splits."
 msgstr "Выровнять размеры всех областей по сетке."
 
-#: src/input/command.zig:563
+#: src/input/command.zig:551
 msgid "Reset Window Size"
 msgstr "Сбросить размер окна"
 
-#: src/input/command.zig:564
+#: src/input/command.zig:552
 msgid "Reset the window size to the default."
 msgstr "Вернуть размер окна по умолчанию."
 
-#: src/input/command.zig:569
+#: src/input/command.zig:557
 msgid "Toggle Inspector"
 msgstr "Переключить инспектор"
 
-#: src/input/command.zig:570
+#: src/input/command.zig:558
 msgid "Toggle the inspector."
 msgstr "Показать или скрыть инспектор."
 
-#: src/input/command.zig:575
-msgid "Show the GTK Inspector"
-msgstr "Показать инспектор GTK"
-
-#: src/input/command.zig:576
-msgid "Show the GTK inspector."
-msgstr "Показать инспектор GTK."
-
-#: src/input/command.zig:581
+#: src/input/command.zig:563
 msgid "Show On-Screen Keyboard"
 msgstr "Показать экранную клавиатуру"
 
-#: src/input/command.zig:582
+#: src/input/command.zig:564
 msgid "Show the on-screen keyboard if present."
 msgstr "Показать экранную клавиатуру, если она доступна."
 
-#: src/input/command.zig:588
+#: src/input/command.zig:570
 msgid "Open Config Using OS editor"
 msgstr "Открыть конфигурацию в системном редакторе"
 
-#: src/input/command.zig:589
+#: src/input/command.zig:571
 msgid "Open the config file with the OS's default editor."
 msgstr "Открыть файл конфигурации в редакторе по умолчанию."
 
-#: src/input/command.zig:593
+#: src/input/command.zig:575
 msgid "Open Config in New Terminal Window"
 msgstr "Открыть конфигурацию в новом окне терминала"
 
-#: src/input/command.zig:594
+#: src/input/command.zig:576
 msgid "Open the config file in a new window using $EDITOR or $VISUAL."
 msgstr "Открыть файл конфигурации в новом окне с помощью $EDITOR или $VISUAL."
 
-#: src/input/command.zig:600
+#: src/input/command.zig:582
 msgid "Reload Config"
 msgstr "Перезагрузить конфигурацию"
 
-#: src/input/command.zig:601
+#: src/input/command.zig:583
 msgid "Reload the config file."
 msgstr "Перезагрузить файл конфигурации."
 
-#: src/input/command.zig:606
+#: src/input/command.zig:588
 msgid "Close Terminal"
 msgstr "Закрыть терминал"
 
-#: src/input/command.zig:607
+#: src/input/command.zig:589
 msgid "Close the current terminal."
 msgstr "Закрыть текущий терминал."
 
-#: src/input/command.zig:613
+#: src/input/command.zig:595
 msgid "Close Tab"
 msgstr "Закрыть вкладку"
 
-#: src/input/command.zig:614
+#: src/input/command.zig:596
 msgid "Close the current tab."
 msgstr "Закрыть текущую вкладку."
 
-#: src/input/command.zig:618
+#: src/input/command.zig:600
 msgid "Close Other Tabs"
 msgstr "Закрыть другие вкладки"
 
-#: src/input/command.zig:619
+#: src/input/command.zig:601
 msgid "Close all tabs in this window except the current one."
 msgstr "Закрыть все остальные вкладки в этом окне."
 
-#: src/input/command.zig:623
+#: src/input/command.zig:605
 msgid "Close Tabs to the Right"
 msgstr "Закрыть вкладки справа"
 
-#: src/input/command.zig:624
+#: src/input/command.zig:606
 msgid "Close all tabs to the right of the current one."
 msgstr "Закрыть все вкладки справа от текущей."
 
-#: src/input/command.zig:630
+#: src/input/command.zig:612
 msgid "Close Window"
 msgstr "Закрыть окно"
 
-#: src/input/command.zig:631
+#: src/input/command.zig:613
 msgid "Close the current window."
 msgstr "Закрыть текущее окно."
 
-#: src/input/command.zig:636
+#: src/input/command.zig:618
 msgid "Close All Windows"
 msgstr "Закрыть все окна"
 
-#: src/input/command.zig:637
+#: src/input/command.zig:619
 msgid "Close all windows."
 msgstr "Закрыть все окна."
 
-#: src/input/command.zig:642
+#: src/input/command.zig:624
 msgid "Toggle Maximize"
 msgstr "Переключить развёрнутый режим окна"
 
-#: src/input/command.zig:643
+#: src/input/command.zig:625
 msgid "Toggle the maximized state of the current window."
 msgstr "Развернуть текущее окно или вернуть прежний размер."
 
-#: src/input/command.zig:648
+#: src/input/command.zig:630
 msgid "Toggle Fullscreen"
 msgstr "Переключить полноэкранный режим"
 
-#: src/input/command.zig:649
+#: src/input/command.zig:631
 msgid "Toggle the fullscreen state of the current window."
 msgstr "Показать текущее окно во весь экран или вернуть прежний размер."
 
-#: src/input/command.zig:654
-msgid "Toggle Window Decorations"
-msgstr "Переключить оформление окна"
-
-#: src/input/command.zig:655
-msgid "Toggle the window decorations."
-msgstr "Показать или скрыть оформление окна."
-
-#: src/input/command.zig:660
+#: src/input/command.zig:636
 msgid "Toggle Float on Top"
 msgstr "Переключить режим поверх всех окон"
 
-#: src/input/command.zig:661
+#: src/input/command.zig:637
 msgid "Toggle the float on top state of the current window."
 msgstr "Закрепить окно поверх остальных или снять закрепление."
 
-#: src/input/command.zig:666
+#: src/input/command.zig:642
 msgid "Toggle Secure Input"
 msgstr "Переключить защищённый ввод"
 
-#: src/input/command.zig:667
+#: src/input/command.zig:643
 msgid "Toggle secure input mode."
 msgstr "Включить или отключить режим защищённого ввода."
 
-#: src/input/command.zig:672
+#: src/input/command.zig:648
 msgid "Toggle Mouse Reporting"
 msgstr "Переключить передачу событий мыши"
 
-#: src/input/command.zig:673
+#: src/input/command.zig:649
 msgid "Toggle whether mouse events are reported to terminal applications."
 msgstr ""
 "Разрешить или запретить передачу событий мыши терминальным приложениям."
 
-#: src/input/command.zig:678
+#: src/input/command.zig:654
 msgid "Toggle Background Opacity"
 msgstr "Переключить прозрачность фона"
 
-#: src/input/command.zig:679
+#: src/input/command.zig:655
 msgid "Toggle the background opacity of a window that started transparent."
 msgstr "Изменить прозрачность у изначально прозрачного окна."
 
-#: src/input/command.zig:684
+#: src/input/command.zig:660
 msgid "Check for Updates"
 msgstr "Проверить обновления"
 
-#: src/input/command.zig:685
+#: src/input/command.zig:661
 msgid "Check for updates to the application."
 msgstr "Проверить наличие обновлений приложения."
 
-#: src/input/command.zig:690
+#: src/input/command.zig:666
 msgid "Undo"
 msgstr "Отменить"
 
-#: src/input/command.zig:691
+#: src/input/command.zig:667
 msgid "Undo the last action."
 msgstr "Отменить последнее действие."
 
-#: src/input/command.zig:696
+#: src/input/command.zig:672
 msgid "Redo"
 msgstr "Повторить"
 
-#: src/input/command.zig:697
+#: src/input/command.zig:673
 msgid "Redo the last undone action."
 msgstr "Повторить последнее отменённое действие."
 
-#: src/input/command.zig:702
+#: src/input/command.zig:678
 msgid "Quit"
 msgstr "Выход"
 
-#: src/input/command.zig:703
+#: src/input/command.zig:679
 msgid "Quit the application."
 msgstr "Выйти из приложения."
 
-#: src/input/command.zig:708
+#: src/input/command.zig:684
 msgid "Ghostty"
 msgstr "Ghostty"
 
-#: src/input/command.zig:709
+#: src/input/command.zig:685
 msgid "Put a little Ghostty in your terminal."
 msgstr "Вставить в терминал маленького Ghostty."

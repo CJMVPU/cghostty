@@ -15,7 +15,7 @@
 		A546F1142D7B68D7003B11A0 /* locale in Resources */ = {isa = PBXBuildFile; fileRef = A546F1132D7B68D7003B11A0 /* locale */; };
 		A553F4142E06EB1600257779 /* cghostty.icon in Resources */ = {isa = PBXBuildFile; fileRef = A553F4122E06EB1600257779 /* cghostty.icon */; };
 		A56B880B2A840447007A0E29 /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A56B880A2A840447007A0E29 /* Carbon.framework */; };
-		A571AB1D2A206FCF00248498 /* GhosttyKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A5D495A1299BEC7E00DD1313 /* GhosttyKit.xcframework */; };
+		A571AB1D2A206FCF00248498 /* libghostty-internal.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A5D495A1299BEC7E00DD1313 /* libghostty-internal.a */; };
 		A586167C2B7703CC009BDB1D /* fish in Resources */ = {isa = PBXBuildFile; fileRef = A586167B2B7703CC009BDB1D /* fish */; };
 		A5985CE62C33060F00C57AD3 /* man in Resources */ = {isa = PBXBuildFile; fileRef = A5985CE52C33060F00C57AD3 /* man */; };
 		A5A1F8852A489D6800D1E8BC /* terminfo in Resources */ = {isa = PBXBuildFile; fileRef = A5A1F8842A489D6800D1E8BC /* terminfo */; };
@@ -61,7 +61,7 @@
 		A5B30531299BEAAA0047F10C /* cghostty.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = cghostty.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A5B30538299BEAAB0047F10C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A5B3053D299BEAAB0047F10C /* Ghostty.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Ghostty.entitlements; sourceTree = "<group>"; };
-		A5D495A1299BEC7E00DD1313 /* GhosttyKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = GhosttyKit.xcframework; sourceTree = "<group>"; };
+		A5D495A1299BEC7E00DD1313 /* libghostty-internal.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = "../zig-out/lib/libghostty-internal.a"; sourceTree = "<group>"; };
 		FC5218F92D10FFC7004C93E0 /* zsh */ = {isa = PBXFileReference; lastKnownFileType = folder; name = zsh; path = "../zig-out/share/zsh"; sourceTree = "<group>"; };
 		FC9ABA9B2D0F538D0020D4C8 /* bash-completion */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "bash-completion"; path = "../zig-out/share/bash-completion"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -92,7 +92,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A56B880B2A840447007A0E29 /* Carbon.framework in Frameworks */,
-				A571AB1D2A206FCF00248498 /* GhosttyKit.xcframework in Frameworks */,
+				A571AB1D2A206FCF00248498 /* libghostty-internal.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -149,7 +149,7 @@
 			isa = PBXGroup;
 			children = (
 				A56B880A2A840447007A0E29 /* Carbon.framework */,
-				A5D495A1299BEC7E00DD1313 /* GhosttyKit.xcframework */,
+				A5D495A1299BEC7E00DD1313 /* libghostty-internal.a */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -424,6 +424,9 @@
 				MTL_FAST_MATH = YES;
 				SDKROOT = macosx;
 				ARCHS = arm64;
+				LIBRARY_SEARCH_PATHS = ("$(inherited)", "$(SRCROOT)/../zig-out/lib");
+				SWIFT_INCLUDE_PATHS = ("$(inherited)", "$(SRCROOT)/../include");
+				HEADER_SEARCH_PATHS = ("$(inherited)", "$(SRCROOT)/../include");
 				VALID_ARCHS = arm64;
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
@@ -442,7 +445,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -464,7 +467,6 @@
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "A program running within cghostty would like to access the local network.";
 				INFOPLIST_KEY_NSLocationTemporaryUsageDescriptionDictionary = "A program running within cghostty would like to use your location temporarily.";
 				INFOPLIST_KEY_NSLocationUsageDescription = "A program running within cghostty would like to access your location information.";
-				INFOPLIST_KEY_NSMainNibFile = MainMenu;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "A program running within cghostty would like to use your microphone.";
 				INFOPLIST_KEY_NSMotionUsageDescription = "A program running within cghostty would like to access motion data.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "A program running within cghostty would like to access your Photo Library.";
@@ -477,7 +479,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 27.0;
-				MARKETING_VERSION = 0.1.8;
+				MARKETING_VERSION = 0.1.9;
 				"OTHER_LDFLAGS[arch=*]" = "-lstdc++";
 				PRODUCT_BUNDLE_IDENTIFIER = com.cjmvpu.cghostty;
 				PRODUCT_NAME = cghostty;
@@ -703,6 +705,9 @@
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
 				ARCHS = arm64;
+				LIBRARY_SEARCH_PATHS = ("$(inherited)", "$(SRCROOT)/../zig-out/lib");
+				SWIFT_INCLUDE_PATHS = ("$(inherited)", "$(SRCROOT)/../include");
+				HEADER_SEARCH_PATHS = ("$(inherited)", "$(SRCROOT)/../include");
 				VALID_ARCHS = arm64;
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
@@ -761,6 +766,9 @@
 				MTL_FAST_MATH = YES;
 				SDKROOT = macosx;
 				ARCHS = arm64;
+				LIBRARY_SEARCH_PATHS = ("$(inherited)", "$(SRCROOT)/../zig-out/lib");
+				SWIFT_INCLUDE_PATHS = ("$(inherited)", "$(SRCROOT)/../include");
+				HEADER_SEARCH_PATHS = ("$(inherited)", "$(SRCROOT)/../include");
 				VALID_ARCHS = arm64;
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
@@ -779,7 +787,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = "";
@@ -800,7 +808,6 @@
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "A program running within cghostty would like to access the local network.";
 				INFOPLIST_KEY_NSLocationTemporaryUsageDescriptionDictionary = "A program running within cghostty would like to use your location temporarily.";
 				INFOPLIST_KEY_NSLocationUsageDescription = "A program running within cghostty would like to access your location information.";
-				INFOPLIST_KEY_NSMainNibFile = MainMenu;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "A program running within cghostty would like to use your microphone.";
 				INFOPLIST_KEY_NSMotionUsageDescription = "A program running within cghostty would like to access motion data.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "A program running within cghostty would like to access your Photo Library.";
@@ -813,7 +820,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 27.0;
-				MARKETING_VERSION = 0.1.8;
+				MARKETING_VERSION = 0.1.9;
 				"OTHER_LDFLAGS[arch=*]" = "-lstdc++";
 				PRODUCT_BUNDLE_IDENTIFIER = com.cjmvpu.cghostty.debug;
 				PRODUCT_NAME = cghostty;
@@ -839,7 +846,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -860,7 +867,6 @@
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "A program running within cghostty would like to access the local network.";
 				INFOPLIST_KEY_NSLocationTemporaryUsageDescriptionDictionary = "A program running within cghostty would like to use your location temporarily.";
 				INFOPLIST_KEY_NSLocationUsageDescription = "A program running within cghostty would like to access your location information.";
-				INFOPLIST_KEY_NSMainNibFile = MainMenu;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "A program running within cghostty would like to use your microphone.";
 				INFOPLIST_KEY_NSMotionUsageDescription = "A program running within cghostty would like to access motion data.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "A program running within cghostty would like to access your Photo Library.";
@@ -873,7 +879,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 27.0;
-				MARKETING_VERSION = 0.1.8;
+				MARKETING_VERSION = 0.1.9;
 				"OTHER_LDFLAGS[arch=*]" = "-lstdc++";
 				PRODUCT_BUNDLE_IDENTIFIER = com.cjmvpu.cghostty;
 				PRODUCT_NAME = cghostty;

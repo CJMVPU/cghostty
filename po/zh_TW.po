@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: com.cjmvpu.cghostty\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-19 22:55+0800\n"
+"POT-Creation-Date: 2026-09-21 16:28+0800\n"
 "PO-Revision-Date: 2026-08-14 10:59+0800\n"
 "Last-Translator: Alang Hsu <alang.hsu@gmail.com>\n"
 "Language-Team: Chinese (traditional)\n"
@@ -426,345 +426,321 @@ msgid "Move the current tab to a new window."
 msgstr "將目前的分頁移至新視窗。"
 
 #: src/input/command.zig:452
-msgid "Toggle Tab Overview"
-msgstr "切換分頁總覽"
-
-#: src/input/command.zig:453
-msgid "Toggle the tab overview."
-msgstr "切換分頁總覽。"
-
-#: src/input/command.zig:458
 msgid "Change Terminal Title…"
 msgstr "變更終端機標題…"
 
-#: src/input/command.zig:459
+#: src/input/command.zig:453
 msgid "Prompt for a new title for the current terminal."
 msgstr "提示輸入目前終端機的新標題。"
 
-#: src/input/command.zig:464
+#: src/input/command.zig:458
 msgid "Change Tab Title…"
 msgstr "變更分頁標題…"
 
-#: src/input/command.zig:465
+#: src/input/command.zig:459
 msgid "Prompt for a new title for the current tab."
 msgstr "提示輸入目前分頁的新標題。"
 
-#: src/input/command.zig:477
+#: src/input/command.zig:465
 msgid "Split Left"
 msgstr "向左分割"
 
-#: src/input/command.zig:478
+#: src/input/command.zig:466
 msgid "Split the terminal to the left."
 msgstr "向左分割終端機。"
 
-#: src/input/command.zig:482
+#: src/input/command.zig:470
 msgid "Split Right"
 msgstr "向右分割"
 
-#: src/input/command.zig:483
+#: src/input/command.zig:471
 msgid "Split the terminal to the right."
 msgstr "向右分割終端機。"
 
-#: src/input/command.zig:487
+#: src/input/command.zig:475
 msgid "Split Up"
 msgstr "向上分割"
 
-#: src/input/command.zig:488
+#: src/input/command.zig:476
 msgid "Split the terminal up."
 msgstr "向上分割終端機。"
 
-#: src/input/command.zig:492
+#: src/input/command.zig:480
 msgid "Split Down"
 msgstr "向下分割"
 
-#: src/input/command.zig:493
+#: src/input/command.zig:481
 msgid "Split the terminal down."
 msgstr "向下分割終端機。"
 
-#: src/input/command.zig:500
+#: src/input/command.zig:488
 msgid "Focus Split: Previous"
 msgstr "聚焦窗格：上一個"
 
-#: src/input/command.zig:501
+#: src/input/command.zig:489
 msgid "Focus the previous split, if any."
 msgstr "聚焦上一個窗格（若有）。"
 
-#: src/input/command.zig:505
+#: src/input/command.zig:493
 msgid "Focus Split: Next"
 msgstr "聚焦窗格：下一個"
 
-#: src/input/command.zig:506
+#: src/input/command.zig:494
 msgid "Focus the next split, if any."
 msgstr "聚焦下一個窗格（若有）。"
 
-#: src/input/command.zig:510
+#: src/input/command.zig:498
 msgid "Focus Split: Left"
 msgstr "聚焦窗格：左"
 
-#: src/input/command.zig:511
+#: src/input/command.zig:499
 msgid "Focus the split to the left, if it exists."
 msgstr "聚焦左側的窗格（若存在）。"
 
-#: src/input/command.zig:515
+#: src/input/command.zig:503
 msgid "Focus Split: Right"
 msgstr "聚焦窗格：右"
 
-#: src/input/command.zig:516
+#: src/input/command.zig:504
 msgid "Focus the split to the right, if it exists."
 msgstr "聚焦右側的窗格（若存在）。"
 
-#: src/input/command.zig:520
+#: src/input/command.zig:508
 msgid "Focus Split: Up"
 msgstr "聚焦窗格：上"
 
-#: src/input/command.zig:521
+#: src/input/command.zig:509
 msgid "Focus the split above, if it exists."
 msgstr "聚焦上方的窗格（若存在）。"
 
-#: src/input/command.zig:525
+#: src/input/command.zig:513
 msgid "Focus Split: Down"
 msgstr "聚焦窗格：下"
 
-#: src/input/command.zig:526
+#: src/input/command.zig:514
 msgid "Focus the split below, if it exists."
 msgstr "聚焦下方的窗格（若存在）。"
 
-#: src/input/command.zig:533
+#: src/input/command.zig:521
 msgid "Focus Window: Previous"
 msgstr "聚焦視窗：上一個"
 
-#: src/input/command.zig:534
+#: src/input/command.zig:522
 msgid "Focus the previous window, if any."
 msgstr "聚焦上一個視窗（若有）。"
 
-#: src/input/command.zig:538
+#: src/input/command.zig:526
 msgid "Focus Window: Next"
 msgstr "聚焦視窗：下一個"
 
-#: src/input/command.zig:539
+#: src/input/command.zig:527
 msgid "Focus the next window, if any."
 msgstr "聚焦下一個視窗（若有）。"
 
-#: src/input/command.zig:545
+#: src/input/command.zig:533
 msgid "Toggle Split Zoom"
 msgstr "切換窗格縮放"
 
-#: src/input/command.zig:546
+#: src/input/command.zig:534
 msgid "Toggle the zoom state of the current split."
 msgstr "切換目前窗格的縮放狀態。"
 
-#: src/input/command.zig:551
+#: src/input/command.zig:539
 msgid "Toggle Read-Only Mode"
 msgstr "切換唯讀模式"
 
-#: src/input/command.zig:552
+#: src/input/command.zig:540
 msgid "Toggle read-only mode for the current surface."
 msgstr "切換目前終端機的唯讀模式。"
 
-#: src/input/command.zig:557
+#: src/input/command.zig:545
 msgid "Equalize Splits"
 msgstr "均分窗格"
 
-#: src/input/command.zig:558
+#: src/input/command.zig:546
 msgid "Equalize the size of all splits."
 msgstr "將所有窗格的大小均分。"
 
-#: src/input/command.zig:563
+#: src/input/command.zig:551
 msgid "Reset Window Size"
 msgstr "重設視窗大小"
 
-#: src/input/command.zig:564
+#: src/input/command.zig:552
 msgid "Reset the window size to the default."
 msgstr "將視窗大小重設為預設值。"
 
-#: src/input/command.zig:569
+#: src/input/command.zig:557
 msgid "Toggle Inspector"
 msgstr "切換檢查工具"
 
-#: src/input/command.zig:570
+#: src/input/command.zig:558
 msgid "Toggle the inspector."
 msgstr "切換檢查工具。"
 
-#: src/input/command.zig:575
-msgid "Show the GTK Inspector"
-msgstr "顯示 GTK 檢查工具"
-
-#: src/input/command.zig:576
-msgid "Show the GTK inspector."
-msgstr "顯示 GTK 檢查工具。"
-
-#: src/input/command.zig:581
+#: src/input/command.zig:563
 msgid "Show On-Screen Keyboard"
 msgstr "顯示螢幕鍵盤"
 
-#: src/input/command.zig:582
+#: src/input/command.zig:564
 msgid "Show the on-screen keyboard if present."
 msgstr "顯示螢幕鍵盤（若存在）。"
 
-#: src/input/command.zig:588
+#: src/input/command.zig:570
 msgid "Open Config Using OS editor"
 msgstr "使用作業系統編輯器開啟設定"
 
-#: src/input/command.zig:589
+#: src/input/command.zig:571
 msgid "Open the config file with the OS's default editor."
 msgstr "使用作業系統的預設編輯器開啟設定檔。"
 
-#: src/input/command.zig:593
+#: src/input/command.zig:575
 msgid "Open Config in New Terminal Window"
 msgstr "在新終端機視窗中開啟設定"
 
-#: src/input/command.zig:594
+#: src/input/command.zig:576
 msgid "Open the config file in a new window using $EDITOR or $VISUAL."
 msgstr "使用 $EDITOR 或 $VISUAL 在新視窗中開啟設定檔。"
 
-#: src/input/command.zig:600
+#: src/input/command.zig:582
 msgid "Reload Config"
 msgstr "重新載入設定"
 
-#: src/input/command.zig:601
+#: src/input/command.zig:583
 msgid "Reload the config file."
 msgstr "重新載入設定檔。"
 
-#: src/input/command.zig:606
+#: src/input/command.zig:588
 msgid "Close Terminal"
 msgstr "關閉終端機"
 
-#: src/input/command.zig:607
+#: src/input/command.zig:589
 msgid "Close the current terminal."
 msgstr "關閉目前終端機。"
 
-#: src/input/command.zig:613
+#: src/input/command.zig:595
 msgid "Close Tab"
 msgstr "關閉分頁"
 
-#: src/input/command.zig:614
+#: src/input/command.zig:596
 msgid "Close the current tab."
 msgstr "關閉目前分頁。"
 
-#: src/input/command.zig:618
+#: src/input/command.zig:600
 msgid "Close Other Tabs"
 msgstr "關閉其他分頁"
 
-#: src/input/command.zig:619
+#: src/input/command.zig:601
 msgid "Close all tabs in this window except the current one."
 msgstr "關閉此視窗中目前分頁以外的所有分頁。"
 
-#: src/input/command.zig:623
+#: src/input/command.zig:605
 msgid "Close Tabs to the Right"
 msgstr "關閉右側的分頁"
 
-#: src/input/command.zig:624
+#: src/input/command.zig:606
 msgid "Close all tabs to the right of the current one."
 msgstr "關閉目前分頁右側的所有分頁。"
 
-#: src/input/command.zig:630
+#: src/input/command.zig:612
 msgid "Close Window"
 msgstr "關閉視窗"
 
-#: src/input/command.zig:631
+#: src/input/command.zig:613
 msgid "Close the current window."
 msgstr "關閉目前視窗。"
 
-#: src/input/command.zig:636
+#: src/input/command.zig:618
 msgid "Close All Windows"
 msgstr "關閉所有視窗"
 
-#: src/input/command.zig:637
+#: src/input/command.zig:619
 msgid "Close all windows."
 msgstr "關閉所有視窗。"
 
-#: src/input/command.zig:642
+#: src/input/command.zig:624
 msgid "Toggle Maximize"
 msgstr "切換最大化"
 
-#: src/input/command.zig:643
+#: src/input/command.zig:625
 msgid "Toggle the maximized state of the current window."
 msgstr "切換目前視窗的最大化狀態。"
 
-#: src/input/command.zig:648
+#: src/input/command.zig:630
 msgid "Toggle Fullscreen"
 msgstr "切換全螢幕"
 
-#: src/input/command.zig:649
+#: src/input/command.zig:631
 msgid "Toggle the fullscreen state of the current window."
 msgstr "切換目前視窗的全螢幕狀態。"
 
-#: src/input/command.zig:654
-msgid "Toggle Window Decorations"
-msgstr "切換視窗裝飾"
-
-#: src/input/command.zig:655
-msgid "Toggle the window decorations."
-msgstr "切換視窗裝飾。"
-
-#: src/input/command.zig:660
+#: src/input/command.zig:636
 msgid "Toggle Float on Top"
 msgstr "切換置頂"
 
-#: src/input/command.zig:661
+#: src/input/command.zig:637
 msgid "Toggle the float on top state of the current window."
 msgstr "切換目前視窗的置頂狀態。"
 
-#: src/input/command.zig:666
+#: src/input/command.zig:642
 msgid "Toggle Secure Input"
 msgstr "切換安全輸入"
 
-#: src/input/command.zig:667
+#: src/input/command.zig:643
 msgid "Toggle secure input mode."
 msgstr "切換安全輸入模式。"
 
-#: src/input/command.zig:672
+#: src/input/command.zig:648
 msgid "Toggle Mouse Reporting"
 msgstr "切換滑鼠回報"
 
-#: src/input/command.zig:673
+#: src/input/command.zig:649
 msgid "Toggle whether mouse events are reported to terminal applications."
 msgstr "切換是否將滑鼠事件回報給終端機應用程式。"
 
-#: src/input/command.zig:678
+#: src/input/command.zig:654
 msgid "Toggle Background Opacity"
 msgstr "切換背景不透明度"
 
-#: src/input/command.zig:679
+#: src/input/command.zig:655
 msgid "Toggle the background opacity of a window that started transparent."
 msgstr "切換以透明狀態啟動之視窗的背景不透明度。"
 
-#: src/input/command.zig:684
+#: src/input/command.zig:660
 msgid "Check for Updates"
 msgstr "檢查更新"
 
-#: src/input/command.zig:685
+#: src/input/command.zig:661
 msgid "Check for updates to the application."
 msgstr "檢查應用程式是否有更新。"
 
-#: src/input/command.zig:690
+#: src/input/command.zig:666
 msgid "Undo"
 msgstr "復原"
 
-#: src/input/command.zig:691
+#: src/input/command.zig:667
 msgid "Undo the last action."
 msgstr "復原上一個動作。"
 
-#: src/input/command.zig:696
+#: src/input/command.zig:672
 msgid "Redo"
 msgstr "重做"
 
-#: src/input/command.zig:697
+#: src/input/command.zig:673
 msgid "Redo the last undone action."
 msgstr "重做上一個已復原的動作。"
 
-#: src/input/command.zig:702
+#: src/input/command.zig:678
 msgid "Quit"
 msgstr "結束"
 
-#: src/input/command.zig:703
+#: src/input/command.zig:679
 msgid "Quit the application."
 msgstr "結束應用程式。"
 
-#: src/input/command.zig:708
+#: src/input/command.zig:684
 msgid "Ghostty"
 msgstr "Ghostty"
 
-#: src/input/command.zig:709
+#: src/input/command.zig:685
 msgid "Put a little Ghostty in your terminal."
 msgstr "在您的終端機裡放一隻小小的 Ghostty。"

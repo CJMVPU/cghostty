@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: com.cjmvpu.cghostty\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-19 22:55+0800\n"
+"POT-Creation-Date: 2026-09-21 16:28+0800\n"
 "PO-Revision-Date: 2026-08-13 08:25+0200\n"
 "Last-Translator: Tadas Lotuzas <tdslot@gmail.com>\n"
 "Language-Team: Language LT\n"
@@ -457,348 +457,324 @@ msgid "Move the current tab to a new window."
 msgstr "Perkelti dabartinę kortelę į naują langą."
 
 #: src/input/command.zig:452
-msgid "Toggle Tab Overview"
-msgstr "Rodyti arba slėpti kortelių apžvalgą"
-
-#: src/input/command.zig:453
-msgid "Toggle the tab overview."
-msgstr "Rodyti arba slėpti kortelių apžvalgą."
-
-#: src/input/command.zig:458
 msgid "Change Terminal Title…"
 msgstr "Keisti terminalo pavadinimą…"
 
-#: src/input/command.zig:459
+#: src/input/command.zig:453
 msgid "Prompt for a new title for the current terminal."
 msgstr "Paprašyti įvesti naują dabartinio terminalo pavadinimą."
 
-#: src/input/command.zig:464
+#: src/input/command.zig:458
 msgid "Change Tab Title…"
 msgstr "Keisti kortelės pavadinimą…"
 
-#: src/input/command.zig:465
+#: src/input/command.zig:459
 msgid "Prompt for a new title for the current tab."
 msgstr "Paprašyti įvesti naują dabartinės kortelės pavadinimą."
 
-#: src/input/command.zig:477
+#: src/input/command.zig:465
 msgid "Split Left"
 msgstr "Padalyti kairėn"
 
-#: src/input/command.zig:478
+#: src/input/command.zig:466
 msgid "Split the terminal to the left."
 msgstr "Padalyti terminalą kairėn."
 
-#: src/input/command.zig:482
+#: src/input/command.zig:470
 msgid "Split Right"
 msgstr "Padalyti dešinėn"
 
-#: src/input/command.zig:483
+#: src/input/command.zig:471
 msgid "Split the terminal to the right."
 msgstr "Padalyti terminalą dešinėn."
 
-#: src/input/command.zig:487
+#: src/input/command.zig:475
 msgid "Split Up"
 msgstr "Padalyti aukštyn"
 
-#: src/input/command.zig:488
+#: src/input/command.zig:476
 msgid "Split the terminal up."
 msgstr "Padalyti terminalą aukštyn."
 
-#: src/input/command.zig:492
+#: src/input/command.zig:480
 msgid "Split Down"
 msgstr "Padalyti žemyn"
 
-#: src/input/command.zig:493
+#: src/input/command.zig:481
 msgid "Split the terminal down."
 msgstr "Padalyti terminalą žemyn."
 
-#: src/input/command.zig:500
+#: src/input/command.zig:488
 msgid "Focus Split: Previous"
 msgstr "Aktyvinti ankstesnį padalijimą"
 
-#: src/input/command.zig:501
+#: src/input/command.zig:489
 msgid "Focus the previous split, if any."
 msgstr "Aktyvinti ankstesnį padalijimą, jei toks yra."
 
-#: src/input/command.zig:505
+#: src/input/command.zig:493
 msgid "Focus Split: Next"
 msgstr "Aktyvinti kitą padalijimą"
 
-#: src/input/command.zig:506
+#: src/input/command.zig:494
 msgid "Focus the next split, if any."
 msgstr "Aktyvinti kitą padalijimą, jei toks yra."
 
-#: src/input/command.zig:510
+#: src/input/command.zig:498
 msgid "Focus Split: Left"
 msgstr "Aktyvinti padalijimą kairėje"
 
-#: src/input/command.zig:511
+#: src/input/command.zig:499
 msgid "Focus the split to the left, if it exists."
 msgstr "Aktyvinti padalijimą kairėje, jei toks yra."
 
-#: src/input/command.zig:515
+#: src/input/command.zig:503
 msgid "Focus Split: Right"
 msgstr "Aktyvinti padalijimą dešinėje"
 
-#: src/input/command.zig:516
+#: src/input/command.zig:504
 msgid "Focus the split to the right, if it exists."
 msgstr "Aktyvinti padalijimą dešinėje, jei toks yra."
 
-#: src/input/command.zig:520
+#: src/input/command.zig:508
 msgid "Focus Split: Up"
 msgstr "Aktyvinti padalijimą viršuje"
 
-#: src/input/command.zig:521
+#: src/input/command.zig:509
 msgid "Focus the split above, if it exists."
 msgstr "Aktyvinti padalijimą viršuje, jei toks yra."
 
-#: src/input/command.zig:525
+#: src/input/command.zig:513
 msgid "Focus Split: Down"
 msgstr "Aktyvinti padalijimą apačioje"
 
-#: src/input/command.zig:526
+#: src/input/command.zig:514
 msgid "Focus the split below, if it exists."
 msgstr "Aktyvinti padalijimą apačioje, jei toks yra."
 
-#: src/input/command.zig:533
+#: src/input/command.zig:521
 msgid "Focus Window: Previous"
 msgstr "Aktyvinti ankstesnį langą"
 
-#: src/input/command.zig:534
+#: src/input/command.zig:522
 msgid "Focus the previous window, if any."
 msgstr "Aktyvinti ankstesnį langą, jei toks yra."
 
-#: src/input/command.zig:538
+#: src/input/command.zig:526
 msgid "Focus Window: Next"
 msgstr "Aktyvinti kitą langą"
 
-#: src/input/command.zig:539
+#: src/input/command.zig:527
 msgid "Focus the next window, if any."
 msgstr "Aktyvinti kitą langą, jei toks yra."
 
-#: src/input/command.zig:545
+#: src/input/command.zig:533
 msgid "Toggle Split Zoom"
 msgstr "Išdidinti arba atkurti padalijimą"
 
-#: src/input/command.zig:546
+#: src/input/command.zig:534
 msgid "Toggle the zoom state of the current split."
 msgstr "Išdidinti dabartinį padalijimą arba atkurti jo dydį."
 
-#: src/input/command.zig:551
+#: src/input/command.zig:539
 msgid "Toggle Read-Only Mode"
 msgstr "Įjungti arba išjungti tik skaitymo režimą"
 
-#: src/input/command.zig:552
+#: src/input/command.zig:540
 msgid "Toggle read-only mode for the current surface."
 msgstr "Įjungti arba išjungti dabartinio terminalo tik skaitymo režimą."
 
-#: src/input/command.zig:557
+#: src/input/command.zig:545
 msgid "Equalize Splits"
 msgstr "Suvienodinti padalijimus"
 
-#: src/input/command.zig:558
+#: src/input/command.zig:546
 msgid "Equalize the size of all splits."
 msgstr "Suvienodinti visų padalijimų dydžius."
 
-#: src/input/command.zig:563
+#: src/input/command.zig:551
 msgid "Reset Window Size"
 msgstr "Atkurti lango dydį"
 
-#: src/input/command.zig:564
+#: src/input/command.zig:552
 msgid "Reset the window size to the default."
 msgstr "Atkurti numatytąjį lango dydį."
 
-#: src/input/command.zig:569
+#: src/input/command.zig:557
 msgid "Toggle Inspector"
 msgstr "Rodyti arba slėpti inspektorių"
 
-#: src/input/command.zig:570
+#: src/input/command.zig:558
 msgid "Toggle the inspector."
 msgstr "Rodyti arba slėpti konkretų inspektorių."
 
-#: src/input/command.zig:575
-msgid "Show the GTK Inspector"
-msgstr "Rodyti GTK inspektorių"
-
-#: src/input/command.zig:576
-msgid "Show the GTK inspector."
-msgstr "Rodyti GTK inspektorių."
-
-#: src/input/command.zig:581
+#: src/input/command.zig:563
 msgid "Show On-Screen Keyboard"
 msgstr "Rodyti ekrano klaviatūrą"
 
-#: src/input/command.zig:582
+#: src/input/command.zig:564
 msgid "Show the on-screen keyboard if present."
 msgstr "Rodyti ekrano klaviatūrą, jei ji pasiekiama."
 
-#: src/input/command.zig:588
+#: src/input/command.zig:570
 msgid "Open Config Using OS editor"
 msgstr "Atidaryti konfigūraciją sistemos redaktoriuje"
 
-#: src/input/command.zig:589
+#: src/input/command.zig:571
 msgid "Open the config file with the OS's default editor."
 msgstr ""
 "Atidaryti konfigūracijos failą numatytuoju operacinės sistemos redaktoriumi."
 
-#: src/input/command.zig:593
+#: src/input/command.zig:575
 msgid "Open Config in New Terminal Window"
 msgstr "Atidaryti konfigūraciją naujame terminalo lange"
 
-#: src/input/command.zig:594
+#: src/input/command.zig:576
 msgid "Open the config file in a new window using $EDITOR or $VISUAL."
 msgstr "Atidaryti konfigūracijos failą naujame lange su $EDITOR arba $VISUAL."
 
-#: src/input/command.zig:600
+#: src/input/command.zig:582
 msgid "Reload Config"
 msgstr "Iš naujo įkelti konfigūraciją"
 
-#: src/input/command.zig:601
+#: src/input/command.zig:583
 msgid "Reload the config file."
 msgstr "Iš naujo įkelti konfigūracijos failą."
 
-#: src/input/command.zig:606
+#: src/input/command.zig:588
 msgid "Close Terminal"
 msgstr "Uždaryti terminalą"
 
-#: src/input/command.zig:607
+#: src/input/command.zig:589
 msgid "Close the current terminal."
 msgstr "Uždaryti dabartinį terminalą."
 
-#: src/input/command.zig:613
+#: src/input/command.zig:595
 msgid "Close Tab"
 msgstr "Uždaryti kortelę"
 
-#: src/input/command.zig:614
+#: src/input/command.zig:596
 msgid "Close the current tab."
 msgstr "Uždaryti dabartinę kortelę."
 
-#: src/input/command.zig:618
+#: src/input/command.zig:600
 msgid "Close Other Tabs"
 msgstr "Uždaryti kitas korteles"
 
-#: src/input/command.zig:619
+#: src/input/command.zig:601
 msgid "Close all tabs in this window except the current one."
 msgstr "Uždaryti visas šio lango korteles, išskyrus dabartinę."
 
-#: src/input/command.zig:623
+#: src/input/command.zig:605
 msgid "Close Tabs to the Right"
 msgstr "Uždaryti korteles dešinėje"
 
-#: src/input/command.zig:624
+#: src/input/command.zig:606
 msgid "Close all tabs to the right of the current one."
 msgstr "Uždaryti visas korteles dabartinės kortelės dešinėje."
 
-#: src/input/command.zig:630
+#: src/input/command.zig:612
 msgid "Close Window"
 msgstr "Uždaryti langą"
 
-#: src/input/command.zig:631
+#: src/input/command.zig:613
 msgid "Close the current window."
 msgstr "Uždaryti dabartinį langą."
 
-#: src/input/command.zig:636
+#: src/input/command.zig:618
 msgid "Close All Windows"
 msgstr "Uždaryti visus langus"
 
-#: src/input/command.zig:637
+#: src/input/command.zig:619
 msgid "Close all windows."
 msgstr "Uždaryti visus langus."
 
-#: src/input/command.zig:642
+#: src/input/command.zig:624
 msgid "Toggle Maximize"
 msgstr "Išdidinti arba atkurti langą"
 
-#: src/input/command.zig:643
+#: src/input/command.zig:625
 msgid "Toggle the maximized state of the current window."
 msgstr "Išdidinti dabartinį langą arba atkurti jo dydį."
 
-#: src/input/command.zig:648
+#: src/input/command.zig:630
 msgid "Toggle Fullscreen"
 msgstr "Įjungti arba išjungti viso ekrano režimą"
 
-#: src/input/command.zig:649
+#: src/input/command.zig:631
 msgid "Toggle the fullscreen state of the current window."
 msgstr "Įjungti arba išjungti dabartinio lango viso ekrano režimą."
 
-#: src/input/command.zig:654
-msgid "Toggle Window Decorations"
-msgstr "Rodyti arba slėpti lango dekoracijas"
-
-#: src/input/command.zig:655
-msgid "Toggle the window decorations."
-msgstr "Rodyti arba slėpti konkretaus lango dekoracijas."
-
-#: src/input/command.zig:660
+#: src/input/command.zig:636
 msgid "Toggle Float on Top"
 msgstr "Įjungti arba išjungti lango rodymą virš kitų"
 
-#: src/input/command.zig:661
+#: src/input/command.zig:637
 msgid "Toggle the float on top state of the current window."
 msgstr "Įjungti arba išjungti dabartinio lango rodymą virš kitų."
 
-#: src/input/command.zig:666
+#: src/input/command.zig:642
 msgid "Toggle Secure Input"
 msgstr "Įjungti arba išjungti saugios įvesties režimą"
 
-#: src/input/command.zig:667
+#: src/input/command.zig:643
 msgid "Toggle secure input mode."
 msgstr "Įjungti arba išjungti saugios įvesties režimą."
 
-#: src/input/command.zig:672
+#: src/input/command.zig:648
 msgid "Toggle Mouse Reporting"
 msgstr "Įjungti arba išjungti pelės įvykių perdavimą"
 
-#: src/input/command.zig:673
+#: src/input/command.zig:649
 msgid "Toggle whether mouse events are reported to terminal applications."
 msgstr ""
 "Įjungti arba išjungti pelės įvykių perdavimą terminale veikiančioms "
 "programoms."
 
-#: src/input/command.zig:678
+#: src/input/command.zig:654
 msgid "Toggle Background Opacity"
 msgstr "Perjungti fono nepermatomumą"
 
-#: src/input/command.zig:679
+#: src/input/command.zig:655
 msgid "Toggle the background opacity of a window that started transparent."
 msgstr "Perjungti lango, kuris buvo paleistas permatomas, fono nepermatomumą."
 
-#: src/input/command.zig:684
+#: src/input/command.zig:660
 msgid "Check for Updates"
 msgstr "Tikrinti, ar yra naujinimų"
 
-#: src/input/command.zig:685
+#: src/input/command.zig:661
 msgid "Check for updates to the application."
 msgstr "Tikrinti, ar yra programos naujinimų."
 
-#: src/input/command.zig:690
+#: src/input/command.zig:666
 msgid "Undo"
 msgstr "Atšaukti"
 
-#: src/input/command.zig:691
+#: src/input/command.zig:667
 msgid "Undo the last action."
 msgstr "Atšaukti paskutinį veiksmą."
 
-#: src/input/command.zig:696
+#: src/input/command.zig:672
 msgid "Redo"
 msgstr "Pakartoti"
 
-#: src/input/command.zig:697
+#: src/input/command.zig:673
 msgid "Redo the last undone action."
 msgstr "Pakartoti paskutinį atšauktą veiksmą."
 
-#: src/input/command.zig:702
+#: src/input/command.zig:678
 msgid "Quit"
 msgstr "Išeiti"
 
-#: src/input/command.zig:703
+#: src/input/command.zig:679
 msgid "Quit the application."
 msgstr "Išeiti iš programos."
 
-#: src/input/command.zig:708
+#: src/input/command.zig:684
 msgid "Ghostty"
 msgstr "Ghostty"
 
-#: src/input/command.zig:709
+#: src/input/command.zig:685
 msgid "Put a little Ghostty in your terminal."
 msgstr "Įleiskite truputį Ghostty į savo terminalą."

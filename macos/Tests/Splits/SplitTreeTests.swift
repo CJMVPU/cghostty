@@ -229,8 +229,8 @@ struct SplitTreeTests {
 
     @Test func encodingAndDecodingPreservesTree() throws {
         let (tree, view1, view2) = try makeHorizontalSplit()
-        let data = try JSONEncoder().encode(tree)
-        let decoded = try JSONDecoder().decode(SplitTree<MockView>.self, from: data)
+        let data = try JSONEncoder().encode(TerminalLayout(tree, snapshot: { $0.id }))
+        let decoded = try JSONDecoder().decode(TerminalLayout<UUID>.self, from: data).restore { MockView(id: $0) }
         #expect(decoded.find(id: view1.id) != nil)
         #expect(decoded.find(id: view2.id) != nil)
         #expect(decoded.isSplit)
@@ -240,8 +240,8 @@ struct SplitTreeTests {
         let (tree, _, view2) = try makeHorizontalSplit()
         let treeWithZoomed = SplitTree<MockView>(root: tree.root, zoomed: .leaf(view: view2))
 
-        let data = try JSONEncoder().encode(treeWithZoomed)
-        let decoded = try JSONDecoder().decode(SplitTree<MockView>.self, from: data)
+        let data = try JSONEncoder().encode(TerminalLayout(treeWithZoomed, snapshot: { $0.id }))
+        let decoded = try JSONDecoder().decode(TerminalLayout<UUID>.self, from: data).restore { MockView(id: $0) }
 
         #expect(decoded.zoomed != nil)
         if case .leaf(let zoomedView) = decoded.zoomed! {

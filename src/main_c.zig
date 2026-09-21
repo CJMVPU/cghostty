@@ -1,11 +1,5 @@
-// This is the main file for the C API. The C API is used to embed Ghostty
-// within other applications. Depending on the build settings some APIs
-// may not be available (i.e. embedding into macOS exposes various Metal
-// support).
-//
-// This currently isn't supported as a general purpose embedding API.
-// This is currently used only to embed ghostty within a macOS app. However,
-// it could be expanded to be general purpose in the future.
+// Internal C ABI connecting the native Swift app to the Zig terminal core.
+// This module is linked into cghostty, not shipped as a standalone embedding SDK.
 
 const std = @import("std");
 const assert = @import("quirks.zig").inlineAssert;
@@ -15,7 +9,6 @@ const build_config = @import("build_config.zig");
 const main = @import("main_ghostty.zig");
 const global = @import("global.zig");
 const apprt = @import("apprt.zig");
-const internal_os = @import("os/main.zig");
 
 // Some comptime assertions that our C API depends on.
 comptime {
@@ -158,16 +151,6 @@ pub export fn ghostty_info() Info {
         .version = build_config.version_string.ptr,
         .version_len = build_config.version_string.len,
     };
-}
-
-/// Translate a string maintained by libghostty into the current
-/// application language. This will return the same string (same pointer)
-/// if no translation is found, so the pointer must be stable through
-/// the function call.
-///
-/// This should only be used for singular strings maintained by Ghostty.
-pub export fn ghostty_translate(msgid: [*:0]const u8) [*:0]const u8 {
-    return internal_os.i18n._(msgid);
 }
 
 /// Free a string allocated by Ghostty.

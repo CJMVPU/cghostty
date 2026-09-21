@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: com.cjmvpu.cghostty\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-19 22:55+0800\n"
+"POT-Creation-Date: 2026-09-21 16:28+0800\n"
 "PO-Revision-Date: 2026-08-13 00:00+0500\n"
 "Last-Translator: AnmiTaliDev <anmitalidev@nuros.org>\n"
 "Language-Team: Kazakh <kk_KZ@googlegroups.com>\n"
@@ -452,349 +452,325 @@ msgid "Move the current tab to a new window."
 msgstr "Ағымдағы бетті жаңа терезеге жылжыту."
 
 #: src/input/command.zig:452
-msgid "Toggle Tab Overview"
-msgstr "Беттер шолуын іске қосу/сөндіру"
-
-#: src/input/command.zig:453
-msgid "Toggle the tab overview."
-msgstr "Беттер шолуын іске қосу немесе сөндіру."
-
-#: src/input/command.zig:458
 msgid "Change Terminal Title…"
 msgstr "Терминал атауын өзгерту…"
 
-#: src/input/command.zig:459
+#: src/input/command.zig:453
 msgid "Prompt for a new title for the current terminal."
 msgstr "Ағымдағы терминал үшін жаңа атау сұрау."
 
-#: src/input/command.zig:464
+#: src/input/command.zig:458
 msgid "Change Tab Title…"
 msgstr "Бет атауын өзгерту…"
 
-#: src/input/command.zig:465
+#: src/input/command.zig:459
 msgid "Prompt for a new title for the current tab."
 msgstr "Ағымдағы бет үшін жаңа атау сұрау."
 
-#: src/input/command.zig:477
+#: src/input/command.zig:465
 msgid "Split Left"
 msgstr "Сол жаққа бөлу"
 
-#: src/input/command.zig:478
+#: src/input/command.zig:466
 msgid "Split the terminal to the left."
 msgstr "Терминалды солға бөлу."
 
-#: src/input/command.zig:482
+#: src/input/command.zig:470
 msgid "Split Right"
 msgstr "Оң жаққа бөлу"
 
-#: src/input/command.zig:483
+#: src/input/command.zig:471
 msgid "Split the terminal to the right."
 msgstr "Терминалды оңға бөлу."
 
-#: src/input/command.zig:487
+#: src/input/command.zig:475
 msgid "Split Up"
 msgstr "Жоғарыға бөлу"
 
-#: src/input/command.zig:488
+#: src/input/command.zig:476
 msgid "Split the terminal up."
 msgstr "Терминалды жоғары қарай бөлу."
 
-#: src/input/command.zig:492
+#: src/input/command.zig:480
 msgid "Split Down"
 msgstr "Төменге бөлу"
 
-#: src/input/command.zig:493
+#: src/input/command.zig:481
 msgid "Split the terminal down."
 msgstr "Терминалды төмен қарай бөлу."
 
-#: src/input/command.zig:500
+#: src/input/command.zig:488
 msgid "Focus Split: Previous"
 msgstr "Фокусты бөлікке ауыстыру: алдыңғы"
 
-#: src/input/command.zig:501
+#: src/input/command.zig:489
 msgid "Focus the previous split, if any."
 msgstr "Бар болса, алдыңғы бөлікке фокусты ауыстыру."
 
-#: src/input/command.zig:505
+#: src/input/command.zig:493
 msgid "Focus Split: Next"
 msgstr "Фокусты бөлікке ауыстыру: келесі"
 
-#: src/input/command.zig:506
+#: src/input/command.zig:494
 msgid "Focus the next split, if any."
 msgstr "Бар болса, келесі бөлікке фокусты ауыстыру."
 
-#: src/input/command.zig:510
+#: src/input/command.zig:498
 msgid "Focus Split: Left"
 msgstr "Фокусты бөлікке ауыстыру: сол жақ"
 
-#: src/input/command.zig:511
+#: src/input/command.zig:499
 msgid "Focus the split to the left, if it exists."
 msgstr "Бар болса, сол жақтағы бөлікке фокусты ауыстыру."
 
-#: src/input/command.zig:515
+#: src/input/command.zig:503
 msgid "Focus Split: Right"
 msgstr "Фокусты бөлікке ауыстыру: оң жақ"
 
-#: src/input/command.zig:516
+#: src/input/command.zig:504
 msgid "Focus the split to the right, if it exists."
 msgstr "Бар болса, оң жақтағы бөлікке фокусты ауыстыру."
 
-#: src/input/command.zig:520
+#: src/input/command.zig:508
 msgid "Focus Split: Up"
 msgstr "Фокусты бөлікке ауыстыру: жоғары"
 
-#: src/input/command.zig:521
+#: src/input/command.zig:509
 msgid "Focus the split above, if it exists."
 msgstr "Бар болса, жоғарыдағы бөлікке фокусты ауыстыру."
 
-#: src/input/command.zig:525
+#: src/input/command.zig:513
 msgid "Focus Split: Down"
 msgstr "Фокусты бөлікке ауыстыру: төмен"
 
-#: src/input/command.zig:526
+#: src/input/command.zig:514
 msgid "Focus the split below, if it exists."
 msgstr "Бар болса, төмендегі бөлікке фокусты ауыстыру."
 
-#: src/input/command.zig:533
+#: src/input/command.zig:521
 msgid "Focus Window: Previous"
 msgstr "Фокусты терезеге ауыстыру: алдыңғы"
 
-#: src/input/command.zig:534
+#: src/input/command.zig:522
 msgid "Focus the previous window, if any."
 msgstr "Бар болса, алдыңғы терезеге фокусты ауыстыру."
 
-#: src/input/command.zig:538
+#: src/input/command.zig:526
 msgid "Focus Window: Next"
 msgstr "Фокусты терезеге ауыстыру: келесі"
 
-#: src/input/command.zig:539
+#: src/input/command.zig:527
 msgid "Focus the next window, if any."
 msgstr "Бар болса, келесі терезеге фокусты ауыстыру."
 
-#: src/input/command.zig:545
+#: src/input/command.zig:533
 msgid "Toggle Split Zoom"
 msgstr "Бөлікті ұлғайтуды іске қосу/сөндіру"
 
-#: src/input/command.zig:546
+#: src/input/command.zig:534
 msgid "Toggle the zoom state of the current split."
 msgstr "Ағымдағы бөліктің ұлғайту күйін іске қосу немесе сөндіру."
 
-#: src/input/command.zig:551
+#: src/input/command.zig:539
 msgid "Toggle Read-Only Mode"
 msgstr "Тек оқу режимін іске қосу/сөндіру"
 
-#: src/input/command.zig:552
+#: src/input/command.zig:540
 msgid "Toggle read-only mode for the current surface."
 msgstr "Ағымдағы терминал үшін тек оқу режимін іске қосу немесе сөндіру."
 
-#: src/input/command.zig:557
+#: src/input/command.zig:545
 msgid "Equalize Splits"
 msgstr "Бөліктерді теңестіру"
 
-#: src/input/command.zig:558
+#: src/input/command.zig:546
 msgid "Equalize the size of all splits."
 msgstr "Барлық бөліктердің өлшемін теңестіру."
 
-#: src/input/command.zig:563
+#: src/input/command.zig:551
 msgid "Reset Window Size"
 msgstr "Терезе өлшемін қалпына келтіру"
 
-#: src/input/command.zig:564
+#: src/input/command.zig:552
 msgid "Reset the window size to the default."
 msgstr "Терезе өлшемін бастапқы мәніне келтіру."
 
-#: src/input/command.zig:569
+#: src/input/command.zig:557
 msgid "Toggle Inspector"
 msgstr "Инспекторды іске қосу/сөндіру"
 
-#: src/input/command.zig:570
+#: src/input/command.zig:558
 msgid "Toggle the inspector."
 msgstr "Инспекторды іске қосу немесе сөндіру."
 
-#: src/input/command.zig:575
-msgid "Show the GTK Inspector"
-msgstr "GTK инспекторын көрсету"
-
-#: src/input/command.zig:576
-msgid "Show the GTK inspector."
-msgstr "GTK инспекторын көрсету."
-
-#: src/input/command.zig:581
+#: src/input/command.zig:563
 msgid "Show On-Screen Keyboard"
 msgstr "Экрандағы пернетақтаны көрсету"
 
-#: src/input/command.zig:582
+#: src/input/command.zig:564
 msgid "Show the on-screen keyboard if present."
 msgstr "Бар болса, экрандағы пернетақтаны көрсету."
 
-#: src/input/command.zig:588
+#: src/input/command.zig:570
 msgid "Open Config Using OS editor"
 msgstr "Конфигурацияны ОЖ түзеткішімен ашу"
 
-#: src/input/command.zig:589
+#: src/input/command.zig:571
 msgid "Open the config file with the OS's default editor."
 msgstr "Конфигурация файлын ОЖ бастапқы түзеткішімен ашу."
 
-#: src/input/command.zig:593
+#: src/input/command.zig:575
 msgid "Open Config in New Terminal Window"
 msgstr "Конфигурацияны жаңа терминал терезесінде ашу"
 
-#: src/input/command.zig:594
+#: src/input/command.zig:576
 msgid "Open the config file in a new window using $EDITOR or $VISUAL."
 msgstr "Конфигурация файлын $EDITOR немесе $VISUAL арқылы жаңа терезеде ашу."
 
-#: src/input/command.zig:600
+#: src/input/command.zig:582
 msgid "Reload Config"
 msgstr "Конфигурацияны қайта жүктеу"
 
-#: src/input/command.zig:601
+#: src/input/command.zig:583
 msgid "Reload the config file."
 msgstr "Конфигурация файлын қайта жүктеу."
 
-#: src/input/command.zig:606
+#: src/input/command.zig:588
 msgid "Close Terminal"
 msgstr "Терминалды жабу"
 
-#: src/input/command.zig:607
+#: src/input/command.zig:589
 msgid "Close the current terminal."
 msgstr "Ағымдағы терминалды жабу."
 
-#: src/input/command.zig:613
+#: src/input/command.zig:595
 msgid "Close Tab"
 msgstr "Бетті жабу"
 
-#: src/input/command.zig:614
+#: src/input/command.zig:596
 msgid "Close the current tab."
 msgstr "Ағымдағы бетті жабу."
 
-#: src/input/command.zig:618
+#: src/input/command.zig:600
 msgid "Close Other Tabs"
 msgstr "Басқа беттерді жабу"
 
-#: src/input/command.zig:619
+#: src/input/command.zig:601
 msgid "Close all tabs in this window except the current one."
 msgstr "Осы терезедегі ағымдағыдан басқа барлық беттерді жабу."
 
-#: src/input/command.zig:623
+#: src/input/command.zig:605
 msgid "Close Tabs to the Right"
 msgstr "Оң жақтағы беттерді жабу"
 
-#: src/input/command.zig:624
+#: src/input/command.zig:606
 msgid "Close all tabs to the right of the current one."
 msgstr "Ағымдағы беттің оң жағындағы барлық беттерді жабу."
 
-#: src/input/command.zig:630
+#: src/input/command.zig:612
 msgid "Close Window"
 msgstr "Терезені жабу"
 
-#: src/input/command.zig:631
+#: src/input/command.zig:613
 msgid "Close the current window."
 msgstr "Ағымдағы терезені жабу."
 
-#: src/input/command.zig:636
+#: src/input/command.zig:618
 msgid "Close All Windows"
 msgstr "Барлық терезелерді жабу"
 
-#: src/input/command.zig:637
+#: src/input/command.zig:619
 msgid "Close all windows."
 msgstr "Барлық терезелерді жабу."
 
-#: src/input/command.zig:642
+#: src/input/command.zig:624
 msgid "Toggle Maximize"
 msgstr "Жаюды іске қосу/сөндіру"
 
-#: src/input/command.zig:643
+#: src/input/command.zig:625
 msgid "Toggle the maximized state of the current window."
 msgstr "Ағымдағы терезенің жайылған күйін іске қосу немесе сөндіру."
 
-#: src/input/command.zig:648
+#: src/input/command.zig:630
 msgid "Toggle Fullscreen"
 msgstr "Толық экранды іске қосу/сөндіру"
 
-#: src/input/command.zig:649
+#: src/input/command.zig:631
 msgid "Toggle the fullscreen state of the current window."
 msgstr "Ағымдағы терезенің толық экран күйін іске қосу немесе сөндіру."
 
-#: src/input/command.zig:654
-msgid "Toggle Window Decorations"
-msgstr "Терезе безендірулерін іске қосу/сөндіру"
-
-#: src/input/command.zig:655
-msgid "Toggle the window decorations."
-msgstr "Терезе безендірулерін іске қосу немесе сөндіру."
-
-#: src/input/command.zig:660
+#: src/input/command.zig:636
 msgid "Toggle Float on Top"
 msgstr "Үстінде қалқып тұруды іске қосу/сөндіру"
 
-#: src/input/command.zig:661
+#: src/input/command.zig:637
 msgid "Toggle the float on top state of the current window."
 msgstr "Ағымдағы терезенің үстінде қалқып тұру күйін іске қосу немесе сөндіру."
 
-#: src/input/command.zig:666
+#: src/input/command.zig:642
 msgid "Toggle Secure Input"
 msgstr "Қауіпсіз енгізуді іске қосу/сөндіру"
 
-#: src/input/command.zig:667
+#: src/input/command.zig:643
 msgid "Toggle secure input mode."
 msgstr "Қауіпсіз енгізу режимін іске қосу немесе сөндіру."
 
-#: src/input/command.zig:672
+#: src/input/command.zig:648
 msgid "Toggle Mouse Reporting"
 msgstr "Тышқан туралы хабарлауды іске қосу/сөндіру"
 
-#: src/input/command.zig:673
+#: src/input/command.zig:649
 msgid "Toggle whether mouse events are reported to terminal applications."
 msgstr ""
 "Тышқан оқиғалары терминал қолданбаларына хабарлануын іске қосу немесе "
 "сөндіру."
 
-#: src/input/command.zig:678
+#: src/input/command.zig:654
 msgid "Toggle Background Opacity"
 msgstr "Фон мөлдірсіздігін іске қосу/сөндіру"
 
-#: src/input/command.zig:679
+#: src/input/command.zig:655
 msgid "Toggle the background opacity of a window that started transparent."
 msgstr ""
 "Мөлдір күйде іске қосылған терезенің фон мөлдірсіздігін іске қосу немесе "
 "сөндіру."
 
-#: src/input/command.zig:684
+#: src/input/command.zig:660
 msgid "Check for Updates"
 msgstr "Жаңартуларды тексеру"
 
-#: src/input/command.zig:685
+#: src/input/command.zig:661
 msgid "Check for updates to the application."
 msgstr "Қолданба жаңартуларын тексеру."
 
-#: src/input/command.zig:690
+#: src/input/command.zig:666
 msgid "Undo"
 msgstr "Болдырмау"
 
-#: src/input/command.zig:691
+#: src/input/command.zig:667
 msgid "Undo the last action."
 msgstr "Соңғы әрекетті болдырмау."
 
-#: src/input/command.zig:696
+#: src/input/command.zig:672
 msgid "Redo"
 msgstr "Қайталау"
 
-#: src/input/command.zig:697
+#: src/input/command.zig:673
 msgid "Redo the last undone action."
 msgstr "Соңғы болдырылмаған әрекетті қайталау."
 
-#: src/input/command.zig:702
+#: src/input/command.zig:678
 msgid "Quit"
 msgstr "Шығу"
 
-#: src/input/command.zig:703
+#: src/input/command.zig:679
 msgid "Quit the application."
 msgstr "Қолданбадан шығу."
 
-#: src/input/command.zig:708
+#: src/input/command.zig:684
 msgid "Ghostty"
 msgstr "Ghostty"
 
-#: src/input/command.zig:709
+#: src/input/command.zig:685
 msgid "Put a little Ghostty in your terminal."
 msgstr "Терминалыңызға аздап Ghostty қосыңыз."

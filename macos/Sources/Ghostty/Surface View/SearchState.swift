@@ -24,6 +24,24 @@ extension Ghostty {
             }
         }
 
+        @ObservationIgnored private var focusOwner: UUID?
+        @ObservationIgnored private var focusAction: (() -> Void)?
+
+        func attachFocusRequest(owner: UUID, action: @escaping () -> Void) {
+            focusOwner = owner
+            focusAction = action
+        }
+
+        func detachFocusRequest(owner: UUID) {
+            guard focusOwner == owner else { return }
+            focusOwner = nil
+            focusAction = nil
+        }
+
+        func requestFocus() {
+            focusAction?()
+        }
+
         @ObservationIgnored private var searchTask: Task<Void, Never>?
         @ObservationIgnored private var searchAction: ((String) -> Void)?
 

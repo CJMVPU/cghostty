@@ -106,12 +106,6 @@ pub const Action = union(Key) {
     /// Toggle fullscreen mode.
     toggle_fullscreen: Fullscreen,
 
-    /// Toggle tab overview.
-    toggle_tab_overview,
-
-    /// Toggle whether window directions are shown.
-    toggle_window_decorations,
-
     /// Toggle the quick terminal in or out.
     toggle_quick_terminal,
 
@@ -188,9 +182,6 @@ pub const Action = union(Key) {
 
     /// Control whether the inspector is shown or hidden.
     inspector: Inspector,
-
-    /// Show the GTK inspector.
-    show_gtk_inspector,
 
     /// The inspector for the given target has changes and should be
     /// rendered at the next opportunity.
@@ -370,8 +361,6 @@ pub const Action = union(Key) {
         close_all_windows,
         toggle_maximize,
         toggle_fullscreen,
-        toggle_tab_overview,
-        toggle_window_decorations,
         toggle_quick_terminal,
         toggle_command_palette,
         toggle_visibility,
@@ -391,7 +380,6 @@ pub const Action = union(Key) {
         scrollbar,
         render,
         inspector,
-        show_gtk_inspector,
         render_inspector,
         export_terminal_io,
         desktop_notification,
@@ -686,11 +674,10 @@ pub const MouseVisibility = enum(c_int) {
     }
 };
 
-/// Whether to prompt for the surface, tab, or window title.
+/// Whether to prompt for the surface or tab title.
 pub const PromptTitle = enum(c_int) {
     surface,
     tab,
-    window,
 
     test "ghostty.h PromptTitle" {
         try lib.checkGhosttyHEnum(PromptTitle, "GHOSTTY_PROMPT_TITLE_");

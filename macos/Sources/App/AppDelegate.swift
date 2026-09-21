@@ -14,70 +14,58 @@ class AppDelegate: NSObject,
         category: String(describing: AppDelegate.self)
     )
 
-    /// Various menu items so that we can programmatically sync the keyboard shortcut with the Ghostty config
-    @IBOutlet private var menuAbout: NSMenuItem?
-    @IBOutlet private var menuServices: NSMenu?
-    @IBOutlet private var menuCheckForUpdates: NSMenuItem?
-    @IBOutlet private var menuOpenConfig: NSMenuItem?
-    @IBOutlet private var menuReloadConfig: NSMenuItem?
-    @IBOutlet private var menuSecureInput: NSMenuItem?
-    @IBOutlet private var menuQuit: NSMenuItem?
+    /// Configuration bindings are registered alongside native menu creation.
+    var menuBindings: [(action: String, item: NSMenuItem)] = []
 
-    @IBOutlet private var menuNewWindow: NSMenuItem?
-    @IBOutlet private var menuNewTab: NSMenuItem?
-    @IBOutlet private var menuSplitRight: NSMenuItem?
-    @IBOutlet private var menuSplitLeft: NSMenuItem?
-    @IBOutlet private var menuSplitDown: NSMenuItem?
-    @IBOutlet private var menuSplitUp: NSMenuItem?
-    @IBOutlet private var menuClose: NSMenuItem?
-    @IBOutlet private var menuCloseTab: NSMenuItem?
-    @IBOutlet private var menuCloseWindow: NSMenuItem?
-    @IBOutlet private var menuCloseAllWindows: NSMenuItem?
+    /// Items whose state or appearance is updated after construction.
+    var menuAbout: NSMenuItem?
+    var menuServices: NSMenu?
+    var menuCheckForUpdates: NSMenuItem?
+    var menuOpenConfig: NSMenuItem?
+    var menuReloadConfig: NSMenuItem?
+    var menuSecureInput: NSMenuItem?
 
-    @IBOutlet private var menuUndo: NSMenuItem?
-    @IBOutlet private var menuRedo: NSMenuItem?
-    @IBOutlet private var menuCopy: NSMenuItem?
-    @IBOutlet private var menuPaste: NSMenuItem?
-    @IBOutlet private var menuPasteSelection: NSMenuItem?
-    @IBOutlet private var menuSelectAll: NSMenuItem?
-    @IBOutlet private var menuFindParent: NSMenuItem?
-    @IBOutlet private var menuFind: NSMenuItem?
-    @IBOutlet private var menuSelectionForFind: NSMenuItem?
-    @IBOutlet private var menuScrollToSelection: NSMenuItem?
-    @IBOutlet private var menuFindNext: NSMenuItem?
-    @IBOutlet private var menuFindPrevious: NSMenuItem?
-    @IBOutlet private var menuHideFindBar: NSMenuItem?
+    var menuNewWindow: NSMenuItem?
+    var menuNewTab: NSMenuItem?
+    var menuSplitRight: NSMenuItem?
+    var menuSplitLeft: NSMenuItem?
+    var menuSplitDown: NSMenuItem?
+    var menuSplitUp: NSMenuItem?
+    var menuClose: NSMenuItem?
 
-    @IBOutlet private var menuToggleVisibility: NSMenuItem?
-    @IBOutlet private var menuToggleFullScreen: NSMenuItem?
-    @IBOutlet private var menuBringAllToFront: NSMenuItem?
-    @IBOutlet private var menuZoomSplit: NSMenuItem?
-    @IBOutlet private var menuPreviousSplit: NSMenuItem?
-    @IBOutlet private var menuNextSplit: NSMenuItem?
-    @IBOutlet private var menuSelectSplitAbove: NSMenuItem?
-    @IBOutlet private var menuSelectSplitBelow: NSMenuItem?
-    @IBOutlet private var menuSelectSplitLeft: NSMenuItem?
-    @IBOutlet private var menuSelectSplitRight: NSMenuItem?
-    @IBOutlet private var menuReturnToDefaultSize: NSMenuItem?
-    @IBOutlet private var menuFloatOnTop: NSMenuItem?
-    @IBOutlet private var menuUseAsDefault: NSMenuItem?
-    @IBOutlet private var menuSetAsDefaultTerminal: NSMenuItem?
+    var menuPasteSelection: NSMenuItem?
+    var menuFindParent: NSMenuItem?
 
-    @IBOutlet private var menuIncreaseFontSize: NSMenuItem?
-    @IBOutlet private var menuDecreaseFontSize: NSMenuItem?
-    @IBOutlet private var menuResetFontSize: NSMenuItem?
-    @IBOutlet private var menuChangeTitle: NSMenuItem?
-    @IBOutlet private var menuChangeTabTitle: NSMenuItem?
-    @IBOutlet private var menuReadonly: NSMenuItem?
-    @IBOutlet private var menuQuickTerminal: NSMenuItem?
-    @IBOutlet private var menuTerminalInspector: NSMenuItem?
-    @IBOutlet private var menuCommandPalette: NSMenuItem?
+    var menuToggleVisibility: NSMenuItem?
+    var menuToggleFullScreen: NSMenuItem?
+    var menuBringAllToFront: NSMenuItem?
+    var menuZoomSplit: NSMenuItem?
+    var menuPreviousSplit: NSMenuItem?
+    var menuNextSplit: NSMenuItem?
+    var menuSelectSplitAbove: NSMenuItem?
+    var menuSelectSplitBelow: NSMenuItem?
+    var menuSelectSplitLeft: NSMenuItem?
+    var menuSelectSplitRight: NSMenuItem?
+    var menuFloatOnTop: NSMenuItem?
+    var menuUseAsDefault: NSMenuItem?
+    var menuSetAsDefaultTerminal: NSMenuItem?
 
-    @IBOutlet private var menuEqualizeSplits: NSMenuItem?
-    @IBOutlet private var menuMoveSplitDividerUp: NSMenuItem?
-    @IBOutlet private var menuMoveSplitDividerDown: NSMenuItem?
-    @IBOutlet private var menuMoveSplitDividerLeft: NSMenuItem?
-    @IBOutlet private var menuMoveSplitDividerRight: NSMenuItem?
+    var menuIncreaseFontSize: NSMenuItem?
+    var menuDecreaseFontSize: NSMenuItem?
+    var menuResetFontSize: NSMenuItem?
+    var menuChangeTabTitle: NSMenuItem?
+    var menuReadonly: NSMenuItem?
+    var menuQuickTerminal: NSMenuItem?
+    var menuTerminalInspector: NSMenuItem?
+    var menuCommandPalette: NSMenuItem?
+
+    var menuEqualizeSplits: NSMenuItem?
+    var menuMoveSplitDividerUp: NSMenuItem?
+    var menuMoveSplitDividerDown: NSMenuItem?
+    var menuMoveSplitDividerLeft: NSMenuItem?
+    var menuMoveSplitDividerRight: NSMenuItem?
+
+    private lazy var configurationErrorsController = ConfigurationErrorsController(app: ghostty)
 
     /// The dock menu
     private var dockMenu: NSMenu = NSMenu()
@@ -105,7 +93,7 @@ class AppDelegate: NSObject,
     let ghostty: Ghostty.App
 
     /// The global undo manager for app-level state such as window restoration.
-    lazy var undoManager = ExpiringUndoManager()
+    var undoManager: ExpiringUndoManager { ghostty.undoManager }
 
     /// The current state of the quick terminal.
     private var quickTerminalControllerState: QuickTerminalState = .uninitialized
@@ -216,7 +204,7 @@ class AppDelegate: NSObject,
         }
 
         // Initial config loading
-        ghosttyConfigDidChange(config: ghostty.config)
+        acceptConfiguration(ghostty.config)
 
         // Register our service provider. This must happen after everything is initialized.
         NSApp.servicesProvider = ServiceProvider()
@@ -239,32 +227,8 @@ class AppDelegate: NSObject,
         )
         NotificationCenter.default.addObserver(
             self,
-            selector: #selector(quickTerminalDidChangeVisibility),
-            name: .quickTerminalDidChangeVisibility,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(ghosttyConfigDidChange(_:)),
-            name: .ghosttyConfigDidChange,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
             selector: #selector(keyboardSelectionDidChange(_:)),
             name: NSTextInputContext.keyboardSelectionDidChangeNotification,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(ghosttyBellDidRing(_:)),
-            name: .ghosttyBellDidRing,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(terminalWindowHasBell(_:)),
-            name: .terminalWindowBellDidChangeNotification,
             object: nil
         )
 
@@ -587,21 +551,8 @@ class AppDelegate: NSObject,
         syncFloatOnTopMenu(notification.object as? NSWindow)
     }
 
-    @objc private func quickTerminalDidChangeVisibility(_ notification: Notification) {
-        guard let quickController = notification.object as? QuickTerminalController else { return }
+    func quickTerminalVisibilityDidChange(_ quickController: QuickTerminalController) {
         self.menuQuickTerminal?.state = if quickController.visible { .on } else { .off }
-    }
-
-    @objc private func ghosttyConfigDidChange(_ notification: Notification) {
-        // We only care if the configuration is a global configuration, not a surface one.
-        guard notification.object == nil else { return }
-
-        // Get our managed configuration object out
-        guard let config = notification.userInfo?[
-            Notification.Name.GhosttyConfigChangeKey
-        ] as? Ghostty.Config else { return }
-
-        ghosttyConfigDidChange(config: config)
     }
 
     @MainActor @objc private func keyboardSelectionDidChange(_ notification: Notification) {
@@ -609,7 +560,7 @@ class AppDelegate: NSObject,
         ghostty.windowRegistry.all.forEach { $0.relabelTabs() }
     }
 
-    @objc private func ghosttyBellDidRing(_ notification: Notification) {
+    func ringBell() {
         if ghostty.config.bellFeatures.contains(.system) {
             NSSound.beep()
         }
@@ -628,11 +579,6 @@ class AppDelegate: NSObject,
         }
     }
 
-    @objc private func terminalWindowHasBell(_ notification: Notification) {
-        guard notification.object is BaseTerminalController else { return }
-        syncDockBadge()
-    }
-
     private func requestBadgeAuthorizationAndSet(_ center: UNUserNotificationCenter) {
         center.requestAuthorization(options: [.badge]) { granted, error in
             if let error = error {
@@ -649,7 +595,7 @@ class AppDelegate: NSObject,
         }
     }
 
-    private func syncDockBadge() {
+    func syncDockBadge() {
         let center = UNUserNotificationCenter.current()
         center.getNotificationSettings { settings in
             let status = settings.authorizationStatus
@@ -674,8 +620,7 @@ class AppDelegate: NSObject,
     }
 
     private func setDockBadge() {
-        let bellCount = NSApp.windows
-            .compactMap { $0.windowController as? BaseTerminalController }
+        let bellCount = ghostty.windowRegistry.windowControllers
             .reduce(0) { $0 + ($1.bell ? 1 : 0) }
         let wantsBadge = ghostty.config.bellFeatures.contains(.attention) && bellCount > 0
         let label = wantsBadge ? (bellCount > 99 ? "99+" : String(bellCount)) : nil
@@ -683,7 +628,7 @@ class AppDelegate: NSObject,
         NSApp.dockTile.display()
     }
 
-    private func ghosttyConfigDidChange(config: Ghostty.Config) {
+    func acceptConfiguration(_ config: Ghostty.Config) {
         // Update the config we need to store
         self.derivedConfig = DerivedConfig(config.snapshot)
 
@@ -721,7 +666,7 @@ class AppDelegate: NSObject,
         }
 
         // If we have configuration errors, we need to show them.
-        let c = ConfigurationErrorsController.sharedInstance
+        let c = configurationErrorsController
         c.updateErrors(config.errors)
         if !config.errors.isEmpty {
             if c.window == nil || !c.window!.isVisible {
@@ -813,13 +758,7 @@ class AppDelegate: NSObject,
     // MARK: - GhosttyAppDelegate
 
     func findSurface(forUUID uuid: UUID) -> Ghostty.SurfaceView? {
-        for c in ghostty.windowRegistry.all {
-            for view in c.surfaceTree where view.id == uuid {
-                return view
-            }
-        }
-
-        return nil
+        ghostty.windowRegistry.surface(id: uuid)
     }
 
     // MARK: - Global State
@@ -1051,74 +990,12 @@ extension AppDelegate {
 
         menuShortcutManager.reset()
 
-        syncMenuShortcut(config, action: "check_for_updates", menuItem: self.menuCheckForUpdates)
-        syncMenuShortcut(config, action: "open_config", menuItem: self.menuOpenConfig)
-        syncMenuShortcut(config, action: "reload_config", menuItem: self.menuReloadConfig)
-        syncMenuShortcut(config, action: "quit", menuItem: self.menuQuit)
-
-        syncMenuShortcut(config, action: "new_window", menuItem: self.menuNewWindow)
-        syncMenuShortcut(config, action: "new_tab", menuItem: self.menuNewTab)
-        syncMenuShortcut(config, action: "close_surface", menuItem: self.menuClose)
-        syncMenuShortcut(config, action: "close_tab", menuItem: self.menuCloseTab)
-        syncMenuShortcut(config, action: "close_window", menuItem: self.menuCloseWindow)
-        syncMenuShortcut(config, action: "close_all_windows", menuItem: self.menuCloseAllWindows)
-        syncMenuShortcut(config, action: "new_split:right", menuItem: self.menuSplitRight)
-        syncMenuShortcut(config, action: "new_split:left", menuItem: self.menuSplitLeft)
-        syncMenuShortcut(config, action: "new_split:down", menuItem: self.menuSplitDown)
-        syncMenuShortcut(config, action: "new_split:up", menuItem: self.menuSplitUp)
-
-        syncMenuShortcut(config, action: "undo", menuItem: self.menuUndo)
-        syncMenuShortcut(config, action: "redo", menuItem: self.menuRedo)
-        syncMenuShortcut(config, action: "copy_to_clipboard", menuItem: self.menuCopy)
-        syncMenuShortcut(config, action: "paste_from_clipboard", menuItem: self.menuPaste)
-        syncMenuShortcut(config, action: "paste_from_selection", menuItem: self.menuPasteSelection)
-        syncMenuShortcut(config, action: "select_all", menuItem: self.menuSelectAll)
-        syncMenuShortcut(config, action: "start_search", menuItem: self.menuFind)
-        syncMenuShortcut(config, action: "end_search", menuItem: self.menuHideFindBar)
-        syncMenuShortcut(config, action: "search_selection", menuItem: self.menuSelectionForFind)
-        syncMenuShortcut(config, action: "scroll_to_selection", menuItem: self.menuScrollToSelection)
-        syncMenuShortcut(config, action: "navigate_search:next", menuItem: self.menuFindNext)
-        syncMenuShortcut(config, action: "navigate_search:previous", menuItem: self.menuFindPrevious)
-
-        syncMenuShortcut(config, action: "toggle_split_zoom", menuItem: self.menuZoomSplit)
-        syncMenuShortcut(config, action: "goto_split:previous", menuItem: self.menuPreviousSplit)
-        syncMenuShortcut(config, action: "goto_split:next", menuItem: self.menuNextSplit)
-        syncMenuShortcut(config, action: "goto_split:up", menuItem: self.menuSelectSplitAbove)
-        syncMenuShortcut(config, action: "goto_split:down", menuItem: self.menuSelectSplitBelow)
-        syncMenuShortcut(config, action: "goto_split:left", menuItem: self.menuSelectSplitLeft)
-        syncMenuShortcut(config, action: "goto_split:right", menuItem: self.menuSelectSplitRight)
-        syncMenuShortcut(config, action: "resize_split:up,10", menuItem: self.menuMoveSplitDividerUp)
-        syncMenuShortcut(config, action: "resize_split:down,10", menuItem: self.menuMoveSplitDividerDown)
-        syncMenuShortcut(config, action: "resize_split:right,10", menuItem: self.menuMoveSplitDividerRight)
-        syncMenuShortcut(config, action: "resize_split:left,10", menuItem: self.menuMoveSplitDividerLeft)
-        syncMenuShortcut(config, action: "equalize_splits", menuItem: self.menuEqualizeSplits)
-        syncMenuShortcut(config, action: "reset_window_size", menuItem: self.menuReturnToDefaultSize)
-
-        syncMenuShortcut(config, action: "increase_font_size:1", menuItem: self.menuIncreaseFontSize)
-        syncMenuShortcut(config, action: "decrease_font_size:1", menuItem: self.menuDecreaseFontSize)
-        syncMenuShortcut(config, action: "reset_font_size", menuItem: self.menuResetFontSize)
-        syncMenuShortcut(config, action: "prompt_surface_title", menuItem: self.menuChangeTitle)
-        syncMenuShortcut(config, action: "prompt_tab_title", menuItem: self.menuChangeTabTitle)
-        syncMenuShortcut(config, action: "toggle_quick_terminal", menuItem: self.menuQuickTerminal)
-        syncMenuShortcut(config, action: "toggle_visibility", menuItem: self.menuToggleVisibility)
-        syncMenuShortcut(config, action: "toggle_window_float_on_top", menuItem: self.menuFloatOnTop)
-        syncMenuShortcut(config, action: "inspector:toggle", menuItem: self.menuTerminalInspector)
-        syncMenuShortcut(config, action: "toggle_command_palette", menuItem: self.menuCommandPalette)
-
-        syncMenuShortcut(config, action: "toggle_secure_input", menuItem: self.menuSecureInput)
-
-        // This menu item is NOT synced with the configuration because it disables macOS
-        // global fullscreen keyboard shortcut. The shortcut in the Ghostty config will continue
-        // to work but it won't be reflected in the menu item.
-        //
-        // syncMenuShortcut(config, action: "toggle_fullscreen", menuItem: self.menuToggleFullScreen)
+        for binding in menuBindings {
+            menuShortcutManager.syncMenuShortcut(config, action: binding.action, menuItem: binding.item)
+        }
 
         // Dock menu
         reloadDockMenu()
-    }
-
-    @MainActor private func syncMenuShortcut(_ config: Ghostty.Config, action: String, menuItem: NSMenuItem?) {
-        menuShortcutManager.syncMenuShortcut(config, action: action, menuItem: menuItem)
     }
 
     @MainActor func performGhosttyBindingMenuKeyEquivalent(with event: NSEvent) -> Bool {
@@ -1213,8 +1090,7 @@ extension AppDelegate: NSMenuItemValidation {
 
 extension AppDelegate {
     func terminate() -> NSApplication.TerminateReply {
-        let controllersNeedConfirmation = NSApplication.shared.windows
-            .compactMap { $0.windowController as? BaseTerminalController }
+        let controllersNeedConfirmation = ghostty.windowRegistry.windowControllers
             .filter { !$0.windowCanBeClosedWithoutConfirmation() }
 
         guard !controllersNeedConfirmation.isEmpty else {

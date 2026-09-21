@@ -6,9 +6,6 @@ pub const Backend = enum {
     pub fn hasFreetype(self: Backend) bool {
         return self == .coretext_freetype;
     }
-    pub fn hasCoretext(_: Backend) bool {
-        return true;
-    }
     pub fn hasHarfbuzz(self: Backend) bool {
         return self == .coretext_freetype or self == .coretext_harfbuzz;
     }

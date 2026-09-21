@@ -85,7 +85,51 @@ import Testing
         #expect(snapshot.backgroundOpacity == 1)
         #expect(snapshot.window.stepResize)
         #expect(snapshot.window.maximize)
+        #expect(snapshot.shouldQuitAfterLastWindowClosed)
+        #expect(snapshot.autoSecureInput)
+        #expect(snapshot.secureInputIndication)
+        #expect(snapshot.macosAppleScript)
+        #expect(snapshot.resizeOverlayDuration == 1000)
+        #expect(snapshot.notifyOnCommandFinishAfter == .seconds(5))
+        #expect(snapshot.undoTimeout == .seconds(5))
         #expect(config.keyboardShortcut(for: "new_window") == nil)
+    }
+
+    @Test func scalarAndStringSnapshotValuesUseLoadedConfiguration() throws {
+        let config = try TemporaryConfig("""
+        title = 原生快照
+        background-opacity = 0.6
+        bell-audio-volume = 0.25
+        initial-window = false
+        quit-after-last-window-closed = false
+        macos-auto-secure-input = false
+        macos-secure-input-indication = false
+        macos-applescript = false
+        macos-shortcuts = deny
+        macos-window-shadow = true
+        quick-terminal-autohide = false
+        quick-terminal-animation-duration = 0.4
+        resize-overlay-duration = 2s
+        notify-on-command-finish-after = 3s
+        undo-timeout = 4s
+        """)
+        #expect(config.errors.isEmpty)
+        let snapshot = config.snapshot
+        #expect(snapshot.title == "原生快照")
+        #expect(snapshot.backgroundOpacity == 0.6)
+        #expect(snapshot.bellAudioVolume == 0.25)
+        #expect(!snapshot.initialWindow)
+        #expect(!snapshot.shouldQuitAfterLastWindowClosed)
+        #expect(!snapshot.autoSecureInput)
+        #expect(!snapshot.secureInputIndication)
+        #expect(!snapshot.macosAppleScript)
+        #expect(snapshot.macosShortcuts == .deny)
+        #expect(snapshot.macosWindowShadow)
+        #expect(!snapshot.quickTerminalAutoHide)
+        #expect(snapshot.quickTerminalAnimationDuration == 0.4)
+        #expect(snapshot.resizeOverlayDuration == 2000)
+        #expect(snapshot.notifyOnCommandFinishAfter == .seconds(3))
+        #expect(snapshot.undoTimeout == .seconds(4))
     }
 
     @Test func replacementInvalidatesObservationOnceForTheWholeGeneration() throws {
@@ -105,23 +149,13 @@ import Testing
         #expect(config.window.titleFontFamily == "After Font")
     }
 
-    @Test func appPublishesConfigBeforeSynchronousNotification() throws {
+    @Test func configReloadUpdatesOnlyItsOwningApp() throws {
         let file = try TemporaryConfig("title = Before")
         let app = Ghostty.App(configPath: file.temporaryFile.path)
-        let observed = Mutex<[Bool]>([])
-        let configKey = Notification.Name.GhosttyConfigChangeKey
-        let token = NotificationCenter.default.addObserver(forName: .ghosttyConfigDidChange, object: nil, queue: nil) { notification in
-            guard notification.object == nil,
-                  let delivered = notification.userInfo?[configKey] as? Ghostty.Config else { return }
-            MainActor.assumeIsolated {
-                observed.withLock { $0.append(app.config === delivered && app.config.snapshot.title == "After") }
-            }
-        }
-        defer { NotificationCenter.default.removeObserver(token) }
+        let other = Ghostty.App(configPath: file.temporaryFile.path)
         try file.reload("title = After")
         app.reloadConfig()
-        #expect(!observed.withLock { $0 }.isEmpty)
-        #expect(observed.withLock { $0 }.allSatisfy { $0 })
         #expect(app.config.snapshot.title == "After")
+        #expect(other.config.snapshot.title == "Before")
     }
 }

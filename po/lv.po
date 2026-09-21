@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: com.cjmvpu.cghostty\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-19 22:55+0800\n"
+"POT-Creation-Date: 2026-09-21 16:28+0800\n"
 "PO-Revision-Date: 2026-08-10 17:32+0300\n"
 "Last-Translator: Ēriks Remess <eriks@remess.lv>\n"
 "Language-Team: Latvian\n"
@@ -440,349 +440,325 @@ msgid "Move the current tab to a new window."
 msgstr "Pārvietot pašreizējo cilni uz jaunu logu."
 
 #: src/input/command.zig:452
-msgid "Toggle Tab Overview"
-msgstr "Parādīt vai paslēpt ciļņu pārskatu"
-
-#: src/input/command.zig:453
-msgid "Toggle the tab overview."
-msgstr "Parādīt vai paslēpt ciļņu pārskatu."
-
-#: src/input/command.zig:458
 msgid "Change Terminal Title…"
 msgstr "Mainīt termināļa virsrakstu…"
 
-#: src/input/command.zig:459
+#: src/input/command.zig:453
 msgid "Prompt for a new title for the current terminal."
 msgstr "Parādīt aicinājumu ievadīt jaunu virsrakstu pašreizējam terminālim."
 
-#: src/input/command.zig:464
+#: src/input/command.zig:458
 msgid "Change Tab Title…"
 msgstr "Mainīt cilnes virsrakstu…"
 
-#: src/input/command.zig:465
+#: src/input/command.zig:459
 msgid "Prompt for a new title for the current tab."
 msgstr "Parādīt aicinājumu ievadīt jaunu virsrakstu pašreizējai cilnei."
 
-#: src/input/command.zig:477
+#: src/input/command.zig:465
 msgid "Split Left"
 msgstr "Sadalīt pa kreisi"
 
-#: src/input/command.zig:478
+#: src/input/command.zig:466
 msgid "Split the terminal to the left."
 msgstr "Sadalīt termināli pa kreisi."
 
-#: src/input/command.zig:482
+#: src/input/command.zig:470
 msgid "Split Right"
 msgstr "Sadalīt pa labi"
 
-#: src/input/command.zig:483
+#: src/input/command.zig:471
 msgid "Split the terminal to the right."
 msgstr "Sadalīt termināli pa labi."
 
-#: src/input/command.zig:487
+#: src/input/command.zig:475
 msgid "Split Up"
 msgstr "Sadalīt uz augšu"
 
-#: src/input/command.zig:488
+#: src/input/command.zig:476
 msgid "Split the terminal up."
 msgstr "Sadalīt termināli augšup."
 
-#: src/input/command.zig:492
+#: src/input/command.zig:480
 msgid "Split Down"
 msgstr "Sadalīt uz leju"
 
-#: src/input/command.zig:493
+#: src/input/command.zig:481
 msgid "Split the terminal down."
 msgstr "Sadalīt termināli lejup."
 
-#: src/input/command.zig:500
+#: src/input/command.zig:488
 msgid "Focus Split: Previous"
 msgstr "Fokusēt iepriekšējo nodalījumu"
 
-#: src/input/command.zig:501
+#: src/input/command.zig:489
 msgid "Focus the previous split, if any."
 msgstr "Fokusēt iepriekšējo nodalījumu, ja tāds ir."
 
-#: src/input/command.zig:505
+#: src/input/command.zig:493
 msgid "Focus Split: Next"
 msgstr "Fokusēt nākamo nodalījumu"
 
-#: src/input/command.zig:506
+#: src/input/command.zig:494
 msgid "Focus the next split, if any."
 msgstr "Fokusēt nākamo nodalījumu, ja tāds ir."
 
-#: src/input/command.zig:510
+#: src/input/command.zig:498
 msgid "Focus Split: Left"
 msgstr "Fokusēt nodalījumu pa kreisi"
 
-#: src/input/command.zig:511
+#: src/input/command.zig:499
 msgid "Focus the split to the left, if it exists."
 msgstr "Fokusēt nodalījumu pa kreisi, ja tāds ir."
 
-#: src/input/command.zig:515
+#: src/input/command.zig:503
 msgid "Focus Split: Right"
 msgstr "Fokusēt nodalījumu pa labi"
 
-#: src/input/command.zig:516
+#: src/input/command.zig:504
 msgid "Focus the split to the right, if it exists."
 msgstr "Fokusēt nodalījumu pa labi, ja tāds ir."
 
-#: src/input/command.zig:520
+#: src/input/command.zig:508
 msgid "Focus Split: Up"
 msgstr "Fokusēt augšējo nodalījumu"
 
-#: src/input/command.zig:521
+#: src/input/command.zig:509
 msgid "Focus the split above, if it exists."
 msgstr "Fokusēt augšējo nodalījumu, ja tāds ir."
 
-#: src/input/command.zig:525
+#: src/input/command.zig:513
 msgid "Focus Split: Down"
 msgstr "Fokusēt apakšējo nodalījumu"
 
-#: src/input/command.zig:526
+#: src/input/command.zig:514
 msgid "Focus the split below, if it exists."
 msgstr "Fokusēt apakšējo nodalījumu, ja tāds ir."
 
-#: src/input/command.zig:533
+#: src/input/command.zig:521
 msgid "Focus Window: Previous"
 msgstr "Fokusēt iepriekšējo logu"
 
-#: src/input/command.zig:534
+#: src/input/command.zig:522
 msgid "Focus the previous window, if any."
 msgstr "Fokusēt iepriekšējo logu, ja tāds ir."
 
-#: src/input/command.zig:538
+#: src/input/command.zig:526
 msgid "Focus Window: Next"
 msgstr "Fokusēt nākamo logu"
 
-#: src/input/command.zig:539
+#: src/input/command.zig:527
 msgid "Focus the next window, if any."
 msgstr "Fokusēt nākamo logu, ja tāds ir."
 
-#: src/input/command.zig:545
+#: src/input/command.zig:533
 msgid "Toggle Split Zoom"
 msgstr "Palielināt nodalījumu vai atjaunot tā izmēru"
 
-#: src/input/command.zig:546
+#: src/input/command.zig:534
 msgid "Toggle the zoom state of the current split."
 msgstr "Palielināt pašreizējo nodalījumu vai atjaunot tā izmēru."
 
-#: src/input/command.zig:551
+#: src/input/command.zig:539
 msgid "Toggle Read-Only Mode"
 msgstr "Ieslēgt vai izslēgt tikai lasīšanas režīmu"
 
-#: src/input/command.zig:552
+#: src/input/command.zig:540
 msgid "Toggle read-only mode for the current surface."
 msgstr "Ieslēgt vai izslēgt tikai lasīšanas režīmu pašreizējā terminālī."
 
-#: src/input/command.zig:557
+#: src/input/command.zig:545
 msgid "Equalize Splits"
 msgstr "Izlīdzināt nodalījumu izmērus"
 
-#: src/input/command.zig:558
+#: src/input/command.zig:546
 msgid "Equalize the size of all splits."
 msgstr "Izlīdzināt visu nodalījumu izmērus."
 
-#: src/input/command.zig:563
+#: src/input/command.zig:551
 msgid "Reset Window Size"
 msgstr "Atiestatīt loga izmēru"
 
-#: src/input/command.zig:564
+#: src/input/command.zig:552
 msgid "Reset the window size to the default."
 msgstr "Atiestatīt loga izmēru uz noklusēto."
 
-#: src/input/command.zig:569
+#: src/input/command.zig:557
 msgid "Toggle Inspector"
 msgstr "Parādīt vai paslēpt inspektoru"
 
-#: src/input/command.zig:570
+#: src/input/command.zig:558
 msgid "Toggle the inspector."
 msgstr "Parādīt vai paslēpt inspektoru."
 
-#: src/input/command.zig:575
-msgid "Show the GTK Inspector"
-msgstr "Rādīt GTK inspektoru"
-
-#: src/input/command.zig:576
-msgid "Show the GTK inspector."
-msgstr "Rādīt GTK inspektoru."
-
-#: src/input/command.zig:581
+#: src/input/command.zig:563
 msgid "Show On-Screen Keyboard"
 msgstr "Rādīt ekrāna tastatūru"
 
-#: src/input/command.zig:582
+#: src/input/command.zig:564
 msgid "Show the on-screen keyboard if present."
 msgstr "Rādīt ekrāna tastatūru, ja tā ir pieejama."
 
-#: src/input/command.zig:588
+#: src/input/command.zig:570
 msgid "Open Config Using OS editor"
 msgstr "Atvērt konfigurāciju noklusējuma redaktorā"
 
-#: src/input/command.zig:589
+#: src/input/command.zig:571
 msgid "Open the config file with the OS's default editor."
 msgstr "Atvērt konfigurācijas failu noklusējuma redaktorā."
 
-#: src/input/command.zig:593
+#: src/input/command.zig:575
 msgid "Open Config in New Terminal Window"
 msgstr "Atvērt konfigurāciju jaunā termināļa logā"
 
-#: src/input/command.zig:594
+#: src/input/command.zig:576
 msgid "Open the config file in a new window using $EDITOR or $VISUAL."
 msgstr ""
 "Atvērt konfigurācijas failu jaunā logā, izmantojot mainīgajā $EDITOR vai "
 "$VISUAL norādīto redaktoru."
 
-#: src/input/command.zig:600
+#: src/input/command.zig:582
 msgid "Reload Config"
 msgstr "Pārlādēt konfigurāciju"
 
-#: src/input/command.zig:601
+#: src/input/command.zig:583
 msgid "Reload the config file."
 msgstr "Pārlādēt konfigurācijas failu."
 
-#: src/input/command.zig:606
+#: src/input/command.zig:588
 msgid "Close Terminal"
 msgstr "Aizvērt termināli"
 
-#: src/input/command.zig:607
+#: src/input/command.zig:589
 msgid "Close the current terminal."
 msgstr "Aizvērt pašreizējo termināli."
 
-#: src/input/command.zig:613
+#: src/input/command.zig:595
 msgid "Close Tab"
 msgstr "Aizvērt cilni"
 
-#: src/input/command.zig:614
+#: src/input/command.zig:596
 msgid "Close the current tab."
 msgstr "Aizvērt pašreizējo cilni."
 
-#: src/input/command.zig:618
+#: src/input/command.zig:600
 msgid "Close Other Tabs"
 msgstr "Aizvērt citas cilnes"
 
-#: src/input/command.zig:619
+#: src/input/command.zig:601
 msgid "Close all tabs in this window except the current one."
 msgstr "Aizvērt visas cilnes šajā logā, izņemot pašreizējo."
 
-#: src/input/command.zig:623
+#: src/input/command.zig:605
 msgid "Close Tabs to the Right"
 msgstr "Aizvērt cilnes pa labi"
 
-#: src/input/command.zig:624
+#: src/input/command.zig:606
 msgid "Close all tabs to the right of the current one."
 msgstr "Aizvērt visas cilnes pa labi no pašreizējās."
 
-#: src/input/command.zig:630
+#: src/input/command.zig:612
 msgid "Close Window"
 msgstr "Aizvērt logu"
 
-#: src/input/command.zig:631
+#: src/input/command.zig:613
 msgid "Close the current window."
 msgstr "Aizvērt pašreizējo logu."
 
-#: src/input/command.zig:636
+#: src/input/command.zig:618
 msgid "Close All Windows"
 msgstr "Aizvērt visus logus"
 
-#: src/input/command.zig:637
+#: src/input/command.zig:619
 msgid "Close all windows."
 msgstr "Aizvērt visus logus."
 
-#: src/input/command.zig:642
+#: src/input/command.zig:624
 msgid "Toggle Maximize"
 msgstr "Maksimizēt vai atjaunot logu"
 
-#: src/input/command.zig:643
+#: src/input/command.zig:625
 msgid "Toggle the maximized state of the current window."
 msgstr "Maksimizēt pašreizējo logu vai atjaunot tā iepriekšējo izmēru."
 
-#: src/input/command.zig:648
+#: src/input/command.zig:630
 msgid "Toggle Fullscreen"
 msgstr "Ieslēgt vai izslēgt pilnekrāna režīmu"
 
-#: src/input/command.zig:649
+#: src/input/command.zig:631
 msgid "Toggle the fullscreen state of the current window."
 msgstr "Ieslēgt vai izslēgt pilnekrāna režīmu pašreizējam logam."
 
-#: src/input/command.zig:654
-msgid "Toggle Window Decorations"
-msgstr "Parādīt vai paslēpt loga apdari"
-
-#: src/input/command.zig:655
-msgid "Toggle the window decorations."
-msgstr "Parādīt vai paslēpt loga apdari."
-
-#: src/input/command.zig:660
+#: src/input/command.zig:636
 msgid "Toggle Float on Top"
 msgstr "Ieslēgt vai izslēgt rādīšanu virspusē"
 
-#: src/input/command.zig:661
+#: src/input/command.zig:637
 msgid "Toggle the float on top state of the current window."
 msgstr "Ieslēgt vai izslēgt pašreizējā loga rādīšanu virs citiem logiem."
 
-#: src/input/command.zig:666
+#: src/input/command.zig:642
 msgid "Toggle Secure Input"
 msgstr "Ieslēgt vai izslēgt drošo ievadi"
 
-#: src/input/command.zig:667
+#: src/input/command.zig:643
 msgid "Toggle secure input mode."
 msgstr "Ieslēgt vai izslēgt drošās ievades režīmu."
 
-#: src/input/command.zig:672
+#: src/input/command.zig:648
 msgid "Toggle Mouse Reporting"
 msgstr "Ieslēgt vai izslēgt peles notikumu nosūtīšanu"
 
-#: src/input/command.zig:673
+#: src/input/command.zig:649
 msgid "Toggle whether mouse events are reported to terminal applications."
 msgstr "Ieslēgt vai izslēgt peles notikumu nosūtīšanu termināļa lietotnēm."
 
-#: src/input/command.zig:678
+#: src/input/command.zig:654
 msgid "Toggle Background Opacity"
 msgstr "Ieslēgt vai izslēgt fona caurspīdīgumu"
 
-#: src/input/command.zig:679
+#: src/input/command.zig:655
 msgid "Toggle the background opacity of a window that started transparent."
 msgstr ""
 "Ieslēgt vai izslēgt fona caurspīdīgumu logam, kas tika atvērts ar "
 "caurspīdīgu fonu."
 
-#: src/input/command.zig:684
+#: src/input/command.zig:660
 msgid "Check for Updates"
 msgstr "Pārbaudīt atjauninājumus"
 
-#: src/input/command.zig:685
+#: src/input/command.zig:661
 msgid "Check for updates to the application."
 msgstr "Pārbaudīt lietotnes atjauninājumus."
 
-#: src/input/command.zig:690
+#: src/input/command.zig:666
 msgid "Undo"
 msgstr "Atsaukt"
 
-#: src/input/command.zig:691
+#: src/input/command.zig:667
 msgid "Undo the last action."
 msgstr "Atsaukt pēdējo darbību."
 
-#: src/input/command.zig:696
+#: src/input/command.zig:672
 msgid "Redo"
 msgstr "Atkārtot"
 
-#: src/input/command.zig:697
+#: src/input/command.zig:673
 msgid "Redo the last undone action."
 msgstr "Atkārtot pēdējo atsaukto darbību."
 
-#: src/input/command.zig:702
+#: src/input/command.zig:678
 msgid "Quit"
 msgstr "Iziet"
 
-#: src/input/command.zig:703
+#: src/input/command.zig:679
 msgid "Quit the application."
 msgstr "Iziet no lietotnes."
 
-#: src/input/command.zig:708
+#: src/input/command.zig:684
 msgid "Ghostty"
 msgstr "Ghostty"
 
-#: src/input/command.zig:709
+#: src/input/command.zig:685
 msgid "Put a little Ghostty in your terminal."
 msgstr "Ielaid mazu Ghostty savā terminālī."

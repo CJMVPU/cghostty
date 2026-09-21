@@ -220,7 +220,7 @@ pub fn add(
             .target = target,
             .optimize = optimize,
             .@"enable-freetype" = self.config.font_backend.hasFreetype(),
-            .@"enable-coretext" = self.config.font_backend.hasCoretext(),
+            .@"enable-coretext" = true,
         })) |harfbuzz_dep| {
             step.root_module.addImport(
                 "harfbuzz",

@@ -708,7 +708,6 @@ typedef struct {
 typedef enum {
   GHOSTTY_PROMPT_TITLE_SURFACE,
   GHOSTTY_PROMPT_TITLE_TAB,
-  GHOSTTY_PROMPT_TITLE_WINDOW,
 } ghostty_action_prompt_title_e;
 
 // apprt.action.Pwd.C
@@ -937,8 +936,6 @@ typedef enum {
   GHOSTTY_ACTION_CLOSE_ALL_WINDOWS,
   GHOSTTY_ACTION_TOGGLE_MAXIMIZE,
   GHOSTTY_ACTION_TOGGLE_FULLSCREEN,
-  GHOSTTY_ACTION_TOGGLE_TAB_OVERVIEW,
-  GHOSTTY_ACTION_TOGGLE_WINDOW_DECORATIONS,
   GHOSTTY_ACTION_TOGGLE_QUICK_TERMINAL,
   GHOSTTY_ACTION_TOGGLE_COMMAND_PALETTE,
   GHOSTTY_ACTION_TOGGLE_VISIBILITY,
@@ -958,7 +955,6 @@ typedef enum {
   GHOSTTY_ACTION_SCROLLBAR,
   GHOSTTY_ACTION_RENDER,
   GHOSTTY_ACTION_INSPECTOR,
-  GHOSTTY_ACTION_SHOW_GTK_INSPECTOR,
   GHOSTTY_ACTION_RENDER_INSPECTOR,
   GHOSTTY_ACTION_EXPORT_TERMINAL_IO,
   GHOSTTY_ACTION_DESKTOP_NOTIFICATION,
@@ -1102,7 +1098,6 @@ typedef struct {
 GHOSTTY_API int ghostty_init(uintptr_t, char**);
 GHOSTTY_API void ghostty_cli_try_action(void);
 GHOSTTY_API ghostty_info_s ghostty_info(void);
-GHOSTTY_API const char* ghostty_translate(const char*);
 GHOSTTY_API void ghostty_string_free(ghostty_string_s);
 
 GHOSTTY_API ghostty_config_t ghostty_config_new();
@@ -1130,7 +1125,6 @@ GHOSTTY_API void* ghostty_app_userdata(ghostty_app_t);
 GHOSTTY_API void ghostty_app_set_focus(ghostty_app_t, bool);
 GHOSTTY_API bool ghostty_app_key(ghostty_app_t, ghostty_input_key_s);
 GHOSTTY_API void ghostty_app_keyboard_changed(ghostty_app_t);
-GHOSTTY_API void ghostty_app_open_config(ghostty_app_t);
 GHOSTTY_API void ghostty_app_update_config(ghostty_app_t, ghostty_config_t);
 GHOSTTY_API bool ghostty_app_needs_confirm_quit(ghostty_app_t);
 GHOSTTY_API bool ghostty_app_has_global_keybinds(ghostty_app_t);
@@ -1147,8 +1141,6 @@ GHOSTTY_API ghostty_surface_config_s ghostty_surface_inherited_config(ghostty_su
 GHOSTTY_API void ghostty_surface_update_config(ghostty_surface_t, ghostty_config_t);
 GHOSTTY_API bool ghostty_surface_needs_confirm_quit(ghostty_surface_t);
 GHOSTTY_API bool ghostty_surface_process_exited(ghostty_surface_t);
-GHOSTTY_API void ghostty_surface_refresh(ghostty_surface_t);
-GHOSTTY_API void ghostty_surface_draw(ghostty_surface_t);
 GHOSTTY_API void ghostty_surface_set_content_scale(ghostty_surface_t, double, double);
 GHOSTTY_API void ghostty_surface_set_focus(ghostty_surface_t, bool);
 GHOSTTY_API void ghostty_surface_set_occlusion(ghostty_surface_t, bool);
@@ -1265,7 +1257,6 @@ GHOSTTY_API void ghostty_inspector_text(ghostty_inspector_t, const char*);
 #ifdef __APPLE__
 GHOSTTY_API bool ghostty_inspector_metal_init(ghostty_inspector_t, void*);
 GHOSTTY_API void ghostty_inspector_metal_render(ghostty_inspector_t, void*, void*);
-GHOSTTY_API bool ghostty_inspector_metal_shutdown(ghostty_inspector_t);
 #endif
 
 // APIs I'd like to get rid of eventually but are still needed for now.

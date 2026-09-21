@@ -8,24 +8,31 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
     /// AppKit's window/controller link is weak. Keep loaded windows' coordinators
     /// alive independently of SwiftUI view state, and release them on close.
     private static var openControllers: [ObjectIdentifier: TerminalController] = [:]
-    override var windowNibName: NSNib.Name? {
-
+    override func loadWindow() {
         let config = ghostty.config
-
-        // If we have no window decorations, there's no reason to do anything but
-        // the default titlebar (because there will be no titlebar).
-        if !config.windowDecorations {
-            return "Terminal"
+        let windowType: TerminalWindow.Type = if !config.windowDecorations {
+            TerminalWindow.self
+        } else {
+            switch config.macosTitlebarStyle {
+            case .native: TerminalWindow.self
+            case .hidden: HiddenTitlebarTerminalWindow.self
+            case .transparent: TransparentTitlebarTerminalWindow.self
+            case .tabs: TitlebarTabsTahoeTerminalWindow.self
+            }
         }
-
-        let nib = switch config.macosTitlebarStyle {
-        case .native: "Terminal"
-        case .hidden: "TerminalHiddenTitlebar"
-        case .transparent: "TerminalTransparentTitlebar"
-        case .tabs: "TerminalTabsTitlebarTahoe"
-        }
-
-        return nib
+        let terminalWindow = windowType.init(
+            contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        terminalWindow.title = "👻 cghostty"
+        terminalWindow.isReleasedWhenClosed = false
+        terminalWindow.autorecalculatesKeyViewLoop = false
+        terminalWindow.contentView?.wantsLayer = true
+        window = terminalWindow
+        terminalWindow.delegate = self
+        terminalWindow.configure(for: ghostty)
     }
 
     /// This is set to true when we care about frame changes. This is a small optimization since
@@ -71,12 +78,6 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
 
         // Setup our notifications for behaviors
         let center = NotificationCenter.default
-        center.addObserver(
-            self,
-            selector: #selector(ghosttyConfigDidChange(_:)),
-            name: .ghosttyConfigDidChange,
-            object: nil
-        )
         center.addObserver(
             self,
             selector: #selector(onFrameDidChange),
@@ -466,29 +467,10 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
 
     // MARK: - Methods
 
-    @objc private func ghosttyConfigDidChange(_ notification: Notification) {
-        // Get our managed configuration object out
-        guard let config = notification.userInfo?[
-            Notification.Name.GhosttyConfigChangeKey
-        ] as? Ghostty.Config else { return }
-
-        // If this is an app-level config update then we update some things.
-        if notification.object == nil {
-            // Update our derived config
-            self.derivedConfig = DerivedConfig(config.snapshot)
-
-            // If we have no surfaces in our window (is that possible?) then we update
-            // our window appearance based on the root config. If we have surfaces, we
-            // don't call this because focused surface changes will trigger appearance updates.
-            if surfaceTree.isEmpty {
-                syncAppearance(.init(config.snapshot))
-            }
-
-            return
-        }
-        /// Surface-level config will be updated in
-        /// ``Ghostty/Ghostty/SurfaceView/derivedConfig`` then
-        /// ``TerminalController/focusedSurfaceDidChange(to:)``
+    override func acceptConfiguration(_ config: Ghostty.Config) {
+        super.acceptConfiguration(config)
+        derivedConfig = DerivedConfig(config.snapshot)
+        if surfaceTree.isEmpty { syncAppearance(.init(config.snapshot)) }
     }
 
     /// Update the accessory view of each tab according to the keyboard
@@ -913,11 +895,11 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
     }
 
     static private func closeAllWindowsImmediately(_ ghostty: Ghostty.App) {
-        let undoManager = (NSApp.delegate as? AppDelegate)?.undoManager
-        undoManager?.beginUndoGrouping()
+        let undoManager = ghostty.undoManager
+        undoManager.beginUndoGrouping()
         ghostty.windowRegistry.all.forEach { $0.closeWindowImmediately() }
-        undoManager?.setActionName("Close All Windows")
-        undoManager?.endUndoGrouping()
+        undoManager.setActionName("Close All Windows")
+        undoManager.endUndoGrouping()
     }
 
     // MARK: Undo/Redo
@@ -999,7 +981,6 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         super.windowDidLoad()
         guard let window else { return }
         Self.openControllers[ObjectIdentifier(self)] = self
-        ghostty.windowRegistry.register(self)
 
         // I copy this because we may change the source in the future but also because
         // I regularly audit our codebase for "ghostty.config" access because generally
@@ -1088,7 +1069,7 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
 
         // Set the initial window position. This must happen after the window
         // is fully set up (content view, toolbar, default size) so that
-        // decorations added by subclass awakeFromNib (e.g. toolbar for tabs
+        // decorations added by subclass configuration (e.g. toolbar for tabs
         // style) don't change the frame after the position is restored.
         let originChanged = terminalWindow.setInitialWindowPosition(
             x: derivedConfig.windowPositionX,
@@ -1142,11 +1123,10 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
     override func windowWillClose(_ notification: Notification) {
         defer { Self.openControllers[ObjectIdentifier(self)] = nil }
         appearanceObservation?.cancel()
+        ghostty.windowRegistry.windowWillClose(self, keyWindow: NSApp.keyWindow)
         super.windowWillClose(notification)
         cancelPendingInitialPresentation()
         self.relabelTabs()
-
-        ghostty.windowRegistry.windowWillClose(self, keyWindow: NSApp.keyWindow)
     }
 
     override func windowDidBecomeKey(_ notification: Notification) {

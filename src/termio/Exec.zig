@@ -37,7 +37,8 @@ const TERMIOS_POLL_MS = 200;
 subprocess: Subprocess,
 
 /// Initialize the exec state. This will NOT start it, this only sets
-/// up the internal state necessary to start it later.
+/// up the internal state necessary to start it later. Takes ownership of cfg.env,
+/// including when initialization fails.
 pub fn init(
     alloc: Allocator,
     cfg: Config,
@@ -559,15 +560,13 @@ const Subprocess = struct {
     /// Initialize the subprocess. This will NOT start it, this only sets
     /// up the internal state necessary to start it later.
     pub fn init(gpa: Allocator, cfg: Config) !Subprocess {
+        var env = cfg.env;
+        errdefer env.deinit();
         // We have a lot of maybe-allocations that all share the same lifetime
         // so use an arena so we don't end up in an accounting nightmare.
         var arena = std.heap.ArenaAllocator.init(gpa);
         errdefer arena.deinit();
         const alloc = arena.allocator();
-
-        // Get our env. If a default env isn't provided by the caller
-        // then we get it ourselves.
-        var env = cfg.env;
 
         // If we have a resources dir then set our env var
         if (cfg.resources_dir) |dir| {
@@ -1938,4 +1937,43 @@ test "execCommand: direct command, config freed" {
     try testing.expectEqual(2, result.len);
     try testing.expectEqualStrings(result[0], "foo");
     try testing.expectEqualStrings(result[1], "bar baz");
+}
+
+test "exec initialization owns environment on every allocation failure" {
+    const t = std.testing;
+    var config = try configpkg.Config.default(t.allocator);
+    defer config.deinit();
+    const Case = struct {
+        fn run(alloc: Allocator, cfg: *const configpkg.Config) !void {
+            const environment = prepared: {
+                var env: EnvMap = .init(alloc);
+                errdefer env.deinit();
+                try env.put("CGHOSTTY_ALLOCATION_TEST", "owned by subprocess");
+                break :prepared env;
+            };
+            var exec = try Exec.init(alloc, .{
+                .command = .{ .direct = &.{"/bin/sh"} },
+                .env = environment,
+                .resources_dir = null,
+                .term = "xterm-256color",
+                .rt_pre_exec_info = .init(cfg),
+                .rt_post_fork_info = .init(cfg),
+            });
+            exec.deinit();
+        }
+    };
+    var baseline = t.FailingAllocator.init(t.allocator, .{});
+    try Case.run(baseline.allocator(), &config);
+    try t.expectEqual(baseline.allocated_bytes, baseline.freed_bytes);
+    for (0..baseline.alloc_index) |index| {
+        var failing = t.FailingAllocator.init(t.allocator, .{ .fail_index = index });
+        Case.run(failing.allocator(), &config) catch |err| switch (err) {
+            error.OutOfMemory => {},
+            else => return err,
+        };
+        // Command construction deliberately tolerates OOM by falling back to sh.
+        // Both successful fallback and failed construction must release ownership.
+        try t.expect(failing.has_induced_failure);
+        try t.expectEqual(failing.allocated_bytes, failing.freed_bytes);
+    }
 }

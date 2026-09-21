@@ -210,13 +210,10 @@ fn threadMain_(self: *Thread) !void {
     // Setup our thread QoS
     self.setQosClass();
 
-    // Run our loop start/end callbacks if the renderer cares.
-    const has_loop = @hasDecl(rendererpkg.Renderer, "loopEnter");
-    if (has_loop) try self.renderer.loopEnter(self);
-    defer if (has_loop) self.renderer.loopExit();
+    self.renderer.loopEnter(self);
+    defer self.renderer.loopExit();
 
-    // Run the renderer's thread setup and cleanup callbacks.
-    try self.renderer.threadEnter(self.surface);
+    // Release GPU resources while the render thread is still alive.
     defer self.renderer.threadExit();
 
     // Start the async handlers
@@ -386,10 +383,8 @@ fn drainMailbox(self: *Thread) !void {
             },
 
             .macos_display_id => |v| {
-                if (@hasDecl(rendererpkg.Renderer, "setMacOSDisplayID")) {
-                    try self.renderer.setMacOSDisplayID(v, &self.draw_now);
-                    self.armAnimationTimer();
-                }
+                self.renderer.setMacOSDisplayID(v, &self.draw_now);
+                self.armAnimationTimer();
             },
         }
     }

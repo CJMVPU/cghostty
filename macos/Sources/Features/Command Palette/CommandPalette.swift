@@ -220,6 +220,7 @@ private struct CommandPaletteQuery: View {
             .accessibilityHidden(true)
 
             TextField("Execute a command…", text: $query)
+                .autocorrectionDisabled()
                 .padding()
                 .font(.system(size: 20, weight: .light))
                 .frame(height: 48)

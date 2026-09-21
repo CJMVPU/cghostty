@@ -1,3 +1,53 @@
+## 0.1.9 版本与更新说明（2026-09-21，未发布）
+
+- 项目版本从 0.1.8 提升至 **0.1.9**；Xcode 的三个应用构建配置同步为 0.1.9，构建号从 8 提升至 **9**。测试目标的独立版本号保持原值。
+- 根目录 `RELEASE_NOTES.md` 已按本轮窗口/会话管理、原生 UI 与输入、Metal 与桥接构建精简整理，并列出已删除的四个无效 macOS 配置动作。0.1.8 的既有光标更新说明保留在 Git 历史中，不重复列为 0.1.9 的新增改动。
+- 三个应用构建配置的版本/构建号与更新说明标题一致；Xcode 工程格式、依赖版本记录、Swift 6 配置及 diff 检查通过。
+- 本轮仅更新版本元数据和发布说明；功能测试与构建证据沿用下方此前已完成的验证，不描述为 0.1.9 新一轮验收。现有本地应用仍为 0.1.8 / 构建号 8，未重新构建、制作安装包、提交、打标签或发布。
+
+## 桌面线程优先级警告修复（2026-09-21，未发布）
+
+- 从原始 xcresult 导出系统诊断并解析 AppKit 堆栈，确认三条警告均等待 `_getDataDetectorsScanner`：命令面板一条经 `NSTextCheckingController` 在退出文本编辑时执行，搜索两条经辅助功能枚举动态 Services 菜单执行。证据 `/tmp/cghostty-qos-original-stacks.txt`；原始系统记录为 `/tmp/cghostty-qos-system.json` 和 `/tmp/cghostty-qos-palette-system.json`。
+- BaseTerminalController 监听 AppKit 的开始编辑事件，在系统重新应用字段设置后，为所属窗口的原生字段编辑器关闭自动文本检查、数据识别和文字替换。只处理本窗口的 field editor；普通与快捷终端共用该策略，不更改终端 NSTextInputClient 的组合文本及按键处理顺序。SwiftUI 搜索与命令输入框同时显式关闭自动纠错。
+- 桌面输入测试使用隔离配置，显式提供原生文本框可用的 Cmd+A / Cmd+V。默认终端的 performable 粘贴绑定不进入菜单反向映射，因此不能直接假定它是文本框菜单快捷键。测试改用键盘全选与粘贴，避免为编辑输入而枚举动态 Services 菜单；粘贴后等待字段值确实收到预期文本再恢复剪贴板。保留全部原有功能断言，以及命令面板从菜单打开的验收。
+- 新增真实原生字段回归：输入带引号、双连字符、网址的原始文字，在两个字段间切换并提交，确认文本原样保留、编辑器复用后不重新启用自动检查。所属状态测试组 **20/20 通过、0 运行时警告**：`/tmp/cghostty-qos-field-observer2.xcresult`。
+- 第一轮桌面专项 **5/5 通过、0 运行时警告**：`/tmp/cghostty-qos-bindings-GhosttyCommandPaletteTests.xcresult`（2）与 `/tmp/cghostty-qos-bindings-GhosttyObservationUITests.xcresult`（3）；对应 `.summary.json` 保存正式统计。线程性能检查在测试计划中保持开启，未屏蔽日志或停用系统 Services 功能。
+- 最终桌面复验再次 **5/5 通过、0 运行时警告**：`/tmp/cghostty-qos-final-GhosttyCommandPaletteTests.xcresult`（2）与 `/tmp/cghostty-qos-final-GhosttyObservationUITests.xcresult`（3），对应 `.summary.json` 保存统计。两轮是同一组 5 项测试的重复验证，不计为 10 项不同测试。
+- 完整原生回归 **293 通过、1 项既有基准跳过、0 失败、0 运行时警告**：`/tmp/cghostty-qos-native-final.xcresult`，摘要 `/tmp/cghostty-qos-native-final.summary.json`。严格 SwiftLint、Swift 6、依赖版本及 diff 检查通过。
+- ReleaseFast 核心与 ReleaseLocal 应用重建成功：`/tmp/cghostty-qos-release.log`，无 `warning:` / `error:` 构建诊断。平台范围、arm64、资源、签名及原生桥接边界检查通过：`/tmp/cghostty-qos-release-scope.log`。应用为 `macos/build/ReleaseLocal/cghostty.app`，Info.plist 确认 **0.1.8 / 构建号 8**；本轮未提交、打包发布或替换已安装应用。
+
+## 原生边界与桥接构建精简（2026-09-21，未发布）
+
+- 50 个可配置菜单动作在菜单创建时登记，快捷键重载遍历同一份对应关系；移除 AppDelegate 中独立维护的逐项同步列表及仅为同步而保存的菜单引用。保留原生响应链和系统全屏快捷键。
+- 内部核心直接输出 `zig-out/lib/libghostty-internal.a`，Xcode 通过 `include/module.modulemap` 导入 GhosttyKit。移除两个 XCFramework 构建文件及 emit-xcframework 选项；不再先删除再重新打包框架。旧本地产物移至 `/tmp/cghostty-previous-GhosttyKit-20260921.xcframework` 后继续验证，确保构建没有依赖旧产物。
+- 删除 5 个无调用的 C 导出：ghostty_translate、ghostty_app_open_config、ghostty_surface_refresh、ghostty_surface_draw、ghostty_inspector_metal_shutdown；同时删除专属的刷新/直接绘制转发。仍保留实际使用的翻译、配置动作、渲染调度、Inspector 释放和核心句柄所有权约束。
+- 窗口恢复改为 TerminalLayout/SurfaceSnapshot 值数据。运行中的 SplitTree 与 SurfaceView 不再负责 Codable；解码不依赖全局 App，也不创建终端。窗口控制器显式传入所属 App 和基础配置创建会话，快捷终端恢复时正确继承专用环境变量。保持原有布局 wire format、普通窗口 5–7 与快捷终端 1 的归档版本。
+- 键盘事件、组合文本和 NSTextInputClient 集中到 SurfaceView+Input，保留事件处理顺序。SurfaceView_AppKit 从本轮开始时的约 2100 行收拢至 1464 行；输入处理是职责迁移，不宣称移除这些必需行为。
+- 核心会话/IO/渲染器定向测试 **168/168 通过，89/89 构建步骤**：`/tmp/cghostty-boundaries-core-tests.log`。
+- 完整原生测试 **292 通过、1 项既有基准跳过、0 失败**：`/tmp/cghostty-boundaries-native7.xcresult`，正式统计为同名前缀 `.summary.json`。覆盖旧恢复格式、真实 NSSecureCoding 归档往返、显式 App 归属、恢复布局/缩放/标题、快终端环境、快照不保留原生视图以及既有键盘/组合文本桥接。
+- 桌面首轮出现后台激活超时；第二轮配置与快捷键流程通过，但外观截图未通过。失败录像确认被“ChatGPT is Using Your Mac”桌面遮罩覆盖，不能作为窗口外观验收；记录 `/tmp/cghostty-boundaries-config-ui2.xcresult`，取证画面 `/tmp/cghostty-ui-frame-12.png`。
+- 用户解除桌面遮罩后，最终桌面验收 **9/9 通过、0 失败**：配置重载/窗口外观 2、命令面板 2、搜索/分屏/标签页状态 3、会话关闭/撤销 2。结果为 `/tmp/cghostty-boundaries-unlocked-GhosttyConfigSnapshotUITests.xcresult`、`/tmp/cghostty-boundaries-unlocked-GhosttyCommandPaletteTests.xcresult`、`/tmp/cghostty-boundaries-observation-final.xcresult`、`/tmp/cghostty-boundaries-unlocked-GhosttySurfaceLifecycleUITests.xcresult`，各自的 `.summary.json` 保存正式统计。
+- 解锁后的搜索首轮被 macOS InputSource 浮窗干扰：XCTest 点击已聚焦的空输入框时进入系统对话框处理，浮窗消失后快照查找失败。移除循环内多余的重复点击，只在开始时聚焦搜索框；保留两轮匹配计数、前后跳转、无匹配、清空、再次搜索和带搜索关闭分屏的全部断言，整组复验 3/3 通过。失败记录保留在 `/tmp/cghostty-boundaries-unlocked-GhosttyObservationUITests.xcresult`。本次未修改产品输入处理逻辑。
+- 当时的桌面结果记录 3 条 `[Internal]` 线程优先级等待警告（命令面板 1、搜索/分屏 2），没有测试失败；后续定位与修复见上方“桌面线程优先级警告修复”记录。指定桌面流程通过不等于所有输入法、显示器组合或 GPU 性能验收。
+- ReleaseFast 核心与 ReleaseLocal 应用构建成功，旧 XCFramework 缺席时直接链接通过：`/tmp/cghostty-boundaries-release.log`，无 `warning:` / `error:` 构建诊断。arm64、资源、签名及 130 个原生 UI/功能文件桥接边界检查通过：`/tmp/cghostty-boundaries-release-scope.log`。严格 SwiftLint、Zig 格式、Swift 6、依赖版本及 diff 检查通过。
+- 应用位于 `macos/build/ReleaseLocal/cghostty.app`，保持 **0.1.8 / 构建号 8**。桌面复验完成后再次通过严格 SwiftLint、范围、Swift 6、版本及 diff 检查；本次后续修改仅涉及测试点击和文档，沿用此前已完成的核心/原生测试与 Release 构建结果。未替换已安装应用，未制作新 ZIP、提交、标签或发布。
+
+## 应用上下文、核心会话与原生 UI 统一（2026-09-21，未发布）
+
+- 应用拥有窗口注册表、配置投递和撤销管理器；普通窗口与快捷终端使用同一归属查询。注册表只持有弱引用，关闭后立即移除，跨窗口移动仍保留原始 Surface 和终端会话。移除重复的 GhosttyDelegate 中转。
+- Metal 渲染器由泛型工厂改为具体实现，移除空的能力分支和无消费者的帧导出队列；保留实际渲染、光标动画、帧调度和内部 GhosttyKit 桥接。
+- 新增 IOSession，集中管理终端状态、子进程、IO 循环与线程。构造和启动分离、停止可重复调用；环境变量所有权在失败路径也只释放一次。Surface 负责搜索、IO、渲染和共享状态之间的停止/释放顺序。
+- 分屏移动、移除、调整、缩放、焦点和逆向撤销统一到 BaseTerminalController+Splits。测试发现并修复撤销条目析构重入 UndoManager 的崩溃；跨窗口移动整组撤销，原始核心会话保持不变。
+- 内部通知改为有类型的方法调用，展示状态统一由 Observation 持有，移除剩余 Combine 订阅。NotificationCenter 仅用于系统事件。搜索焦点显式记录当前视图归属，旧视图消失不会清除新视图的回调；滚动条和检查器保持当前原生视图的弱引用。
+- 删除全部 6 个 XIB 和 IBOutlet 连接；菜单、4 种普通终端窗口和快捷终端均显式创建。保留 AppKit 原生标签页、菜单响应链、配置快捷键和窗口恢复。原生视图的辅助功能/文本缓存与用户通知拆为独立扩展，输入法与输入事件处理顺序保持原样。
+- Zig 的 Session、termio、renderer 定向验证 **168/168 通过，89/89 构建步骤**：`/tmp/cghostty-architecture-core-tests-final.log`。覆盖 IO 线程启动失败、重复停止、环境分配失败回收以及既有渲染/搜索会话行为。
+- 最终完整原生测试 **286 通过、1 项既有基准跳过、0 失败**：`/tmp/cghostty-architecture-native-final2.xcresult`，摘要为同名前缀的 `.summary.json`。包含应用隔离、4 种窗口样式、配置投递、跨窗口撤销/重做和搜索焦点替换。
+- 桌面验证共 **25 项通过、0 失败**：会话关闭/撤销 2、窗口注册/层叠 2、原生标签栏/全屏/移动/合并 5、配置重载 2、主题/快捷终端 9、搜索/分屏/标签会话 3、命令面板 2。结果分别为 `/tmp/cghostty-architecture-GhosttySurfaceLifecycleUITests.xcresult`、`...-GhosttyWindowRegistryUITests.xcresult`、`...-GhosttyTitlebarTabsUITests.xcresult`、`...-GhosttyConfigSnapshotUITests.xcresult`、`...-verified-GhosttyThemeTests.xcresult`、`...-observation-final.xcresult`、`...-palette-verified.xcresult`；对应 `.summary.json` 保存准确统计。
+- 以上为指定桌面流程的自动化验收，不等同于所有输入法、显示器组合或 GPU 性能验收。
+- 桌面测试修复了两个既有验收缺陷：主题测试在没有窗口时原先可能跳过断言；命令面板测试继承极窄窗口尺寸且文字输入受输入法影响。改为隔离配置、观察窗口和颜色就绪、明确窗口内点击、剪贴板传入并核对文字；没有放宽产品行为断言。剪贴板帮助方法复用现有搜索测试逻辑，并恢复原有剪贴板内容。
+- ReleaseFast 核心和 ReleaseLocal 应用完整重建成功：`/tmp/cghostty-architecture-release.log`，无 `warning:` / `error:` 构建诊断。arm64、资源、签名、平台范围及 128 个原生 UI/功能文件的桥接边界检查通过：`/tmp/cghostty-architecture-release-scope.log`。Zig 格式、严格 SwiftLint、Swift 6、依赖版本与 diff 检查通过。
+- 本地应用为 `macos/build/ReleaseLocal/cghostty.app`，CLI 与 Info.plist 均确认 **0.1.8 / 构建号 8**。本轮沿用工作区既有版本，没有新建安装包、替换已安装应用、提交、标签或发布。下方旧记录按各自时间保留。
+
 ## 0.1.8 版本与更新说明（2026-09-21，待用户提交）
 
 - 项目版本从 0.1.7 提升至 **0.1.8**；三个应用构建配置的版本同步为 0.1.8，构建号提升至 **8**。测试目标的独立版本号保持原值。

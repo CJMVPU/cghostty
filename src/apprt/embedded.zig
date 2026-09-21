@@ -929,20 +929,6 @@ pub const Surface = struct {
         return self.cursor_pos;
     }
 
-    pub fn refresh(self: *Surface) void {
-        self.core_surface.refreshCallback() catch |err| {
-            log.err("error in refresh callback err={}", .{err});
-            return;
-        };
-    }
-
-    pub fn draw(self: *Surface) void {
-        self.core_surface.draw() catch |err| {
-            log.err("error in draw err={}", .{err});
-            return;
-        };
-    }
-
     pub fn updateContentScale(self: *Surface, x: f64, y: f64) void {
         // We are an embedded API so the caller can send us all sorts of
         // garbage. We want to make sure that the float values are valid
@@ -1682,14 +1668,6 @@ pub const CAPI = struct {
         };
     }
 
-    /// Open the configuration.
-    export fn ghostty_app_open_config(v: *App) void {
-        _ = v.performAction(.app, .open_config, .new_window) catch |err| {
-            log.err("error reloading config err={}", .{err});
-            return;
-        };
-    }
-
     /// Update the configuration to the provided config. This will propagate
     /// to all surfaces as well.
     export fn ghostty_app_update_config(
@@ -1804,7 +1782,7 @@ pub const CAPI = struct {
         defer core_surface.render.state.mutex.unlock(global.io());
 
         // If we don't have a selection, do nothing.
-        const core_sel = core_surface.io.terminal.screens.active.selection orelse return false;
+        const core_sel = core_surface.io.termio.terminal.screens.active.selection orelse return false;
 
         // Read the text from the selection.
         return readTextLocked(surface, core_sel, result);
@@ -1867,17 +1845,6 @@ pub const CAPI = struct {
 
     export fn ghostty_surface_free_text(_: *Surface, ptr: *Text) void {
         ptr.deinit();
-    }
-
-    /// Tell the surface that it needs to schedule a render
-    export fn ghostty_surface_refresh(surface: *Surface) void {
-        surface.refresh();
-    }
-
-    /// Tell the surface that it needs to schedule a render
-    /// call as soon as possible (NOW if possible).
-    export fn ghostty_surface_draw(surface: *Surface) void {
-        surface.draw();
     }
 
     /// Update the size of a surface. This will trigger resize notifications
@@ -2481,7 +2448,7 @@ pub const CAPI = struct {
                     if (comptime std.debug.runtime_safety) unreachable;
                     return false;
                 };
-                break :sel surface.io.terminal.screens.active.selectWord(
+                break :sel surface.io.termio.terminal.screens.active.selectWord(
                     pin,
                     surface.config.selection_word_chars,
                 ) orelse return false;
@@ -2507,10 +2474,6 @@ pub const CAPI = struct {
                 log.err("error rendering inspector err={}", .{err});
                 return;
             };
-        }
-
-        export fn ghostty_inspector_metal_shutdown(ptr: *Inspector) void {
-            ptr.shutdownMetal();
         }
     };
 };

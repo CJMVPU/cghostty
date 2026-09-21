@@ -41,12 +41,8 @@ class TitlebarTabsTahoeTerminalWindow: TransparentTitlebarTerminalWindow, NSTool
         }
     }
 
-    nonisolated override func awakeFromNib() {
-        super.awakeFromNib()
-        MainActor.assumeIsolated { configureAfterLoading() }
-    }
-
-    private func configureAfterLoading() {
+    override func configure(for app: Ghostty.App) {
+        super.configure(for: app)
 
         // We must hide the title since we're going to be moving tabs into
         // the titlebar which have their own title.

@@ -1,16 +1,17 @@
 import AppKit
-import Combine
 import SwiftUI
 import Observation
 
 /// The base class for all standalone, "normal" terminal windows. This sets the basic
 /// style and configuration of the window based on the app configuration.
 class TerminalWindow: NSWindow {
-    /// Posted when a terminal window awakes from nib.
-    static let terminalDidAwake = Notification.Name("TerminalWindowDidAwake")
+    required override init(contentRect: NSRect, styleMask: NSWindow.StyleMask, backing: NSWindow.BackingStoreType, defer flag: Bool) {
+        super.init(contentRect: contentRect, styleMask: styleMask, backing: backing, defer: flag)
+    }
 
-    /// Posted when a terminal window will close
-    static let terminalWillCloseNotification = Notification.Name("TerminalWindowWillClose")
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
 
     /// This is the key in UserDefaults to use for the default `level` value. This is
     /// used by the manual float on top menu item feature.
@@ -71,14 +72,7 @@ class TerminalWindow: NSWindow {
 
     // MARK: NSWindow Overrides
 
-    nonisolated override func awakeFromNib() {
-        MainActor.assumeIsolated { configureAfterLoading() }
-    }
-
-    private func configureAfterLoading() {
-        // Notify that this terminal window has loaded
-        NotificationCenter.default.post(name: Self.terminalDidAwake, object: self)
-
+    func configure(for app: Ghostty.App) {
         // This is fragile, but there doesn't seem to be an official API for customizing
         // native tab bar menus.
         tabMenuObserver = NotificationCenter.default.addObserver(
@@ -101,8 +95,7 @@ class TerminalWindow: NSWindow {
         }
 
         // All new windows are based on the app config at the time of creation.
-        guard let appDelegate = NSApp.delegate as? AppDelegate else { return }
-        let config = appDelegate.ghostty.config
+        let config = app.config
 
         // Setup our initial config
         derivedConfig = .init(config.snapshot)
@@ -119,7 +112,7 @@ class TerminalWindow: NSWindow {
         if !config.windowDecorations { styleMask.remove(.titled) }
 
         // NOTE: setInitialWindowPosition is NOT called here because subclass
-        // awakeFromNib may add decorations (e.g. toolbar for tabs style) that
+        // configure(for:) may add decorations (e.g. toolbar for tabs style) that
         // change the frame. It is called from TerminalController.windowDidLoad
         // after the window is fully set up.
 
@@ -176,7 +169,6 @@ class TerminalWindow: NSWindow {
 
     override func close() {
         tabTitleEditor.finishEditing(commit: true)
-        NotificationCenter.default.post(name: Self.terminalWillCloseNotification, object: self)
         super.close()
     }
 
@@ -403,7 +395,7 @@ class TerminalWindow: NSWindow {
     }
 
     // Cancellables for the frame change of the text fields in the titlebar.
-    private var titlebarTextFieldFrameCancellables = Set<AnyCancellable>()
+    private var titlebarTextFieldFrameObservers: [NSObjectProtocol] = []
 
     // Return a styled representation of our title property.
     var attributedTitle: NSAttributedString? {
@@ -448,7 +440,8 @@ class TerminalWindow: NSWindow {
             }
         }
 
-        titlebarTextFieldFrameCancellables.removeAll()
+        titlebarTextFieldFrameObservers.forEach { NotificationCenter.default.removeObserver($0) }
+        titlebarTextFieldFrameObservers.removeAll()
 
         // macOS 15 doesn't seem to need to adjust the frame.
         //
@@ -475,13 +468,14 @@ class TerminalWindow: NSWindow {
 
         titlebarTextFields.forEach { field in
             field.postsFrameChangedNotifications = true
-            NotificationCenter.default
-                .publisher(for: NSView.frameDidChangeNotification, object: field)
-                .compactMap { $0.object as? NSTextField }
-                .sink { [weak self] in
-                    self?.setWindowTitleFrameSize($0)
+            titlebarTextFieldFrameObservers.append(NotificationCenter.default.addObserver(
+                forName: NSView.frameDidChangeNotification, object: field, queue: .main
+            ) { [weak self, weak field] _ in
+                MainActor.assumeIsolated {
+                    guard let field else { return }
+                    self?.setWindowTitleFrameSize(field)
                 }
-                .store(in: &titlebarTextFieldFrameCancellables)
+            })
         }
     }
 
@@ -528,8 +522,8 @@ class TerminalWindow: NSWindow {
             backgroundColor = .white.withAlphaComponent(0.001)
 
             // We don't need to set blur when using glass
-            if !surfaceConfig.backgroundBlur.isGlassStyle, let appDelegate = NSApp.delegate as? AppDelegate {
-                appDelegate.ghostty.applyBackgroundBlur(to: self)
+            if !surfaceConfig.backgroundBlur.isGlassStyle {
+                terminalController?.ghostty.applyBackgroundBlur(to: self)
             }
         } else {
             isOpaque = true
@@ -608,6 +602,7 @@ class TerminalWindow: NSWindow {
     }
 
     isolated deinit {
+        titlebarTextFieldFrameObservers.forEach { NotificationCenter.default.removeObserver($0) }
         if let observer = tabMenuObserver {
             NotificationCenter.default.removeObserver(observer)
         }

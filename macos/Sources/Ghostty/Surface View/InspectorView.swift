@@ -18,9 +18,6 @@ extension Ghostty {
         @State private var split: CGFloat = 0.5
 
         var body: some View {
-            let center = NotificationCenter.default
-            let pubInspector = center.publisher(for: Notification.didControlInspector, object: surfaceView)
-
             ZStack {
                 if !surfaceView.inspectorVisible {
                     SurfaceWrapper(surfaceView: surfaceView, isSplit: isSplit)
@@ -37,7 +34,6 @@ extension Ghostty {
                     })
                 }
             }
-            .onReceive(pubInspector) { onControlInspector($0) }
             .onChange(of: surfaceView.inspectorVisible) { _, inspectorVisible in
                 // When we show the inspector, we want to focus on the inspector.
                 // When we hide the inspector, we want to move focus back to the surface.
@@ -53,23 +49,6 @@ extension Ghostty {
             }
         }
 
-        private func onControlInspector(_ notification: SwiftUI.Notification) {
-            // Determine our mode
-            guard let modeAny = notification.userInfo?["mode"] else { return }
-            guard let mode = modeAny as? Ghostty.Inspector.Visibility else { return }
-
-            switch mode {
-            case .toggle:
-                surfaceView.inspectorVisible = !surfaceView.inspectorVisible
-
-            case .show:
-                surfaceView.inspectorVisible = true
-
-            case .hide:
-                surfaceView.inspectorVisible = false
-
-            }
-        }
     }
 
     struct InspectorViewRepresentable: NSViewRepresentable {
@@ -92,7 +71,11 @@ extension Ghostty {
         let commandQueue: MTLCommandQueue
 
         var surfaceView: SurfaceView? {
-            didSet { surfaceViewDidChange() }
+            didSet {
+                if oldValue?.inspectorView === self { oldValue?.inspectorView = nil }
+                surfaceView?.inspectorView = self
+                surfaceViewDidChange()
+            }
         }
 
         private var inspector: Ghostty.Inspector? {

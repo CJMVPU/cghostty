@@ -20,12 +20,8 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
 
     // MARK: NSWindow
 
-    nonisolated override func awakeFromNib() {
-        super.awakeFromNib()
-        MainActor.assumeIsolated { configureAfterLoading() }
-    }
-
-    private func configureAfterLoading() {
+    override func configure(for app: Ghostty.App) {
+        super.configure(for: app)
 
         // Setup all the KVO we will use, see the docs for the respective functions
         // to learn why we need KVO.

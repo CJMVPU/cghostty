@@ -14,7 +14,6 @@ pub const Presentation = @import("renderer/Presentation.zig");
 pub const CursorMotion = @import("renderer/CursorMotion.zig");
 pub const SmoothCursor = @import("renderer/SmoothCursor.zig");
 pub const CursorTrail = @import("renderer/CursorTrail.zig");
-pub const GenericRenderer = @import("renderer/generic.zig").Renderer;
 pub const Metal = @import("renderer/Metal.zig");
 pub const Options = @import("renderer/Options.zig");
 pub const Overlay = @import("renderer/Overlay.zig");
@@ -33,7 +32,7 @@ pub const cursorNeedsBlink = cursor.needsBlink;
 pub const lib = @import("lib/main.zig");
 
 /// The native Metal renderer.
-pub const Renderer = GenericRenderer(Metal);
+pub const Renderer = @import("renderer/Renderer.zig");
 
 /// Renderer health reported through the internal C bridge.
 pub const Health = enum(c_int) {

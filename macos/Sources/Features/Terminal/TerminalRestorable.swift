@@ -65,7 +65,7 @@ final class TerminalRestorableState: @MainActor TerminalRestorable {
     var focusedSurface: String? {
         internalState.focusedSurface
     }
-    var surfaceTree: SplitTree<Ghostty.SurfaceView> {
+    var surfaceTree: TerminalLayout<SurfaceSnapshot> {
         internalState.surfaceTree
     }
     var effectiveFullscreenMode: FullscreenMode? {
@@ -83,7 +83,7 @@ final class TerminalRestorableState: @MainActor TerminalRestorable {
     /// Since we can't really change the type of `TerminalRestorableState`
     /// due to `CodableBridge<TerminalRestorableState>` supporting secure coding,
     /// we use an internal type to perform migration and tests
-    private let internalState: InternalState<Ghostty.SurfaceView>
+    let internalState: InternalState<SurfaceSnapshot>
 
     init(from controller: TerminalController) {
         internalState = .init(from: controller)
@@ -97,7 +97,7 @@ final class TerminalRestorableState: @MainActor TerminalRestorable {
     ///
     /// - Important: If you intend to add more things, go to `InternalState`.
     init(from decoder: any Decoder) throws {
-        self.internalState = try InternalState<Ghostty.SurfaceView>(from: decoder)
+        self.internalState = try InternalState<SurfaceSnapshot>(from: decoder)
     }
 
     /// This is just wrapper around internalState
@@ -129,9 +129,9 @@ class TerminalWindowRestoration: NSObject, NSWindowRestoration {
             return
         }
 
-        // The app delegate is definitely setup by now. If it isn't our AppDelegate
-        // then something is royally fucked up but protect against it anyhow.
-        guard let appDelegate = NSApplication.shared.delegate as? AppDelegate else {
+        // Resolve the owning app at this system entry point, before materialization.
+        guard let appDelegate = NSApplication.shared.delegate as? AppDelegate,
+              appDelegate.ghostty.isReady else {
             completionHandler(nil, TerminalRestoreError.delegateInvalid)
             return
         }
@@ -152,13 +152,10 @@ class TerminalWindowRestoration: NSObject, NSWindowRestoration {
             return
         }
 
-        // The window creation has to go through our terminalManager so that it
-        // can be found for events from libghostty. This uses the low-level
-        // createWindow so that AppKit can place the window wherever it should
-        // be.
+        // Create the saved sessions in this app; AppKit restores window placement.
         let c = TerminalController.init(
             appDelegate.ghostty,
-            withSurfaceTree: state.surfaceTree)
+            withSurfaceTree: state.surfaceTree.restore { $0.makeView(in: appDelegate.ghostty) })
         guard let window = c.window else {
             completionHandler(nil, TerminalRestoreError.windowDidNotLoad)
             return

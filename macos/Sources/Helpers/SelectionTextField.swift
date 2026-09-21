@@ -38,5 +38,6 @@ struct SelectionTextField: View {
                 }
             )
         )
+        .autocorrectionDisabled()
     }
 }

@@ -65,6 +65,34 @@ import Testing
         withExtendedLifetime(app) {}
     }
 
+    @Test func terminalFieldEditorCommitsLiteralTextAcrossFields() throws {
+        let app = Ghostty.App(configPath: "/dev/null")
+        let controller = BaseTerminalController(app, surfaceTree: .init())
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 100),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        controller.window = window
+        window.delegate = controller
+        defer { window.close() }
+        let first = NSTextField(frame: NSRect(x: 0, y: 50, width: 250, height: 24))
+        let second = NSTextField(frame: NSRect(x: 0, y: 10, width: 250, height: 24))
+        window.contentView?.addSubview(first)
+        window.contentView?.addSubview(second)
+        #expect(window.makeFirstResponder(first))
+        let editor = try #require(first.currentEditor() as? NSTextView)
+        let literal = "\"teh\" -- https://example.com"
+        editor.insertText(literal, replacementRange: NSRange(location: NSNotFound, length: 0))
+        #expect(editor.enabledTextCheckingTypes == 0)
+        #expect(window.makeFirstResponder(second))
+        #expect(first.stringValue == literal)
+        #expect(second.currentEditor() === editor)
+        editor.insertText(literal, replacementRange: NSRange(location: NSNotFound, length: 0))
+        #expect(editor.enabledTextCheckingTypes == 0)
+        #expect(window.makeFirstResponder(nil))
+        #expect(second.stringValue == literal)
+        withExtendedLifetime(controller) {}
+    }
+
     @Test func observationTasksDoNotRetainWindowController() async throws {
         let app = Ghostty.App(configPath: "/dev/null")
         let surface = Ghostty.SurfaceView(app, baseConfig: isolatedSurfaceConfiguration)
@@ -118,7 +146,8 @@ import Testing
     }
 
     @Test func configurationErrorsDoNotLoadWindowWhenEmpty() {
-        let controller = ConfigurationErrorsController()
+        let app = Ghostty.App(configPath: "/dev/null")
+        let controller = ConfigurationErrorsController(app: app)
         controller.updateErrors([])
         #expect(!controller.isWindowLoaded)
         controller.updateErrors(["Invalid test setting"])

@@ -22,7 +22,6 @@ emit_terminfo: bool = false,
 emit_termcap: bool = false,
 emit_test_exe: bool = false,
 emit_themes: bool = true,
-emit_xcframework: bool = true,
 emit_unicode_table_gen: bool = false,
 
 pub fn init(b: *std.Build, version: []const u8) !Config {
@@ -49,7 +48,7 @@ pub fn init(b: *std.Build, version: []const u8) !Config {
         .simd = b.option(bool, "simd", "Enable SIMD acceleration") orelse true,
         .i18n = b.option(bool, "i18n", "Build gettext translations") orelse true,
     };
-    inline for (.{ "bench", "docs", "helpgen", "macos-app", "terminfo", "termcap", "test-exe", "themes", "xcframework", "unicode-table-gen" }) |name| {
+    inline for (.{ "bench", "docs", "helpgen", "macos-app", "terminfo", "termcap", "test-exe", "themes", "unicode-table-gen" }) |name| {
         const field = comptime blk: {
             var result = ("emit_" ++ name).*;
             for (&result) |*c| {

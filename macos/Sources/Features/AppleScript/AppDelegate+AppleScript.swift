@@ -324,12 +324,13 @@ extension NSApplication {
 
     /// All terminal controllers in undefined order.
     fileprivate var allTerminalControllers: [BaseTerminalController] {
-        NSApp.windows.compactMap { $0.windowController as? BaseTerminalController }
+        (delegate as? AppDelegate)?.ghostty.windowRegistry.windowControllers ?? []
     }
 
     /// All terminal controllers in front-to-back order.
     fileprivate var orderedTerminalControllers: [BaseTerminalController] {
         NSApp.orderedWindows.compactMap { $0.windowController as? BaseTerminalController }
+            .filter { $0.ghostty === (delegate as? AppDelegate)?.ghostty }
     }
 
     /// Identifies the primary tab controller for a window's tab group.

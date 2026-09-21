@@ -7,7 +7,7 @@ struct QuickTerminalRestorableState: @MainActor TerminalRestorable {
         internalState.focusedSurface
     }
 
-    var surfaceTree: SplitTree<Ghostty.SurfaceView> {
+    var surfaceTree: TerminalLayout<SurfaceSnapshot> {
         internalState.surfaceTree
     }
 
@@ -15,7 +15,7 @@ struct QuickTerminalRestorableState: @MainActor TerminalRestorable {
         internalState.screenStateEntries
     }
 
-    private let internalState: InternalState<Ghostty.SurfaceView>
+    let internalState: InternalState<SurfaceSnapshot>
 
     init(from controller: QuickTerminalController) {
         controller.saveScreenState(exitFullscreen: true)
@@ -39,19 +39,19 @@ extension QuickTerminalRestorableState {
     /// Since we can't really change the type of `QuickTerminalRestorableState`
     /// due to `CodableBridge<QuickTerminalRestorableState>` supporting secure coding,
     /// we use an internal type to perform migration and tests
-    struct InternalState<ViewType: NSView & Codable & Identifiable>: Codable {
+    struct InternalState<Leaf: Codable>: Codable {
         // MARK: - Version 1 (1.3.0)
         let focusedSurface: String?
-        let surfaceTree: SplitTree<ViewType>
+        let surfaceTree: TerminalLayout<Leaf>
         let screenStateEntries: QuickTerminalScreenStateCache.Entries
     }
 }
 
-extension QuickTerminalRestorableState.InternalState where ViewType == Ghostty.SurfaceView {
+extension QuickTerminalRestorableState.InternalState where Leaf == SurfaceSnapshot {
     init(from controller: QuickTerminalController) {
         self.init(
             focusedSurface: controller.focusedSurface?.id.uuidString,
-            surfaceTree: controller.surfaceTree,
+            surfaceTree: TerminalLayout(controller.surfaceTree, snapshot: SurfaceSnapshot.init),
             screenStateEntries: controller.screenStateCache.stateByDisplay,
         )
     }

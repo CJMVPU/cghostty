@@ -3,26 +3,13 @@ import AppKit
 class HiddenTitlebarTerminalWindow: TerminalWindow {
     // No titlebar, we don't support accessories.
 
-    nonisolated override func awakeFromNib() {
-        super.awakeFromNib()
-        MainActor.assumeIsolated { configureAfterLoading() }
-    }
-
-    private func configureAfterLoading() {
+    override func configure(for app: Ghostty.App) {
+        super.configure(for: app)
 
         // Setup our initial style
         reapplyHiddenStyle()
 
         // Notifications
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(fullscreenDidExit(_:)),
-            name: .fullscreenDidExit,
-            object: nil)
-    }
-
-    isolated deinit {
-        NotificationCenter.default.removeObserver(self)
     }
 
     private static let hiddenStyleMask: NSWindow.StyleMask = [
@@ -108,11 +95,7 @@ class HiddenTitlebarTerminalWindow: TerminalWindow {
 
     // MARK: Notifications
 
-    @objc private func fullscreenDidExit(_ notification: Notification) {
-        // Make sure they're talking about our window
-        guard let fullscreen = notification.object as? FullscreenBase else { return }
-        guard fullscreen.window == self else { return }
-
+    func fullscreenDidChange() {
         // On exit we need to reapply the style because macOS breaks it usually.
         // This is safe to call repeatedly so if its not broken its still safe.
         reapplyHiddenStyle()

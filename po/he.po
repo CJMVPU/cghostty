@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: com.cjmvpu.cghostty\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-19 22:55+0800\n"
+"POT-Creation-Date: 2026-09-21 16:28+0800\n"
 "PO-Revision-Date: 2026-08-13 19:14+0300\n"
 "Last-Translator: Sl (Shahaf Levi), Sl's Repository Ltd "
 "<ghostty@slsrepo.com>\n"
@@ -452,345 +452,321 @@ msgid "Move the current tab to a new window."
 msgstr "העבר/י את הכרטיסייה הנוכחית לחלון חדש."
 
 #: src/input/command.zig:452
-msgid "Toggle Tab Overview"
-msgstr "הצגה/הסתרה של סקירת כרטיסיות"
-
-#: src/input/command.zig:453
-msgid "Toggle the tab overview."
-msgstr "הצג/י או הסתר/י את סקירת הכרטיסיות."
-
-#: src/input/command.zig:458
 msgid "Change Terminal Title…"
 msgstr "שנה/י את כותרת המסוף…"
 
-#: src/input/command.zig:459
+#: src/input/command.zig:453
 msgid "Prompt for a new title for the current terminal."
 msgstr "הצג/י בקשה לכותרת חדשה עבור המסוף הנוכחי."
 
-#: src/input/command.zig:464
+#: src/input/command.zig:458
 msgid "Change Tab Title…"
 msgstr "שינוי כותרת הכרטיסייה…"
 
-#: src/input/command.zig:465
+#: src/input/command.zig:459
 msgid "Prompt for a new title for the current tab."
 msgstr "הצג/י בקשה לכותרת חדשה עבור הכרטיסייה הנוכחית."
 
-#: src/input/command.zig:477
+#: src/input/command.zig:465
 msgid "Split Left"
 msgstr "פיצול שמאלה"
 
-#: src/input/command.zig:478
+#: src/input/command.zig:466
 msgid "Split the terminal to the left."
 msgstr "פצל/י את המסוף שמאלה."
 
-#: src/input/command.zig:482
+#: src/input/command.zig:470
 msgid "Split Right"
 msgstr "פיצול ימינה"
 
-#: src/input/command.zig:483
+#: src/input/command.zig:471
 msgid "Split the terminal to the right."
 msgstr "פצל/י את המסוף ימינה."
 
-#: src/input/command.zig:487
+#: src/input/command.zig:475
 msgid "Split Up"
 msgstr "פיצול למעלה"
 
-#: src/input/command.zig:488
+#: src/input/command.zig:476
 msgid "Split the terminal up."
 msgstr "פצל/י את המסוף למעלה."
 
-#: src/input/command.zig:492
+#: src/input/command.zig:480
 msgid "Split Down"
 msgstr "פיצול למטה"
 
-#: src/input/command.zig:493
+#: src/input/command.zig:481
 msgid "Split the terminal down."
 msgstr "פצל/י את המסוף למטה."
 
-#: src/input/command.zig:500
+#: src/input/command.zig:488
 msgid "Focus Split: Previous"
 msgstr "התמקדות בפיצול: הקודם"
 
-#: src/input/command.zig:501
+#: src/input/command.zig:489
 msgid "Focus the previous split, if any."
 msgstr "התמקד/י בפיצול הקודם, אם הוא קיים."
 
-#: src/input/command.zig:505
+#: src/input/command.zig:493
 msgid "Focus Split: Next"
 msgstr "התמקדות בפיצול: הבא"
 
-#: src/input/command.zig:506
+#: src/input/command.zig:494
 msgid "Focus the next split, if any."
 msgstr "התמקד/י בפיצול הבא, אם הוא קיים."
 
-#: src/input/command.zig:510
+#: src/input/command.zig:498
 msgid "Focus Split: Left"
 msgstr "התמקדות בפיצול: שמאלה"
 
-#: src/input/command.zig:511
+#: src/input/command.zig:499
 msgid "Focus the split to the left, if it exists."
 msgstr "התמקד/י בפיצול שמאלה, אם הוא קיים."
 
-#: src/input/command.zig:515
+#: src/input/command.zig:503
 msgid "Focus Split: Right"
 msgstr "התמקדות בפיצול: ימינה"
 
-#: src/input/command.zig:516
+#: src/input/command.zig:504
 msgid "Focus the split to the right, if it exists."
 msgstr "התמקד/י בפיצול ימינה, אם הוא קיים."
 
-#: src/input/command.zig:520
+#: src/input/command.zig:508
 msgid "Focus Split: Up"
 msgstr "התמקדות בפיצול: למעלה"
 
-#: src/input/command.zig:521
+#: src/input/command.zig:509
 msgid "Focus the split above, if it exists."
 msgstr "התמקד/י בפיצול שלמעלה, אם הוא קיים."
 
-#: src/input/command.zig:525
+#: src/input/command.zig:513
 msgid "Focus Split: Down"
 msgstr "התמקדות בפיצול: למטה"
 
-#: src/input/command.zig:526
+#: src/input/command.zig:514
 msgid "Focus the split below, if it exists."
 msgstr "התמקד/י בפיצול שלמטה, אם הוא קיים."
 
-#: src/input/command.zig:533
+#: src/input/command.zig:521
 msgid "Focus Window: Previous"
 msgstr "התמקדות בחלון: הקודם"
 
-#: src/input/command.zig:534
+#: src/input/command.zig:522
 msgid "Focus the previous window, if any."
 msgstr "התמקד/י בחלון הקודם, אם הוא קיים."
 
-#: src/input/command.zig:538
+#: src/input/command.zig:526
 msgid "Focus Window: Next"
 msgstr "התמקדות בחלון: הבא"
 
-#: src/input/command.zig:539
+#: src/input/command.zig:527
 msgid "Focus the next window, if any."
 msgstr "התמקד/י בחלון הבא, אם הוא קיים."
 
-#: src/input/command.zig:545
+#: src/input/command.zig:533
 msgid "Toggle Split Zoom"
 msgstr "שינוי מצב הזום של הפיצול"
 
-#: src/input/command.zig:546
+#: src/input/command.zig:534
 msgid "Toggle the zoom state of the current split."
 msgstr "שנה/י את מצב הזום של הפיצול הנוכחי."
 
-#: src/input/command.zig:551
+#: src/input/command.zig:539
 msgid "Toggle Read-Only Mode"
 msgstr "שינוי המצב לקריאה בלבד"
 
-#: src/input/command.zig:552
+#: src/input/command.zig:540
 msgid "Toggle read-only mode for the current surface."
 msgstr "שנה/י את מצב הקריאה בלבד של המשטח הנוכחי."
 
-#: src/input/command.zig:557
+#: src/input/command.zig:545
 msgid "Equalize Splits"
 msgstr "השוואת גודל פיצולים"
 
-#: src/input/command.zig:558
+#: src/input/command.zig:546
 msgid "Equalize the size of all splits."
 msgstr "השווה/י את המימדים של כל הפיצולים."
 
-#: src/input/command.zig:563
+#: src/input/command.zig:551
 msgid "Reset Window Size"
 msgstr "איפוס גודל החלון"
 
-#: src/input/command.zig:564
+#: src/input/command.zig:552
 msgid "Reset the window size to the default."
 msgstr "אפס/י את גודל החלון לברירת המחדל."
 
-#: src/input/command.zig:569
+#: src/input/command.zig:557
 msgid "Toggle Inspector"
 msgstr "הצגה/הסתרה של בודק המסוף"
 
-#: src/input/command.zig:570
+#: src/input/command.zig:558
 msgid "Toggle the inspector."
 msgstr "הצג/י או הסתר/י את בודק המסוף."
 
-#: src/input/command.zig:575
-msgid "Show the GTK Inspector"
-msgstr "הצגה/הסתרה של בודק הGTK"
-
-#: src/input/command.zig:576
-msgid "Show the GTK inspector."
-msgstr "הצג/י או הסתר/י את בודק הGTK."
-
-#: src/input/command.zig:581
+#: src/input/command.zig:563
 msgid "Show On-Screen Keyboard"
 msgstr "הצגת מקלדת על המסך"
 
-#: src/input/command.zig:582
+#: src/input/command.zig:564
 msgid "Show the on-screen keyboard if present."
 msgstr "הצג/י את המקלדת שעל המסך אם היא קיימת."
 
-#: src/input/command.zig:588
+#: src/input/command.zig:570
 msgid "Open Config Using OS editor"
 msgstr "פתיחת ההגדרות באמצעות עורך הטקסט של המערכת"
 
-#: src/input/command.zig:589
+#: src/input/command.zig:571
 msgid "Open the config file with the OS's default editor."
 msgstr "פתח/י את קובץ ההגדרות בעורך הטקסט שמוגדר כברירת המחדל של מערכת ההפעלה."
 
-#: src/input/command.zig:593
+#: src/input/command.zig:575
 msgid "Open Config in New Terminal Window"
 msgstr "פתיחת ההגדרות בחלון מסוף חדש"
 
-#: src/input/command.zig:594
+#: src/input/command.zig:576
 msgid "Open the config file in a new window using $EDITOR or $VISUAL."
 msgstr "פתח/י את קובץ ההגדרות בחלון חדש באמצעות $EDITOR או $VISUAL."
 
-#: src/input/command.zig:600
+#: src/input/command.zig:582
 msgid "Reload Config"
 msgstr "טעינת ההגדרות מחדש"
 
-#: src/input/command.zig:601
+#: src/input/command.zig:583
 msgid "Reload the config file."
 msgstr "טען/י מחדש את קובץ ההגדרות."
 
-#: src/input/command.zig:606
+#: src/input/command.zig:588
 msgid "Close Terminal"
 msgstr "סגירת המסוף"
 
-#: src/input/command.zig:607
+#: src/input/command.zig:589
 msgid "Close the current terminal."
 msgstr "סגור/י את המסוף הנוכחי."
 
-#: src/input/command.zig:613
+#: src/input/command.zig:595
 msgid "Close Tab"
 msgstr "סגירת כרטיסייה"
 
-#: src/input/command.zig:614
+#: src/input/command.zig:596
 msgid "Close the current tab."
 msgstr "סגור/י את הכרטיסייה הנוכחית."
 
-#: src/input/command.zig:618
+#: src/input/command.zig:600
 msgid "Close Other Tabs"
 msgstr "סגור/י כרטיסיות אחרות"
 
-#: src/input/command.zig:619
+#: src/input/command.zig:601
 msgid "Close all tabs in this window except the current one."
 msgstr "סגור/י את כל הכרטיסיות בחלון זה למעט הנוכחית."
 
-#: src/input/command.zig:623
+#: src/input/command.zig:605
 msgid "Close Tabs to the Right"
 msgstr "סגירת כרטיסיות מימין"
 
-#: src/input/command.zig:624
+#: src/input/command.zig:606
 msgid "Close all tabs to the right of the current one."
 msgstr "סגור/י את כל הכרטיסיות שנמצאות מימין לכרטיסייה הנוכחית."
 
-#: src/input/command.zig:630
+#: src/input/command.zig:612
 msgid "Close Window"
 msgstr "סגירת החלון"
 
-#: src/input/command.zig:631
+#: src/input/command.zig:613
 msgid "Close the current window."
 msgstr "סגור/י את החלון הנוכחי."
 
-#: src/input/command.zig:636
+#: src/input/command.zig:618
 msgid "Close All Windows"
 msgstr "סגירת כל החלונות"
 
-#: src/input/command.zig:637
+#: src/input/command.zig:619
 msgid "Close all windows."
 msgstr "סגור/י את כל החלונות."
 
-#: src/input/command.zig:642
+#: src/input/command.zig:624
 msgid "Toggle Maximize"
 msgstr "שינוי הגדלה למקסימום"
 
-#: src/input/command.zig:643
+#: src/input/command.zig:625
 msgid "Toggle the maximized state of the current window."
 msgstr "שנה/י את מצב ההגדלה למקסימום של החלון הנוכחי."
 
-#: src/input/command.zig:648
+#: src/input/command.zig:630
 msgid "Toggle Fullscreen"
 msgstr "הפעלה/ביטול של מסך מלא"
 
-#: src/input/command.zig:649
+#: src/input/command.zig:631
 msgid "Toggle the fullscreen state of the current window."
 msgstr "שנה/י את מצב המסך המלא של החלון הנוכחי."
 
-#: src/input/command.zig:654
-msgid "Toggle Window Decorations"
-msgstr "הצגה/הסתרה של עיטורי חלון"
-
-#: src/input/command.zig:655
-msgid "Toggle the window decorations."
-msgstr "הצג/י או הסתר/י את עיטורי החלון."
-
-#: src/input/command.zig:660
+#: src/input/command.zig:636
 msgid "Toggle Float on Top"
 msgstr "שינוי של מצב ציפה מעל"
 
-#: src/input/command.zig:661
+#: src/input/command.zig:637
 msgid "Toggle the float on top state of the current window."
 msgstr "הפעל/י או בטל/י את מצב הציפה מעל של החלון הנוכחי."
 
-#: src/input/command.zig:666
+#: src/input/command.zig:642
 msgid "Toggle Secure Input"
 msgstr "שינוי של מצב קלט מאובטח"
 
-#: src/input/command.zig:667
+#: src/input/command.zig:643
 msgid "Toggle secure input mode."
 msgstr "הפעל/י או בטל/י את מצב הקלט המאובטח."
 
-#: src/input/command.zig:672
+#: src/input/command.zig:648
 msgid "Toggle Mouse Reporting"
 msgstr "שינוי של דיווחי העכבר"
 
-#: src/input/command.zig:673
+#: src/input/command.zig:649
 msgid "Toggle whether mouse events are reported to terminal applications."
 msgstr "הפעל/י או בטל/י את הדיווח של אירועי עכבר לאפליקציות מסוף."
 
-#: src/input/command.zig:678
+#: src/input/command.zig:654
 msgid "Toggle Background Opacity"
 msgstr "שינוי של אטימות הרקע"
 
-#: src/input/command.zig:679
+#: src/input/command.zig:655
 msgid "Toggle the background opacity of a window that started transparent."
 msgstr "שנה/י את אטימות הרקע של חלון שהתחיל כשקוף."
 
-#: src/input/command.zig:684
+#: src/input/command.zig:660
 msgid "Check for Updates"
 msgstr "בדיקת עדכונים"
 
-#: src/input/command.zig:685
+#: src/input/command.zig:661
 msgid "Check for updates to the application."
 msgstr "בדוק/י אם קיימים עדכונים לאפליקציה."
 
-#: src/input/command.zig:690
+#: src/input/command.zig:666
 msgid "Undo"
 msgstr "ביטול פעולה"
 
-#: src/input/command.zig:691
+#: src/input/command.zig:667
 msgid "Undo the last action."
 msgstr "בטל/י את הפעולה האחרונה."
 
-#: src/input/command.zig:696
+#: src/input/command.zig:672
 msgid "Redo"
 msgstr "ביצוע פעולה שוב"
 
-#: src/input/command.zig:697
+#: src/input/command.zig:673
 msgid "Redo the last undone action."
 msgstr "בצע/י שוב את הפעולה האחרונה שבוטלה."
 
-#: src/input/command.zig:702
+#: src/input/command.zig:678
 msgid "Quit"
 msgstr "יציאה"
 
-#: src/input/command.zig:703
+#: src/input/command.zig:679
 msgid "Quit the application."
 msgstr "צא/י מהאפליקציה."
 
-#: src/input/command.zig:708
+#: src/input/command.zig:684
 msgid "Ghostty"
 msgstr "Ghostty"
 
-#: src/input/command.zig:709
+#: src/input/command.zig:685
 msgid "Put a little Ghostty in your terminal."
 msgstr "הכנס/י קצת Ghostty למסוף שלך."

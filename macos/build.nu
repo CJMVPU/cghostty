@@ -59,6 +59,9 @@ def main [
         ^zig build -Demit-macos-app=false $"-Doptimize=($optimize)" $"-Dversion-string=($app_version)"
         if $env.LAST_EXIT_CODE != 0 { exit $env.LAST_EXIT_CODE }
     }
+    if $action != "clean" and not ($root | path join "zig-out/lib/libghostty-internal.a" | path exists) {
+        error make {msg: "Internal core archive is missing. Build without --skip-core first."}
+    }
     let skip_testing = if $action == "test" and not $ui_tests { [-skip-testing GhosttyUITests] } else { [] }
     let test_selection = if $only_testing == "" { [] } else { [-only-testing $only_testing] }
     # ReleaseLocal benchmarks still build the unit-test target, whose imports

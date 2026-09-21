@@ -11,12 +11,11 @@ const apprt = @import("../apprt.zig");
 const font = @import("../font/main.zig");
 const configpkg = @import("../config.zig");
 const rendererpkg = @import("../renderer.zig");
-const Renderer = rendererpkg.GenericRenderer(Metal);
+const Renderer = rendererpkg.Renderer;
 
 const mtl = @import("metal/api.zig");
 const IOSurfaceLayer = @import("metal/IOSurfaceLayer.zig");
 
-pub const GraphicsAPI = Metal;
 pub const Target = @import("metal/Target.zig");
 pub const Frame = @import("metal/Frame.zig");
 pub const Commands = Frame.Commands;

@@ -41,6 +41,8 @@ python3 scripts/check-scope.py --app macos/build/ReleaseLocal/cghostty.app
 
 `--action test` 默认将应用、测试 runner 和 DerivedData 放到 `$TMPDIR/cghostty-tests-<checkout-hash>`，避免运行时读取文稿目录中的构建资源。`--build-dir /absolute/path` 可覆盖产物目录；测试配置及工作目录也使用非受保护路径。源码仍可留在文稿目录。Xcode 直接运行使用用户主目录作为工作目录；日常使用请运行安装到“应用程序”的发行版。终端命令主动读取文稿中的项目仍受 macOS 权限管理，若不希望授权，请将项目放在 `~/Developer` 等非受保护目录。
 
+原生核心输出为 `zig-out/lib/libghostty-internal.a`。Xcode 直接链接该静态库，通过 `include/module.modulemap` 导入 `GhosttyKit`；不再生成或消费 XCFramework。头文件直接来自 `include/`，无需再复制进包装产物。原生测试与应用使用同一个内部 C 模块。
+
 `zig build` 也可作为根入口，会调用同一个 `macos/build.nu`。日常应用开发直接使用 Nushell 脚本。`--skip-core` 只适用于版本和优化模式均匹配的已有核心；切换 Debug / ReleaseLocal 时重新构建完整应用。
 
 Zig 改动使用 `zig fmt`；Swift 使用 `swiftlint lint --strict --fix`。完整核心测试为 `zig build test`，通常优先运行相关过滤测试。终端压缩、快照等子目录的测试约定继续适用。
@@ -76,7 +78,7 @@ Xcode scheme 和 Swift 模块仍为 `Ghostty`，C 桥接模块为 `GhosttyKit`�
 
 ## 构建服务
 
-内部 XCFramework 只封装一个 arm64 静态库和桥接头文件，没有 Universal 目标选择、独立 pkg-config 安装或静态库 dSYM 分支。版本直接来自 `build.zig.zon` 或显式 `--version`，不依赖 Git 探测。归档规范化与 libSystem 符号处理仍是当前 Zig/Xcode 链接所需步骤。
+内部核心只构建 arm64 静态库，由 Xcode 直接链接，没有 XCFramework 包装、Universal 目标选择、独立 pkg-config 安装或静态库 dSYM 分支。版本直接来自 `build.zig.zon` 或显式 `--version`，不依赖 Git 探测。归档规范化与 libSystem 符号处理仍是当前 Zig/Xcode 链接所需步骤。
 
 `zig build update-translations` 直接从共享命令面板提取 gettext 模板，合并现有译文并移除 obsolete 条目；不再生成 GTK/Python 中间模板。译者署名保留，删除的界面译文可从 Git 历史查询。
 
@@ -84,11 +86,12 @@ Metal 编译通过 `xcrun --toolchain Metal` 调用安装的工具链。缺失�
 
 ## Surface 渲染会话回归
 
-`zig build test -Dtest-filter=RenderSession -Dtest-filter=renderer -Dtest-filter=SearchSession`
+`zig build test -Dtest-filter=Session -Dtest-filter=renderer -Dtest-filter=termio`
 验证线程创建失败、启动后停止/join、重复停止、禁止重复启动，以及未启动时
 队列中配置、搜索结果和连续字体切换引用的回收。`RenderSession` 拥有稳定地址，
 将资源创建、线程启动、停止和最终释放分开；Surface 负责先停止搜索/IO 生产者，
-再停止渲染，之后才释放终端和共享状态。
+再停止渲染，之后才释放终端和共享状态。`IOSession` 同样拥有固定地址和明确的
+未初始化、就绪、运行、停止阶段；进程环境、解析器、消息队列和 IO 线程由它统一释放。
 
 原生 `renderSessionReleasesAfterQueuedFontAndDisplayChanges` 验证连续字体、尺寸、
 可见性与焦点切换后立即释放。桌面 `GhosttyCursorMotionUITests` 和
@@ -206,6 +209,9 @@ Observation 模型；窗口由 `TerminalWindowState` 保存共享显示状态，
 （47 项原生设置、六项窗口字段及加载/诊断状态的不可变副本）。`Ghostty.Config` 一次替换一整代
 句柄与快照；现有属性只转发快照，不再读取 C。窗口与 Surface 的显示投影显式接收快照。
 全局配置先发布到 App，再发送同步通知；Surface 回调保持局部作用域。
+只读、渲染健康、按键序列和键表状态通过带类型参数的 SurfaceView 方法传递；
+只读保持同步，其他显示状态保留原有主队列更新顺序，不再借助通知字典中转。
+快照读取器集中处理普通值和字符串复制，显式区分未加载配置与读取失败时的默认值。
 增加原生设置时，把转换放进快照解码并补齐热重载/所有权验证，不在 UI 或 Config facade 追加 C 查询。
 将需要读取的配置加入 `src/configgen.zig` 的 `native_keys`，运行 `zig build update-config-bridge`。
 `Ghostty.ConfigSchema.swift` 的 53 个键由 Zig 字段与 `c_get.CValue` 自动生成；不要手改生成文件或另写字符串键。
@@ -214,11 +220,23 @@ Observation 模型；窗口由 `TerminalWindowState` 保存共享显示状态，
 `zig build check-config-bridge` 只校验，不改文件；核心构建/测试、`--skip-core` 原生构建和范围检查都会执行。
 修改字段类型或桥接规则时，运行配置 Zig 定向测试、`ConfigSnapshotTests` 和 `GhosttyConfigSnapshotUITests`。
 快捷键查询继续使用同代句柄，解析和配置优先级由 Zig 负责。
-Combine 仅用于仍有必要的原生通知/控件事件。不要引入新旧状态互相同步的兼容层。
+应用内部事件直接调用所属对象的类型化方法；共享状态使用 Observation。
+NotificationCenter 只接收 AppKit 系统事件，订阅必须随原生宿主结束。无 Combine 订阅。
+分屏移动、关闭和撤销规则集中在 `BaseTerminalController+Splits.swift`；跨窗口操作
+使用当前 App 的同一个撤销管理器，并保持 Surface 和核心会话身份不变。
+
+快捷指令授权由 `Features/App Intents/IntentPermission.swift` 集中处理，遵守
+`macos-shortcuts` 的 allow/deny/ask 策略。允许结果继续使用原有 UserDefaults 键和
+`StoredPermission` 安全归档格式，以保留已有授权；拒绝不持久化。
+
+不再接受 `show_gtk_inspector`、`toggle_tab_overview`、`toggle_window_decorations`
+和 `prompt_window_title` 这四个旧动作。旧配置中的这些绑定会报告无效动作；
+标题提示应使用 `prompt_surface_title` 或 `prompt_tab_title`。
 
 `--ui-tests` 显式包含桌面测试，`--only-testing` 接受 Xcode 的目标/套件/测试标识；
 默认单元测试和 CI 仍不启动桌面交互测试。辅助窗口直接创建并托管 SwiftUI 内容；
-主菜单、主终端窗口样式和快捷终端仍使用实际承担 AppKit 初始化的 XIB。
+主菜单、主终端窗口样式和快捷终端均由 Swift 显式构造，保留 AppKit 响应链和动态快捷键。
+窗口延迟加载有重入保护；没有窗口的基础控制器不会尝试加载 nib。
 桌面测试要求解锁的交互会话及已处理的系统提示。测试命令使用粘贴避免输入法转换，
 随后恢复原剪贴板内容；测试期间不要操作键盘鼠标。
 

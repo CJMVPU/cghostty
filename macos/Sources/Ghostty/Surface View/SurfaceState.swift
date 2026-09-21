@@ -7,6 +7,8 @@ extension Ghostty {
     @MainActor @Observable final class SurfaceState {
         var pwd: String?
         var cellSize: CGSize = .zero
+        var windowFocused = true
+        var scrollbar: Action.Scrollbar?
         var healthy: Bool = true
         var error: Error?
         var fault: SurfaceFault?

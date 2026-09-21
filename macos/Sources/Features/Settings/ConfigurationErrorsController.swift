@@ -3,10 +3,12 @@ import Cocoa
 import SwiftUI
 
 class ConfigurationErrorsController: NSWindowController, NSWindowDelegate {
-    /// Singleton for the errors view.
-    static let sharedInstance = ConfigurationErrorsController()
+    private weak var app: Ghostty.App?
 
-    init() { super.init(window: nil) }
+    init(app: Ghostty.App) {
+        self.app = app
+        super.init(window: nil)
+    }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) is not supported")
@@ -65,7 +67,7 @@ class ConfigurationErrorsController: NSWindowController, NSWindowDelegate {
         window.contentView = NSHostingView(rootView: ConfigurationErrorsView(
             model: model,
             dismiss: { [weak self] in self?.updateErrors([]) },
-            reload: { (NSApplication.shared.delegate as? AppDelegate)?.reloadConfig(nil) }
+            reload: { [weak app] in app?.reloadConfig() }
         ))
         window.titlebarAppearsTransparent = true
     }

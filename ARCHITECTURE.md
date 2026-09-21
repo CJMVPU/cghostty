@@ -318,3 +318,8 @@ Upstream-derived terminal, font and protocol code retains its attribution.
 Import upstream changes by behavior and dependency impact, preserving protocol
 tests and the macOS-only build contract. Avoid bulk renames or directory moves
 solely to distinguish upstream history from locally maintained code.
+
+Native restoration stores value-only layouts and terminal snapshots; creating a
+restored session requires an explicit owning app. Swift imports the internal
+GhosttyKit C module from include/module.modulemap and directly links the Zig
+static archive. The C ABI remains internal; there is no XCFramework product.

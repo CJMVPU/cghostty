@@ -18,25 +18,29 @@ final class GhosttyThemeTests: GhosttyCustomConfigCase {
     private func assertTitlebarAppearance(
         _ appearance: XCUIDevice.Appearance,
         for app: XCUIApplication,
-        title: String? = nil,
+        label: String? = nil,
         colorLocation: CGPoint? = nil,
         file: StaticString = #filePath,
         line: UInt = #line
     ) throws {
+        XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 5), file: file, line: line)
         for i in 0 ..< app.windows.count {
-            let titleView = app.windows.element(boundBy: i).staticTexts.element(matching: NSPredicate(format: "value == '\(title ?? windowTitle)'"))
-
-            let image = titleView.screenshot().image
-            guard let imageColor = image.colorAt(x: Int(colorLocation?.x ?? 1), y: Int(colorLocation?.y ?? 1)) else {
-                throw XCTSkip("failed to get pixel color", file: file, line: line)
+            let texts = app.windows.element(boundBy: i).staticTexts
+            let titleView = if let label { texts[label] } else {
+                texts.element(matching: NSPredicate(format: "value == %@", windowTitle))
             }
-
-            switch appearance {
-            case .dark:
-                XCTAssertLessThanOrEqual(imageColor.luminance, 0.5, "Expected dark appearance for this test", file: file, line: line)
-            default:
-                XCTAssertGreaterThanOrEqual(imageColor.luminance, 0.5, "Expected light appearance for this test", file: file, line: line)
+            XCTAssertTrue(titleView.waitForExistence(timeout: 5), "Expected the configured window title", file: file, line: line)
+            let appearanceMatches = NSPredicate { _, _ in
+                MainActor.assumeIsolated {
+                    guard titleView.exists,
+                          let color = titleView.screenshot().image.colorAt(
+                            x: Int(colorLocation?.x ?? 1), y: Int(colorLocation?.y ?? 1)) else { return false }
+                    return appearance == .dark ? color.luminance <= 0.5 : color.luminance >= 0.5
+                }
             }
+            let ready = XCTNSPredicateExpectation(predicate: appearanceMatches, object: nil)
+            XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 5), .completed,
+                           "Expected \(appearance) titlebar appearance", file: file, line: line)
         }
     }
 
@@ -46,14 +50,13 @@ final class GhosttyThemeTests: GhosttyCustomConfigCase {
         try updateConfig("title=\(windowTitle) \n theme=light:3024 Day,dark:3024 Night")
         XCUIDevice.shared.appearance = .dark
 
-        let app = try ghosttyApplication()
+        let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         app.launch()
         try assertTitlebarAppearance(.dark, for: app)
         // create a split
         app.groups["Terminal pane"].typeKey("d", modifierFlags: .command)
         // reload config
         app.typeKey(",", modifierFlags: [.command, .shift])
-        try await Task.sleep(for: .seconds(0.5))
         // create a new window
         app.typeKey("n", modifierFlags: [.command])
         try assertTitlebarAppearance(.dark, for: app)
@@ -62,16 +65,15 @@ final class GhosttyThemeTests: GhosttyCustomConfigCase {
     @MainActor
     func testLightTransparentWindowThemeWithDarkTerminal() async throws {
         try updateConfig("title=\(windowTitle) \n window-theme=light")
-        let app = try ghosttyApplication()
+        let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         app.launch()
-        try await Task.sleep(for: .seconds(0.5))
         try assertTitlebarAppearance(.dark, for: app)
     }
 
     @MainActor
     func testLightNativeWindowThemeWithDarkTerminal() async throws {
         try updateConfig("title=\(windowTitle) \n window-theme = light \n macos-titlebar-style = native")
-        let app = try ghosttyApplication()
+        let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         app.launch()
         try assertTitlebarAppearance(.light, for: app)
     }
@@ -79,14 +81,13 @@ final class GhosttyThemeTests: GhosttyCustomConfigCase {
     @MainActor
     func testReloadingLightTransparentWindowTheme() async throws {
         try updateConfig("title=\(windowTitle) \n ")
-        let app = try ghosttyApplication()
+        let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         app.launch()
         // default dark theme
         try assertTitlebarAppearance(.dark, for: app)
         try updateConfig("title=\(windowTitle) \n theme=light:3024 Day,dark:3024 Night \n window-theme = light")
         // reload config
         app.typeKey(",", modifierFlags: [.command, .shift])
-        try await Task.sleep(for: .seconds(0.5))
         try assertTitlebarAppearance(.light, for: app)
     }
 
@@ -94,11 +95,10 @@ final class GhosttyThemeTests: GhosttyCustomConfigCase {
     func testSwitchingSystemTheme() async throws {
         try updateConfig("title=\(windowTitle) \n theme=light:3024 Day,dark:3024 Night")
         XCUIDevice.shared.appearance = .dark
-        let app = try ghosttyApplication()
+        let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         app.launch()
         try assertTitlebarAppearance(.dark, for: app)
         XCUIDevice.shared.appearance = .light
-        try await Task.sleep(for: .seconds(0.5))
         try assertTitlebarAppearance(.light, for: app)
     }
 
@@ -106,13 +106,12 @@ final class GhosttyThemeTests: GhosttyCustomConfigCase {
     func testReloadFromLightWindowThemeToDefaultTheme() async throws {
         try updateConfig("title=\(windowTitle) \n theme=light:3024 Day,dark:3024 Night")
         XCUIDevice.shared.appearance = .light
-        let app = try ghosttyApplication()
+        let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         app.launch()
         try assertTitlebarAppearance(.light, for: app)
         try updateConfig("title=\(windowTitle) \n ")
         // reload config
         app.typeKey(",", modifierFlags: [.command, .shift])
-        try await Task.sleep(for: .seconds(0.5))
         try assertTitlebarAppearance(.dark, for: app)
     }
 
@@ -120,13 +119,12 @@ final class GhosttyThemeTests: GhosttyCustomConfigCase {
     func testReloadFromDefaultThemeToDarkWindowTheme() async throws {
         try updateConfig("title=\(windowTitle) \n ")
         XCUIDevice.shared.appearance = .light
-        let app = try ghosttyApplication()
+        let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         app.launch()
         try assertTitlebarAppearance(.dark, for: app)
         try updateConfig("title=\(windowTitle) \n theme=light:3024 Day,dark:3024 Night \n window-theme=dark")
         // reload config
         app.typeKey(",", modifierFlags: [.command, .shift])
-        try await Task.sleep(for: .seconds(0.5))
         try assertTitlebarAppearance(.dark, for: app)
     }
 
@@ -134,31 +132,31 @@ final class GhosttyThemeTests: GhosttyCustomConfigCase {
     func testReloadingFromDarkThemeToSystemLightTheme() async throws {
         try updateConfig("title=\(windowTitle) \n theme=light:3024 Day,dark:3024 Night \n window-theme=dark")
         XCUIDevice.shared.appearance = .light
-        let app = try ghosttyApplication()
+        let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         app.launch()
         try assertTitlebarAppearance(.dark, for: app)
         try updateConfig("title=\(windowTitle) \n theme=light:3024 Day,dark:3024 Night")
         // reload config
         app.typeKey(",", modifierFlags: [.command, .shift])
-        try await Task.sleep(for: .seconds(0.5))
         try assertTitlebarAppearance(.light, for: app)
     }
 
     @MainActor
     func testQuickTerminalThemeChange() async throws {
-        try updateConfig("title=\(windowTitle) \n theme=light:3024 Day,dark:3024 Night \n confirm-close-surface=false")
+        try updateConfig("title=\(windowTitle) \n theme=light:3024 Day,dark:3024 Night \n confirm-close-surface=false \n quick-terminal-autohide=false")
         XCUIDevice.shared.appearance = .light
-        let app = try ghosttyApplication()
+        let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         app.launch()
+        app.activate()
+        XCTAssertTrue(app.groups["Terminal pane"].firstMatch.waitForExistence(timeout: 10))
         // close default window
         app.typeKey("w", modifierFlags: [.command])
         // open quick terminal
         app.menuBarItems["View"].firstMatch.click()
         app.menuItems["Quick Terminal"].firstMatch.click()
-        let title = "Debug builds of Ghostty are very slow and you may experience performance problems. Debug builds are only recommended during development."
-        try assertTitlebarAppearance(.light, for: app, title: title, colorLocation: CGPoint(x: 5, y: 5)) // to avoid dark edge
+        let label = "Debug build warning"
+        try assertTitlebarAppearance(.light, for: app, label: label, colorLocation: CGPoint(x: 5, y: 5)) // to avoid dark edge
         XCUIDevice.shared.appearance = .dark
-        try await Task.sleep(for: .seconds(0.5))
-        try assertTitlebarAppearance(.dark, for: app, title: title, colorLocation: CGPoint(x: 5, y: 5))
+        try assertTitlebarAppearance(.dark, for: app, label: label, colorLocation: CGPoint(x: 5, y: 5))
     }
 }

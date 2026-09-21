@@ -74,12 +74,10 @@ class FullscreenBase {
     }
 
     @objc private func didEnterFullScreenNotification(_ notification: Notification) {
-        NotificationCenter.default.post(name: .fullscreenDidEnter, object: self)
         delegate?.fullscreenDidChange()
     }
 
     @objc private func didExitFullScreenNotification(_ notification: Notification) {
-        NotificationCenter.default.post(name: .fullscreenDidExit, object: self)
         delegate?.fullscreenDidChange()
     }
 }
@@ -239,7 +237,6 @@ class NonNativeFullscreen: FullscreenBase, FullscreenStyle {
                 self.window.makeFirstResponder(firstResponder)
             }
 
-            NotificationCenter.default.post(name: .fullscreenDidEnter, object: self)
             self.delegate?.fullscreenDidChange()
         }
     }
@@ -316,7 +313,6 @@ class NonNativeFullscreen: FullscreenBase, FullscreenStyle {
         window.makeKeyAndOrderFront(nil)
 
         // Notify the delegate
-        NotificationCenter.default.post(name: .fullscreenDidExit, object: self)
         self.delegate?.fullscreenDidChange()
     }
 
@@ -449,9 +445,4 @@ class NonNativeFullscreenVisibleMenu: NonNativeFullscreen {
 class NonNativeFullscreenPaddedNotch: NonNativeFullscreen {
     override var fullscreenMode: FullscreenMode { .nonNativePaddedNotch }
     override var properties: Properties { Properties(paddedNotch: true) }
-}
-
-extension Notification.Name {
-    static let fullscreenDidEnter = Notification.Name("com.cjmvpu.cghostty.fullscreenDidEnter")
-    static let fullscreenDidExit = Notification.Name("com.cjmvpu.cghostty.fullscreenDidExit")
 }

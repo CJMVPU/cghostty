@@ -115,6 +115,24 @@ extension Ghostty {
         @MainActor private struct Reader {
             let config: ghostty_config_t?
 
+            private func value<Value>(
+                _ key: ConfigSchema.Key<Value>,
+                default defaultValue: Value,
+                unloaded: Value? = nil
+            ) -> Value {
+                guard let config else { return unloaded ?? defaultValue }
+                var result = defaultValue
+                _ = key.read(from: config, into: &result)
+                return result
+            }
+
+            private func string(_ key: ConfigSchema.Key<UnsafePointer<CChar>?>) -> String? {
+                guard let config else { return nil }
+                var pointer: UnsafePointer<CChar>?
+                guard key.read(from: config, into: &pointer), let pointer else { return nil }
+                return String(cString: pointer)
+            }
+
             var bellFeatures: Config.BellFeatures {
                 guard let config = self.config else { return .defaultValue }
                 var v: CUnsignedInt = 0
@@ -133,20 +151,12 @@ extension Ghostty {
             }
 
             var bellAudioVolume: Float {
-                guard let config = self.config else { return 0.5 }
-                var v: Double = 0.5
-                let key = ConfigSchema.bellAudioVolume
-                _ = key.read(from: config, into: &v)
-                return Float(v)
+                Float(value(ConfigSchema.bellAudioVolume, default: 0.5))
             }
 
             var notifyOnCommandFinish: Config.NotifyOnCommandFinish {
-                guard let config = self.config else { return .never }
-                var v: UnsafePointer<Int8>?
-                let key = ConfigSchema.notifyOnCommandFinish
-                guard key.read(from: config, into: &v) else { return .never }
-                guard let ptr = v else { return .never }
-                return Config.NotifyOnCommandFinish(rawValue: String(cString: ptr)) ?? .never
+                guard let str = string(ConfigSchema.notifyOnCommandFinish) else { return .never }
+                return Config.NotifyOnCommandFinish(rawValue: str) ?? .never
             }
 
             var notifyOnCommandFinishAction: Config.NotifyOnCommandFinishAction {
@@ -159,11 +169,7 @@ extension Ghostty {
             }
 
             var notifyOnCommandFinishAfter: Duration {
-                guard let config = self.config else { return .seconds(5) }
-                var v: UInt = 0
-                let key = ConfigSchema.notifyOnCommandFinishAfter
-                _ = key.read(from: config, into: &v)
-                return .milliseconds(v)
+                .milliseconds(value(ConfigSchema.notifyOnCommandFinishAfter, default: 0, unloaded: 5000))
             }
 
             var splitPreserveZoom: Config.SplitPreserveZoom {
@@ -175,88 +181,46 @@ extension Ghostty {
             }
 
             var initialWindow: Bool {
-                guard let config = self.config else { return true }
-                var v = true
-                let key = ConfigSchema.initialWindow
-                _ = key.read(from: config, into: &v)
-                return v
+                value(ConfigSchema.initialWindow, default: true)
             }
 
             var shouldQuitAfterLastWindowClosed: Bool {
-                guard let config = self.config else { return true }
-                var v = false
-                let key = ConfigSchema.quitAfterLastWindowClosed
-                _ = key.read(from: config, into: &v)
-                return v
+                value(ConfigSchema.quitAfterLastWindowClosed, default: false, unloaded: true)
             }
 
             var title: String? {
-                guard let config = self.config else { return nil }
-                var v: UnsafePointer<Int8>?
-                let key = ConfigSchema.title
-                guard key.read(from: config, into: &v) else { return nil }
-                guard let ptr = v else { return nil }
-                return String(cString: ptr)
+                string(ConfigSchema.title)
             }
 
             var windowSaveState: String {
-                guard let config = self.config else { return "" }
-                var v: UnsafePointer<Int8>?
-                let key = ConfigSchema.windowSaveState
-                guard key.read(from: config, into: &v) else { return "" }
-                guard let ptr = v else { return "" }
-                return String(cString: ptr)
+                string(ConfigSchema.windowSaveState) ?? ""
             }
 
             var windowNewTabPosition: String {
-                guard let config = self.config else { return "" }
-                var v: UnsafePointer<Int8>?
-                let key = ConfigSchema.windowNewTabPosition
-                guard key.read(from: config, into: &v) else { return "" }
-                guard let ptr = v else { return "" }
-                return String(cString: ptr)
+                string(ConfigSchema.windowNewTabPosition) ?? ""
             }
 
             var windowDecorations: Bool {
                 let defaultValue = true
-                guard let config = self.config else { return defaultValue }
-                var v: UnsafePointer<Int8>?
-                let key = ConfigSchema.windowDecoration
-                guard key.read(from: config, into: &v) else { return defaultValue }
-                guard let ptr = v else { return defaultValue }
-                let str = String(cString: ptr)
+                guard let str = string(ConfigSchema.windowDecoration) else { return defaultValue }
                 return Config.WindowDecoration(rawValue: str)?.enabled() ?? defaultValue
             }
 
             var windowTheme: String? {
-                guard let config = self.config else { return nil }
-                var v: UnsafePointer<Int8>?
-                let key = ConfigSchema.windowTheme
-                guard key.read(from: config, into: &v) else { return nil }
-                guard let ptr = v else { return nil }
-                return String(cString: ptr)
+                string(ConfigSchema.windowTheme)
             }
 
             var dragHandle: Config.DragHandle {
                 let defaultValue = Config.DragHandle.auto
-                guard let config = self.config else { return defaultValue }
-                var v: UnsafePointer<Int8>?
-                let key = ConfigSchema.dragHandle
-                guard key.read(from: config, into: &v) else { return defaultValue }
-                guard let ptr = v else { return defaultValue }
-                return Config.DragHandle(rawValue: String(cString: ptr)) ?? defaultValue
+                guard let str = string(ConfigSchema.dragHandle) else { return defaultValue }
+                return Config.DragHandle(rawValue: str) ?? defaultValue
             }
 
             /// Returns the fullscreen mode if fullscreen is enabled, or nil if disabled.
             /// This parses the `fullscreen` enum config which supports both
             /// native and non-native fullscreen modes.
             var windowFullscreen: FullscreenMode? {
-                guard let config = self.config else { return nil }
-                var v: UnsafePointer<Int8>?
-                let key = ConfigSchema.fullscreen
-                guard key.read(from: config, into: &v) else { return nil }
-                guard let ptr = v else { return nil }
-                let str = String(cString: ptr)
+                guard let str = string(ConfigSchema.fullscreen) else { return nil }
                 return switch str {
                 case "false":
                     nil
@@ -277,12 +241,7 @@ extension Ghostty {
             /// This is controlled by `macos-non-native-fullscreen` config.
             var windowFullscreenMode: FullscreenMode {
                 let defaultValue: FullscreenMode = .native
-                guard let config = self.config else { return defaultValue }
-                var v: UnsafePointer<Int8>?
-                let key = ConfigSchema.macosNonNativeFullscreen
-                guard key.read(from: config, into: &v) else { return defaultValue }
-                guard let ptr = v else { return defaultValue }
-                let str = String(cString: ptr)
+                guard let str = string(ConfigSchema.macosNonNativeFullscreen) else { return defaultValue }
                 return switch str {
                 case "false":
                         .native
@@ -299,62 +258,34 @@ extension Ghostty {
 
             var macosWindowButtons: MacOSWindowButtons {
                 let defaultValue = MacOSWindowButtons.visible
-                guard let config = self.config else { return defaultValue }
-                var v: UnsafePointer<Int8>?
-                let key = ConfigSchema.macosWindowButtons
-                guard key.read(from: config, into: &v) else { return defaultValue }
-                guard let ptr = v else { return defaultValue }
-                let str = String(cString: ptr)
+                guard let str = string(ConfigSchema.macosWindowButtons) else { return defaultValue }
                 return MacOSWindowButtons(rawValue: str) ?? defaultValue
             }
 
             var macosTitlebarStyle: Config.MacOSTitlebarStyle {
                 let defaultValue = Config.MacOSTitlebarStyle.transparent
-                guard let config = self.config else { return defaultValue }
-                var v: UnsafePointer<Int8>?
-                let key = ConfigSchema.macosTitlebarStyle
-                guard key.read(from: config, into: &v) else { return defaultValue }
-                guard let ptr = v else { return defaultValue }
-                return Config.MacOSTitlebarStyle(rawValue: String(cString: ptr)) ?? defaultValue
+                guard let str = string(ConfigSchema.macosTitlebarStyle) else { return defaultValue }
+                return Config.MacOSTitlebarStyle(rawValue: str) ?? defaultValue
             }
 
             var macosTitlebarProxyIcon: MacOSTitlebarProxyIcon {
                 let defaultValue = MacOSTitlebarProxyIcon.visible
-                guard let config = self.config else { return defaultValue }
-                var v: UnsafePointer<Int8>?
-                let key = ConfigSchema.macosTitlebarProxyIcon
-                guard key.read(from: config, into: &v) else { return defaultValue }
-                guard let ptr = v else { return defaultValue }
-                let str = String(cString: ptr)
+                guard let str = string(ConfigSchema.macosTitlebarProxyIcon) else { return defaultValue }
                 return MacOSTitlebarProxyIcon(rawValue: str) ?? defaultValue
             }
 
             var macosDockDropBehavior: Config.MacDockDropBehavior {
                 let defaultValue = Config.MacDockDropBehavior.new_tab
-                guard let config = self.config else { return defaultValue }
-                var v: UnsafePointer<Int8>?
-                let key = ConfigSchema.macosDockDropBehavior
-                guard key.read(from: config, into: &v) else { return defaultValue }
-                guard let ptr = v else { return defaultValue }
-                let str = String(cString: ptr)
+                guard let str = string(ConfigSchema.macosDockDropBehavior) else { return defaultValue }
                 return Config.MacDockDropBehavior(rawValue: str) ?? defaultValue
             }
 
             var macosWindowShadow: Bool {
-                guard let config = self.config else { return false }
-                var v = false
-                let key = ConfigSchema.macosWindowShadow
-                _ = key.read(from: config, into: &v)
-                return v
+                value(ConfigSchema.macosWindowShadow, default: false)
             }
 
             var macosHidden: Config.MacHidden {
-                guard let config = self.config else { return .never }
-                var v: UnsafePointer<Int8>?
-                let key = ConfigSchema.macosHidden
-                guard key.read(from: config, into: &v) else { return .never }
-                guard let ptr = v else { return .never }
-                let str = String(cString: ptr)
+                guard let str = string(ConfigSchema.macosHidden) else { return .never }
                 return Config.MacHidden(rawValue: str) ?? .never
             }
 
@@ -374,11 +305,7 @@ extension Ghostty {
             }
 
             var backgroundOpacity: Double {
-                guard let config = self.config else { return 1 }
-                var v: Double = 1
-                let key = ConfigSchema.backgroundOpacity
-                _ = key.read(from: config, into: &v)
-                return v
+                value(ConfigSchema.backgroundOpacity, default: 1)
             }
 
             var backgroundBlur: Config.BackgroundBlur {
@@ -435,48 +362,25 @@ extension Ghostty {
             }
 
             var quickTerminalPosition: QuickTerminalPosition {
-                guard let config = self.config else { return .top }
-                var v: UnsafePointer<Int8>?
-                let key = ConfigSchema.quickTerminalPosition
-                guard key.read(from: config, into: &v) else { return .top }
-                guard let ptr = v else { return .top }
-                let str = String(cString: ptr)
+                guard let str = string(ConfigSchema.quickTerminalPosition) else { return .top }
                 return QuickTerminalPosition(rawValue: str) ?? .top
             }
 
             var quickTerminalScreen: QuickTerminalScreen {
-                guard let config = self.config else { return .main }
-                var v: UnsafePointer<Int8>?
-                let key = ConfigSchema.quickTerminalScreen
-                guard key.read(from: config, into: &v) else { return .main }
-                guard let ptr = v else { return .main }
-                let str = String(cString: ptr)
+                guard let str = string(ConfigSchema.quickTerminalScreen) else { return .main }
                 return QuickTerminalScreen(fromGhosttyConfig: str) ?? .main
             }
 
             var quickTerminalAnimationDuration: Double {
-                guard let config = self.config else { return 0.2 }
-                var v: Double = 0.2
-                let key = ConfigSchema.quickTerminalAnimationDuration
-                _ = key.read(from: config, into: &v)
-                return v
+                value(ConfigSchema.quickTerminalAnimationDuration, default: 0.2)
             }
 
             var quickTerminalAutoHide: Bool {
-                guard let config = self.config else { return true }
-                var v = true
-                let key = ConfigSchema.quickTerminalAutohide
-                _ = key.read(from: config, into: &v)
-                return v
+                value(ConfigSchema.quickTerminalAutohide, default: true)
             }
 
             var quickTerminalSpaceBehavior: QuickTerminalSpaceBehavior {
-                guard let config = self.config else { return .move }
-                var v: UnsafePointer<Int8>?
-                let key = ConfigSchema.quickTerminalSpaceBehavior
-                guard key.read(from: config, into: &v) else { return .move }
-                guard let ptr = v else { return .move }
-                let str = String(cString: ptr)
+                guard let str = string(ConfigSchema.quickTerminalSpaceBehavior) else { return .move }
                 return QuickTerminalSpaceBehavior(fromGhosttyConfig: str) ?? .move
             }
 
@@ -489,74 +393,39 @@ extension Ghostty {
             }
 
             var resizeOverlay: Config.ResizeOverlay {
-                guard let config = self.config else { return .after_first }
-                var v: UnsafePointer<Int8>?
-                let key = ConfigSchema.resizeOverlay
-                guard key.read(from: config, into: &v) else { return .after_first }
-                guard let ptr = v else { return .after_first }
-                let str = String(cString: ptr)
+                guard let str = string(ConfigSchema.resizeOverlay) else { return .after_first }
                 return Config.ResizeOverlay(rawValue: str) ?? .after_first
             }
 
             var resizeOverlayPosition: Config.ResizeOverlayPosition {
                 let defaultValue = Config.ResizeOverlayPosition.center
-                guard let config = self.config else { return defaultValue }
-                var v: UnsafePointer<Int8>?
-                let key = ConfigSchema.resizeOverlayPosition
-                guard key.read(from: config, into: &v) else { return defaultValue }
-                guard let ptr = v else { return defaultValue }
-                let str = String(cString: ptr)
+                guard let str = string(ConfigSchema.resizeOverlayPosition) else { return defaultValue }
                 return Config.ResizeOverlayPosition(rawValue: str) ?? defaultValue
             }
 
             var resizeOverlayDuration: UInt {
-                guard let config = self.config else { return 1000 }
-                var v: UInt = 0
-                let key = ConfigSchema.resizeOverlayDuration
-                _ = key.read(from: config, into: &v)
-                return v
+                value(ConfigSchema.resizeOverlayDuration, default: 0, unloaded: 1000)
             }
 
             var undoTimeout: Duration {
-                guard let config = self.config else { return .seconds(5) }
-                var v: UInt = 0
-                let key = ConfigSchema.undoTimeout
-                _ = key.read(from: config, into: &v)
-                return .milliseconds(v)
+                .milliseconds(value(ConfigSchema.undoTimeout, default: 0, unloaded: 5000))
             }
 
             var autoSecureInput: Bool {
-                guard let config = self.config else { return true }
-                var v = false
-                let key = ConfigSchema.macosAutoSecureInput
-                _ = key.read(from: config, into: &v)
-                return v
+                value(ConfigSchema.macosAutoSecureInput, default: false, unloaded: true)
             }
 
             var secureInputIndication: Bool {
-                guard let config = self.config else { return true }
-                var v = false
-                let key = ConfigSchema.macosSecureInputIndication
-                _ = key.read(from: config, into: &v)
-                return v
+                value(ConfigSchema.macosSecureInputIndication, default: false, unloaded: true)
             }
 
             var macosAppleScript: Bool {
-                guard let config = self.config else { return true }
-                var v = false
-                let key = ConfigSchema.macosApplescript
-                _ = key.read(from: config, into: &v)
-                return v
+                value(ConfigSchema.macosApplescript, default: false, unloaded: true)
             }
 
             var macosShortcuts: Config.MacShortcuts {
                 let defaultValue = Config.MacShortcuts.ask
-                guard let config = self.config else { return defaultValue }
-                var v: UnsafePointer<Int8>?
-                let key = ConfigSchema.macosShortcuts
-                guard key.read(from: config, into: &v) else { return defaultValue }
-                guard let ptr = v else { return defaultValue }
-                let str = String(cString: ptr)
+                guard let str = string(ConfigSchema.macosShortcuts) else { return defaultValue }
                 return Config.MacShortcuts(rawValue: str) ?? defaultValue
             }
 
@@ -571,12 +440,7 @@ extension Ghostty {
 
             var scrollbar: Config.Scrollbar {
                 let defaultValue = Config.Scrollbar.system
-                guard let config = self.config else { return defaultValue }
-                var v: UnsafePointer<Int8>?
-                let key = ConfigSchema.scrollbar
-                guard key.read(from: config, into: &v) else { return defaultValue }
-                guard let ptr = v else { return defaultValue }
-                let str = String(cString: ptr)
+                guard let str = string(ConfigSchema.scrollbar) else { return defaultValue }
                 return Config.Scrollbar(rawValue: str) ?? defaultValue
             }
 
@@ -591,11 +455,7 @@ extension Ghostty {
             }
 
             var progressStyle: Bool {
-                guard let config = self.config else { return true }
-                var v = true
-                let key = ConfigSchema.progressStyle
-                _ = key.read(from: config, into: &v)
-                return v
+                value(ConfigSchema.progressStyle, default: true)
             }
         }
     }

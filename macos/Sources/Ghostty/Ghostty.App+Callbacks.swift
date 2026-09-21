@@ -455,7 +455,7 @@ extension Ghostty.App {
     private static func checkForUpdates(
         _ app: ghostty_app_t
     ) {
-        if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
+        if let appDelegate = appState(from: app)?.delegate as? AppDelegate {
             appDelegate.checkForUpdates(nil)
         }
     }
@@ -540,12 +540,12 @@ extension Ghostty.App {
         let undoManager: UndoManager?
         switch target.tag {
         case GHOSTTY_TARGET_APP:
-            undoManager = (NSApp.delegate as? AppDelegate)?.undoManager
+            undoManager = appState(from: app)?.undoManager
 
         case GHOSTTY_TARGET_SURFACE:
             guard let surface = target.target.surface else { return false }
             guard let surfaceView = self.surfaceView(from: surface) else { return false }
-            undoManager = surfaceView.undoManager
+            undoManager = surfaceView.windowRegistry.owner(of: surfaceView)?.undoManager
 
         default:
             assertionFailure()
@@ -561,12 +561,12 @@ extension Ghostty.App {
         let undoManager: UndoManager?
         switch target.tag {
         case GHOSTTY_TARGET_APP:
-            undoManager = (NSApp.delegate as? AppDelegate)?.undoManager
+            undoManager = appState(from: app)?.undoManager
 
         case GHOSTTY_TARGET_SURFACE:
             guard let surface = target.target.surface else { return false }
             guard let surfaceView = self.surfaceView(from: surface) else { return false }
-            undoManager = surfaceView.undoManager
+            undoManager = surfaceView.windowRegistry.owner(of: surfaceView)?.undoManager
 
         default:
             assertionFailure()
@@ -789,7 +789,7 @@ extension Ghostty.App {
         _ app: ghostty_app_t,
         target: ghostty_target_s
     ) {
-        guard let appDelegate = NSApplication.shared.delegate as? AppDelegate else { return }
+        guard let appDelegate = appState(from: app)?.delegate as? AppDelegate else { return }
         appDelegate.toggleVisibility(self)
     }
 
@@ -807,10 +807,7 @@ extension Ghostty.App {
         case GHOSTTY_TARGET_SURFACE:
             guard let surface = target.target.surface else { return }
             guard let surfaceView = self.surfaceView(from: surface) else { return }
-            NotificationCenter.default.post(
-                name: .ghosttyBellDidRing,
-                object: surfaceView
-            )
+            surfaceView.ringBell()
 
         default:
             assertionFailure()
@@ -828,10 +825,7 @@ extension Ghostty.App {
         case GHOSTTY_TARGET_SURFACE:
             guard let surface = target.target.surface else { return }
             guard let surfaceView = self.surfaceView(from: surface) else { return }
-            NotificationCenter.default.post(
-                name: .ghosttySelectionDidChange,
-                object: surfaceView
-            )
+            surfaceView.selectionDidChange()
 
         default:
             assertionFailure()
@@ -850,13 +844,7 @@ extension Ghostty.App {
         case GHOSTTY_TARGET_SURFACE:
             guard let surface = target.target.surface else { return }
             guard let surfaceView = self.surfaceView(from: surface) else { return }
-            NotificationCenter.default.post(
-                name: .ghosttyDidChangeReadonly,
-                object: surfaceView,
-                userInfo: [
-                    SwiftUI.Notification.Name.ReadonlyKey: v == GHOSTTY_READONLY_ON,
-                ]
-            )
+            surfaceView.setReadonly(v == GHOSTTY_READONLY_ON)
 
         default:
             assertionFailure()
@@ -994,8 +982,8 @@ extension Ghostty.App {
         // standalone or the currently selected tab in their tab group. This
         // treats each native tab group as a single "window" for navigation
         // purposes, since goto_tab handles per-tab navigation.
-        let candidates: [NSWindow] = NSApplication.shared.windows.filter { window in
-            guard window.windowController is BaseTerminalController else { return false }
+        guard let state = appState(from: app) else { return false }
+        let candidates = state.windowRegistry.windowControllers.compactMap(\.window).filter { window in
             guard window.isVisible, !window.isMiniaturized else { return false }
             // For native tabs, only include the selected tab in each group
             if let group = window.tabGroup, group.selectedWindow !== window {
@@ -1126,11 +1114,7 @@ extension Ghostty.App {
             guard let surface = target.target.surface else { return }
             guard let surfaceView = self.surfaceView(from: surface) else { return }
             guard let visibility = Ghostty.Inspector.Visibility(coreValue: mode) else { return }
-            NotificationCenter.default.post(
-                name: Ghostty.Notification.didControlInspector,
-                object: surfaceView,
-                userInfo: ["mode": visibility]
-            )
+            surfaceView.controlInspector(visibility)
 
         default:
             assertionFailure()
@@ -1232,7 +1216,7 @@ extension Ghostty.App {
             guard let surfaceView = self.surfaceView(from: surface) else { return }
 
             // Determine if we even care about command finish notifications
-            guard let config = (NSApplication.shared.delegate as? AppDelegate)?.ghostty.config else { return }
+            guard let config = appState(from: app)?.config else { return }
             switch config.notifyOnCommandFinish {
             case .never:
                 return
@@ -1251,10 +1235,7 @@ extension Ghostty.App {
             let actions = config.notifyOnCommandFinishAction
 
             if actions.contains(.bell) {
-                NotificationCenter.default.post(
-                    name: .ghosttyBellDidRing,
-                    object: surfaceView
-                )
+                surfaceView.ringBell()
             }
 
             if actions.contains(.notify) {
@@ -1322,7 +1303,7 @@ extension Ghostty.App {
                 window.level = window.level == .floating ? .normal : .floating
             }
 
-            if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
+            if let appDelegate = appState(from: app)?.delegate as? AppDelegate {
                 appDelegate.syncFloatOnTopMenu(window)
             }
 
@@ -1343,7 +1324,7 @@ extension Ghostty.App {
         case GHOSTTY_TARGET_SURFACE:
             guard let surface = target.target.surface,
                 let surfaceView = self.surfaceView(from: surface),
-                let controller = surfaceView.window?.windowController as? BaseTerminalController else { return }
+                let controller = surfaceView.windowRegistry.owner(of: surfaceView) else { return }
 
             controller.toggleBackgroundOpacity()
 
@@ -1361,7 +1342,7 @@ extension Ghostty.App {
 
         switch target.tag {
         case GHOSTTY_TARGET_APP:
-            guard let appDelegate = NSApplication.shared.delegate as? AppDelegate else { return }
+            guard let appDelegate = appState(from: app)?.delegate as? AppDelegate else { return }
             appDelegate.setSecureInput(mode)
 
         case GHOSTTY_TARGET_SURFACE:
@@ -1390,7 +1371,7 @@ extension Ghostty.App {
         _ app: ghostty_app_t,
         target: ghostty_target_s
     ) {
-        guard let appDelegate = NSApplication.shared.delegate as? AppDelegate else { return }
+        guard let appDelegate = appState(from: app)?.delegate as? AppDelegate else { return }
         appDelegate.toggleQuickTerminal(self)
     }
 
@@ -1429,9 +1410,7 @@ extension Ghostty.App {
             let titleOverride = title.isEmpty ? nil : title
             guard let surface = target.target.surface else { return false }
             guard let surfaceView = self.surfaceView(from: surface) else { return false }
-            guard let window = surfaceView.window,
-                  let controller = window.windowController as? BaseTerminalController
-            else { return false }
+            guard let controller = surfaceView.windowRegistry.owner(of: surfaceView) else { return false }
             controller.titleOverride = titleOverride
             return true
 
@@ -1467,7 +1446,7 @@ extension Ghostty.App {
             // We handle this when the window is visible and timetime_ms is greater than 0,
             // which will rule out exit codes on launch
             guard surfaceView.window != nil, v.timetime_ms > 0 else { return false }
-            guard let config = (NSApplication.shared.delegate as? AppDelegate)?.ghostty.config else { return false }
+            guard let config = appState(from: app)?.config else { return false }
             surfaceView.setChildExitedMessage(.init(v, threshold: config.abnormalCommandExitRuntime))
             return true
         default:
@@ -1520,8 +1499,9 @@ extension Ghostty.App {
         case .tab:
             switch target.tag {
             case GHOSTTY_TARGET_APP:
-                guard let window = NSApp.mainWindow ?? NSApp.keyWindow,
-                      let controller = window.windowController as? BaseTerminalController
+                guard let registry = appState(from: app)?.windowRegistry,
+                      let controller = registry.windowControllers.first(where: { $0.window?.isMainWindow == true })
+                        ?? registry.windowControllers.first(where: { $0.window?.isKeyWindow == true })
                 else { return false }
                 controller.promptTabTitle()
                 return true
@@ -1529,9 +1509,7 @@ extension Ghostty.App {
             case GHOSTTY_TARGET_SURFACE:
                 guard let surface = target.target.surface else { return false }
                 guard let surfaceView = self.surfaceView(from: surface) else { return false }
-                guard let window = surfaceView.window,
-                      let controller = window.windowController as? BaseTerminalController
-                else { return false }
+                guard let controller = surfaceView.windowRegistry.owner(of: surfaceView) else { return false }
                 controller.promptTabTitle()
                 return true
 
@@ -1705,10 +1683,7 @@ extension Ghostty.App {
         case GHOSTTY_TARGET_SURFACE:
             guard let surface = target.target.surface else { return }
             guard let surfaceView = self.surfaceView(from: surface) else { return }
-            NotificationCenter.default.post(
-                name: Ghostty.Notification.inspectorNeedsDisplay,
-                object: surfaceView
-            )
+            surfaceView.inspectorView?.needsDisplay = true
 
         default:
             assertionFailure()
@@ -1727,13 +1702,7 @@ extension Ghostty.App {
         case GHOSTTY_TARGET_SURFACE:
             guard let surface = target.target.surface else { return }
             guard let surfaceView = self.surfaceView(from: surface) else { return }
-            NotificationCenter.default.post(
-                name: Ghostty.Notification.didUpdateRendererHealth,
-                object: surfaceView,
-                userInfo: [
-                    "health": v == GHOSTTY_RENDERER_HEALTH_HEALTHY,
-                ]
-            )
+            surfaceView.updateRendererHealth(v == GHOSTTY_RENDERER_HEALTH_HEALTHY)
 
         default:
             assertionFailure()
@@ -1754,18 +1723,10 @@ extension Ghostty.App {
             guard let surfaceView = self.surfaceView(from: surface) else { return }
             DispatchQueue.main.async {
                 if v.active {
-                    NotificationCenter.default.post(
-                        name: Ghostty.Notification.didContinueKeySequence,
-                        object: surfaceView,
-                        userInfo: [
-                            Ghostty.Notification.KeySequenceKey: Ghostty.keyboardShortcut(for: v.trigger) as Any
-                        ]
-                    )
+                    guard let key = Ghostty.keyboardShortcut(for: v.trigger) else { return }
+                    surfaceView.continueKeySequence(key)
                 } else {
-                    NotificationCenter.default.post(
-                        name: Ghostty.Notification.didEndKeySequence,
-                        object: surfaceView
-                    )
+                    surfaceView.endKeySequence()
                 }
             }
 
@@ -1788,11 +1749,7 @@ extension Ghostty.App {
             guard let surfaceView = self.surfaceView(from: surface) else { return }
             guard let action = Ghostty.Action.KeyTable(c: v) else { return }
 
-            NotificationCenter.default.post(
-                name: Ghostty.Notification.didChangeKeyTable,
-                object: surfaceView,
-                userInfo: [Ghostty.Notification.KeyTableKey: action]
-            )
+            surfaceView.updateKeyTable(action)
 
         default:
             assertionFailure()
@@ -1811,7 +1768,7 @@ extension Ghostty.App {
         case GHOSTTY_TARGET_SURFACE:
             guard let surface = target.target.surface else { return }
             guard let surfaceView = self.surfaceView(from: surface) else { return }
-            guard let config = (NSApplication.shared.delegate as? AppDelegate)?.ghostty.config else { return }
+            guard let config = appState(from: app)?.config else { return }
 
             guard config.progressStyle else {
                 Ghostty.logger.debug("progress_report action blocked by config")
@@ -1849,13 +1806,7 @@ extension Ghostty.App {
             guard let surfaceView = self.surfaceView(from: surface) else { return }
 
             let scrollbar = Ghostty.Action.Scrollbar(c: v)
-            NotificationCenter.default.post(
-                name: .ghosttyDidUpdateScrollbar,
-                object: surfaceView,
-                userInfo: [
-                    SwiftUI.Notification.Name.ScrollbarKey: scrollbar
-                ]
-            )
+            surfaceView.updateScrollbar(scrollbar)
 
         default:
             assertionFailure()
@@ -1885,7 +1836,7 @@ extension Ghostty.App {
                     surfaceView.searchState = Ghostty.SearchState(from: startSearch)
                 }
 
-                NotificationCenter.default.post(name: .ghosttySearchFocus, object: surfaceView)
+                surfaceView.searchState?.requestFocus()
             }
 
         default:
@@ -2007,27 +1958,12 @@ extension Ghostty.App {
                 let ghostty = Unmanaged<Ghostty.App>.fromOpaque(app_ud).takeUnretainedValue()
                 ghostty.acceptConfiguration(config)
 
-                // Notify the world that the app config changed
-                NotificationCenter.default.post(
-                    name: .ghosttyConfigDidChange,
-                    object: nil,
-                    userInfo: [
-                        SwiftUI.Notification.Name.GhosttyConfigChangeKey: config,
-                    ]
-                )
-
                 return
 
             case GHOSTTY_TARGET_SURFACE:
                 guard let surface = target.target.surface else { return }
                 guard let surfaceView = self.surfaceView(from: surface) else { return }
-                NotificationCenter.default.post(
-                    name: .ghosttyConfigDidChange,
-                    object: surfaceView,
-                    userInfo: [
-                        SwiftUI.Notification.Name.GhosttyConfigChangeKey: config,
-                    ]
-                )
+                surfaceView.acceptConfiguration(config)
 
             default:
                 assertionFailure()
@@ -2046,13 +1982,7 @@ extension Ghostty.App {
             case GHOSTTY_TARGET_SURFACE:
                 guard let surface = target.target.surface else { return }
                 guard let surfaceView = self.surfaceView(from: surface) else { return }
-                NotificationCenter.default.post(
-                    name: .ghosttyColorDidChange,
-                    object: surfaceView,
-                    userInfo: [
-                        SwiftUI.Notification.Name.GhosttyColorChangeKey: Ghostty.Action.ColorChange(c: change)
-                    ]
-                )
+                surfaceView.acceptColorChange(Ghostty.Action.ColorChange(c: change))
 
             default:
                 assertionFailure()

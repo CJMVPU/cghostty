@@ -7,8 +7,8 @@
 #
 # Background: our static library bundles Zig's compiler-rt, which defines
 # strong global implementations of libc/libm functions (memcpy, memmove,
-# memset, cos, sin, ...). When a consumer (e.g. the macOS app via the
-# XCFramework) links this archive, ld64 resolves those symbols from the
+# memset, cos, sin, ...). When the macOS app links this archive directly,
+# ld64 resolves those symbols from the
 # archive instead of libSystem, silently replacing Apple's highly
 # optimized implementations (_platform_memmove and friends, vectorized
 # libm) with compiler-rt's generic ones. We measured Zig 0.16 (LLVM 21)

@@ -75,17 +75,8 @@ class SurfaceScrollView: NSView {
             MainActor.assumeIsolated { self?.synchronizeSurfaceView() }
         })
 
-        // Listen for scrollbar updates from Ghostty
-        observers.append(NotificationCenter.default.addObserver(
-            forName: .ghosttyDidUpdateScrollbar,
-            object: surfaceView,
-            queue: .main
-        ) { [weak self] notification in
-            guard let scrollbar = notification.userInfo?[SwiftUI.Notification.Name.ScrollbarKey] as? Ghostty.Action.Scrollbar else {
-                return
-            }
-            MainActor.assumeIsolated { self?.handleScrollbarUpdate(scrollbar) }
-        })
+        surfaceView.scrollContainer = self
+        if let scrollbar = surfaceView.state.scrollbar { handleScrollbarUpdate(scrollbar) }
 
         // Listen for live scroll events
         observers.append(NotificationCenter.default.addObserver(
@@ -147,6 +138,7 @@ class SurfaceScrollView: NSView {
     private var ownsSurfacePresentation: Bool { surfaceView.superview === documentView }
 
     private func stopObserving() {
+        if surfaceView.scrollContainer === self { surfaceView.scrollContainer = nil }
         appearanceObservation?.cancel()
         appearanceObservation = nil
         observers.forEach { NotificationCenter.default.removeObserver($0) }
@@ -300,7 +292,7 @@ class SurfaceScrollView: NSView {
     /// - `total`: Total rows in scrollback + active area
     /// - `offset`: First visible row (0 = top of history)
     /// - `len`: Number of visible rows (viewport height)
-    private func handleScrollbarUpdate(_ scrollbar: Ghostty.Action.Scrollbar) {
+    func handleScrollbarUpdate(_ scrollbar: Ghostty.Action.Scrollbar) {
         guard ownsSurfacePresentation else { return }
         surfaceView.scrollbar = scrollbar
         synchronizeScrollView()

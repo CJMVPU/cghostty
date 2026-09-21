@@ -4,7 +4,7 @@ const assert = @import("../quirks.zig").inlineAssert;
 const font = @import("../font/main.zig");
 const terminal = @import("../terminal/main.zig");
 const renderer = @import("../renderer.zig");
-const shaderpkg = renderer.Renderer.API.shaders;
+const shaderpkg = renderer.Metal.shaders;
 const symbols = @import("../unicode/symbols_table.zig").table;
 
 const CellTextRow = std.ArrayListUnmanaged(shaderpkg.CellText);

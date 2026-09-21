@@ -30,6 +30,7 @@ extension Ghostty {
 
         /// Weak topology lookup, separate from loaded-window retention.
         @ObservationIgnored let windowRegistry = WindowRegistry()
+        @ObservationIgnored let undoManager = ExpiringUndoManager()
 
         /// Preferred config file than the default ones
         @ObservationIgnored private var configPath: String?
@@ -118,7 +119,11 @@ extension Ghostty {
             NotificationCenter.default.removeObserver(self)
         }
 
-        func acceptConfiguration(_ config: Config) { self.config = config }
+        func acceptConfiguration(_ config: Config) {
+            self.config = config
+            windowRegistry.registeredControllers.forEach { $0.acceptConfiguration(config) }
+            (delegate as? AppDelegate)?.acceptConfiguration(config)
+        }
 
         var isReady: Bool { app != nil }
 
@@ -236,6 +241,9 @@ extension Ghostty {
         @objc private func applicationDidBecomeActive(notification: NSNotification) {
             guard let app = self.app else { return }
             ghostty_app_set_focus(app, true)
+            for controller in windowRegistry.windowControllers {
+                for surface in controller.surfaceTree { surface.searchState?.readPasteboardNeedle() }
+            }
         }
 
         // Called when the app becomes inactive.
@@ -251,7 +259,7 @@ extension Ghostty {
             // We always require the notification to be attached to a surface.
             guard let uuidString = userInfo["surface"] as? String,
                   let uuid = UUID(uuidString: uuidString),
-                  let surface = delegate?.findSurface(forUUID: uuid),
+                  let surface = windowRegistry.surface(id: uuid),
                   let window = surface.window else { return false }
 
             // If we don't require focus then we're good!
@@ -268,7 +276,7 @@ extension Ghostty {
             let userInfo = response.notification.request.content.userInfo
             guard let uuidString = userInfo["surface"] as? String,
                   let uuid = UUID(uuidString: uuidString),
-                  let surface = delegate?.findSurface(forUUID: uuid) else { return }
+                  let surface = windowRegistry.surface(id: uuid) else { return }
 
             switch response.actionIdentifier {
             case UNNotificationDefaultActionIdentifier, Ghostty.userNotificationActionShow:

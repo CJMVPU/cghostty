@@ -110,6 +110,21 @@ import Testing
 }
 
 extension SurfaceView_SearchStateTests {
+    @Test func disappearingOverlayDoesNotClearItsReplacementFocus() {
+        let state = SearchState(from: StartSearch(c: .init(needle: nil)), pasteboard: pasteboard)
+        let oldOwner = UUID()
+        let newOwner = UUID()
+        var focused: [UUID] = []
+        state.attachFocusRequest(owner: oldOwner) { focused.append(oldOwner) }
+        state.attachFocusRequest(owner: newOwner) { focused.append(newOwner) }
+        state.detachFocusRequest(owner: oldOwner)
+        state.requestFocus()
+        #expect(focused == [newOwner])
+        state.detachFocusRequest(owner: newOwner)
+        state.requestFocus()
+        #expect(focused == [newOwner])
+    }
+
     @Test func selectionChangesDoNotRepeatSearch() {
         let state = SearchState(from: StartSearch(c: .init(needle: nil)), pasteboard: pasteboard)
         state.setNeedle("terminal")

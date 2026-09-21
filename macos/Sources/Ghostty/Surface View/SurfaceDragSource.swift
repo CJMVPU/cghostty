@@ -242,12 +242,8 @@ extension Ghostty {
                 let endsInWindow = NSApplication.shared.windows.contains { window in
                     window.isVisible && window.frame.contains(screenPoint)
                 }
-                if !endsInWindow {
-                    NotificationCenter.default.post(
-                        name: .ghosttySurfaceDragEndedNoTarget,
-                        object: surfaceView,
-                        userInfo: [Foundation.Notification.Name.ghosttySurfaceDragEndedNoTargetPointKey: screenPoint]
-                    )
+                if !endsInWindow, let surfaceView {
+                    surfaceView.windowRegistry.owner(of: surfaceView)?.detachSplit(surfaceView, at: screenPoint)
                 }
             }
 
@@ -255,14 +251,4 @@ extension Ghostty {
             onDragStateChanged?(false)
         }
     }
-}
-
-extension Notification.Name {
-    /// Posted when a surface drag session ends with no operation (the drag was
-    /// released outside a valid drop target) and was not cancelled by the user
-    /// pressing escape. The notification's object is the SurfaceView that was dragged.
-    static let ghosttySurfaceDragEndedNoTarget = Notification.Name("ghosttySurfaceDragEndedNoTarget")
-
-    /// Key for the screen point where the drag ended in the userInfo dictionary.
-    static let ghosttySurfaceDragEndedNoTargetPointKey = "endedAtPoint"
 }

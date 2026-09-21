@@ -77,8 +77,7 @@ class ExpiringUndoManager: UndoManager {
             expiringTargets
                 .filter { $0.target == nil || $0.target === (target as AnyObject) }
                 .forEach {
-                    // Technically they'll always expire when they get deinitialized
-                    // but we want to make sure it happens right now.
+                    // Remove the proxy's undo actions before dropping our ownership.
                     $0.expire()
                     expiringTargets.remove($0)
                 }
@@ -91,10 +90,8 @@ class ExpiringUndoManager: UndoManager {
 ///
 /// This class acts as a proxy for the real target object in undo operations.
 /// It holds a weak reference to the actual target and automatically removes
-/// all associated undo operations when either:
-/// - The specified duration expires
-/// - The ExpiringTarget instance is deallocated
-/// - The expire() method is called manually
+/// all associated undo operations when the timer fires or expire() is called.
+/// Deallocation only cancels the timer; the manager has already released the entry.
 private class ExpiringTarget {
     /// The actual target object for the undo operation, held weakly to avoid retain cycles.
     private(set) weak var target: AnyObject?
@@ -133,7 +130,9 @@ private class ExpiringTarget {
     }
 
     isolated deinit {
-        expire()
+        // The manager has already released this entry. Calling back into it here
+        // would reenter its target set while removeAllActions is mutating it.
+        timer?.invalidate()
     }
 }
 

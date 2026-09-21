@@ -79,11 +79,10 @@ struct TerminalCommandPaletteView: View {
 
     /// Custom commands from the command-palette-entry configuration.
     private var terminalOptions: [CommandOption] {
-        guard let appDelegate = NSApp.delegate as? AppDelegate else { return [] }
-        return appDelegate.ghostty.config.commandPaletteEntries
-            .filter(\.isSupported)
+        guard let app = surfaceView.windowRegistry.owner(of: surfaceView)?.ghostty else { return [] }
+        return app.config.commandPaletteEntries
             .map { c in
-                let symbols = appDelegate.ghostty.config.keyboardShortcut(for: c.action)?.keyList
+                let symbols = app.config.keyboardShortcut(for: c.action)?.keyList
                 return CommandOption(
                     title: c.title,
                     description: c.description,

@@ -2097,7 +2097,6 @@ fn testShaper(alloc: Allocator) !TestShaper {
 }
 
 fn testShaperWithFont(alloc: Allocator, font_req: TestFont) !TestShaper {
-    const testEmoji = font.embedded.emoji;
     const testEmojiText = font.embedded.emoji_text;
     const testFont = switch (font_req) {
         .inconsolata => font.embedded.inconsolata,
@@ -2122,18 +2121,7 @@ fn testShaperWithFont(alloc: Allocator, font_req: TestFont) !TestShaper {
         .size_adjustment = .none,
     });
 
-    if (comptime !font.options.backend.hasCoretext()) {
-        // Coretext doesn't support Noto's format
-        _ = try c.add(alloc, try .init(
-            lib,
-            testEmoji,
-            .{ .size = .{ .points = 12 } },
-        ), .{
-            .style = .regular,
-            .fallback = false,
-            .size_adjustment = .none,
-        });
-    } else {
+    {
         // On CoreText we want to load Apple Emoji, we should have it.
         var disco = font.Discover.init(lib);
         defer disco.deinit();

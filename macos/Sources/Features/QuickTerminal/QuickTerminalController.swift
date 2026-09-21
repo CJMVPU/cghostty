@@ -4,7 +4,22 @@ import SwiftUI
 
 /// Controller for the "quick" terminal.
 class QuickTerminalController: BaseTerminalController {
-    override var windowNibName: NSNib.Name? { "QuickTerminal" }
+    override func loadWindow() {
+        let panel = QuickTerminalWindow(
+            contentRect: NSRect(x: 196, y: 240, width: 480, height: 270),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        panel.title = "👻 cghostty"
+        panel.isReleasedWhenClosed = false
+        panel.isRestorable = false
+        panel.autorecalculatesKeyViewLoop = false
+        panel.contentView?.wantsLayer = true
+        window = panel
+        panel.delegate = self
+        panel.configure()
+    }
 
     /// The position for the quick terminal.
     let position: QuickTerminalPosition
@@ -63,11 +78,6 @@ class QuickTerminalController: BaseTerminalController {
             self,
             selector: #selector(applicationWillTerminate(_:)),
             name: NSApplication.willTerminateNotification,
-            object: nil)
-        center.addObserver(
-            self,
-            selector: #selector(ghosttyConfigDidChange(_:)),
-            name: .ghosttyConfigDidChange,
             object: nil)
         center.addObserver(
             self,
@@ -322,10 +332,7 @@ class QuickTerminalController: BaseTerminalController {
         visible = true
 
         // Notify the change
-        NotificationCenter.default.post(
-            name: .quickTerminalDidChangeVisibility,
-            object: self
-        )
+        (ghostty.delegate as? AppDelegate)?.quickTerminalVisibilityDidChange(self)
 
         // If we have a previously focused application and it isn't us, then
         // we want to store it so we can restore state later.
@@ -344,7 +351,8 @@ class QuickTerminalController: BaseTerminalController {
         // animate out.
         if surfaceTree.isEmpty,
            ghostty.isReady {
-            if let tree = restorationState?.surfaceTree, !tree.isEmpty {
+            if let saved = restorationState, !saved.surfaceTree.isEmpty {
+                let tree = saved.surfaceTree.restore { $0.makeView(in: ghostty, baseConfig: saved.baseConfig) }
                 surfaceTree = tree
                 let view = tree.first(where: { $0.id.uuidString == restorationState?.focusedSurface }) ?? tree.first!
                 focusedSurface = view
@@ -381,10 +389,7 @@ class QuickTerminalController: BaseTerminalController {
         visible = false
 
         // Notify the change
-        NotificationCenter.default.post(
-            name: .quickTerminalDidChangeVisibility,
-            object: self
-        )
+        (ghostty.delegate as? AppDelegate)?.quickTerminalVisibilityDidChange(self)
 
         animateWindowOut(window: window, to: position)
     }
@@ -541,7 +546,7 @@ class QuickTerminalController: BaseTerminalController {
             MainActor.assumeIsolated {
                 window.orderOut(self)
                 // If our application was hidden previously, hide it again.
-                if (NSApp.delegate as? AppDelegate)?.hiddenState != nil {
+                if (self.ghostty.delegate as? AppDelegate)?.hiddenState != nil {
                     NSApp.hide(nil)
                 }
             }
@@ -583,7 +588,7 @@ class QuickTerminalController: BaseTerminalController {
             MainActor.assumeIsolated {
                 window.orderOut(self)
                 // If our application was hidden previously, hide it again.
-                if (NSApp.delegate as? AppDelegate)?.hiddenState != nil {
+                if (self.ghostty.delegate as? AppDelegate)?.hiddenState != nil {
                     NSApp.hide(nil)
                 }
             }
@@ -698,16 +703,8 @@ class QuickTerminalController: BaseTerminalController {
         toggleFullscreen(mode: mode)
     }
 
-    @objc private func ghosttyConfigDidChange(_ notification: Notification) {
-        // We only care if the configuration is a global configuration, not a
-        // surface-specific one.
-        guard notification.object == nil else { return }
-
-        // Get our managed configuration object out
-        guard let config = notification.userInfo?[
-            Notification.Name.GhosttyConfigChangeKey
-        ] as? Ghostty.Config else { return }
-
+    override func acceptConfiguration(_ config: Ghostty.Config) {
+        super.acceptConfiguration(config)
         // Update our derived config
         self.derivedConfig = DerivedConfig(config.snapshot)
 
@@ -779,9 +776,4 @@ class QuickTerminalController: BaseTerminalController {
             hidden = false
         }
     }
-}
-
-extension Notification.Name {
-    /// The quick terminal did become hidden or visible.
-    static let quickTerminalDidChangeVisibility = Notification.Name("QuickTerminalDidChangeVisibility")
 }

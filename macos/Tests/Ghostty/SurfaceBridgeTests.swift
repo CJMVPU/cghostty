@@ -124,4 +124,59 @@ import Testing
         #expect(surface.size.pixels == CGSize(width: 640, height: 480))
         #expect(surface.size.columns > 0)
     }
+
+    @Test func stateCallbacksReachOnlyTheirTargetAndPreserveQueueOrder() async throws {
+        let app = Ghostty.App(configPath: "/dev/null")
+        var config = Ghostty.SurfaceConfiguration()
+        config.command = "/bin/cat"
+        config.workingDirectory = FileManager.default.temporaryDirectory.path
+        let view = Ghostty.SurfaceView(app, baseConfig: config)
+        let other = Ghostty.SurfaceView(app, baseConfig: config)
+        let core = try #require(view.surfaceModel)
+        let target = ghostty_target_s(tag: GHOSTTY_TARGET_SURFACE,
+                                     target: .init(surface: core.unsafeCValue))
+        let appHandle = try #require(app.app)
+        func deliver(_ tag: ghostty_action_tag_e, _ value: ghostty_action_u) {
+            #expect(Ghostty.App.action(appHandle, target: target, action: .init(tag: tag, action: value)))
+        }
+        func drainQueue() async {
+            await withCheckedContinuation { continuation in
+                DispatchQueue.main.async { continuation.resume() }
+            }
+        }
+
+        deliver(GHOSTTY_ACTION_READONLY, .init(readonly: GHOSTTY_READONLY_ON))
+        #expect(view.readonly)
+        #expect(!other.readonly)
+        deliver(GHOSTTY_ACTION_RENDERER_HEALTH, .init(renderer_health: GHOSTTY_RENDERER_HEALTH_UNHEALTHY))
+        #expect(view.healthy) // Presentation changes remain deferred.
+
+        var name = Array("navigation".utf8CString)
+        name.withUnsafeBufferPointer { buffer in
+            deliver(GHOSTTY_ACTION_KEY_TABLE,
+                    .init(key_table: .init(tag: GHOSTTY_KEY_TABLE_ACTIVATE,
+                                           value: .init(activate: .init(name: buffer.baseAddress, len: 10)))))
+        }
+        name[0] = 88 // The callback must own the name before returning to the core.
+        let trigger = ghostty_input_trigger_s(tag: GHOSTTY_TRIGGER_UNICODE,
+                                             key: .init(unicode: 97), mods: GHOSTTY_MODS_CTRL)
+        deliver(GHOSTTY_ACTION_KEY_SEQUENCE, .init(key_sequence: .init(active: true, trigger: trigger)))
+        await drainQueue()
+        await drainQueue()
+        #expect(!view.healthy)
+        #expect(other.healthy)
+        #expect(view.keyTables == ["navigation"])
+        #expect(other.keyTables.isEmpty)
+        #expect(view.keySequence.count == 1)
+        #expect(other.keySequence.isEmpty)
+
+        deliver(GHOSTTY_ACTION_KEY_TABLE,
+                .init(key_table: .init(tag: GHOSTTY_KEY_TABLE_DEACTIVATE, value: .init())))
+        deliver(GHOSTTY_ACTION_KEY_SEQUENCE, .init(key_sequence: .init(active: false, trigger: trigger)))
+        await drainQueue()
+        await drainQueue()
+        #expect(view.keyTables.isEmpty)
+        #expect(view.keySequence.isEmpty)
+    }
+
 }

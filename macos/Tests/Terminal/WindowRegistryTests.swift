@@ -10,6 +10,43 @@ import Testing
         return TerminalController(app, withBaseConfig: config)
     }
 
+    @Test(arguments: ["native", "hidden", "transparent", "tabs"])
+    func nativeWindowStylesInitializeWithTheirOwnApp(style: String) throws {
+        let config = try TemporaryConfig("macos-titlebar-style = \(style)\ntitle = Scoped window")
+        let app = Ghostty.App(configPath: config.temporaryFile.path)
+        let controller = terminal(app)
+        let window = try #require(controller.window as? TerminalWindow)
+        defer { window.close() }
+        #expect(window.title == "Scoped window")
+        #expect(window.delegate === controller)
+        #expect(window.contentView != nil)
+        #expect(app.windowRegistry.windowControllers.contains { $0 === controller })
+        switch style {
+        case "hidden": #expect(window is HiddenTitlebarTerminalWindow)
+        case "transparent": #expect(window is TransparentTitlebarTerminalWindow)
+        case "tabs": #expect(window is TitlebarTabsTahoeTerminalWindow)
+        default: #expect(type(of: window) == TerminalWindow.self)
+        }
+    }
+
+    @Test func opacityToggleAndConfigReloadStayWithinTheirApp() throws {
+        let config = try TemporaryConfig("background-opacity = 0.5")
+        let first = Ghostty.App(configPath: config.temporaryFile.path)
+        let second = Ghostty.App(configPath: config.temporaryFile.path)
+        let one = terminal(first)
+        let two = terminal(second)
+        defer { one.window?.close(); two.window?.close() }
+        _ = try #require(one.window)
+        _ = try #require(two.window)
+        one.toggleBackgroundOpacity()
+        #expect(one.isBackgroundOpaque)
+        #expect(!two.isBackgroundOpaque)
+        try config.reload("background-opacity = 0.8")
+        first.reloadConfig()
+        #expect(first.config.backgroundOpacity == 0.8)
+        #expect(second.config.backgroundOpacity == 0.5)
+    }
+
     @Test func enumerationAndPreferredParentAreAppScoped() throws {
         let first = Ghostty.App(configPath: "/dev/null")
         let second = Ghostty.App(configPath: "/dev/null")
