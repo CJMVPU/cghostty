@@ -219,13 +219,15 @@ pub const Uniforms = extern struct {
         use_linear_correction: bool align(1) = false,
     },
 
-    smooth_corners: [4][2]f32 align(8) = .{.{ 0, 0 }} ** 4,
+    smooth_center: [2]f32 align(8) = .{ 0, 0 },
+    smooth_tail_offset: [2]f32 align(8) = .{ 0, 0 },
     smooth_target: [2]f32 align(8) = .{ 0, 0 },
     smooth_half_size: [2]f32 align(8) = .{ 0, 0 },
+    smooth_native_half_size: [2]f32 align(8) = .{ 0, 0 },
+    smooth_roundness: f32 align(4) = 0,
     smooth_color: [4]u8 align(4) = .{ 0, 0, 0, 0 },
     smooth_effect: f32 align(4) = 0,
     smooth_block: u32 align(4) = 0,
-    smooth_corner_count: u32 align(4) = 4,
 
     const PaddingExtend = packed struct(u8) {
         left: bool = false,

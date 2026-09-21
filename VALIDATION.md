@@ -1,3 +1,37 @@
+## 移除尾部长度上限（2026-09-21，未发布）
+
+- 按用户要求删除尾部的单元格宽度上限与光标自身尺寸上限。横向、竖向、斜向和三种光标均直接采用主体/尾部缓动进度之差，保留尾部额外 40ms 的追赶时长、主体等比例放大 12%、轻微椭圆化及默认 3 物理像素笔画。连续重定向保留当前主体和尾部位置。
+- 长距离单次移动使用主体 180ms、尾部 220ms 的时长。从静止移动 1000 像素，峰值偏移约为 88.96 像素，发生在约 66.11ms；该数值是中心间距，不是外露尾长，也不是新的固定上限。绘制继续覆盖主体与尾部之间的整段连接区域，不依赖两者始终重叠来保持连接。
+- 渲染定向回归 **101/101 通过，89/89 构建步骤**，日志 `/private/tmp/cghostty-free-tail-core.log`。新增八方向、三种形状的等长移动峰值与方向一致性断言；持续长跳和反向重定向验证位置连续、有限、保留在移动区域内，停止后完全收拢。既有主体尺寸、持续输入、隐藏重绘和帧调度回归通过。
+- Metal 桌面回归 **2/2 通过，0 失败，无运行时警告**，结果 `/private/tmp/cghostty-free-tail-ui.xcresult`，摘要为同名前缀的 `-summary.json`，截图位于 `-attachments/`。垂直同步开启/关闭分别验证三种光标的长距离横向、竖向和斜向跳转，每段必须拍到超过旧上限的尾部；逐帧验证主体完整、所有绿色像素为一个四邻接连通区域，避免仅通过包围盒掩盖断尾。保留单格重复输入、最小化恢复、停止精确恢复及系统提示遮挡识别。
+- 抽检的方块尾部截图整体尺寸为横向 93×46、竖向 21×102、斜向 52×85 像素；这些是不同时间点的主体与尾部整体包围盒，不是峰值中心偏移。测试使用受控 PTY，不宣称实际 Vim 物理长按或 GPU 性能验收。本轮未重复原生全套测试，既有 277 项通过记录仍属于前一轮。
+- ReleaseFast 核心及 ReleaseLocal 应用重建成功，日志 `/private/tmp/cghostty-free-tail-release.log` 无 `warning:` / `error:` 诊断；应用架构、资源、签名和项目范围检查通过，记录 `/private/tmp/cghostty-free-tail-release-scope.log`。严格 SwiftLint、Zig 格式、Swift 6、依赖版本、配置桥与 diff 检查通过，README 最长行仍为 64 显示列。
+- 试用应用仍位于 `macos/build/ReleaseLocal/cghostty.app`，版本 0.1.6 / 构建号 6。改动保留本地，未提交、打标签、发布或替换已安装应用；旧 0.1.6 ZIP 的 SHA-256 已核对未变，不包含本轮修改。
+
+## 稳定主体与短尾部跟随（2026-09-21，未发布）
+
+- 主体保持等比例放大 12% 与轻微椭圆化，默认细线仍为 3 个物理像素。增加独立尾部偏移，跟随时长比主体多 40ms；尾部偏移同时受 0.75 个单元格宽度及按原生光标尺寸归一化后的 0.75 距离限制。长距离搜索跳转不会无限拉长，细线横移也不会留下整格宽的尾带。
+- 重定向承接当前主体位置、尾部偏移和形变量；持续输入不重新收缩再放大。形变保持阶段至少覆盖尾部追上所需时间，随后平滑恢复原生尺寸。Metal 将完整主体与渐细尾部取覆盖并集，尾部只能增加覆盖，不能削掉主体；保留上一轮屏幕坐标直接投影修复。
+- 核心 renderer/config/Metrics/光标字形定向回归 **315/315 通过，89/89 构建步骤**，日志 `/private/tmp/cghostty-body-tail-core.log`。新增主体到达后尾部继续收拢、快速长距离跳转及改向时尾部连续且有界的测试；既有八方向、三种形状、持续输入、隐藏重绘、状态切换和帧调度回归同时通过。
+- 完整原生回归 **277 通过、1 项既有基准跳过、0 失败**，运行时警告为空。结果 `/private/tmp/cghostty-body-tail-native.xcresult`，摘要 `/private/tmp/cghostty-body-tail-native-summary.json`。
+- 桌面首轮失败帧明确显示 macOS 蓝色大写锁定提示覆盖光标，并非主体被尾部压窄。测试新增遮挡识别，仍要求每段至少 8 张未遮挡的可见帧满足完整主体及整体尺寸上限；没有放宽主体几何断言，也没有修改用户的大写锁定状态。首轮结果 `/private/tmp/cghostty-body-tail-ui.xcresult`，失败截图位于同名前缀的 `-attachments/`。
+- 最终 Metal 桌面回归 **2/2 通过，0 失败，无运行时警告**：垂直同步开启＋较大留白、垂直同步关闭＋零留白。每组检查横向、竖向、斜向、反向、最小化恢复，以及细线/下划线横竖移动与停止恢复；快速单格重复输入必须实际拍到尾部。结果 `/private/tmp/cghostty-body-tail-ui-v2.xcresult`，摘要为同名前缀的 `-summary.json`，截图位于 `-attachments/`。静止方块为 19×42 像素，抽检横向含尾部帧为 26×46，斜向为 24×53；断言还在包围盒内部验证完整主体，不能仅靠尾部长宽通过。
+- 以上桌面测试使用受控 PTY 的位置、形状与隐藏/显示序列；不等同于实际 Vim 物理长按、所有输入法/显示器组合或 GPU 性能测试。
+- 已重建 ReleaseFast 核心与 ReleaseLocal 应用，日志 `/private/tmp/cghostty-body-tail-release.log` 无 `warning:` / `error:` 诊断；应用的 arm64、资源、签名与项目范围检查通过，记录 `/private/tmp/cghostty-body-tail-release-scope.log`。严格 SwiftLint、Zig 格式、Swift 6、依赖版本、配置桥及 diff 检查通过。README 保持短行，最长 64 显示列。
+- 试用应用：`macos/build/ReleaseLocal/cghostty.app`。版本仍为 0.1.6 / 构建号 6；本轮未提交、打标签、发布或替换已安装应用。既有 0.1.6 ZIP 已核对 SHA-256 未变，不包含本轮试用改动。
+
+## 整体光标形变与屏幕坐标修正（2026-09-21，未发布）
+
+- 用单一中心位移替换四角独立追赶，移除前后沿差速与凸包处理。方块、细线和下划线均等比例放大至 **112%**，保持长宽比例；Metal 使用四次超椭圆柔化轮廓，不沿移动方向拉伸。默认笔画厚度由 1 改为 **3 个物理像素**，现有厚度调整配置仍可覆盖。
+- 位置与形变包络分开管理。展开约 24ms；新位置延长保持阶段，覆盖最长 120ms 的短输入间隔，且至少保持到位置到达；停止后用 100ms 收回。连续输入不重新播放展开阶段，收回中再次移动从当前形变量接续。形状/尺寸切换、隐藏/显示和 Reduce Motion 保留既有生命周期约定。
+- 新增逐帧回归覆盖八方向、三种光标、放大上限、比例不变、精确恢复、8/16/33/60/100ms 单格持续输入、快速改向、Vim 式隐藏重绘及中断收回。实际字体栅格回归验证默认细线宽度 3 像素和显式 1 像素覆盖。核心 renderer/config/Metrics/光标字形定向回归 **313/313 通过，89/89 构建步骤**：`/private/tmp/cghostty-uniform-motion-core-final.log`。
+- 真实 Metal 测试首轮发现尺寸不符：19×42 静止光标移动后仅为 21×44，上侧轮廓被裁切。根因是动画使用包含留白的屏幕坐标，顶点又应用带留白的网格投影，覆盖区域与包围三角形错位。改为屏幕像素直接映射裁剪坐标。相同场景修复后为 21×46，符合 12% 几何放大及像素抗锯齿误差，原生细线确认宽度 3 像素。修复后的首组完整桌面回归 **2/2 通过**：`/private/tmp/cghostty-uniform-motion-ui-v2.xcresult`；截图保存在 `/private/tmp/cghostty-uniform-motion-ui-v2-attachments/`。首轮失败是实际渲染错误，未放宽尺寸断言来绕过。
+- 顶点投影修正后，最终完整原生复验 **277 通过、1 项现有基准跳过、0 失败**：`/private/tmp/cghostty-uniform-motion-native-final.xcresult`；摘要 `/private/tmp/cghostty-uniform-motion-native-final-summary.json`。
+- 最终 Metal 桌面回归 **2/2 通过**：分别使用垂直同步开启＋较大留白、垂直同步关闭＋零留白。每组覆盖左右上下、斜向、最小化恢复、细线与下划线的横/竖移动及停止后精确恢复；每段采集 12 帧，对每张可见帧验证尺寸范围，而非任意一张符合即通过。结果 `/private/tmp/cghostty-uniform-motion-ui-final.xcresult`；摘要 `/private/tmp/cghostty-uniform-motion-ui-final-summary.json`。最终原生和桌面结果均无运行时警告。
+- 实际 UI 使用受控 PTY；不将这些结果描述为所有 Vim 物理按键、输入法、显示器组合或 GPU 性能验收。首次核心构建受 Metal 模块缓存的沙盒权限限制，使用获准的本地构建权限重跑通过，未绕过测试失败。
+- 最终 ReleaseFast 核心与 ReleaseLocal 应用重建成功，日志 `/private/tmp/cghostty-uniform-motion-release.log` 无 `warning:` / `error:` 诊断；应用范围、arm64、资源与签名检查通过：`/private/tmp/cghostty-uniform-motion-release-scope.log`。严格 SwiftLint、Zig 格式、Swift 6、依赖版本、配置桥及 diff 检查通过。
+- 可试用应用位于 `macos/build/ReleaseLocal/cghostty.app`，未替换 `/Applications` 中的应用。本轮保留版本 0.1.6 / 构建号 6，改动未提交、未打新标签、未发布；既有 `v0.1.6` 与 ZIP 仍对应上一版代码，ZIP 的 SHA-256 已核对未变。
+
 ## 0.1.6 本地安装包（2026-09-21，未发布）
 
 - README 按功能、安装、配置、构建与开发重新编写，采用短句与短行；最长行按中文双宽计算为 64 列，本地文档链接均有效。

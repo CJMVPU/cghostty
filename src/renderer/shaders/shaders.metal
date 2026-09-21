@@ -24,13 +24,15 @@ struct Uniforms {
   bool use_display_p3;
   bool use_linear_blending;
   bool use_linear_correction;
-  float2 smooth_corners[4];
+  float2 smooth_center;
+  float2 smooth_tail_offset;
   float2 smooth_target;
   float2 smooth_half_size;
+  float2 smooth_native_half_size;
+  float smooth_roundness;
   uchar4 smooth_color;
   float smooth_effect;
   uint smooth_block;
-  uint smooth_corner_count;
 };
 
 //-------------------------------------------------------------------
@@ -552,36 +554,47 @@ struct CellTextVertexIn {
   uint8_t bools [[attribute(6)]];
 };
 
-// Convex outline of the four independently animated corners. The CPU orders
-// the outline so quick reversals cannot produce a crossed or inverted quad.
+// One uniformly scaled body. A fourth-power ellipse softly rounds the
+// rectangle without pinching its middle or stretching it along travel.
 float smooth_cursor_coverage(float2 p, constant Uniforms& u) {
-  float distance = -INFINITY;
-  for (uint i = 0; i < u.smooth_corner_count; i++) {
-    float2 a = u.smooth_corners[i];
-    float2 b = u.smooth_corners[(i + 1) % u.smooth_corner_count];
-    float2 edge = b - a;
-    float2 outward = float2(edge.y, -edge.x) / max(length(edge), 0.0001);
-    distance = max(distance, dot(p - a, outward));
+  float2 normalized = (p - u.smooth_center) / max(u.smooth_half_size, float2(0.001));
+  float2 local = abs(normalized);
+  float rectangle = max(local.x, local.y) - 1;
+  float2 squared = local * local;
+  float oval = sqrt(sqrt(dot(squared, squared))) - 1;
+  float distance = mix(rectangle, oval, u.smooth_roundness);
+  float aa = max(0.5 * fwidth(distance), 0.0001);
+  float coverage = 1 - smoothstep(-aa, aa, distance);
+  // Union a connected tapered follower with the complete body. The tail can add
+  // coverage but never remove pixels from or squeeze the moving body.
+  float2 tail = u.smooth_tail_offset / max(u.smooth_half_size, float2(0.001));
+  float tail_length_squared = dot(tail, tail);
+  if (tail_length_squared > 0.000001) {
+    float t = clamp(dot(normalized, tail) / tail_length_squared, 0.0, 1.0);
+    float tail_distance = length(normalized - tail * t) - mix(0.9, 0.75, t);
+    float tail_aa = max(0.5 * fwidth(tail_distance), 0.0001);
+    float tail_coverage = 1 - smoothstep(-tail_aa, tail_aa, tail_distance);
+    coverage = max(coverage, tail_coverage);
   }
-  float coverage = 1 - smoothstep(-0.65, 0.65, distance);
-  float2 local = p - u.smooth_target;
-  float native = all(local >= -u.smooth_half_size) && all(local < u.smooth_half_size) ? 1.0 : 0.0;
+  float2 native_local = p - u.smooth_target;
+  float native = all(native_local >= -u.smooth_native_half_size) &&
+                 all(native_local < u.smooth_native_half_size) ? 1.0 : 0.0;
   return mix(native, coverage, u.smooth_effect);
 }
 
 struct SmoothCursorVertexOut { float4 position [[position]]; };
 vertex SmoothCursorVertexOut smooth_cursor_vertex(uint vid [[vertex_id]], constant Uniforms& u [[buffer(1)]]) {
-  // One triangle bounds both the moving silhouette and the native handoff.
-  float2 lo = u.smooth_target - u.smooth_half_size;
-  float2 hi = u.smooth_target + u.smooth_half_size;
-  for (uint i = 0; i < u.smooth_corner_count; i++) {
-    lo = min(lo, u.smooth_corners[i]);
-    hi = max(hi, u.smooth_corners[i]);
-  }
-  lo -= 1;
-  hi += 1;
+  float2 lo = min(u.smooth_center - u.smooth_half_size, u.smooth_target - u.smooth_native_half_size) - 1;
+  float2 hi = max(u.smooth_center + u.smooth_half_size, u.smooth_target + u.smooth_native_half_size) + 1;
+  float2 tail_center = u.smooth_center + u.smooth_tail_offset;
+  lo = min(lo, tail_center - u.smooth_half_size - 1);
+  hi = max(hi, tail_center + u.smooth_half_size + 1);
   float2 uv = float2((vid << 1) & 2, vid & 2);
-  return { u.projection_matrix * float4(lo + uv * (hi - lo), 0, 1) };
+  // Cursor bounds are already in screen pixels (including grid padding).
+  // The cell projection would add padding again and clip the top/left of
+  // the coverage field against this triangle. Map screen pixels directly.
+  float2 position = (lo + uv * (hi - lo)) / u.screen_size;
+  return { float4(position.x * 2 - 1, 1 - position.y * 2, 0, 1) };
 }
 fragment float4 smooth_cursor_fragment(SmoothCursorVertexOut in [[stage_in]], constant Uniforms& u [[buffer(1)]]) {
   float4 color = load_color(u.smooth_color, u.use_display_p3, true);

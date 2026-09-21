@@ -588,6 +588,16 @@ test "full height cursor sprites respect cursor height metric" {
     };
 
     try testing.expectEqual(16, face.metrics.cell_height);
+    // The default stroke is visible at native resolution and still honors
+    // an explicit thickness override in the rasterized cursor geometry.
+    {
+        const glyph = try face.renderGlyph(alloc, &atlas, @intFromEnum(Sprite.cursor_bar), .{ .grid_metrics = face.metrics });
+        try testing.expectEqual(3, glyph.width);
+        face.metrics.cursor_thickness = 1;
+        const thin = try face.renderGlyph(alloc, &atlas, @intFromEnum(Sprite.cursor_bar), .{ .grid_metrics = face.metrics });
+        try testing.expectEqual(1, thin.width);
+        face.metrics.cursor_thickness = 3;
+    }
 
     // --- smaller than cell height ---
     face.metrics.cursor_height = 12;

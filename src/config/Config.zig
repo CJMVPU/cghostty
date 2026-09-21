@@ -432,6 +432,7 @@ pub const compatibility = std.StaticStringMap(
 /// See the notes about adjustments in `adjust-cell-width`.
 @"adjust-overline-thickness": ?MetricModifier = null,
 /// Thickness in pixels or percentage adjustment of the bar cursor and outlined rect cursor.
+/// The default cursor stroke is 3 physical pixels.
 /// See the notes about adjustments in `adjust-cell-width`.
 @"adjust-cursor-thickness": ?MetricModifier = null,
 /// Height in pixels or percentage adjustment of the cursor. Currently applies to all cursor types:
@@ -2910,14 +2911,15 @@ keybind: Keybinds = .{},
 /// need KAM, you don't need it.
 @"vt-kam-allowed": bool = false,
 
-/// Native cursor effect. `smooth` animates four corners according to the
-/// direction of travel, with a slight leading-edge expansion that recovers
-/// on arrival. Distance-based response times keep the rear following during
-/// key repeat. Interrupted moves continue from the displayed corners.
-/// Opaque block, bar, and underline cursors animate; thin cursors retain their
-/// thickness. A size change resets motion. Hidden cursors are not drawn, but
+/// Native cursor effect. `smooth` moves a stable body with a connected trailing
+/// follower, uniformly enlarges the body by up to 12%, and softly rounds it.
+/// The follower offset follows travel without a length cap and never
+/// compresses the body. Repeated input retains the shape across short gaps;
+/// after movement stops, the native size
+/// and shape return. Block, bar, and underline cursors share the effect.
+/// Shape and size changes reset motion. Hidden cursors are not drawn, but
 /// retain motion across application redraws. Unfocused, hollow, and lock
-/// cursors use the normal cursor.
+/// cursors use the normal cursor. Reduced Motion disables the effect.
 /// Set to `none` to disable. No external shader files are loaded.
 @"cursor-effect": enum { none, smooth } = .smooth,
 

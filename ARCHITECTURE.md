@@ -238,10 +238,23 @@ animations stay in AppKit/SwiftUI.
 `renderer/CursorMotion.zig` owns cursor motion lifecycle: draw-lock-owned
 geometry and atomic invalidation/activity at the thread boundary. Terminal
 hide/show preserves motion; focus, visibility, configuration and size changes
-invalidate it. `SmoothCursor.zig` keeps position and leading-edge expansion
-separate. Expansion carries both its value and velocity across retargets,
-holds while the rear catches up, then settles. Diagonal expansion points
-outward on both leading edges; thin bars retain their native thickness.
+invalidate it. `SmoothCursor.zig` translates a stable body and uniformly scales
+both dimensions by up to 12%. A separate follower arrives 40ms after the body;
+its offset is the difference between the body and follower progress, without
+a cell-width or cursor-stroke cap. Equal-length horizontal, vertical and
+diagonal travel uses the same timing and offset magnitude for every shape.
+Retargets preserve the displayed center, follower
+offset and shape. A separate burst envelope holds through input gaps up to
+120ms (and at least until the follower arrives), then releases over 100ms.
+Shape/size changes restore native geometry. The Metal shader blends the body
+toward a fourth-power ellipse and unions it with a connected tapered follower
+along the entire offset, including long jumps. The tail
+can only add coverage, never compress or cut the body. Text recoloring uses
+the same coverage as the cursor.
+Cursor bounds already include padding and map directly from screen pixels to
+clip space; applying the grid projection again would offset and clip the body.
+Block, bar and underline share the effect; the default native cursor stroke
+is three physical pixels and metric modifiers still apply.
 
 `renderer/FrameScheduler.zig` contains the pure policy for the next animation
 wake, pending timer deadlines and whether visible work needs DisplayLink.

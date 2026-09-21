@@ -31,7 +31,7 @@ box_thickness: u32,
 
 /// The thickness in pixels of the cursor sprite. This has a default value
 /// because it is not determined by fonts but rather by user configuration.
-cursor_thickness: u32 = 1,
+cursor_thickness: u32 = 3,
 
 /// The height in pixels of the cursor sprite.
 cursor_height: u32,

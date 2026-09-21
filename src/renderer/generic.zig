@@ -2018,19 +2018,20 @@ pub fn Renderer(comptime GraphicsAPI: type) type {
             const x: f32 = @floatFromInt(@as(i64, c.grid_pos[0]) * self.size.cell.width + self.size.padding.left + c.bearings[0]);
             const y: f32 = @floatFromInt(@as(i64, c.grid_pos[1]) * self.size.cell.height + self.size.padding.top + self.size.cell.height - c.bearings[1]);
             const target: SmoothCursor.Vec = .{ x + size[0] * 0.5, y + size[1] * 0.5 };
-            // A thin insert-mode bar must not turn one cell into a long move.
-            const timing_width: f32 = if (self.cells.cursor_style == .bar) @floatFromInt(self.size.cell.width) else size[0];
+            // All shapes use cell travel, independent of cursor stroke thickness.
+            const timing_width: f32 = @floatFromInt(self.size.cell.width);
             const frame = self.cursor_motion.sample(true, .{
                 .center = target,
                 .size = size,
                 .timing_width = timing_width,
                 .shape = shape,
             }, now) orelse return;
-            const outline = frame.pose.outline(size);
-            for (outline.corners, &self.uniforms.smooth_corners) |corner, *uniform| uniform.* = corner;
-            self.uniforms.smooth_corner_count = outline.count;
+            self.uniforms.smooth_center = frame.pose.center;
+            self.uniforms.smooth_tail_offset = frame.pose.tail_offset;
             self.uniforms.smooth_target = target;
-            self.uniforms.smooth_half_size = size * @as(SmoothCursor.Vec, @splat(0.5));
+            self.uniforms.smooth_half_size = frame.pose.size * @as(SmoothCursor.Vec, @splat(0.5));
+            self.uniforms.smooth_native_half_size = size * @as(SmoothCursor.Vec, @splat(0.5));
+            self.uniforms.smooth_roundness = frame.pose.roundness;
             self.uniforms.smooth_color = c.color;
             self.uniforms.smooth_effect = frame.effect;
             self.uniforms.smooth_block = if (self.cells.cursor_style == .block) 1 else 0;
