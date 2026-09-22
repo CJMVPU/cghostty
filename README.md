@@ -1,59 +1,145 @@
 # cghostty
 
-基于 [Ghostty] 独立维护的 macOS 终端。
-仅支持 **macOS 27+ 和 Apple Silicon**。
+基于 [Ghostty](https://github.com/ghostty-org/ghostty) 独立维护的原生 macOS 终端。
+
+**macOS 27+ · Apple Silicon · SwiftUI · Metal 4**
+
+[下载安装](https://github.com/CJMVPU/cghostty/releases) · [开发指南](HACKING.md) · [架构说明](ARCHITECTURE.md)
 
 ## 功能
 
-- Swift 原生界面，支持窗口、标签页、分屏和快速终端
-- Zig 终端核心、Metal 4 渲染和 CoreText 字体
-- 内置平滑光标，支持方块、细线和下划线
-- 支持终端搜索、主题、shell 集成和 AppleScript
-- 使用独立配置目录；检查更新时打开本仓库 Releases
+- **窗口**：多窗口、原生标签页、分屏、窗口恢复、快速终端。
+- **交互**：终端搜索、命令面板、自定义快捷键、shell 集成、AppleScript。
+- **显示**：主题、透明背景、平滑光标、Metal 渲染。
+- **配置**：中英文配置模板、启动校验、成功快照、恢复默认设置。
+
+## 默认设置
+
+| 项目 | 默认值 |
+| --- | --- |
+| 字体 | 内置 LXGW WenKai Mono |
+| 字号 | 16 pt |
+| 新窗口 | 144 列 × 33 行 |
+| 平滑光标 | 开启 |
+
+- 内置 Nerd Font 符号，Emoji 优先使用系统 Apple Color Emoji。
+- 粗体、斜体和粗斜体遵循 `font-synthetic-style` 合成规则。
+- 用户配置优先；窗口恢复和屏幕空间可能影响实际尺寸。
 
 ## 安装
 
-在 [Releases] 下载 `cghostty-<版本>-macos-arm64.zip`
-解压后，将 `cghostty.app` 拖入“应用程序”
+1. 从 [Releases](https://github.com/CJMVPU/cghostty/releases) 下载 `cghostty-<版本>-macos-arm64.zip`。
+2. 解压，将 `cghostty.app` 拖入“应用程序”并启动。
 
-本地打包默认采用 ad-hoc 签名，未经 Apple 公证。
-签名和公证方法见 [PACKAGING.md]。
+- **更新**：应用内“检查更新”打开 Releases，手动下载并替换。
+- **签名**：默认打包使用 ad-hoc 签名，具体签名及公证状态以发布说明为准。
+- **平台**：仅支持 macOS 27+、Apple Silicon（arm64）。
 
 ## 配置
 
-默认用户配置只有一个入口：
+### 入口
+
+应用菜单 **Settings…** 或 **⌘,** 打开配置文件：
 
 ```text
 ~/Library/Application Support/com.cjmvpu.cghostty/config.ghostty
 ```
 
-文件不存在或为空时使用内置默认值，启动不会自动生成文件。主动打开 Settings 或执行 `+edit-config` 时，生成带中英文说明、默认值和示例的八类配置模板；只需取消需要修改的示例行前的 `#` 并填写自己的值。菜单与配置编辑命令均使用同一路径。显式指定的 `--config-file` 和文件中的 `config-file` 引用仍然有效；主题资源的查找目录保持原样。
+- 文件缺失或为空时，使用内置默认值。
+- 主动打开配置时，生成带中英文名称、默认值和示例的模板。
+- 现有配置首次加入模板前自动备份，保留原有内容。
 
-模板包含常规、外观、窗口与分屏、快捷终端、输入与快捷键、终端行为、通知与安全、高级八类，共 **171 个可编辑配置项**。默认值及枚举选项直接来自当前配置模型，全部以注释展示，不覆盖主题或用户设置。已存在的文件首次打开时，先备份到同目录的 `config.ghostty.before-guide-<标识>.bak`，再追加说明；保留原有内容、重复项顺序和符号链接。已有模板不会反复追加或改写。模板头标明生成版本，恢复默认时会生成当前版本的模板。
+### 分类
 
-默认字体已经随应用内置：LXGW WenKai Mono 1.522（常规字形内置，粗体、斜体和粗斜体按 `font-synthetic-style` 合成），并附带 Nerd Font 符号，无需另外安装。`font-family` 留空时使用内置字体；模板中的 `Menlo` 是切换字体的示例，不是默认值。中文等缺失字符由 macOS 字体回退补齐，Emoji 优先使用系统 Apple Color Emoji。默认字号为 **16 pt**，新窗口初始网格为 **144 列 × 33 行**。已有字体、字号或窗口尺寸配置仍优先于默认值；恢复的窗口及屏幕可用尺寸也可能影响实际窗口大小。字体采用 [SIL OFL 1.1](https://github.com/lxgw/LxgwWenKai/blob/v1.522/OFL.txt)，完整版权声明与许可原样保存在应用的 `Contents/Resources/cghostty/licenses/LXGW-WenKai-OFL.txt`。
+模板包含 **171 个可编辑配置项**，按八类组织：
 
-通过应用菜单的 **Settings…**（⌘,）打开配置文件。修改只在**退出并重新启动应用**后生效；打开新窗口、标签页或分屏不会重新读取用户配置，也不提供手动热重载入口。旧配置中显式绑定 `reload_config` 的行应删除，该用户动作已移除；内部深浅色条件切换继续复用启动配置。
+1. 常规
+2. 外观
+3. 窗口与分屏
+4. 快捷终端
+5. 输入与快捷键
+6. 终端行为
+7. 通知与安全
+8. 高级
 
-启动时先检查主配置文件的大小、时间和文件身份。同一构建且文件未改变时，使用上次成功保存的文件内容重建配置；文件改变或应用构建变化时重新读取。新配置校验失败时，整份回退到上一次成功配置，并在配置错误窗口显示具体错误；没有可用快照时使用内置默认值。错误文件保留原样，便于修正。快照保存的是主文件，显式引用文件和主题资源仍在启动时重新校验，不是外部资源的完整备份。
+### 修改与生效
 
-应用菜单的 **Restore Default Settings…** 会先将当前文件备份到同目录的 `.config-state/before-reset-<标识>.ghostty`，再用只有注释的当前模板替换用户覆盖，并将成功快照更新为默认状态；重启后生效，当前终端继续运行。`.config-state/last-success.json` 是自动管理的恢复数据，不是另一个需要编辑的配置文件。
-
-旧版 XDG 目录及无扩展名 `config` 文件不再自动读取。已有多文件配置应先备份，按原顺序（XDG `config` → XDG `config.ghostty` → Application Support `config` → Application Support `config.ghostty`）整理后再切换。重复项、清空操作及相对资源路径会影响结果，不能简单按字段去重；移动文件时需调整相对路径。使用新版本的 `+validate-config --config-file=<绝对路径>` 校验候选文件后，再替换目标文件。
-
-平滑光标默认开启：
+只取消需要修改的示例行前的 `#`，填写数值后保存：
 
 ```ini
-cursor-effect = true
-window-vsync = true
+# 自定义字号；内置默认值为 16。
+font-size = 18
+
+# 关闭平滑光标。
+cursor-effect = false
 ```
 
-基于 [MIT 许可](LICENSE)，保留上游版权声明
+- **生效时机**：退出并重新启动应用。
+- **运行期间**：新窗口、标签页和分屏沿用启动配置。
+- **默认字体**：`font-family` 未指定时使用内置 LXGW WenKai Mono。
+- **模板注释**：无需全部启用；示例值不等于默认值。
 
-[Ghostty]: https://github.com/ghostty-org/ghostty
-[Releases]: https://github.com/CJMVPU/cghostty/releases
-[PACKAGING.md]: PACKAGING.md
-[ARCHITECTURE.md]: ARCHITECTURE.md
-[HACKING.md]: HACKING.md
-[SCOPE.md]: SCOPE.md
-[VALIDATION.md]: VALIDATION.md
+### 校验与恢复
+
+| 情况 | 行为 |
+| --- | --- |
+| 新配置有效 | 启动时应用并保存成功快照 |
+| 新配置有误 | 显示错误窗口，整份回退到上次成功配置 |
+| 没有可用快照 | 使用内置默认值，保留错误文件 |
+| 选择 **Restore Default Settings…** | 确认后备份当前配置、恢复默认模板，重启生效 |
+
+成功快照只保存主文件；引用的配置和主题资源仍需有效。
+
+### 命令行
+
+```sh
+CGHOSTTY="/Applications/cghostty.app/Contents/MacOS/cghostty"
+
+# 查看默认配置与英文说明。
+"$CGHOSTTY" +show-config --default --docs --no-pager
+
+# 校验用户配置。
+"$CGHOSTTY" +validate-config
+
+# 校验指定文件。
+"$CGHOSTTY" +validate-config --config-file="/absolute/path/config.ghostty"
+```
+
+## 构建
+
+**环境**：macOS 27+、Apple Silicon、Xcode 27+、Python 3、Homebrew。
+
+在仓库根目录执行：
+
+```sh
+brew install nushell gettext
+xcodebuild -downloadComponent MetalToolchain
+
+cghostty_zig_bin="$(bash scripts/install-zig.sh)"
+export PATH="$cghostty_zig_bin:$(brew --prefix gettext)/bin:$PATH"
+
+nu macos/build.nu --configuration ReleaseLocal
+```
+
+- **Zig**：由仓库安装脚本下载锁定版本并校验。
+- **产物**：`macos/build/ReleaseLocal/cghostty.app`。
+- **测试与检查**：[HACKING.md](HACKING.md)。
+- **打包与签名**：[PACKAGING.md](PACKAGING.md)。
+
+## 项目结构
+
+| 目录 | 职责 |
+| --- | --- |
+| `macos/` | SwiftUI 界面、Observation 状态、AppKit 系统交互及原生测试 |
+| `src/` | Zig 终端核心、配置、IO、搜索、字体与渲染 |
+| `include/` | 内部 GhosttyKit C 桥接 |
+| `pkg/` | 第三方依赖与构建适配 |
+| `scripts/` | 工具链安装与项目检查 |
+
+[核心架构](ARCHITECTURE.md) · [原生 UI 架构](UI_ARCHITECTURE.md) · [支持范围](SCOPE.md)
+
+## 许可
+
+- **应用**：[MIT](LICENSE)，保留 Ghostty 上游版权声明。
+- **默认字体**：[LXGW WenKai](https://github.com/lxgw/LxgwWenKai)，采用 [SIL OFL 1.1](https://github.com/lxgw/LxgwWenKai/blob/v1.522/OFL.txt)。完整许可随应用保存在 `Contents/Resources/cghostty/licenses/LXGW-WenKai-OFL.txt`。
+- **其他依赖**：遵循各自许可，见 [pkg/README.md](pkg/README.md)。
