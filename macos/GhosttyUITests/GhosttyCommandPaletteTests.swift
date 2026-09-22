@@ -5,6 +5,7 @@
 //  Created by Lukas on 19.03.2026.
 //
 
+import AppKit
 import XCTest
 
 final class GhosttyCommandPaletteTests: GhosttyCustomConfigCase {
@@ -14,10 +15,6 @@ final class GhosttyCommandPaletteTests: GhosttyCustomConfigCase {
         command = /bin/zsh -f
         shell-integration = none
         confirm-close-surface = false
-        # Native text editing shortcuts must be unconditional: performable
-        # terminal bindings are intentionally omitted from menu equivalents.
-        keybind = super+v=paste_from_clipboard
-        keybind = super+a=select_all
         window-width = 100
         window-height = 30
         """)
@@ -92,5 +89,42 @@ final class GhosttyCommandPaletteTests: GhosttyCustomConfigCase {
 
         XCTAssertTrue(app.windows.firstMatch.waitForNonExistence(timeout: 2), "All windows should be closed")
     }
-}
 
+    @MainActor func testTextEditingWithRemappedTerminalBindings() throws {
+        try updateConfig("""
+        command = /bin/zsh -f
+        shell-integration = none
+        confirm-close-surface = false
+        keybind = super+v=ignore
+        keybind = super+a=ignore
+        keybind = super+c=ignore
+        keybind = super+x=ignore
+        """)
+        let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
+        app.launch()
+        app.activate()
+        defer { app.terminate() }
+        XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 5))
+        app.typeKey("p", modifierFlags: [.command, .shift])
+        let query = app.textFields["Execute a command…"]
+        XCTAssertTrue(query.waitForExistence(timeout: 5))
+        query.click()
+        paste("Clear Screen", into: query, submit: false)
+        query.typeKey("a", modifierFlags: .command)
+        // Replacing the selection proves native Select All also ignores terminal mappings.
+        paste("New Window", into: query, submit: false)
+        XCTAssertEqual(query.value as? String, "New Window")
+        preservingClipboard {
+            query.typeKey("a", modifierFlags: .command)
+            query.typeKey("c", modifierFlags: .command)
+            XCTAssertEqual(NSPasteboard.general.string(forType: .string), "New Window")
+            query.typeKey("x", modifierFlags: .command)
+            XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "value == %@", ""), object: query)], timeout: 5), .completed)
+            query.typeKey("v", modifierFlags: .command)
+            XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "value == %@", "New Window"), object: query)], timeout: 5), .completed)
+        }
+        query.typeKey(.escape, modifierFlags: [])
+    }
+}

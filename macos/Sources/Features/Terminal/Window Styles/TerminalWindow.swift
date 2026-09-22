@@ -219,19 +219,14 @@ class TerminalWindow: NSWindow {
     override func mergeAllWindows(_ sender: Any?) {
         super.mergeAllWindows(sender)
 
-        // It takes an event loop cycle to merge all the windows so we set a
-        // short timer to relabel the tabs (issue #1902)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-            self?.terminalController?.relabelTabs()
-        }
+        terminalController?.scheduleTabRelabel()
     }
 
     override func addTitlebarAccessoryViewController(_ childViewController: NSTitlebarAccessoryViewController) {
         super.addTitlebarAccessoryViewController(childViewController)
 
-        // Tab bar is attached as a titlebar accessory view controller (layout bottom). We
-        // can detect when it is shown or hidden by overriding add/remove and searching for
-        // it. This has been verified to work on macOS 12 to 26
+        // The native tab bar is a titlebar accessory (layout bottom). Track its
+        // attachment here to update window chrome and tab-group observation.
         if isTabBar(childViewController) {
             childViewController.identifier = Self.tabBarIdentifier
             tabBarDidAppear()
@@ -278,6 +273,7 @@ class TerminalWindow: NSWindow {
 
     private func tabBarDidAppear() {
         viewModel.hasTabBar = true
+        terminalController?.scheduleTabRelabel()
         // Remove our reset zoom accessory. For some reason having a SwiftUI
         // titlebar accessory causes our content view scaling to be wrong.
         // Removing it fixes it, we just need to remember to add it again later.
@@ -319,7 +315,6 @@ class TerminalWindow: NSWindow {
     private lazy var keyEquivalentLabel: NSTextField = {
         let label = NSTextField(labelWithAttributedString: NSAttributedString())
         label.setContentCompressionResistancePriority(.windowSizeStayPut, for: .horizontal)
-        label.postsFrameChangedNotifications = true
         return label
     }()
 
@@ -443,9 +438,7 @@ class TerminalWindow: NSWindow {
         titlebarTextFieldFrameObservers.forEach { NotificationCenter.default.removeObserver($0) }
         titlebarTextFieldFrameObservers.removeAll()
 
-        // macOS 15 doesn't seem to need to adjust the frame.
-        //
-        // When using custom font, we always expand the frame to
+        // When using a custom font, expand the frame to
         // show the text properly.
         //
         // AppKit will relayout the frame when the font changes, that's

@@ -43,7 +43,7 @@ python3 scripts/check-scope.py --app macos/build/ReleaseLocal/cghostty.app
 
 原生核心输出为 `zig-out/lib/libghostty-internal.a`。Xcode 直接链接该静态库，通过 `include/module.modulemap` 导入 `GhosttyKit`；不再生成或消费 XCFramework。头文件直接来自 `include/`，无需再复制进包装产物。原生测试与应用使用同一个内部 C 模块。
 
-`zig build` 也可作为根入口，会调用同一个 `macos/build.nu`。日常应用开发直接使用 Nushell 脚本。`--skip-core` 只适用于版本和优化模式均匹配的已有核心；切换 Debug / ReleaseLocal 时重新构建完整应用。
+`zig build` 也可作为根入口，会调用同一个 `macos/build.nu`。日常应用开发直接使用 Nushell 脚本。核心安装步骤记录版本、优化模式、Zig／SDK、源码输入及归档摘要。`--skip-core` 会核对这些记录，缺少记录或任一项不匹配时拒绝复用；切换 Debug / ReleaseLocal 或修改核心后重新构建完整应用。仅修改 Swift 不影响核心复用。
 
 Zig 改动使用 `zig fmt`；Swift 使用 `swiftlint lint --strict --fix`。完整核心测试为 `zig build test`，通常优先运行相关过滤测试。终端压缩、快照等子目录的测试约定继续适用。
 

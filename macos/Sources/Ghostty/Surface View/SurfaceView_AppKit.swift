@@ -474,7 +474,6 @@ extension Ghostty {
             }
 
             if focused {
-                // On macOS 13+ we can store our continuous clock...
                 focusInstant = ContinuousClock.now
 
                 // We unset our bell state if we gained focus
@@ -826,6 +825,7 @@ extension Ghostty {
             isWindowVisible = window.occlusionState.contains(.visible)
             surfaceModel?.setVisible(isWindowVisible)
             windowDidChangeScreen(notification: .init(name: NSWindow.didChangeScreenNotification, object: window))
+            windowRegistry.owner(of: self)?.surfaceDidAttach(self)
         }
 
         override func becomeFirstResponder() -> Bool {

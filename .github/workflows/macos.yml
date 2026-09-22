@@ -54,6 +54,7 @@ jobs:
             zig fmt --check build.zig build.zig.zon src pkg
             swiftlint lint --strict --no-cache
             python3 scripts/check-versions.py
+            python3 -m unittest discover -s scripts/tests
             python3 scripts/check-swift6.py
             actionlint
           } 2>&1 | tee macos/build/ci-logs/quality.log
@@ -85,6 +86,7 @@ jobs:
         run: |
           exec > >(tee macos/build/ci-logs/release.log) 2>&1
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            python3 scripts/check-versions.py --tag "$GITHUB_REF_NAME"
             nu macos/build.nu --configuration ReleaseLocal --version "${GITHUB_REF_NAME#v}"
           else
             nu macos/build.nu --configuration ReleaseLocal
@@ -114,6 +116,7 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: cghostty-macos-arm64
@@ -129,4 +132,11 @@ jobs:
             echo "Release already exists; preserving its assets and publication state."
             exit 0
           fi
-          gh release create "$RELEASE_TAG" artifacts/* --verify-tag --draft --title "cghostty $RELEASE_TAG" --notes 'Apple Silicon macOS build. This automated package uses ad-hoc signing; Developer ID signing and notarization are not configured in CI.'
+          python3 scripts/check-versions.py --tag "$RELEASE_TAG"
+          cp RELEASE_NOTES.md "$RUNNER_TEMP/release-notes.md"
+          cat >> "$RUNNER_TEMP/release-notes.md" <<'NOTES'
+
+          ---
+          This automated Apple Silicon package uses ad-hoc signing; Developer ID signing and notarization are not configured in CI.
+          NOTES
+          gh release create "$RELEASE_TAG" artifacts/* --verify-tag --draft --title "cghostty $RELEASE_TAG" --notes-file "$RUNNER_TEMP/release-notes.md"

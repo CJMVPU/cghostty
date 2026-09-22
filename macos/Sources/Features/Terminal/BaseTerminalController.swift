@@ -19,6 +19,46 @@ class BaseTerminalController: NSWindowController,
         didSet { syncFocusToSurfaceTree() }
     }
 
+    /// Restoration waits for actual AppKit attachment, without retaining a
+    /// removed surface or scheduling retries after its window has closed.
+    private weak var pendingRestoredFocus: Ghostty.SurfaceView?
+
+    func restoreFocus(to view: Ghostty.SurfaceView) {
+        guard surfaceTree.contains(view) else { return }
+        pendingRestoredFocus = view
+        focusedSurface = view
+        surfaceDidAttach(view)
+    }
+
+    func cancelRestoredFocus() {
+        pendingRestoredFocus = nil
+    }
+
+    func surfaceDidAttach(_ view: Ghostty.SurfaceView) {
+        guard pendingRestoredFocus === view else { return }
+        // SwiftUI finishes assigning its default focused values in this turn.
+        DispatchQueue.main.async { [weak self] in self?.completeRestoredFocus() }
+    }
+
+    private func completeRestoredFocus() {
+        guard let view = pendingRestoredFocus else { return }
+        guard ghostty.windowRegistry.owner(of: view) === self else {
+            cancelRestoredFocus()
+            return
+        }
+        guard isWindowLoaded, let window, view.window === window else { return }
+        // An explicit text edit takes precedence over a pending restoration.
+        guard !(window.firstResponder is NSTextView) else {
+            cancelRestoredFocus()
+            return
+        }
+        focusedSurface = view
+        if window.makeFirstResponder(view) {
+            cancelRestoredFocus()
+            if window.isMainWindow { window.orderFront(nil) }
+        }
+    }
+
     let uiState = TerminalWindowState()
 
     /// Structural mutations must pass through the window coordinator so native
@@ -234,6 +274,7 @@ class BaseTerminalController: NSWindowController,
     func focusSurface(_ view: Ghostty.SurfaceView) {
         // Check if target surface is in our tree
         guard surfaceTree.contains(view) else { return }
+        cancelRestoredFocus()
 
         // Move focus to the target surface and activate the window/app
         DispatchQueue.main.async {
@@ -249,6 +290,7 @@ class BaseTerminalController: NSWindowController,
     ///
     /// Subclasses should call super first.
     func surfaceTreeDidChange(from: SplitTree<Ghostty.SurfaceView>, to: SplitTree<Ghostty.SurfaceView>) {
+        if let pendingRestoredFocus, !to.contains(pendingRestoredFocus) { cancelRestoredFocus() }
         for surfaceView in from where !to.contains(surfaceView) {
             cancelPendingClipboardConfirmation(for: surfaceView)
         }
@@ -750,6 +792,7 @@ class BaseTerminalController: NSWindowController,
     }
 
     func windowWillClose(_ notification: Notification) {
+        cancelRestoredFocus()
         ghostty.windowRegistry.unregister(self)
         titleObservation?.cancel()
         bellObservation?.cancel()
@@ -788,6 +831,7 @@ class BaseTerminalController: NSWindowController,
         // Becoming key can race with responder updates when activating a window.
         // Sync on the next runloop so split focus has settled first.
         DispatchQueue.main.async {
+            self.completeRestoredFocus()
             self.syncFocusToSurfaceTree()
         }
     }

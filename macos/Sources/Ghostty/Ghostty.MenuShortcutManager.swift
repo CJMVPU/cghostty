@@ -19,6 +19,26 @@ extension Ghostty {
             menuItemsByShortcut.removeAll(keepingCapacity: true)
         }
 
+        /// Field editors use standard macOS editing keys independently of terminal
+        /// bindings (including performable, unbound, and remapped bindings).
+        /// Terminal SurfaceView / NSTextInputClient dispatch is not involved.
+        static func performTextEditingKeyEquivalent(with event: NSEvent, responder: NSResponder?) -> Bool {
+            guard event.type == .keyDown,
+                  event.modifierFlags.intersection([.command, .control, .option, .shift]) == .command,
+                  let editor = responder as? NSTextView,
+                  editor.isFieldEditor,
+                  editor.isSelectable else { return false }
+            let action: Selector
+            switch event.charactersIgnoringModifiers?.lowercased() {
+            case "a": action = #selector(NSText.selectAll(_:))
+            case "c": action = #selector(NSText.copy(_:))
+            case "v" where editor.isEditable: action = #selector(NSText.paste(_:))
+            case "x" where editor.isEditable: action = #selector(NSText.cut(_:))
+            default: return false
+            }
+            return NSApp.sendAction(action, to: editor, from: nil)
+        }
+
         /// Syncs a single menu shortcut for the given action. The action string is the same
         /// action string used for the Ghostty configuration.
         func syncMenuShortcut(_ config: Ghostty.Config, action: String?, menuItem: NSMenuItem?) {

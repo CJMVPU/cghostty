@@ -8,6 +8,7 @@ output_dir="${2:-$repo_dir/artifacts}"
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")" == com.cjmvpu.cghostty ]] || { echo 'Package the ReleaseLocal or Release application, not Debug.' >&2; exit 1; }
 [[ "$(lipo -archs "$app/Contents/MacOS/cghostty")" == arm64 ]] || { echo 'Expected an arm64-only executable.' >&2; exit 1; }
 version="$(/usr/libexec/PlistBuddy -c 'Print :CGhosttyVersion' "$app/Contents/Info.plist")"
+python3 "$repo_dir/scripts/check-versions.py" --app "$app"
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)*$ ]] || { echo 'Invalid bundle version.' >&2; exit 1; }
 mkdir -p "$output_dir"
 output_dir="$(cd "$output_dir" && pwd)"

@@ -53,6 +53,8 @@ def main [
         cd $root
         ^zig build check-config-bridge
         if $env.LAST_EXIT_CODE != 0 { exit $env.LAST_EXIT_CODE }
+        ^python3 scripts/core-build-record.py check --archive zig-out/lib/libghostty-internal.a --optimize $optimize --version $app_version
+        if $env.LAST_EXIT_CODE != 0 { exit $env.LAST_EXIT_CODE }
     }
     if not $skip_core and $action != "clean" {
         cd $root

@@ -10,6 +10,28 @@ import Testing
         return TerminalController(app, withBaseConfig: config)
     }
 
+    @Test func tabLabelsFollowGroupOrderWithoutFrameNotifications() async throws {
+        let app = Ghostty.App(configPath: "/dev/null")
+        let first = terminal(app)
+        let second = terminal(app)
+        let one = try #require(first.window as? TerminalWindow)
+        let two = try #require(second.window as? TerminalWindow)
+        defer { one.close(); two.close() }
+        one.addTabbedWindow(two, ordered: .above)
+        first.relabelTabs()
+        let group = try #require(one.tabGroup)
+        let firstLabel = one.keyEquivalent
+        let secondLabel = two.keyEquivalent
+        #expect(firstLabel != secondLabel)
+        let index = try #require(group.windows.firstIndex(of: two))
+        group.insertWindow(two, at: index == 0 ? 1 : 0)
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+        #expect(one.keyEquivalent == secondLabel)
+        #expect(two.keyEquivalent == firstLabel)
+    }
+
     @Test(arguments: ["native", "hidden", "transparent", "tabs"])
     func nativeWindowStylesInitializeWithTheirOwnApp(style: String) throws {
         let config = try TemporaryConfig("macos-titlebar-style = \(style)\ntitle = Scoped window")

@@ -10,10 +10,6 @@ final class GhosttyObservationUITests: GhosttyCustomConfigCase {
         command = /bin/zsh -f
         shell-integration = none
         confirm-close-surface = false
-        # Native text editing shortcuts must be unconditional: performable
-        # terminal bindings are intentionally omitted from menu equivalents.
-        keybind = super+v=paste_from_clipboard
-        keybind = super+a=select_all
         macos-titlebar-style = tabs
         keybind = ctrl+alt+shift+m=move_tab:-1
         keybind = ctrl+alt+shift+b=move_tab:1

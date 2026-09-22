@@ -518,10 +518,8 @@ extension Ghostty {
         /// surface. This does not actually SET the size of our frame, this only sets the size
         /// of our Metal surface for drawing.
         ///
-        /// Note: we do NOT use the NSView.resize function because SwiftUI on macOS 12
-        /// does not call this callback (macOS 13+ does).
-        ///
-        /// The best approach is to wrap this view in a GeometryReader and pass in the geo.size.
+        /// GeometryReader reports the current SwiftUI allocation even when AppKit
+        /// defers its frame update; updateNSView then requests a layout pass.
         let size: CGSize
 
         func makeNSView(context: Context) -> SurfaceScrollView {

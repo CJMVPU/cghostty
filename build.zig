@@ -48,12 +48,16 @@ pub fn build(b: *std.Build) !void {
         const core = try buildpkg.GhosttyLib.initStatic(b, &deps);
         const install_core = b.addInstallFileWithDir(core.output, .lib, "libghostty-internal.a");
         b.getInstallStep().dependOn(&install_core.step);
+        const record_core = b.addSystemCommand(&.{ "python3", "scripts/core-build-record.py", "record", "--archive", b.getInstallPath(.lib, "libghostty-internal.a"), "--optimize", @tagName(config.optimize), "--version", b.fmt("{f}", .{config.version}) });
+        record_core.has_side_effects = true;
+        record_core.step.dependOn(&install_core.step);
+        b.getInstallStep().dependOn(&record_core.step);
         resources.install();
         if (i18n) |v| v.install();
         // The checked-in Nushell wrapper is the sole app build entry point.
         if (config.emit_macos_app) {
             const app = b.addSystemCommand(&.{ "nu", "macos/build.nu", "--skip-core", "--version", b.fmt("{f}", .{config.version}), "--configuration", if (config.optimize == .Debug) "Debug" else "ReleaseLocal" });
-            app.step.dependOn(&install_core.step);
+            app.step.dependOn(&record_core.step);
             resources.addStepDependencies(&app.step);
             docs.installDummy(&app.step);
             if (i18n) |v| v.addStepDependencies(&app.step);

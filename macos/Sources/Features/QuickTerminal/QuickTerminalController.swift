@@ -26,6 +26,7 @@ class QuickTerminalController: BaseTerminalController {
 
     /// The current state of the quick terminal
     private(set) var visible: Bool = false
+    private var awaitingKeyWindow = false
 
     /// The previously running application when the terminal is shown. This is NEVER Ghostty.
     /// If this is set then when the quick terminal is animated out then we will restore this
@@ -81,6 +82,11 @@ class QuickTerminalController: BaseTerminalController {
             object: nil)
         center.addObserver(
             self,
+            selector: #selector(applicationDidBecomeActive),
+            name: NSApplication.didBecomeActiveNotification,
+            object: nil)
+        center.addObserver(
+            self,
             selector: #selector(windowDidResize(_:)),
             name: NSWindow.didResizeNotification,
             object: nil)
@@ -119,24 +125,9 @@ class QuickTerminalController: BaseTerminalController {
         // Setup our initial size based on our configured position
         position.setLoaded(window, size: derivedConfig.quickTerminalSize)
 
-        // Upon first adding this Window to its host view, older SwiftUI
-        // seems to have a "hiccup" and corrupts the frameRect,
-        // sometimes setting the size to zero, sometimes corrupting it.
-        // We pass the actual window's frame as "initial" frame directly
-        // to the window, so it can use that instead of the frameworks
-        // "interpretation"
-        if let qtWindow = window as? QuickTerminalWindow {
-            qtWindow.initialFrame = window.frame
-        }
-
         // Setup our content
         window.contentView = TerminalViewContainer {
             TerminalView(ghostty: ghostty, viewModel: uiState, delegate: self)
-        }
-
-        // Clear out our frame at this point, the fixup from above is complete.
-        if let qtWindow = window as? QuickTerminalWindow {
-            qtWindow.initialFrame = nil
         }
 
         // Animate the window in
@@ -147,6 +138,7 @@ class QuickTerminalController: BaseTerminalController {
 
     override func windowDidBecomeKey(_ notification: Notification) {
         super.windowDidBecomeKey(notification)
+        awaitingKeyWindow = false
 
         // If we're not visible we don't care to run the logic below. It only
         // applies if we can be seen.
@@ -355,16 +347,7 @@ class QuickTerminalController: BaseTerminalController {
                 let tree = saved.surfaceTree.restore { $0.makeView(in: ghostty, baseConfig: saved.baseConfig) }
                 surfaceTree = tree
                 let view = tree.first(where: { $0.id.uuidString == restorationState?.focusedSurface }) ?? tree.first!
-                focusedSurface = view
-                // Add a short delay to check if the correct surface is focused.
-                // Each SurfaceWrapper defaults its FocusedValue to itself; without this delay,
-                // the tree often focuses the first surface instead of the intended one.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                    if !view.focused {
-                        self.focusedSurface = view
-                        self.makeWindowKey(window)
-                    }
-                }
+                restoreFocus(to: view)
             } else {
                 var config = Ghostty.SurfaceConfiguration()
                 config.environmentVariables["GHOSTTY_QUICK_TERMINAL"] = "1"
@@ -387,6 +370,8 @@ class QuickTerminalController: BaseTerminalController {
         // Set our visibility state
         guard visible else { return }
         visible = false
+        awaitingKeyWindow = false
+        cancelRestoredFocus()
 
         // Notify the change
         (ghostty.delegate as? AppDelegate)?.quickTerminalVisibilityDidChange(self)
@@ -478,6 +463,7 @@ class QuickTerminalController: BaseTerminalController {
 
                 // Once our animation is done, we must grab focus since we can't grab
                 // focus of a non-visible window.
+                self.awaitingKeyWindow = true
                 self.makeWindowKey(window)
 
                 // If our application is not active, then we grab focus. Its important
@@ -486,51 +472,28 @@ class QuickTerminalController: BaseTerminalController {
                 if !NSApp.isActive {
                     NSApp.activate(ignoringOtherApps: true)
 
-                    // This works around a really funky bug where if the terminal is
-                    // shown on a screen that has no other Ghostty windows, it takes
-                    // a few (variable) event loop ticks until we can actually focus it.
-                    // https://github.com/ghostty-org/ghostty/issues/2409
-                    //
-                    // We wait one event loop tick to try it because under the happy
-                    // path (we have windows on this screen) it takes one event loop
-                    // tick for window.isKeyWindow to return true.
-                    DispatchQueue.main.async {
-                        guard !window.isKeyWindow else { return }
-                        self.makeWindowKey(window, retries: 10)
-                    }
                 }
             }
         })
     }
 
-    /// Attempt to make a window key, supporting retries if necessary. The retries will be attempted
-    /// on a separate event loop tick.
-    ///
-    /// The window must contain the focused surface for this terminal controller.
-    private func makeWindowKey(_ window: NSWindow, retries: UInt8 = 0) {
-        // We must be visible
-        guard visible else { return }
+    @objc private func applicationDidBecomeActive() {
+        guard awaitingKeyWindow, visible, let window else { return }
+        makeWindowKey(window)
+    }
 
-        // If our focused view is somehow not connected to this window then the
-        // function calls below do nothing. I don't think this is possible but
-        // we should guard against it because it is a Cocoa assertion.
-        guard let focusedSurface, focusedSurface.window == window else { return }
+    override func surfaceDidAttach(_ view: Ghostty.SurfaceView) {
+        super.surfaceDidAttach(view)
+        guard awaitingKeyWindow, visible, let window else { return }
+        makeWindowKey(window)
+    }
 
-        // The window must become top-level
+    /// Activation and view attachment each retry a pending presentation once.
+    private func makeWindowKey(_ window: NSWindow) {
+        guard visible, let focusedSurface, focusedSurface.window === window else { return }
         window.makeKeyAndOrderFront(nil)
-
-        // The view must gain our keyboard focus
         window.makeFirstResponder(focusedSurface)
-
-        // If our window is already key then we're done!
-        guard !window.isKeyWindow else { return }
-
-        // If we don't have retries then we're done
-        guard retries > 0 else { return }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(25)) {
-            self.makeWindowKey(window, retries: retries - 1)
-        }
+        if window.isKeyWindow { awaitingKeyWindow = false }
     }
 
     private func animateWindowOut(window: NSWindow, to position: QuickTerminalPosition) {

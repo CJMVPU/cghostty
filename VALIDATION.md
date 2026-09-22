@@ -1,3 +1,26 @@
+## 无效平台配置清理与交互配置归类（2026-09-22）
+
+- 删除当前 macOS 应用没有消费路径的 8 个公开字段：`window-subtitle`、`window-show-tab-bar`、`window-titlebar-background`、`window-titlebar-foreground`、`quit-after-last-window-closed-delay`、`quick-terminal-keyboard-interactivity`、`app-notifications`、`async-backend`。同时删除 5 个专属类型、退出延时的无效警告及 `-e` 赋值，并清理相关旧平台说明。
+- 保留实际使用的 macOS 配置及兼容别名；`freetype-load-flags` 仍由可选 `coretext_freetype` 字体后端使用。公开字段从 182 减为 174，其中 173 个通用字段、1 个非默认字体构建专用字段；不包含 5 个内部状态字段。
+- Zig 配置定向测试 **259 / 259 通过**、89 / 89 构建步骤成功：`/tmp/cghostty-config-cleanup-tests.log`。ReleaseLocal 核心与原生应用完整重建成功，无编译警告：`/tmp/cghostty-config-cleanup-build.log`。
+- 原生配置桥接、应用范围／arm64／资源／签名、版本、Zig 格式及 diff 检查通过：`/tmp/cghostty-config-cleanup-scope.log`。使用最终应用导出干净默认配置，确认旧字段不再出现；一次性临时配置验证确认 8 个旧字段产生未知字段诊断，代表性有效配置通过。未新增已删除功能的长期防回归测试。
+- 配置讨论清单按常规、外观、窗口与分屏、快捷终端、输入与快捷键、终端行为、通知与安全、高级八个母菜单归类：`/tmp/cghostty-config-inventory.md`。清单仅为本次讨论快照，不新增第二份长期维护的配置定义。`cghostty config` 交互命令尚未实现，保存及重载交互仍为设计建议。
+- 未修改用户配置，未重新执行桌面 UI 测试或完整 Zig 测试全集；本轮为无消费字段及文档删除。版本保持 **0.1.9 / 构建号 9**，未提交、打包、替换已安装应用或发布。
+
+## 默认编辑、构建发布一致性与窗口时序精简（2026-09-22）
+
+- 原生 field editor 的 Cmd+A/C/V/X 使用标准编辑响应，独立于终端的 performable、解绑或改写绑定；终端 SurfaceView 的输入法、组合文本和按键处理顺序保持原样。删除搜索及命令面板测试对默认 Cmd+A/V 的覆盖，补充禁用终端 A/C/V/X 后真实全选、复制、剪切、粘贴的桌面验证。
+- 核心安装步骤记录版本、优化模式、Zig／SDK、源码输入及归档摘要；`--skip-core` 在启动 Xcode 前校验。真实 ReleaseFast 归档匹配通过，按 Debug 请求复用被拒绝。两组脚本测试覆盖缺少记录、模式／版本错误、源码新增／修改／删除、归档替换，以及发布版本／构建号／标签／说明／应用不一致。
+- `check-versions.py --sync-app-version [--build-number N]` 只同步三个应用配置；默认检查核对应用版本、构建号与 release notes。CI 草稿读取当前提交的 `RELEASE_NOTES.md` 并追加签名说明，标签和包内版本不一致时拒绝发布／打包。未调用 GitHub 发布接口。
+- 窗口恢复焦点改为等待视图附着，完成一次后清除；显式切换焦点、移除终端或关闭窗口会取消。快捷终端在动画完成、应用激活和视图附着时完成待激活操作，移除固定时间重试。标签顺序改为观察 AppKit 明确支持 KVO 的 `NSWindowTabGroup.windows`，删除全局尺寸通知与 100ms 编号延迟，关闭窗口后不再重新订阅。
+- 31 个仅面向终端的回调共用目标解析，保留应用级动作、返回语义和临时 C 数据的同步复制。未增加通用命令分发框架。
+- 快捷终端上／下／左／右／居中五种位置在旧 `initialFrame` 补丁删除前后均通过首次显示、隐藏、再次显示、尺寸和真实终端输入测试；删除该状态、`setFrame` 覆盖及控制器赋值链。更新失效的旧系统注释，保留仍承担尺寸同步、原生标签栏布局和自定义字体显示的实现。当前验证使用本机单显示器，未实测外接显示器或跨桌面空间切换。
+- 最终原生测试 **297 通过、1 跳过、0 失败、0 运行时警告**：`/tmp/cghostty-refine-native-close.xcresult`。新用例验证延迟附着后恢复焦点、移除终端后取消恢复及无需尺寸通知的标签重排。
+- 桌面验证共 **16 个不同测试全部通过**：命令面板 3、搜索／分屏 3、关闭撤销会话 2、多窗口／标签 2、快捷终端 1（包含五种位置）、标题栏布局 5。相关结果均无运行时警告；快捷终端与编辑交互另有复验。结果：`/tmp/cghostty-refine-Ghostty{CommandPaletteTests,ObservationUITests,SurfaceLifecycleUITests,WindowRegistryUITests}.xcresult`、`/tmp/cghostty-refine-final-{quick,editing,tabs}.xcresult`；关闭顺序补验 `/tmp/cghostty-refine-registry-close.xcresult`。
+- `nu macos/build.nu --configuration ReleaseLocal` 和根入口 `zig build -Doptimize=ReleaseFast` 均成功，无编译警告。最终应用 `macos/build/ReleaseLocal/cghostty.app` 通过 arm64／macOS 27 范围、资源、签名及版本检查。记录：`/tmp/cghostty-refine-release.log`、`/tmp/cghostty-refine-root-build.log`、`/tmp/cghostty-refine-release-scope.log`。
+- SwiftLint strict、Swift 6、Zig 格式、actionlint、应用与依赖版本、脚本测试、工程 plist 及 diff 检查通过。本轮未改动 Zig 终端运行时代码，未重复完整 Zig 测试套件。
+- 应用版本保持 **0.1.9 / 构建号 9**。本次未提交、打标签、制作发布 ZIP、替换已安装应用或发布新版本；GitHub CI 尚待推送后实际运行。
+
 ## 0.1.9 版本与更新说明（2026-09-21，未发布）
 
 - 项目版本从 0.1.8 提升至 **0.1.9**；Xcode 的三个应用构建配置同步为 0.1.9，构建号从 8 提升至 **9**。测试目标的独立版本号保持原值。

@@ -5,6 +5,8 @@ import argparse
 import json
 from pathlib import Path
 import re
+import plistlib
+import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 TABLE_START = "<!-- dependency-versions:start -->"
@@ -130,26 +132,79 @@ def check_versions():
     return toolchain, vendored
 
 
+def check_app_version(*, sync=False, build_number=None, tag=None, app=None):
+    version = capture('build.zig.zon', r'\.version\s*=\s*"([^"]+)"')
+    marketing = re.split(r'[-+]', version)[0]
+    project = ROOT / 'macos/Ghostty.xcodeproj/project.pbxproj'
+    # Resolve the app target's three configuration IDs, leaving test targets alone.
+    data = json.loads(subprocess.check_output(['plutil', '-convert', 'json', '-o', '-', str(project)]))
+    objects = data['objects']
+    target = next(obj for obj in objects.values() if obj.get('isa') == 'PBXNativeTarget' and obj.get('name') == 'Ghostty')
+    configs = objects[target['buildConfigurationList']]['buildConfigurations']
+    numbers = {str(objects[key]['buildSettings']['CURRENT_PROJECT_VERSION']) for key in configs}
+    if build_number is None and len(numbers) != 1:
+        raise ValueError('App build numbers differ; use --sync-app-version --build-number N')
+    number = str(build_number) if build_number is not None else numbers.pop()
+    if not number.isdigit() or int(number) < 1:
+        raise ValueError('App build number must be a positive integer')
+    text = project.read_text()
+    for key in configs:
+        settings = objects[key]['buildSettings']
+        if sync:
+            pattern = rf'({re.escape(key)} /\* [^\n]+ \*/ = \{{.*?)(\n\t\t\}};)'
+            def update(match):
+                block = re.sub(r'MARKETING_VERSION = [^;]+;', f'MARKETING_VERSION = {marketing};', match[1])
+                block = re.sub(r'CURRENT_PROJECT_VERSION = [^;]+;', f'CURRENT_PROJECT_VERSION = {number};', block)
+                return block + match[2]
+            text, count = re.subn(pattern, update, text, count=1, flags=re.DOTALL)
+            if count != 1:
+                raise ValueError(f'Cannot update app configuration {key}')
+        elif str(settings['MARKETING_VERSION']) != marketing or str(settings['CURRENT_PROJECT_VERSION']) != number:
+            raise ValueError('App versions differ; run --sync-app-version')
+    if sync:
+        project.write_text(text)
+    notes_version = capture('RELEASE_NOTES.md', r'^# cghostty ([^\s]+)')
+    if notes_version != version:
+        raise ValueError(f'Release notes {notes_version} do not match app {version}')
+    if tag is not None and tag != f'v{version}':
+        raise ValueError(f'Release tag {tag} does not match v{version}')
+    if app is not None:
+        with (app / 'Contents/Info.plist').open('rb') as source:
+            info = plistlib.load(source)
+        expected = {'CGhosttyVersion': version, 'CFBundleShortVersionString': marketing, 'CFBundleVersion': number}
+        for key, value in expected.items():
+            if str(info.get(key)) != value:
+                raise ValueError(f'Bundle {key}={info.get(key)} does not match {value}')
+    return version, number
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     output = parser.add_mutually_exclusive_group()
     output.add_argument("--zig-version", action="store_true")
     output.add_argument("--zig-sha256", action="store_true")
     output.add_argument("--update-docs", action="store_true", help="refresh only the generated dependency table")
+    output.add_argument('--sync-app-version', action='store_true', help='sync app configurations from build.zig.zon')
+    parser.add_argument('--build-number', type=int, help='set all app build numbers with --sync-app-version')
+    parser.add_argument('--tag', help='verify the release tag matches the app version')
+    parser.add_argument('--app', type=Path, help='verify a built app matches the repository release')
     args = parser.parse_args()
+    if args.build_number is not None and not args.sync_app_version:
+        parser.error('--build-number requires --sync-app-version')
     try:
         toolchain, _ = check_versions()
         # Toolchain installation must remain possible while editing dependency docs.
         if not (args.zig_version or args.zig_sha256):
             check_dependency_docs(dependency_table(), update=args.update_docs)
-    except (OSError, ValueError, KeyError, TypeError) as error:
+            check_app_version(sync=args.sync_app_version, build_number=args.build_number, tag=args.tag, app=args.app)
+    except (OSError, ValueError, KeyError, TypeError, subprocess.CalledProcessError) as error:
         parser.exit(1, f"Version check failed: {error}\n")
     if args.zig_version:
         print(toolchain["version"])
     elif args.zig_sha256:
         print(toolchain["sha256"])
     else:
-        print(f"PASS: Zig {toolchain['version']}, dependency source URLs, generated headers and version table")
+        print(f"PASS: Zig {toolchain['version']}, dependencies, app versions and release notes")
 
 
 if __name__ == "__main__":

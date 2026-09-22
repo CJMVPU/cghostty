@@ -4,6 +4,26 @@ import Testing
 @testable import Ghostty
 
 struct MenuShortcutManagerTests {
+    @MainActor @Test func nativeEditingOnlyHandlesFieldEditorsAndExactModifiers() throws {
+        let editor = NSTextView()
+        editor.isFieldEditor = true
+        editor.string = "literal text"
+        func event(_ modifiers: NSEvent.ModifierFlags) throws -> NSEvent {
+            try #require(NSEvent.keyEvent(with: .keyDown, location: .zero,
+                modifierFlags: modifiers, timestamp: 1, windowNumber: 0,
+                context: nil, characters: "a", charactersIgnoringModifiers: "a",
+                isARepeat: false, keyCode: 0))
+        }
+        let command = try event(.command)
+        #expect(!Ghostty.MenuShortcutManager.performTextEditingKeyEquivalent(with: command, responder: NSResponder()))
+        #expect(!Ghostty.MenuShortcutManager.performTextEditingKeyEquivalent(with: try event([.command, .option]), responder: editor))
+        #expect(editor.selectedRange().length == 0)
+        #expect(Ghostty.MenuShortcutManager.performTextEditingKeyEquivalent(with: command, responder: editor))
+        #expect(editor.selectedRange().length == editor.string.utf16.count)
+        editor.isFieldEditor = false
+        #expect(!Ghostty.MenuShortcutManager.performTextEditingKeyEquivalent(with: command, responder: editor))
+    }
+
     @Test(.bug("https://github.com/ghostty-org/ghostty/issues/779", id: 779))
     func unbindShouldDiscardDefault() throws {
         let config = try TemporaryConfig("keybind = super+d=unbind")

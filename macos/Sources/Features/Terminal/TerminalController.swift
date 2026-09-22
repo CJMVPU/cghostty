@@ -35,14 +35,9 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         terminalWindow.configure(for: ghostty)
     }
 
-    /// This is set to true when we care about frame changes. This is a small optimization since
-    /// this controller registers a listener for ALL frame change notifications and this lets us bail
-    /// early if we don't care.
-    private var tabListenForFrame: Bool = false
-
-    /// This is the hash value of the last tabGroup.windows array. We use this to detect order
-    /// changes in the list.
-    private var tabWindowsHash: Int = 0
+    private weak var observedTabGroup: NSWindowTabGroup?
+    private var tabOrderObservation: NSKeyValueObservation?
+    private var pendingTabRelabel: DispatchWorkItem?
 
     /// The initial window presentation is deferred by one runloop turn in a few places so
     /// AppKit can settle tab/window state first. Close actions must cancel it to avoid
@@ -76,13 +71,6 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
 
         super.init(ghostty, baseConfig: base, surfaceTree: tree)
 
-        // Setup our notifications for behaviors
-        let center = NotificationCenter.default
-        center.addObserver(
-            self,
-            selector: #selector(onFrameDidChange),
-            name: NSView.frameDidChangeNotification,
-            object: nil)
     }
 
     required init?(coder: NSCoder) {
@@ -429,13 +417,7 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
             NSApp.activate(ignoringOtherApps: true)
         }
 
-        // It takes an event loop cycle until the macOS tabGroup state becomes
-        // consistent which causes our tab labeling to be off when the "+" button
-        // is used in the tab bar. This fixes that. If we can find a more robust
-        // solution we should do that.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            controller.relabelTabs()
-        }
+        controller.scheduleTabRelabel()
 
         // Setup our undo
         if let undoManager = parentController.undoManager {
@@ -478,9 +460,16 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
     /// changes, when a window is closed, and when tabs are reordered
     /// with the mouse.
     func relabelTabs() {
-        // We only listen for frame changes if we have more than 1 window,
-        // otherwise the accessory view doesn't matter.
-        tabListenForFrame = window?.tabbedWindows?.count ?? 0 > 1
+        guard isWindowLoaded,
+              ghostty.windowRegistry.registeredControllers.contains(where: { $0 === self }) else { return }
+        let group = window?.tabGroup
+        if observedTabGroup !== group {
+            observedTabGroup = group
+            // NSWindowTabGroup.windows explicitly supports KVO, including drag reorder.
+            tabOrderObservation = group?.observe(\.windows) { [weak self] _, _ in
+                MainActor.assumeIsolated { self?.scheduleTabRelabel() }
+            }
+        }
 
         if let windows = window?.tabbedWindows as? [TerminalWindow] {
             for (tab, window) in zip(1..., windows) {
@@ -512,19 +501,17 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         }
     }
 
-    @objc private func onFrameDidChange(_ notification: NSNotification) {
-        // This is a huge hack to set the proper shortcut for tab selection
-        // on tab reordering using the mouse. There is no event, delegate, etc.
-        // as far as I can tell for when a tab is manually reordered with the
-        // mouse in a macOS-native tab group, so the way we detect it is setting
-        // the accessoryView "postsFrameChangedNotification" to true, listening
-        // for the view frame to change, comparing the windows list, and
-        // relabeling the tabs.
-        guard tabListenForFrame else { return }
-        guard let v = self.window?.tabbedWindows?.hashValue else { return }
-        guard tabWindowsHash != v else { return }
-        tabWindowsHash = v
-        self.relabelTabs()
+    /// Coalesce group mutations until AppKit has finished changing membership.
+    /// This also rebinds observation if a window moved to a different group.
+    func scheduleTabRelabel() {
+        pendingTabRelabel?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.pendingTabRelabel?.isCancelled == false else { return }
+            self.pendingTabRelabel = nil
+            self.relabelTabs()
+        }
+        pendingTabRelabel = work
+        DispatchQueue.main.async(execute: work)
     }
 
     override func syncAppearance() {
@@ -1121,12 +1108,18 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
     }
 
     override func windowWillClose(_ notification: Notification) {
+        pendingTabRelabel?.cancel()
+        pendingTabRelabel = nil
+        tabOrderObservation = nil
+        observedTabGroup = nil
         defer { Self.openControllers[ObjectIdentifier(self)] = nil }
         appearanceObservation?.cancel()
         ghostty.windowRegistry.windowWillClose(self, keyWindow: NSApp.keyWindow)
         super.windowWillClose(notification)
         cancelPendingInitialPresentation()
-        self.relabelTabs()
+        for tab in window?.tabGroup?.windows ?? [] where tab !== window {
+            (tab.windowController as? TerminalController)?.scheduleTabRelabel()
+        }
     }
 
     override func windowDidBecomeKey(_ notification: Notification) {

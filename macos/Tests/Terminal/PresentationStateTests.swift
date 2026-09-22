@@ -13,6 +13,47 @@ import Testing
         return config
     }
 
+    @Test func restoredFocusWaitsForAttachmentAndCompletesOnce() async throws {
+        let app = Ghostty.App(configPath: "/dev/null")
+        let view = Ghostty.SurfaceView(app, baseConfig: isolatedSurfaceConfiguration)
+        let controller = BaseTerminalController(app, surfaceTree: .init(view: view))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 200),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        controller.window = window
+        window.delegate = controller
+        defer { window.close() }
+        controller.restoreFocus(to: view)
+        await drainMainQueue()
+        #expect(window.firstResponder !== view)
+        window.contentView?.addSubview(view)
+        controller.focusedSurface = nil // SwiftUI's initial focus assignment can race attachment.
+        await drainMainQueue()
+        #expect(window.firstResponder === view)
+        #expect(controller.focusedSurface === view)
+        window.makeFirstResponder(window)
+        controller.surfaceDidAttach(view)
+        await drainMainQueue()
+        #expect(window.firstResponder === window)
+    }
+
+    @Test func removedSurfaceCannotCompletePendingRestoration() async throws {
+        let app = Ghostty.App(configPath: "/dev/null")
+        let view = Ghostty.SurfaceView(app, baseConfig: isolatedSurfaceConfiguration)
+        let controller = BaseTerminalController(app, surfaceTree: .init(view: view))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 200),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        controller.window = window
+        defer { window.close() }
+        controller.restoreFocus(to: view)
+        controller.surfaceTree = .init()
+        window.contentView?.addSubview(view)
+        controller.surfaceDidAttach(view)
+        await drainMainQueue()
+        #expect(window.firstResponder !== view)
+    }
+
     @Test func surfacePresentationTracksOnlyReadProperties() throws {
         let app = Ghostty.App(configPath: "/dev/null")
         let surface = Ghostty.SurfaceView(app, baseConfig: isolatedSurfaceConfiguration)

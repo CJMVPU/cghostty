@@ -328,12 +328,6 @@ class NonNativeFullscreen: FullscreenBase, FullscreenStyle {
             // We need to subtract the menu height since we're still showing it.
             frame.size.height -= NSApp.mainMenu?.menuBarHeight ?? 0
 
-            // NOTE on macOS bugs: macOS used to have a bug where menuBarHeight
-            // didn't account for the notch. I reported this as a radar and it
-            // was fixed at some point. I don't know when that was so I can't
-            // put an #available check, but it was in a bug fix release so I think
-            // if a bug is reported to Ghostty we can just advise the user to
-            // update.
         } else if properties.paddedNotch {
             // We are hiding the menu, we may need to avoid the notch.
             frame.size.height -= screen.safeAreaInsets.top

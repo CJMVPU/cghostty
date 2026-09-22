@@ -36,9 +36,8 @@ class GhosttyCustomConfigCase: XCTestCase {
         return app
     }
 
-    /// Keep text literal regardless of the active input method, and restore
-    /// every pasteboard representation after the target consumes it.
-    @MainActor func paste(_ text: String, into target: XCUIElement, submit: Bool = true) {
+    /// Preserve every representation, including non-text user clipboard contents.
+    @MainActor func preservingClipboard(_ body: () -> Void) {
         let pasteboard = NSPasteboard.general
         let savedItems = (pasteboard.pasteboardItems ?? []).map { item in
             let saved = NSPasteboardItem()
@@ -51,14 +50,22 @@ class GhosttyCustomConfigCase: XCTestCase {
             pasteboard.clearContents()
             pasteboard.writeObjects(savedItems)
         }
-        pasteboard.clearContents()
-        pasteboard.setString(text.trimmingCharacters(in: .newlines), forType: .string)
-        target.typeKey("v", modifierFlags: .command)
-        if target.elementType == .textField {
-            let consumed = NSPredicate(format: "value == %@", text.trimmingCharacters(in: .newlines))
-            XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: consumed, object: target)], timeout: 5), .completed)
+        body()
+    }
+
+    /// Keep text literal regardless of the active input method.
+    @MainActor func paste(_ text: String, into target: XCUIElement, submit: Bool = true) {
+        preservingClipboard {
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString(text.trimmingCharacters(in: .newlines), forType: .string)
+            target.typeKey("v", modifierFlags: .command)
+            if target.elementType == .textField {
+                let consumed = NSPredicate(format: "value == %@", text.trimmingCharacters(in: .newlines))
+                XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: consumed, object: target)], timeout: 5), .completed)
+            }
+            if submit { target.typeKey("\n", modifierFlags: []) }
         }
-        if submit { target.typeKey("\n", modifierFlags: []) }
     }
 
 }
