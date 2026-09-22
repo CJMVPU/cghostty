@@ -26,6 +26,8 @@
 
 ## 维护状态与生成文件
 
+默认字体 LXGW WenKai Mono 的官方发布归档及内容哈希锁定在根目录 `build.zig.zon` 的 `lxgw_wenkai` 依赖。构建只嵌入未修改的 `LXGWWenKaiMono-Regular.ttf`，粗体及斜体沿用运行时合成策略，不把其他字重一并打进应用。官方 `OFL.txt` 原样安装至应用的 `Contents/Resources/cghostty/licenses/LXGW-WenKai-OFL.txt`；应用资源检查要求该文件存在。字体升级应同时核对字形、默认网格尺寸、版权声明与许可。JetBrains Mono 仍用于字体后端测试，不再承担运行时默认字体。
+
 版本一致性检查不判断上游维护活跃度，也不替代安全审计。
 
 PCRE2 负责链接与路径识别，复用上游 Zig 构建，仅编译 8 位 UTF-8 静态库，关闭 JIT。渲染高亮与点击定位共用匹配预算；封装测试运行方式和升级要点见 [pcre2/README.md](pcre2/README.md)。tmux 控制消息直接按协议字段解析，不依赖正则库。

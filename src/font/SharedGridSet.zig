@@ -152,6 +152,37 @@ pub fn ref(
     return .{ gop.key_ptr.*, gop.value_ptr.grid };
 }
 
+/// The upstream default face is Regular. Synthesize styles using the same
+/// user-controlled policy as configured fonts, without storing duplicate TTFs.
+fn bundledFace(
+    self: *SharedGridSet,
+    style: Style,
+    opts: font.face.Options,
+    synthetic: Config.FontSyntheticStyle,
+) !Face {
+    var face = try Face.init(self.font_lib, font.embedded.lxgw_wenkai_mono, opts);
+    errdefer face.deinit();
+    const enabled = switch (style) {
+        .regular => false,
+        .bold => synthetic.bold,
+        .italic => synthetic.italic,
+        .bold_italic => synthetic.@"bold-italic",
+    };
+    if (enabled) {
+        if (style == .italic or style == .bold_italic) {
+            const replacement = try face.syntheticItalic(opts);
+            face.deinit();
+            face = replacement;
+        }
+        if (style == .bold or style == .bold_italic) {
+            const replacement = try face.syntheticBold(opts);
+            face.deinit();
+            face = replacement;
+        }
+    }
+    return face;
+}
+
 /// Builds the Collection for the given configuration key and
 /// initial font size.
 fn collection(
@@ -167,7 +198,6 @@ fn collection(
     const load_options: Collection.LoadOptions = .{
         .library = self.font_lib,
         .size = size,
-        .freetype_load_flags = key.freetype_load_flags,
     };
 
     var c = Collection.init();
@@ -191,6 +221,16 @@ fn collection(
         inline for (@typeInfo(Style).@"enum".fields) |field| {
             const style = @field(Style, field.name);
             for (key.descriptorsForStyle(style)) |desc| {
+                // Resolve our bundled family before searching installed fonts.
+                if (std.ascii.eqlIgnoreCase(desc.family orelse "", "LXGW WenKai Mono") and
+                    (desc.style == null or std.ascii.eqlIgnoreCase(desc.style.?, "Regular")))
+                {
+                    const requested_style: Style = if (desc.bold and desc.italic) .bold_italic else if (desc.bold) .bold else if (desc.italic) .italic else .regular;
+                    var face = try self.bundledFace(requested_style, load_options.faceOptions(), config.@"font-synthetic-style");
+                    errdefer face.deinit();
+                    _ = try c.add(self.alloc, face, .{ .style = style, .fallback = false, .size_adjustment = .none });
+                    continue;
+                }
                 {
                     var disco_it = try disco.discover(self.alloc, desc);
                     defer disco_it.deinit();
@@ -256,65 +296,17 @@ fn collection(
     // the configured styles.
     try c.completeStyles(self.alloc, config.@"font-synthetic-style");
 
-    // Our built-in font will be used as a backup
-    _ = try c.add(
-        self.alloc,
-        try .init(
-            self.font_lib,
-            font.embedded.variable,
-            load_options.faceOptions(),
-        ),
-        .{
-            .style = .regular,
+    // Load the bundled family directly: no system installation or registration.
+    // Complete configured styles first, then provide a fallback for every style.
+    inline for (std.meta.tags(Style)) |style| {
+        var face = try self.bundledFace(style, load_options.faceOptions(), config.@"font-synthetic-style");
+        errdefer face.deinit();
+        _ = try c.add(self.alloc, face, .{
+            .style = style,
             .fallback = true,
             .size_adjustment = font.default_fallback_adjustment,
-        },
-    );
-    try (try c.getFace(try c.add(
-        self.alloc,
-        try .init(
-            self.font_lib,
-            font.embedded.variable,
-            load_options.faceOptions(),
-        ),
-        .{
-            .style = .bold,
-            .fallback = true,
-            .size_adjustment = font.default_fallback_adjustment,
-        },
-    ))).setVariations(
-        &.{.{ .id = .init("wght"), .value = 700 }},
-        load_options.faceOptions(),
-    );
-    _ = try c.add(
-        self.alloc,
-        try .init(
-            self.font_lib,
-            font.embedded.variable_italic,
-            load_options.faceOptions(),
-        ),
-        .{
-            .style = .italic,
-            .fallback = true,
-            .size_adjustment = font.default_fallback_adjustment,
-        },
-    );
-    try (try c.getFace(try c.add(
-        self.alloc,
-        try .init(
-            self.font_lib,
-            font.embedded.variable_italic,
-            load_options.faceOptions(),
-        ),
-        .{
-            .style = .bold_italic,
-            .fallback = true,
-            .size_adjustment = font.default_fallback_adjustment,
-        },
-    ))).setVariations(
-        &.{.{ .id = .init("wght"), .value = 700 }},
-        load_options.faceOptions(),
-    );
+        });
+    }
 
     // Nerd-font symbols fallback.
     _ = try c.add(
@@ -502,7 +494,6 @@ pub const DerivedConfig = struct {
     @"adjust-cursor-height": ?Metrics.Modifier,
     @"adjust-box-thickness": ?Metrics.Modifier,
     @"adjust-icon-height": ?Metrics.Modifier,
-    @"freetype-load-flags": font.face.FreetypeLoadFlags,
 
     /// Initialize a DerivedConfig. The config should be either a
     /// config.Config or another DerivedConfig to clone from.
@@ -542,7 +533,6 @@ pub const DerivedConfig = struct {
             .@"adjust-cursor-height" = config.@"adjust-cursor-height",
             .@"adjust-box-thickness" = config.@"adjust-box-thickness",
             .@"adjust-icon-height" = config.@"adjust-icon-height",
-            .@"freetype-load-flags" = if (font.face.FreetypeLoadFlags != void) config.@"freetype-load-flags" else {},
 
             // This must be last so the arena contains all our allocations
             // from above since Zig does assignment in order.
@@ -581,10 +571,6 @@ pub const Key = struct {
     /// directly but it is used as part of the hash for the
     /// font grid.
     font_size: DesiredSize = .{ .points = 12 },
-
-    /// The freetype load flags configuration, only non-void if the
-    /// freetype backend is enabled.
-    freetype_load_flags: font.face.FreetypeLoadFlags = font.face.freetype_load_flags_default,
 
     const style_offsets_len = std.enums.directEnumArrayLen(Style, 0);
     const StyleOffsets = [style_offsets_len]usize;
@@ -709,10 +695,6 @@ pub const Key = struct {
             .codepoint_map = codepoint_map,
             .metric_modifiers = metric_modifiers,
             .font_size = font_size,
-            .freetype_load_flags = if (font.face.FreetypeLoadFlags != void)
-                config.@"freetype-load-flags"
-            else
-                font.face.freetype_load_flags_default,
         };
     }
 
@@ -742,7 +724,6 @@ pub const Key = struct {
         for (self.descriptors) |d| d.hash(hasher);
         self.codepoint_map.hash(hasher);
         autoHash(hasher, self.metric_modifiers.count());
-        autoHash(hasher, self.freetype_load_flags);
         if (self.metric_modifiers.count() > 0) {
             inline for (@typeInfo(Metrics.Key).@"enum".fields) |field| {
                 const key = @field(Metrics.Key, field.name);
@@ -849,4 +830,38 @@ test SharedGridSet {
     // If I deref grid1 then we should have a count of 0
     set.deref(key1);
     try testing.expectEqual(@as(usize, 0), set.count());
+}
+
+test "bundled WenKai resolves all styles and preserves configured fonts" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    var set = try SharedGridSet.init(alloc);
+    defer set.deinit();
+
+    for ([_][]const u8{ "", "font-family = LXGW WenKai Mono\n", "font-family = Menlo\n", "font-synthetic-style = false\n" }, 0..) |data, scenario| {
+        var cfg = try Config.default(alloc);
+        defer cfg.deinit();
+        try cfg.loadData(alloc, data, "/tmp/cghostty-font-test.ghostty");
+        try cfg.finalize();
+        try testing.expectEqual(@as(f32, 16), cfg.@"font-size");
+        try testing.expectEqual(@as(u32, 144), cfg.@"window-width");
+        try testing.expectEqual(@as(u32, 33), cfg.@"window-height");
+        var derived = try DerivedConfig.init(alloc, &cfg);
+        defer derived.deinit();
+        const key, const grid = try set.ref(&derived, .{ .points = cfg.@"font-size" });
+        defer set.deref(key);
+        for (std.meta.tags(Style)) |style| {
+            for ([_]u32{ 'A', '中', '文' }) |cp| {
+                const index = (try grid.getIndex(alloc, cp, style, .text)) orelse return error.MissingGlyph;
+                const face = try grid.resolver.collection.getFace(index);
+                var name_buf: [256]u8 = undefined;
+                const name = try face.name(&name_buf);
+                const expected = if (scenario == 2 and cp == 'A') "Menlo" else "LXGW";
+                try testing.expect(std.mem.indexOf(u8, name, expected) != null);
+            }
+        }
+        // The symbol and emoji fallback chains still provide actual glyphs.
+        try testing.expect((try grid.getIndex(alloc, 0xf121, .regular, .text)) != null);
+        try testing.expect((try grid.getIndex(alloc, 0x1f600, .regular, .emoji)) != null);
+    }
 }

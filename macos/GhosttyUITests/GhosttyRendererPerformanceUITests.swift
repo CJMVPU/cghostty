@@ -54,7 +54,7 @@ final class GhosttyRendererPerformanceUITests: GhosttyCustomConfigCase {
         command = /usr/bin/python3 -u \(script.path) \(control.path)
         shell-integration = none
         confirm-close-surface = false
-        cursor-effect = smooth
+        cursor-effect = true
         cursor-style-blink = false
         font-size = 10
         window-width = 140

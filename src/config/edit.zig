@@ -1,133 +1,129 @@
 const std = @import("std");
-const assert = @import("../quirks.zig").inlineAssert;
 const Allocator = std.mem.Allocator;
-const ArenaAllocator = std.heap.ArenaAllocator;
 const file_load = @import("file_load.zig");
 const global = @import("../global.zig");
 
-/// The path to the configuration that should be opened for editing.
-///
-/// On Linux, this will use the file at the XDG config path. This is the
-/// only valid path for Linux so we don't need to check for other paths.
-///
-/// On macOS, both XDG and AppSupport paths are valid. Because Ghostty
-/// prioritizes AppSupport over XDG, we will use AppSupport if it exists,
-/// followed by XDG if it exists, and finally AppSupport if neither exist.
-/// For the existence check, we also prefer non-empty files over empty
-/// files.
-///
-/// The returned value is allocated using the provided allocator.
-pub fn openPath(alloc_gpa: Allocator) ![:0]const u8 {
-    // Use an arena to make memory management easier in here.
-    var arena = ArenaAllocator.init(alloc_gpa);
-    defer arena.deinit();
-    const alloc_arena = arena.allocator();
+const template = @import("template.zig");
 
-    // Get the path we should open
-    const config_path = try configPath(alloc_arena);
-
-    if (!config_path.exists) {
-        if (std.fs.path.dirname(config_path.name)) |config_dir| check_dir: {
-            // Check to see if dir exists.
-            const dir = std.Io.Dir.cwd().openDir(global.io(), config_dir, .{ .follow_symlinks = true }) catch |err| {
-                switch (err) {
-                    error.FileNotFound => {
-                        // Create config directory recursively. Note that this does not
-                        // allow intermediate symlinks by design, see
-                        // std.Io.Threaded.dirCreateDirPath for why. If some sort of
-                        // complex symlink structure is needed, it will need to be created
-                        // manually.
-                        try std.Io.Dir.cwd().createDirPath(global.io(), config_dir);
-                        break :check_dir;
-                    },
-                    else => return err,
-                }
-            };
-            dir.close(global.io());
-        }
-
-        // Try to create file and go on if it already exists
-        _ = std.Io.Dir.createFileAbsolute(
-            global.io(),
-            config_path.name,
-            .{ .exclusive = true },
-        ) catch |err| {
-            switch (err) {
-                error.PathAlreadyExists => {},
-                else => return err,
-            }
-        };
-    }
-
-    return try alloc_gpa.dupeZ(u8, config_path.name);
+/// Prepare the sole Application Support configuration only when explicitly edited.
+pub fn openPath(alloc: Allocator) ![:0]const u8 {
+    const path = try file_load.defaultPath(alloc);
+    defer alloc.free(path);
+    return try openPathAt(alloc, path);
 }
 
-const ConfigPathResult = struct {
-    name: []const u8,
-    exists: bool,
-};
-
-/// Returns the config path to use for open for the current OS.
-///
-/// The allocator must be an arena allocator. No memory is freed by this
-/// function and the resulting path is not all the memory that is allocated.
-fn configPath(alloc_arena: Allocator) !ConfigPathResult {
-    const paths: []const []const u8 = try configPathCandidates(alloc_arena);
-    assert(paths.len > 0);
-
-    // Find the first path that exists and is non-empty. If no paths are
-    // non-empty but at least one exists, we will return the first path that
-    // exists.
-    var exists: ?[]const u8 = null;
-    for (paths) |path| {
-        const f = std.Io.Dir.openFileAbsolute(global.io(), path, .{}) catch |err| {
-            switch (err) {
-                // File doesn't exist, continue.
-                error.BadPathName, error.FileNotFound => continue,
-
-                // Some other error, assume it exists and return it.
-                else => return err,
-            }
-        };
-        defer f.close(global.io());
-
-        // We expect stat to succeed because we just opened the file.
-        const stat = try f.stat(global.io());
-
-        // If the file is non-empty, return it.
-        if (stat.size > 0) return .{
-            .name = path,
-            .exists = true,
-        };
-
-        // If the file is empty, remember it exists.
-        if (exists == null) exists = path;
+/// Existing settings retain their exact byte order. The guide is appended once,
+/// after a private backup; atomic replacement never exposes a partial template.
+pub fn openPathAt(alloc: Allocator, path: []const u8) ![:0]const u8 {
+    const io = global.io();
+    if (std.fs.path.dirname(path)) |parent| try std.Io.Dir.cwd().createDirPath(io, parent);
+    const existing = std.Io.Dir.openFileAbsolute(io, path, .{}) catch |err| switch (err) {
+        error.FileNotFound => null,
+        else => return err,
+    };
+    defer if (existing) |file| file.close(io);
+    const stat: ?std.Io.File.Stat = if (existing) |file| try file.stat(io) else null;
+    if (stat) |info| if (info.kind != .file) return error.NotAFile;
+    const original = if (existing != null) try std.Io.Dir.cwd().readFileAlloc(io, path, alloc, .unlimited) else try alloc.dupe(u8, "");
+    defer alloc.free(original);
+    var lines = std.mem.splitScalar(u8, original, '\n');
+    while (lines.next()) |line| {
+        if (std.mem.eql(u8, std.mem.trimEnd(u8, line, "\r"), template.marker)) return try alloc.dupeZ(u8, path);
     }
 
-    // No paths are non-empty, return the first path that exists.
-    if (exists) |v| return .{
-        .name = v,
-        .exists = true,
-    };
-
-    // No paths are non-empty or exist, return the first path.
-    return .{
-        .name = paths[0],
-        .exists = false,
-    };
+    // Resolve an existing symlink so editing preserves both the link and its target.
+    var resolved: [std.fs.max_path_bytes]u8 = undefined;
+    const target = if (existing != null)
+        resolved[0..try std.Io.Dir.cwd().realPathFile(io, path, &resolved)]
+    else
+        path;
+    const guide = try template.generate(alloc);
+    defer alloc.free(guide);
+    if (existing != null) {
+        var name_buf: [@import("../os/file.zig").random_basename_len]u8 = undefined;
+        const name = try @import("../os/file.zig").randomBasename(&name_buf);
+        const backup = try std.fmt.allocPrint(alloc, "{s}.before-guide-{s}.bak", .{ target, name });
+        defer alloc.free(backup);
+        var copy = try std.Io.Dir.cwd().createFileAtomic(io, backup, .{ .permissions = .fromMode(0o600) });
+        defer copy.deinit(io);
+        var buf: [4096]u8 = undefined;
+        var writer = copy.file.writer(io, &buf);
+        try writer.interface.writeAll(original);
+        try writer.end();
+        try copy.link(io);
+    }
+    var atomic = try std.Io.Dir.cwd().createFileAtomic(io, target, .{
+        .replace = existing != null,
+        .permissions = if (stat) |info| info.permissions else .fromMode(0o600),
+    });
+    defer atomic.deinit(io);
+    var buffer: [4096]u8 = undefined;
+    var writer = atomic.file.writer(io, &buffer);
+    if (original.len > 0) {
+        try writer.interface.writeAll(original);
+        try writer.interface.writeAll("\n\n");
+    }
+    try writer.interface.writeAll(guide);
+    try writer.end();
+    if (stat) |before| {
+        // Refuse to overwrite edits made while preparing the guide.
+        const current = try std.Io.Dir.openFileAbsolute(io, path, .{});
+        defer current.close(io);
+        const after = try current.stat(io);
+        if (before.inode != after.inode or before.size != after.size or !std.meta.eql(before.mtime, after.mtime)) return error.ConfigurationChanged;
+        try atomic.replace(io);
+    } else try atomic.link(io);
+    return try alloc.dupeZ(u8, path);
 }
 
-/// Returns a const list of possible paths the main config file could be
-/// in for the current OS.
-fn configPathCandidates(alloc_arena: Allocator) ![]const []const u8 {
-    var paths: std.ArrayList([]const u8) = try .initCapacity(alloc_arena, 4);
-    errdefer paths.deinit(alloc_arena);
+test "opening user configuration preserves contents and rejects directories" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    var td = try @import("../os/main.zig").TempDir.init();
+    defer td.deinit();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    const base = buf[0..try td.dir.realPath(testing.io, &buf)];
+    const path = try std.fs.path.join(alloc, &.{ base, "settings", "config.ghostty" });
+    defer alloc.free(path);
 
-    paths.appendAssumeCapacity(try file_load.defaultAppSupportPath(alloc_arena));
-    paths.appendAssumeCapacity(try file_load.legacyDefaultAppSupportPath(alloc_arena));
+    const created = try openPathAt(alloc, path);
+    defer alloc.free(created);
+    try testing.expectEqualStrings(path, created);
+    const initial = try std.Io.Dir.cwd().readFileAlloc(testing.io, path, alloc, .unlimited);
+    defer alloc.free(initial);
+    try testing.expect(std.mem.startsWith(u8, initial, template.marker));
 
-    paths.appendAssumeCapacity(try file_load.defaultXdgPath(alloc_arena));
-    paths.appendAssumeCapacity(try file_load.legacyDefaultXdgPath(alloc_arena));
-
-    return paths.items;
+    const contents = "# Keep my settings\nfont-size = 19\n";
+    {
+        var file = try std.Io.Dir.createFileAbsolute(testing.io, path, .{});
+        defer file.close(testing.io);
+        var buffer: [256]u8 = undefined;
+        var writer = file.writer(testing.io, &buffer);
+        try writer.interface.writeAll(contents);
+        try writer.end();
+    }
+    const reopened = try openPathAt(alloc, path);
+    defer alloc.free(reopened);
+    const actual = try std.Io.Dir.cwd().readFileAlloc(testing.io, path, alloc, .unlimited);
+    defer alloc.free(actual);
+    try testing.expect(std.mem.startsWith(u8, actual, contents));
+    try testing.expect(std.mem.indexOf(u8, actual, template.marker) != null);
+    const again = try openPathAt(alloc, path);
+    defer alloc.free(again);
+    const unchanged = try std.Io.Dir.cwd().readFileAlloc(testing.io, path, alloc, .unlimited);
+    defer alloc.free(unchanged);
+    try testing.expectEqualStrings(actual, unchanged);
+    var parent = try std.Io.Dir.cwd().openDir(testing.io, std.fs.path.dirname(path).?, .{ .iterate = true });
+    defer parent.close(testing.io);
+    var iter = parent.iterate();
+    var backups: usize = 0;
+    while (try iter.next(testing.io)) |entry| {
+        if (!std.mem.endsWith(u8, entry.name, ".bak")) continue;
+        const saved = try parent.readFileAlloc(testing.io, entry.name, alloc, .unlimited);
+        defer alloc.free(saved);
+        try testing.expectEqualStrings(contents, saved);
+        backups += 1;
+    }
+    try testing.expectEqual(@as(usize, 1), backups);
+    try testing.expectError(error.NotAFile, openPathAt(alloc, base));
 }

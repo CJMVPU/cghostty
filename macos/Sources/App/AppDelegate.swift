@@ -22,7 +22,6 @@ class AppDelegate: NSObject,
     var menuServices: NSMenu?
     var menuCheckForUpdates: NSMenuItem?
     var menuOpenConfig: NSMenuItem?
-    var menuReloadConfig: NSMenuItem?
     var menuSecureInput: NSMenuItem?
 
     var menuNewWindow: NSMenuItem?
@@ -463,8 +462,7 @@ class AppDelegate: NSObject,
 
     /// Setup signal handlers
     private func setupSignals() {
-        // Register a signal handler for config reloading. It appears that all
-        // of this is required. I've commented each line because its a bit unclear.
+        // Consume SIGUSR2 without reloading user settings or terminating the app.
         // Warning: signal handlers don't work when run via Xcode. They have to be
         // run on a real app bundle.
 
@@ -477,7 +475,7 @@ class AppDelegate: NSObject,
         let sigusr2 = DispatchSource.makeSignalSource(signal: SIGUSR2, queue: .main)
         sigusr2.setEventHandler { [weak self] in
             guard let self else { return }
-            Ghostty.logger.info("reloading configuration in response to SIGUSR2")
+            Ghostty.logger.notice("SIGUSR2 received; user configuration changes apply after restart")
             self.ghostty.reloadConfig()
         }
 
@@ -672,8 +670,9 @@ class AppDelegate: NSObject,
 
         // If we have configuration errors, we need to show them.
         let c = configurationErrorsController
-        c.updateErrors(config.errors)
-        if !config.errors.isEmpty {
+        let errors = Array(Set(config.errors + ghostty.startupConfigurationErrors)).sorted()
+        c.updateErrors(errors)
+        if !errors.isEmpty {
             if c.window == nil || !c.window!.isVisible {
                 c.showWindow(self)
             }
@@ -790,8 +789,24 @@ class AppDelegate: NSObject,
         ghostty.openConfig()
     }
 
-    @IBAction func reloadConfig(_ sender: Any?) {
-        ghostty.reloadConfig()
+    @IBAction func restoreDefaultSettings(_ sender: Any?) {
+        let alert = NSAlert()
+        alert.messageText = "恢复默认设置？ / Restore Default Settings?"
+        alert.informativeText = "当前配置会先备份，再清除用户覆盖。重启应用后生效，当前终端保持不变。\nYour configuration will be backed up. Defaults take effect after restarting; current terminals stay unchanged."
+        alert.addButton(withTitle: "恢复默认 / Restore Defaults")
+        alert.addButton(withTitle: "取消 / Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        do {
+            let backup = try ghostty.restoreDefaultSettings()
+            let result = NSAlert()
+            result.messageText = "重启后使用默认设置 / Defaults Ready for Next Launch"
+            result.informativeText = backup.map { "备份 / Backup: \($0.path)" } ?? "当前终端保持不变。 / Current terminals are unchanged."
+            result.runModal()
+        } catch {
+            let failure = NSAlert(error: error)
+            failure.messageText = "无法完成恢复默认设置 / Could Not Restore Default Settings"
+            failure.runModal()
+        }
     }
 
     @IBAction func checkForUpdates(_ sender: Any?) {
@@ -952,7 +967,6 @@ extension AppDelegate {
         self.menuAbout?.setImageIfDesired(systemSymbolName: "info.circle")
         self.menuCheckForUpdates?.setImageIfDesired(systemSymbolName: "square.and.arrow.down")
         self.menuOpenConfig?.setImageIfDesired(systemSymbolName: "gear")
-        self.menuReloadConfig?.setImageIfDesired(systemSymbolName: "arrow.trianglehead.2.clockwise.rotate.90")
         self.menuSecureInput?.setImageIfDesired(systemSymbolName: "lock.display")
         self.menuNewWindow?.setImageIfDesired(systemSymbolName: "macwindow.badge.plus")
         self.menuNewTab?.setImageIfDesired(systemSymbolName: "macwindow")

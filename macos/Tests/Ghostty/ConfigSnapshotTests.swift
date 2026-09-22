@@ -149,13 +149,15 @@ import Testing
         #expect(config.window.titleFontFamily == "After Font")
     }
 
-    @Test func configReloadUpdatesOnlyItsOwningApp() throws {
+    @Test func userConfigurationChangesApplyOnlyToRestartedApp() throws {
         let file = try TemporaryConfig("title = Before")
         let app = Ghostty.App(configPath: file.temporaryFile.path)
         let other = Ghostty.App(configPath: file.temporaryFile.path)
         try file.reload("title = After")
         app.reloadConfig()
-        #expect(app.config.snapshot.title == "After")
+        #expect(app.config.snapshot.title == "Before")
+        let restarted = Ghostty.App(configPath: file.temporaryFile.path)
+        #expect(restarted.config.snapshot.title == "After")
         #expect(other.config.snapshot.title == "Before")
     }
 }

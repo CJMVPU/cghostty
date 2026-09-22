@@ -708,12 +708,6 @@ pub const LoadOptions = struct {
     /// The desired font size for all loaded faces.
     size: DesiredSize = .{ .points = 12 },
 
-    /// Freetype Load Flags to use when loading glyphs. This is a list of
-    /// bitfield constants that controls operations to perform during glyph
-    /// loading. Only a subset is exposed for configuration, for the whole set
-    /// of flags see `pkg.freetype.face.LoadFlags`.
-    freetype_load_flags: font.face.FreetypeLoadFlags = font.face.freetype_load_flags_default,
-
     pub fn deinit(self: *LoadOptions, alloc: Allocator) void {
         _ = self;
         _ = alloc;
@@ -723,7 +717,6 @@ pub const LoadOptions = struct {
     pub fn faceOptions(self: *const LoadOptions) font.face.Options {
         return .{
             .size = self.size,
-            .freetype_load_flags = self.freetype_load_flags,
         };
     }
 };

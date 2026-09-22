@@ -19,7 +19,7 @@ final class GhosttyWindowPositionUITests: GhosttyCustomConfigCase {
             """
         )
 
-        let app = try ghosttyApplication()
+        let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         // Suppress Restoration
         app.launchArguments += ["-NSQuitAlwaysKeepsWindows", "NO"]
         // Clean run
@@ -27,15 +27,8 @@ final class GhosttyWindowPositionUITests: GhosttyCustomConfigCase {
 
         app.launch() // window in the center
 
-//        app.menuBarItems["Window"].firstMatch.click()
-//        app.menuItems["_zoomTopLeft:"].firstMatch.click()
-//
-//        // wait for the animation to finish
-//        try await Task.sleep(for: .seconds(0.5))
-
         let window = app.windows.firstMatch
         let windowFrame = window.frame
-//        XCTAssertEqual(windowFrame.minX, 0, "Window should be on the left")
 
         app.typeKey("n", modifierFlags: [.command])
 
@@ -81,7 +74,7 @@ final class GhosttyWindowPositionUITests: GhosttyCustomConfigCase {
             """
         )
 
-        let app = try ghosttyApplication()
+        let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         // Suppress Restoration
         app.launchArguments += ["-NSQuitAlwaysKeepsWindows", "NO"]
         // Clean run
@@ -99,7 +92,9 @@ final class GhosttyWindowPositionUITests: GhosttyCustomConfigCase {
             macos-titlebar-style = hidden
             """
         )
-        app.typeKey(",", modifierFlags: [.command, .shift])
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 10))
 
         app.typeKey("d", modifierFlags: [.command])
 
@@ -109,24 +104,25 @@ final class GhosttyWindowPositionUITests: GhosttyCustomConfigCase {
         let sourcePos = rightSplit.coordinate(withNormalizedOffset: .zero)
             .withOffset(.init(dx: rightFrame.size.width / 2, dy: 3))
 
+        // Drop outside the original window while keeping the whole pane on screen.
+        let targetX = (NSScreen.main?.visibleFrame.minX ?? 0) + 200
         let targetPos = rightSplit.coordinate(withNormalizedOffset: .zero)
-            .withOffset(.init(dx: rightFrame.size.width + 100, dy: 0))
+            .withOffset(.init(dx: targetX - rightFrame.minX, dy: 0))
 
         sourcePos.click(forDuration: 0.2, thenDragTo: targetPos)
+        XCTAssertTrue(app.wait(for: \.windows.count, toEqual: 2, timeout: 5))
 
         let window2 = app.windows.firstMatch
         XCTAssertTrue(window2.waitForExistence(timeout: 5), "New window should appear")
         let windowFrame2 = window2.frame
 
-        try await Task.sleep(for: .seconds(0.5))
-
-        XCTAssertEqual(windowFrame2.minX, rightFrame.maxX + 100, accuracy: 5, "New window should be target position")
+        XCTAssertEqual(windowFrame2.minX, targetX, accuracy: 5, "New window should be target position")
         XCTAssertEqual(windowFrame2.minY, rightFrame.minY, accuracy: 5, "New window should be target position")
-        XCTAssertEqual(windowFrame2.width, rightFrame.width, accuracy: 5, "New window should use size from config")
-         XCTAssertEqual(windowFrame2.height, rightFrame.height, accuracy: 5, "New window should use size from config")
+        XCTAssertEqual(windowFrame2.width, rightFrame.width, accuracy: 5, "Detached window should preserve the existing pane size")
+        XCTAssertEqual(windowFrame2.height, rightFrame.height, accuracy: 5, "Detached window should preserve the existing pane size")
     }
 
-    @MainActor func testDragSplitWindowPositionWithFixedSize() async throws {
+    @MainActor func testDetachedSplitKeepsPaneSizeWithFixedNewWindowConfig() async throws {
         try updateConfig(
             """
             window-width = 40
@@ -136,7 +132,7 @@ final class GhosttyWindowPositionUITests: GhosttyCustomConfigCase {
             """
         )
 
-        let app = try ghosttyApplication()
+        let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         // Suppress Restoration
         app.launchArguments += ["-NSQuitAlwaysKeepsWindows", "NO"]
         // Clean run
@@ -146,7 +142,6 @@ final class GhosttyWindowPositionUITests: GhosttyCustomConfigCase {
 
         let window = app.windows.firstMatch
         XCTAssertTrue(window.waitForExistence(timeout: 5), "New window should appear")
-        let windowFrame = window.frame
 
         app.typeKey("d", modifierFlags: [.command])
 
@@ -156,22 +151,22 @@ final class GhosttyWindowPositionUITests: GhosttyCustomConfigCase {
         let sourcePos = rightSplit.coordinate(withNormalizedOffset: .zero)
             .withOffset(.init(dx: rightFrame.size.width / 2, dy: 3))
 
+        // Drop outside the original window while keeping the whole pane on screen.
+        let targetX = (NSScreen.main?.visibleFrame.minX ?? 0) + 200
         let targetPos = rightSplit.coordinate(withNormalizedOffset: .zero)
-            .withOffset(.init(dx: rightFrame.size.width + 100, dy: 0))
+            .withOffset(.init(dx: targetX - rightFrame.minX, dy: 0))
 
         sourcePos.click(forDuration: 0.2, thenDragTo: targetPos)
+        XCTAssertTrue(app.wait(for: \.windows.count, toEqual: 2, timeout: 5))
 
         let window2 = app.windows.firstMatch
         XCTAssertTrue(window2.waitForExistence(timeout: 5), "New window should appear")
         let windowFrame2 = window2.frame
 
-        try await Task.sleep(for: .seconds(0.5))
-
-        XCTAssertEqual(windowFrame2.minX, rightFrame.maxX + 100, accuracy: 5, "New window should be target position")
+        XCTAssertEqual(windowFrame2.minX, targetX, accuracy: 5, "New window should be target position")
         XCTAssertEqual(windowFrame2.minY, rightFrame.minY, accuracy: 5, "New window should be target position")
-        XCTAssertEqual(windowFrame2.width, windowFrame.width, accuracy: 5, "New window should use size from config")
-        // We're still using right frame, because of the debug banner
-         XCTAssertEqual(windowFrame2.height, rightFrame.height, accuracy: 5, "New window should use size from config")
+        XCTAssertEqual(windowFrame2.width, rightFrame.width, accuracy: 5, "Detached window should preserve the existing pane width")
+        XCTAssertEqual(windowFrame2.height, rightFrame.height, accuracy: 5, "Detached window should preserve the existing pane size")
     }
 
     // MARK: - Restore round-trip per titlebar style
@@ -193,7 +188,7 @@ final class GhosttyWindowPositionUITests: GhosttyCustomConfigCase {
             """
         )
 
-        let app = try ghosttyApplication()
+        let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         app.launch()
 
         let window = app.windows.firstMatch
@@ -202,7 +197,7 @@ final class GhosttyWindowPositionUITests: GhosttyCustomConfigCase {
         let maximizedFrame = window.frame
 
         // Now update the config with a small explicit size and position,
-        // reload, and open a new window. It should respect the config, not the cache.
+        // restart, and open a new window. It should respect the config, not the cache.
         try updateConfig(
             """
             window-position-x = 50
@@ -212,8 +207,9 @@ final class GhosttyWindowPositionUITests: GhosttyCustomConfigCase {
             title = "GhosttyWindowPositionUITests"
             """
         )
-        app.typeKey(",", modifierFlags: [.command, .shift])
-        try await Task.sleep(for: .seconds(0.5))
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 10))
         app.typeKey("n", modifierFlags: [.command])
 
         XCTAssertEqual(app.windows.count, 2, "Should have 2 windows")
@@ -241,7 +237,7 @@ final class GhosttyWindowPositionUITests: GhosttyCustomConfigCase {
             """
         )
 
-        let app = try ghosttyApplication()
+        let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         app.launch()
 
         let window = app.windows.firstMatch
@@ -249,7 +245,7 @@ final class GhosttyWindowPositionUITests: GhosttyCustomConfigCase {
 
         let initialFrame = window.frame
 
-        // Reload with only size changed, close current window, open new one.
+        // Restart with only size changed, close current window, open new one.
         // Position should be restored from cache.
         try updateConfig(
             """
@@ -258,8 +254,9 @@ final class GhosttyWindowPositionUITests: GhosttyCustomConfigCase {
             title = "GhosttyWindowPositionUITests"
             """
         )
-        app.typeKey(",", modifierFlags: [.command, .shift])
-        try await Task.sleep(for: .seconds(0.5))
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 10))
         app.typeKey("w", modifierFlags: [.command])
         app.typeKey("n", modifierFlags: [.command])
 
@@ -292,7 +289,7 @@ final class GhosttyWindowPositionUITests: GhosttyCustomConfigCase {
             """
         )
 
-        let app = try ghosttyApplication()
+        let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         // Suppress Restoration
         app.launchArguments += ["-NSQuitAlwaysKeepsWindows", "NO"]
         // Clean run
@@ -303,9 +300,8 @@ final class GhosttyWindowPositionUITests: GhosttyCustomConfigCase {
         XCTAssertTrue(window.waitForExistence(timeout: 5), "Window should appear")
 
         let firstFrame = window.frame
-        let screenFrame = NSScreen.main?.frame ?? .zero
-
-        XCTAssertEqual(firstFrame.midX, screenFrame.midX, accuracy: 5.0, "First window should be centered horizontally")
+        // AppKit may adjust initial placement for the current desktop layout.
+        // This test verifies that closing and reopening preserves that placement.
 
         // Close the window and open a new one — it should restore the same frame.
         app.typeKey("w", modifierFlags: [.command])

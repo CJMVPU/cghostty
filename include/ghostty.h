@@ -1105,6 +1105,8 @@ GHOSTTY_API void ghostty_config_free(ghostty_config_t);
 GHOSTTY_API ghostty_config_t ghostty_config_clone(ghostty_config_t);
 GHOSTTY_API void ghostty_config_load_cli_args(ghostty_config_t);
 GHOSTTY_API void ghostty_config_load_file(ghostty_config_t, const char*);
+GHOSTTY_API void ghostty_config_load_data(ghostty_config_t, const uint8_t*, size_t, const char*);
+GHOSTTY_API ghostty_string_s ghostty_config_default_path(void);
 GHOSTTY_API void ghostty_config_load_default_files(ghostty_config_t);
 GHOSTTY_API void ghostty_config_load_recursive_files(ghostty_config_t);
 GHOSTTY_API void ghostty_config_finalize(ghostty_config_t);
@@ -1115,7 +1117,8 @@ GHOSTTY_API ghostty_input_trigger_s ghostty_config_trigger(ghostty_config_t,
 GHOSTTY_API bool ghostty_config_key_is_binding(ghostty_config_t, ghostty_input_key_s);
 GHOSTTY_API uint32_t ghostty_config_diagnostics_count(ghostty_config_t);
 GHOSTTY_API ghostty_diagnostic_s ghostty_config_get_diagnostic(ghostty_config_t, uint32_t);
-GHOSTTY_API ghostty_string_s ghostty_config_open_path(void);
+GHOSTTY_API ghostty_string_s ghostty_config_open_path(const char*);
+GHOSTTY_API ghostty_string_s ghostty_config_template(void);
 
 GHOSTTY_API ghostty_app_t ghostty_app_new(const ghostty_runtime_config_s*,
                                              ghostty_config_t);

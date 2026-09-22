@@ -1,10 +1,11 @@
+import Foundation
 import GhosttyKit
 
 extension Ghostty {
     /// Sole owner of a core configuration allocation. Native values live in ConfigSnapshot.
     @MainActor final class ConfigHandle {
         let value: ghostty_config_t
-        let errors: [String]
+        private(set) var errors: [String]
 
         private init(adopting value: ghostty_config_t) {
             self.value = value
@@ -27,6 +28,43 @@ extension Ghostty {
             return (0..<ghostty_config_diagnostics_count(config)).map { index in
                 String(cString: ghostty_config_get_diagnostic(config, UInt32(index)).message)
             }
+        }
+
+        func report(_ messages: [String]) {
+            errors.append(contentsOf: messages)
+        }
+
+        static var defaultTemplate: Data? {
+            let text = Ghostty.AllocatedString(ghostty_config_template()).string
+            return text.isEmpty ? nil : Data(text.utf8)
+        }
+
+        static func prepareForEditing(at path: String?) -> String {
+            if let path {
+                return path.withCString { Ghostty.AllocatedString(ghostty_config_open_path($0)).string }
+            }
+            return Ghostty.AllocatedString(ghostty_config_open_path(nil)).string
+        }
+
+        static var defaultPath: String {
+            Ghostty.AllocatedString(ghostty_config_default_path()).string
+        }
+
+        /// Startup snapshots contain file input only. CLI overrides are applied
+        /// afterward and never written into the shared successful snapshot.
+        static func load(data: Data, source: URL, cli: Bool = false) -> ConfigHandle? {
+            guard let cfg = ghostty_config_new() else { return nil }
+            if !data.isEmpty {
+                data.withUnsafeBytes { bytes in
+                    source.path.withCString { path in
+                        ghostty_config_load_data(cfg, bytes.bindMemory(to: UInt8.self).baseAddress!, data.count, path)
+                    }
+                }
+            }
+            if cli && !isRunningInXcode() { ghostty_config_load_cli_args(cfg) }
+            ghostty_config_load_recursive_files(cfg)
+            ghostty_config_finalize(cfg)
+            return ConfigHandle(adopting: cfg)
         }
 
         static func load(at path: String?, finalize: Bool) -> ConfigHandle? {

@@ -1,3 +1,59 @@
+## 0.2.0 配置模板、内置文楷与默认窗口（2026-09-22，未发布）
+
+- 应用版本更新为 **0.2.0 / 构建号 10**，根清单、三个 Xcode 应用配置和 release notes 一致。
+- 配置编辑模板按八类组织 **171 个实际可编辑字段**，提供中英文名称、当前默认值、示例及必要的单位／选项说明。默认值来自现有配置模型与格式化器，不复制一份默认值数据库。编译期核对字段覆盖及重复；不包含仅用于启动参数的 `config-default-files` 和没有可用用户解析器的内部 `link`。
+- Settings／`+edit-config` 主动打开时创建注释模板；现有文件首次添加说明前备份，保留原字节、重复项顺序、主题效果及符号链接。已带模板的文件不反复追加。创建与替换使用原子文件操作，替换前检查源文件身份与时间，避免覆盖编辑期间的变化。恢复默认改为写入当前注释模板并更新成功快照，提交失败时回滚原文件。
+- 默认字体改为官方 **LXGW WenKai Mono 1.522 Regular**，通过锁定归档 URL 和 Zig 内容哈希获取。直接从嵌入数据加载，也可按名称显式选择；粗体、斜体及粗斜体遵循 `font-synthetic-style`。用户字体仍优先，保留 Nerd Font 与 Emoji 回退。JetBrains Mono 继续作为字体后端测试数据，不再作为运行时默认。
+- 默认字号 **16 pt**、新窗口初始网格 **144 列 × 33 行**。用户覆盖、恢复窗口和屏幕尺寸限制保持原有规则；默认尺寸说明已同步。没有修改个人配置或系统字体安装。
+- 字体 SHA-256 与官方 release asset 一致：`bc068e4e395c396f2909ffdfac3a3751578b73ed3d64a79c9c31bfa84e43debe`。确认最终可执行文件内包含完整未修改 TTF 字节；官方版权声明及 OFL 原文逐字节比对通过，位于 `Contents/Resources/cghostty/licenses/LXGW-WenKai-OFL.txt`。资源范围检查要求该许可存在。
+- 配置／CLI／内置字体定向测试 **546 通过、1 跳过**：`/tmp/cghostty-020-font-tests-summary.log`。字体子系统 **205/205 通过**：`/tmp/cghostty-020-font-subsystem.log`；可选 FreeType 后端定向测试 **73/73 通过**：`/tmp/cghostty-020-font-freetype.log`。三组范围有重叠，不相加为独立测试总数；未运行完整 Zig 全集。核心测试日志有沙盒 hiservices XPC 诊断，测试退出码为 0。
+- 最终 ReleaseLocal 原生测试 **307 通过、1 跳过、0 失败、0 运行时警告**：`/tmp/cghostty-020-font-native.xcresult`，同名前缀 `.summary.json` 保存统计。
+- ReleaseLocal 配置桌面 **5/5 通过、0 运行时警告**：`/tmp/cghostty-020-font-release-ui.xcresult`。覆盖启动快照、重启更新、无效配置回退、恢复默认、外观切换及默认字体窗口；实际 shell `stty size` 返回 **33 144**。截图确认中英文、粗体、斜体和粗斜体显示正常，位于 `/tmp/cghostty-020-font-release-attachments/AA4C13D7-CF3C-4AFD-BEB6-7D30AB0995A3.png`。
+- 新网格用例最初在 Debug 下报告 31 行，原因是调试提示横幅占据内容高度；该精确网格用例明确在 ReleaseLocal 验证，Debug 跳过。既有四项配置桌面测试在 Debug 也已通过。此前锁屏导致的激活失败，在用户准备好桌面后复验通过，不计为产品功能通过记录。
+- 最终 ReleaseLocal 构建成功，无编译警告：`/tmp/cghostty-020-font-release.log`。应用通过平台、arm64、资源、许可、签名与版本检查：`/tmp/cghostty-020-font-scope.log`。修改的 Swift 文件严格 lint、Swift 6、配置桥接、Zig 格式及 diff 检查通过。
+- 最终应用在隔离用户目录验证模板首次创建、不改变默认配置、现有配置与主题保留、精确备份、重复打开幂等，以及全部 171 个示例通过配置校验：`/tmp/cghostty-020-guide-check.log`。预览文件 `/tmp/cghostty-0.2.0-config-template.ghostty`，配置盘点 `/tmp/cghostty-config-inventory.md` 已按最终应用更新。
+- 本轮完成本地实现、构建和验证；未提交、打标签、推送、制作发布包、发布 GitHub Release 或替换已安装应用。
+
+## 启动配置、成功快照与恢复默认（2026-09-22）
+
+- 原生应用启动时统一通过 `Ghostty.ConfigStore` 读取单一用户配置。打开新窗口、标签页或分屏沿用启动配置；删除手动重载菜单、默认快捷键、用户绑定动作及命令面板入口。内部深浅色／条件状态变化仍复用已加载的核心配置，不重新读用户文件。
+- 启动检查主文件大小、修改时间、创建时间和文件身份；相同构建、相同指纹时复用成功快照中的主文件内容重建核心配置，文件或构建变化时重新读取。快照含来源、构建标识和内容摘要，保存在用户配置旁的私有 `.config-state/last-success.json`。CLI 覆盖不写入主文件快照。
+- 主配置完整校验后才更新成功快照；无效配置整份回退到上次通过校验的主文件，没有有效快照时使用内置默认值。原错误文件保留，独立配置错误窗口显示诊断并提供打开配置入口；修改后重启生效。快照不是已解析配置图或资源归档：外部引用和主题仍在启动时重新校验，两者均无效时会退回默认。
+- Settings（⌘,）打开配置文件。Restore Default Settings 经用户确认后先备份当前文件，再清空用户覆盖，并把成功快照更新为空配置。当前终端保持不变；若快照提交失败，恢复原文件。备份位于 `.config-state/before-reset-<UUID>.ghostty`。
+- Zig 配置／CLI／输入定向测试 **866 通过、1 跳过、0 失败**，89 / 89 构建步骤成功：`/tmp/cghostty-startup-config-input-tests.log`。原生测试 **305 通过、1 跳过、0 失败、0 运行时警告**：`/tmp/cghostty-startup-native-verified.xcresult`。覆盖未改变内容复用、改动读取、跨构建无效配置回退、损坏快照、目录拒绝、相对引用、默认恢复及写入失败回滚。
+- 配置桌面测试 4 项、终端错误恢复 2 项、主题 9 项（深浅两种测试配置共 18 次执行）均通过且无运行时警告。结果：`/tmp/cghostty-startup-Ghostty{ConfigSnapshotUITests,SurfaceFaultUITests,ThemeTests}-verified.xcresult`。验证当前／新窗口沿用启动配置、重启采用新值、错误窗口及完整回退、恢复默认菜单，以及系统外观切换。
+- 窗口测试改为重启应用应用配置，使用独立偏好域；拖出已有分屏验证其保留分屏尺寸，并把拖放位置选在屏幕内、远离自动隐藏 Dock。关闭／重开测试只检查位置与尺寸恢复，不假定首次窗口必定在屏幕绝对中心。桌面测试临时配置与成功快照目录一并清理。
+- 窗口 9 项用例最终均已验证通过，运行时警告为 0。整组复验 `/tmp/cghostty-startup-window-verified.xcresult` 为 8 通过、1 个 Dock 边缘位置断言失败；调整拖放目标后，两项受影响用例分别通过 `/tmp/cghostty-startup-testDetachedSplitKeepsPaneSizeWithFixedNewWindowConfig-final.xcresult` 和 `/tmp/cghostty-startup-testDragSplitWindowPosition-final.xcresult`。本轮桌面共验证 24 个不同用例，主题额外覆盖两种测试外观。
+- 最终 ReleaseLocal 核心与原生应用构建成功，无编译警告：`/tmp/cghostty-startup-release-final.log`。最终应用通过 macOS／arm64 范围、资源、签名与版本检查：`/tmp/cghostty-startup-scope-final.log`。修改的 17 个 Swift 文件严格 lint、Swift 6 设置、配置桥接、Zig 格式和 diff 检查通过。未重复完整 Zig 测试全集。
+- 本轮完成生效与恢复机制，八类中英文说明／默认值／示例模板尚未生成；配置盘点已同步新的文件编辑方案。未更改个人配置、版本号、已安装应用，未提交或发布。
+
+## Application Support 单一用户配置入口（2026-09-22）
+
+- 默认加载、菜单打开配置、`+edit-config` 和自动主题文件的基准目录统一使用 `~/Library/Application Support/com.cjmvpu.cghostty/config.ghostty`。删除 XDG／旧文件名的路径枚举、优先选择与回退，删除模板及启动时生成模板的逻辑。没有配置或配置为空时直接使用内置默认值；主动打开配置才创建空文件。
+- 显式 `--config-file`／`config-file` 引用、相对引用解析和主题资源查找保留。默认用户配置不可读或指向目录时产生正常诊断，不再静默当作成功读取。配置编辑采用独占创建，保留现有文件内容并关闭创建的文件句柄。
+- 本机迁移前四个候选路径中只有目标 Application Support 文件存在，无多来源冲突。原文件 21 项设置已整理：20 项原样保留；光标动画原为 smooth，与新旧版本的默认开启等价，移除冗余覆盖并保留说明，使已安装旧版与本次新构建都能读取。备份：`/Users/jie/Library/Application Support/com.cjmvpu.cghostty/config.ghostty.pre-single-path-20260922-192840.bak`。迁移使用验证后的候选文件、源文件摘要复核及原子替换；原备份摘要与 20 项配置逐行比较均通过。
+- Zig 配置／CLI 定向测试 **544 通过、1 跳过、0 失败**，89 / 89 构建步骤成功。新增配置编辑测试覆盖首次创建、保留内容和目录拒绝。日志：`/tmp/cghostty-single-config-tests.log`；沙盒包含系统 hiservices XPC 连接诊断，测试退出码为 0。
+- 最终应用在隔离用户目录验证单一默认路径、缺失／空文件默认行为、启动不生成文件、旧入口不参与加载、显式相对引用、编辑创建及内容保留、目录／无效值诊断。实际个人配置通过已安装应用及新构建的校验。一次性验证脚本：`/tmp/cghostty-single-config-check.py`；结果：`/tmp/cghostty-single-config-check.log`。
+- ReleaseLocal 核心与原生应用完整构建、配置桥接、macOS／arm64 范围、资源、签名、版本、Zig 格式和 diff 检查通过。日志：`/tmp/cghostty-single-config-build.log`、`/tmp/cghostty-single-config-scope.log`。README 说明单一路径及其他机器升级前的配置整理规则。
+- 本轮未新增自动扫描／迁移的运行时兼容层，未运行桌面 UI 测试或完整 Zig 测试全集；未提交、打包发布、更改版本或替换已安装应用。`cghostty config` 交互菜单仍未实现。
+
+## 旧配置映射删除与光标开关统一（2026-09-22）
+
+- 删除配置的 9 个旧字段／旧值映射入口、6 个专属处理函数，以及命令行解析器的兼容回退、类型和重命名辅助函数。删除相应专属测试，未知字段和无效值统一使用正常解析诊断；当前配置类型的其他有效解析格式保留。
+- `cursor-effect` 从 `none`／`smooth` 枚举改为布尔开关，默认 `true`、`false` 关闭。渲染器直接读取布尔值，动画算法不变；README 和两份光标／性能 UI 测试配置同步改用 `true`。现有光标配置测试改为验证默认开启、关闭及重新开启，不再维护已删除 GLSL 的专属诊断测试。
+- 手动安全输入、置顶默认选择和上次窗口位置属于原生内部状态，不是公开配置；未为这些状态新增配置项或交互菜单。现有自动安全输入、明确初始窗口位置等实际配置保持不变。公开字段仍为 **173**。
+- 配置、命令行解析、渲染定向测试 **600 通过、1 跳过、0 失败**，89 / 89 构建步骤成功：`/tmp/cghostty-config-simplify-tests.log`。沙盒运行包含系统 hiservices XPC 连接诊断，退出码为 0。
+- ReleaseLocal 核心与应用完整构建通过，无编译警告：`/tmp/cghostty-config-simplify-build.log`。配置桥接、macOS／arm64 范围、资源、签名、版本、修改的 Swift 测试文件 lint、Zig 格式及 diff 检查通过：`/tmp/cghostty-config-simplify-scope.log`。
+- 最终应用的一次性临时配置校验确认光标 true／false 和当前规范字段／值均有效，旧映射入口与 smooth 值均产生正常错误诊断；默认导出为 `cursor-effect = true`。未修改用户配置；旧配置需自行改为当前写法。未重复运行桌面 UI 测试、完整 Zig 测试全集，未提交、发布或更改版本号。
+
+## FreeType 对外配置收拢（2026-09-22）
+
+- 删除 `freetype-load-flags` 公开配置、类型及导出，以及派生配置、字体缓存键／哈希、Collection 和字体加载选项中的传递链。FreeType 后端保留，直接使用原有默认值：允许但不强制自动 hinting、轻度 hinting、普通抗锯齿渲染；需要移动或缩放字形的约束仍关闭 hinting。默认 CoreText 后端行为不变。
+- 公开配置字段由 174 减为 **173**；八类交互配置讨论清单同步更新。原生配置桥接及所有源码已无此参数引用；未增加已删除配置的长期防回归逻辑。
+- 默认 CoreText 的配置／字体定向测试 **391 / 391 通过**；可选 `coretext_freetype` 构建 **385 通过、5 跳过、0 失败**。日志：`/tmp/cghostty-freetype-config-default-tests.log`、`/tmp/cghostty-freetype-config-alternate-tests.log`。两个沙盒测试运行均有系统 hiservices XPC 连接诊断，构建与测试退出码为 0。
+- ReleaseLocal 核心与原生应用完整重建通过，无编译警告：`/tmp/cghostty-freetype-config-build.log`。配置桥接、macOS／arm64 范围、资源、签名、版本、Zig 格式与 diff 检查通过：`/tmp/cghostty-freetype-config-scope.log`。
+- 使用最终应用导出默认配置，确认不再包含此字段；一次性临时配置验证旧字段会产生 unknown field 诊断。未修改用户配置，未执行桌面视觉验收或完整 Zig 测试全集。未提交、发布、替换已安装应用或更改版本号。
+
 ## 无效平台配置清理与交互配置归类（2026-09-22）
 
 - 删除当前 macOS 应用没有消费路径的 8 个公开字段：`window-subtitle`、`window-show-tab-bar`、`window-titlebar-background`、`window-titlebar-foreground`、`quit-after-last-window-closed-delay`、`quick-terminal-keyboard-interactivity`、`app-notifications`、`async-backend`。同时删除 5 个专属类型、退出延时的无效警告及 `-e` 赋值，并清理相关旧平台说明。

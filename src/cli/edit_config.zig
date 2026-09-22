@@ -6,7 +6,6 @@ const Allocator = std.mem.Allocator;
 const Action = @import("ghostty.zig").Action;
 const configpkg = @import("../config.zig");
 const internal_os = @import("../os/main.zig");
-const Config = configpkg.Config;
 const global = @import("../global.zig");
 
 pub const Options = struct {
@@ -24,19 +23,13 @@ pub const Options = struct {
 /// The `edit-config` command opens the Ghostty configuration file in the
 /// editor specified by the `$VISUAL` or `$EDITOR` environment variables.
 ///
-/// IMPORTANT: This command will not reload the configuration after
-/// editing. You will need to manually reload the configuration using the
-/// application menu, configured keybind, or by restarting Ghostty. We
-/// plan to auto-reload in the future, but Ghostty isn't capable of
-/// this yet.
+/// Changes take effect after restarting cghostty. Existing terminals and
+/// new windows in the running application keep the startup configuration.
 ///
-/// The filepath opened is the default user-specific configuration
-/// file, which is typically located at `$XDG_CONFIG_HOME/ghostty/config.ghostty`.
-/// On macOS, this may also be located at
+/// The file is always the Application Support user configuration:
 /// `~/Library/Application Support/com.cjmvpu.cghostty/config.ghostty`.
-/// On macOS, whichever path exists and is non-empty will be prioritized,
-/// prioritizing the Application Support directory if neither are
-/// non-empty.
+/// Explicit editing creates a bilingual eight-category guide when missing.
+/// Existing settings are backed up and preserved before the guide is appended.
 ///
 /// This command prefers the `$VISUAL` environment variable over `$EDITOR`,
 /// if both are set. If neither are set, it will print an error
@@ -74,16 +67,8 @@ fn runInner(alloc: Allocator, stderr: *std.Io.Writer) !u8 {
     // so this is not a big deal.
     comptime assert(builtin.link_libc);
 
-    // We load the configuration once because that will write our
-    // default configuration files to disk. We don't use the config.
-    var config = try Config.load(alloc);
-    defer config.deinit();
-
-    // Find the preferred path.
-    const path = try configpkg.preferredDefaultFilePath(alloc);
+    const path = try configpkg.edit.openPath(alloc);
     defer alloc.free(path);
-
-    // We don't currently support Windows because we use the exec syscall.
 
     const command = internal_os.getConfigEditCommand(alloc, path, .{ .default_editor = .failure }) catch |err| {
         switch (err) {

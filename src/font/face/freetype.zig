@@ -25,11 +25,6 @@ const F26Dot6 = opentype.sfnt.F26Dot6;
 const log = std.log.scoped(.font_face);
 
 pub const Face = struct {
-    comptime {
-        // If we have the freetype backend, we should have load flags.
-        assert(font.face.FreetypeLoadFlags != void);
-    }
-
     /// Our Library
     lib: Library,
 
@@ -46,9 +41,6 @@ pub const Face = struct {
 
     /// Harfbuzz font corresponding to this face.
     hb_font: harfbuzz.Font,
-
-    /// Freetype load flags for this font face.
-    load_flags: font.face.FreetypeLoadFlags,
 
     /// Set quirks.disableDefaultFontFeatures
     quirks_disable_default_font_features: bool = false,
@@ -109,7 +101,6 @@ pub const Face = struct {
             .face = face,
             .hb_font = hb_font,
             .ft_mutex = ft_mutex,
-            .load_flags = opts.freetype_load_flags,
             .size = opts.size,
         };
         result.quirks_disable_default_font_features = quirks.disableDefaultFontFeatures(&result);
@@ -354,12 +345,6 @@ pub const Face = struct {
     /// Set the load flags to use when loading a glyph for measurement or
     /// rendering.
     fn glyphLoadFlags(self: Face, constrained: bool) freetype.LoadFlags {
-        // Hinting should only be enabled if the configured load flags specify
-        // it and the provided constraint doesn't actually do anything, since
-        // if it does, then it'll mess up the hinting anyway when it moves or
-        // resizes the glyph.
-        const do_hinting = self.load_flags.hinting and !constrained;
-
         return .{
             // If our glyph has color, we want to render the color
             .color = self.face.hasColor(),
@@ -368,23 +353,13 @@ pub const Face = struct {
             // manually after applying constraints further down.
             .render = false,
 
-            // use options from config
-            .no_hinting = !do_hinting,
-            .force_autohint = self.load_flags.@"force-autohint",
-            .no_autohint = !self.load_flags.autohint,
-
-            // If we're gonna be rendering this glyph in monochrome,
-            // then we should use the monochrome hinter as well, or
-            // else it won't look very good at all.
-            //
-            // Otherwise if the user asked for light hinting we
-            // use that, otherwise we just use the normal target.
-            .target = if (self.load_flags.monochrome)
-                .mono
-            else if (self.load_flags.light)
-                .light
-            else
-                .normal,
+            // Preserve the previous defaults: light hinting with automatic
+            // hinting available but not forced. Constraints that move or resize
+            // the glyph must disable hinting.
+            .no_hinting = constrained,
+            .force_autohint = false,
+            .no_autohint = false,
+            .target = .light,
 
             // NO_SVG set to true because we don't currently support rendering
             // SVG glyphs under FreeType, since that requires bundling another
@@ -568,12 +543,7 @@ pub const Face = struct {
                     p.y = @as(i32, @bitCast(F26Dot6.from(py)));
                 }
 
-                try self.face.renderGlyph(
-                    if (self.load_flags.monochrome)
-                        .mono
-                    else
-                        .normal,
-                );
+                try self.face.renderGlyph(.normal);
 
                 // Copy the glyph's bitmap, making sure
                 // that it's 8bpp and densely packed.

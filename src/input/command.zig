@@ -577,12 +577,6 @@ fn actionCommands(action: Action.Key) []const Command {
             },
         },
 
-        .reload_config => comptime &.{.{
-            .action = .reload_config,
-            .title = i18n.N_("Reload Config"),
-            .description = i18n.N_("Reload the config file."),
-        }},
-
         .close_surface => comptime &.{.{
             .action = .close_surface,
             .title = i18n.N_("Close Terminal"),

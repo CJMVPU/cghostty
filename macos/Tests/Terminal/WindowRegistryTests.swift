@@ -51,7 +51,7 @@ import Testing
         }
     }
 
-    @Test func opacityToggleAndConfigReloadStayWithinTheirApp() throws {
+    @Test func opacityToggleStaysLocalAndUserConfigWaitsForRestart() throws {
         let config = try TemporaryConfig("background-opacity = 0.5")
         let first = Ghostty.App(configPath: config.temporaryFile.path)
         let second = Ghostty.App(configPath: config.temporaryFile.path)
@@ -65,7 +65,9 @@ import Testing
         #expect(!two.isBackgroundOpaque)
         try config.reload("background-opacity = 0.8")
         first.reloadConfig()
-        #expect(first.config.backgroundOpacity == 0.8)
+        #expect(first.config.backgroundOpacity == 0.5)
+        let restarted = Ghostty.App(configPath: config.temporaryFile.path)
+        #expect(restarted.config.backgroundOpacity == 0.8)
         #expect(second.config.backgroundOpacity == 0.5)
     }
 

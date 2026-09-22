@@ -20,14 +20,12 @@ extension AppDelegate {
         menuCheckForUpdates.target = self
         menuCheckForUpdates.keyEquivalentModifierMask = []
         cghosttyMenu.addItem(.separator())
-        let menuOpenConfig = shortcut("open_config", cghosttyMenu.addItem(withTitle: "Preferences…", action: NSSelectorFromString("openConfig:"), keyEquivalent: ","))
+        let menuOpenConfig = shortcut("open_config", cghosttyMenu.addItem(withTitle: "Settings…", action: NSSelectorFromString("openConfig:"), keyEquivalent: ","))
         self.menuOpenConfig = menuOpenConfig
         menuOpenConfig.target = self
         cghosttyMenu.addItem(.separator())
-        let menuReloadConfig = shortcut("reload_config", cghosttyMenu.addItem(withTitle: "Reload Configuration", action: NSSelectorFromString("reloadConfig:"), keyEquivalent: ""))
-        self.menuReloadConfig = menuReloadConfig
-        menuReloadConfig.target = self
-        menuReloadConfig.keyEquivalentModifierMask = []
+        let reset = cghosttyMenu.addItem(withTitle: "Restore Default Settings…", action: #selector(restoreDefaultSettings(_:)), keyEquivalent: "")
+        reset.target = self
         let menuSecureInput = shortcut("toggle_secure_input", cghosttyMenu.addItem(withTitle: "Secure Keyboard Entry", action: NSSelectorFromString("toggleSecureInput:"), keyEquivalent: ""))
         self.menuSecureInput = menuSecureInput
         menuSecureInput.target = self

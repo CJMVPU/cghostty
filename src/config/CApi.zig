@@ -74,6 +74,18 @@ export fn ghostty_config_load_file(self: *Config, path: [*:0]const u8) void {
     };
 }
 
+/// Load a saved configuration without reopening the user's file.
+export fn ghostty_config_load_data(self: *Config, data: [*]const u8, len: usize, path: [*:0]const u8) void {
+    self.loadData(global.alloc(), data[0..len], std.mem.span(path)) catch |err| {
+        self.addDiagnosticFmt("unable to read saved configuration: {}", .{err}) catch {};
+    };
+}
+
+export fn ghostty_config_default_path() String {
+    const path = @import("file_load.zig").defaultPath(global.alloc()) catch return .empty;
+    return .fromSlice(path);
+}
+
 /// Load the configuration from the user-specified configuration
 /// file locations in the previously loaded configuration. This will
 /// recursively continue to load up to a built-in limit.
@@ -131,8 +143,17 @@ export fn ghostty_config_get_diagnostic(self: *Config, idx: u32) Diagnostic {
     return .{ .message = message.ptr };
 }
 
-export fn ghostty_config_open_path() String {
-    const path = edit.openPath(global.alloc()) catch |err| {
+export fn ghostty_config_template() String {
+    const data = @import("template.zig").generate(global.alloc()) catch |err| {
+        log.err("error generating configuration guide err={}", .{err});
+        return .empty;
+    };
+    return .fromSlice(data);
+}
+
+export fn ghostty_config_open_path(requested: ?[*:0]const u8) String {
+    const result = if (requested) |path| edit.openPathAt(global.alloc(), std.mem.span(path)) else edit.openPath(global.alloc());
+    const path = result catch |err| {
         log.err("error opening config in editor err={}", .{err});
         return .empty;
     };
@@ -252,11 +273,6 @@ test "ghostty_config_trigger: default keybind" {
     // Default commands should be fetchable through config_trigger_
     {
         const trigger = try config_trigger_(&cfg, "open_config");
-        try testing.expectEqual(.unicode, trigger.tag);
-        try testing.expectEqual(@as(u32, ','), trigger.key.unicode);
-    }
-    {
-        const trigger = try config_trigger_(&cfg, "reload_config");
         try testing.expectEqual(.unicode, trigger.tag);
         try testing.expectEqual(@as(u32, ','), trigger.key.unicode);
     }

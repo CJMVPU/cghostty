@@ -693,13 +693,6 @@ pub const Action = union(enum) {
     ///   since 1.4.0.)
     open_config: OpenConfig,
 
-    /// Reload the configuration.
-    ///
-    /// The exact meaning depends on the app runtime in use, but this usually
-    /// involves re-reading the configuration file and applying any changes
-    /// Note that not all changes can be applied at runtime.
-    reload_config,
-
     /// Close the current "surface", whether that is a window, tab, split, etc.
     ///
     /// This might trigger a close confirmation popup, depending on the value
@@ -1331,7 +1324,6 @@ pub const Action = union(enum) {
 
             // Obviously app actions.
             .open_config,
-            .reload_config,
             .close_all_windows,
             .quit,
             .toggle_quick_terminal,

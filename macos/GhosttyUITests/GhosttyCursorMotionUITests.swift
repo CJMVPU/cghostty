@@ -34,7 +34,7 @@ final class GhosttyCursorMotionUITests: GhosttyCustomConfigCase {
         confirm-close-surface = false
         background = #000000
         cursor-color = #00ff00
-        cursor-effect = smooth
+        cursor-effect = true
         palette = 1=#ff0000
         palette = 4=#0000ff
         """)
@@ -157,7 +157,7 @@ final class GhosttyCursorMotionUITests: GhosttyCustomConfigCase {
         command = /usr/bin/python3 -u \(script.path) \(control.path)
         shell-integration = none
         confirm-close-surface = false
-        cursor-effect = smooth
+        cursor-effect = true
         cursor-color = #00ff00
         cursor-style-blink = false
         background = #000000

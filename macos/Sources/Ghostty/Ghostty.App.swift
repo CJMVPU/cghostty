@@ -34,6 +34,8 @@ extension Ghostty {
 
         /// Preferred config file than the default ones
         @ObservationIgnored private var configPath: String?
+        @ObservationIgnored private var configurationStore: ConfigStore?
+        private(set) var startupConfigurationErrors: [String] = []
         /// The ghostty app instance. We only have one of these for the entire app, although I guess
         /// in theory you can have multiple... I don't know why you would...
         @ObservationIgnored private(set) var app: ghostty_app_t? {
@@ -52,7 +54,18 @@ extension Ghostty {
         init(configPath: String? = nil) {
             self.configPath = configPath
             // Initialize the global configuration.
-            self.config = Config(at: configPath)
+            if configPath == "/dev/null" {
+                self.config = Config(at: configPath)
+            } else {
+                let path = configPath ?? ConfigHandle.defaultPath
+                let source = URL(fileURLWithPath: path)
+                let directory = configPath == nil ? nil : source.deletingLastPathComponent()
+                    .appendingPathComponent(".config-state-" + source.lastPathComponent)
+                let store = ConfigStore(source: source, directory: directory)
+                self.configurationStore = store
+                self.config = Config(handle: store.load())
+                self.startupConfigurationErrors = self.config.errors
+            }
             if self.config.config == nil {
                 readiness = .error
                 return
@@ -176,8 +189,14 @@ extension Ghostty {
         }
 
         func openConfig() {
-            let str = configPath ?? Ghostty.AllocatedString(ghostty_config_open_path()).string
-            guard !str.isEmpty else { return }
+            let str = ConfigHandle.prepareForEditing(at: configPath)
+            guard !str.isEmpty else {
+                let alert = NSAlert()
+                alert.messageText = "无法打开配置 / Could Not Open Settings"
+                alert.informativeText = "无法准备配置文件。请检查文件路径和写入权限后重试。\nCould not prepare the configuration file. Check its path and write permissions, then try again."
+                alert.runModal()
+                return
+            }
             let fileURL = URL(fileURLWithPath: str).absoluteString
             var action = ghostty_action_open_url_s()
             action.kind = GHOSTTY_ACTION_OPEN_URL_KIND_TEXT
@@ -198,34 +217,18 @@ extension Ghostty {
                 return
             }
 
-            // Hard or full updates have to reload the full configuration
-            let newConfig = Config(at: configPath)
-            guard newConfig.loaded else {
-                Ghostty.logger.warning("failed to reload configuration")
-                return
-            }
-
-            ghostty_app_update_config(app, newConfig.config!)
-            /// applied config will be updated in ``Self.configChange(_:target:v:)``
+            // User file changes apply on the next application launch only.
+            Ghostty.logger.notice("Configuration changes require an application restart")
         }
 
         func reloadConfig(surface: Surface, soft: Bool = false) {
-            // Soft updates just call with our existing config
-            if soft {
-                surface.updateConfig(config)
-                return
-            }
+            if soft { surface.updateConfig(config) } else { Ghostty.logger.notice("Configuration changes require an application restart") }
+        }
 
-            // Hard or full updates have to reload the full configuration.
-            // NOTE: We never set this on self.config because this is a surface-only
-            // config. We free it after the call.
-            let newConfig = Config(at: configPath)
-            guard newConfig.loaded else {
-                Ghostty.logger.warning("failed to reload configuration")
-                return
-            }
-
-            surface.updateConfig(newConfig)
+        @discardableResult
+        func restoreDefaultSettings() throws -> URL? {
+            guard let configurationStore else { return nil }
+            return try configurationStore.restoreDefaults()
         }
 
         // MARK: Notifications

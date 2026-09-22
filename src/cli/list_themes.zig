@@ -201,7 +201,7 @@ pub fn run(gpa_alloc: std.mem.Allocator) !u8 {
 }
 
 fn resolveAutoThemePath(alloc: std.mem.Allocator) ![]u8 {
-    const main_cfg_path = try configpkg.preferredDefaultFilePath(alloc);
+    const main_cfg_path = try configpkg.defaultFilePath(alloc);
     defer alloc.free(main_cfg_path);
 
     const base_dir = std.fs.path.dirname(main_cfg_path) orelse return error.BadPathName;

@@ -478,7 +478,7 @@ pub const DerivedConfig = struct {
             .search_selected_background = config.@"search-selected-background",
             .search_selected_foreground = config.@"search-selected-foreground",
 
-            .cursor_effect = config.@"cursor-effect" == .smooth,
+            .cursor_effect = config.@"cursor-effect",
             .bg_image = bg_image,
             .bg_image_opacity = config.@"background-image-opacity",
             .bg_image_position = config.@"background-image-position",

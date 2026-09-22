@@ -444,7 +444,6 @@ pub fn performAction(
                 .new_window => .new_window,
             },
         ),
-        .reload_config => _ = try rt_app.performAction(.app, .reload_config, .{}),
         .close_all_windows => _ = try rt_app.performAction(.app, .close_all_windows, {}),
         .toggle_quick_terminal => _ = try rt_app.performAction(.app, .toggle_quick_terminal, {}),
         .toggle_visibility => _ = try rt_app.performAction(.app, .toggle_visibility, {}),

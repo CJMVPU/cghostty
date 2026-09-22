@@ -20,6 +20,8 @@ class GhosttyCustomConfigCase: XCTestCase {
 
     override func tearDown() async throws {
         try? FileManager.default.removeItem(at: configFile)
+        let state = configFile.deletingLastPathComponent().appendingPathComponent(".config-state-" + configFile.lastPathComponent)
+        try? FileManager.default.removeItem(at: state)
     }
 
     func updateConfig(_ newConfig: String) throws {

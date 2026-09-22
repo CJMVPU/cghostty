@@ -8,7 +8,7 @@ import Observation
 struct ConfigurationErrorsView: View {
     let model: ConfigurationErrorsState
     let dismiss: () -> Void
-    let reload: () -> Void
+    let edit: () -> Void
 
     var body: some View {
         VStack {
@@ -20,8 +20,7 @@ struct ConfigurationErrorsView: View {
                     .frame(alignment: .center)
 
                 Text("""
-                    ^[\(model.errors.count) error(s) were](inflect: true) found while loading the configuration. \
-                    Please review the errors below and reload your configuration or ignore the erroneous lines.
+                    配置未完全应用，请查看下面的原因。修改配置后重启应用生效。\n\nConfiguration could not be fully applied. Review the messages below, edit the file, and restart the application.
                     """)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding()
@@ -48,9 +47,9 @@ struct ConfigurationErrorsView: View {
 
             HStack {
                 Spacer()
-                Button("Ignore", action: dismiss)
+                Button("关闭 / Close", action: dismiss)
                     .keyboardShortcut(.cancelAction)
-                Button("Reload Configuration", action: reload)
+                Button("打开配置 / Open Configuration", action: edit)
                     .keyboardShortcut(.defaultAction)
             }
             .controlSize(.large)

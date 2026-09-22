@@ -92,6 +92,8 @@ if args.app:
         check(arch == 'arm64', f'{binary} has unexpected architecture: {arch}')
     check(not (app / 'Contents/Frameworks/Sparkle.framework').exists(), 'Upstream updater is bundled')
     check((app / 'Contents/Resources/cghostty/shell-integration').is_dir(), 'Shell integration missing')
+    check((app / 'Contents/Resources/cghostty/licenses/LXGW-WenKai-OFL.txt').is_file(),
+          'Bundled LXGW WenKai font license missing')
     check((app / 'Contents/Resources/terminfo/78/xterm-ghostty').exists() or
           (app / 'Contents/Resources/terminfo/x/xterm-ghostty').exists(), 'Terminal description missing')
     version = subprocess.check_output([str(executables[0]), '+version'], text=True)

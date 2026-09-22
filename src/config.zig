@@ -14,7 +14,7 @@ pub const ConditionalState = conditional.State;
 pub const FileFormatter = formatter_file.FileFormatter;
 pub const entryFormatter = formatter.entryFormatter;
 pub const formatEntry = formatter.formatEntry;
-pub const preferredDefaultFilePath = file_load.preferredDefaultFilePath;
+pub const defaultFilePath = file_load.defaultPath;
 
 // Field types
 pub const BoldColor = Config.BoldColor;
@@ -27,7 +27,6 @@ pub const MiddleClickAction = Config.MiddleClickAction;
 pub const FontSyntheticStyle = Config.FontSyntheticStyle;
 pub const FontShapingBreak = Config.FontShapingBreak;
 pub const FontStyle = Config.FontStyle;
-pub const FreetypeLoadFlags = Config.FreetypeLoadFlags;
 pub const Keybinds = Config.Keybinds;
 pub const MouseShiftCapture = Config.MouseShiftCapture;
 pub const MouseScrollMultiplier = Config.MouseScrollMultiplier;

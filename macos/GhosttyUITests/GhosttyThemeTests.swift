@@ -55,8 +55,9 @@ final class GhosttyThemeTests: GhosttyCustomConfigCase {
         try assertTitlebarAppearance(.dark, for: app)
         // create a split
         app.groups["Terminal pane"].typeKey("d", modifierFlags: .command)
-        // reload config
-        app.typeKey(",", modifierFlags: [.command, .shift])
+        // User configuration changes apply only on application restart.
+        app.terminate()
+        app.launch()
         // create a new window
         app.typeKey("n", modifierFlags: [.command])
         try assertTitlebarAppearance(.dark, for: app)
@@ -79,15 +80,16 @@ final class GhosttyThemeTests: GhosttyCustomConfigCase {
     }
 
     @MainActor
-    func testReloadingLightTransparentWindowTheme() async throws {
+    func testRestartingLightTransparentWindowTheme() async throws {
         try updateConfig("title=\(windowTitle) \n ")
         let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         app.launch()
         // default dark theme
         try assertTitlebarAppearance(.dark, for: app)
         try updateConfig("title=\(windowTitle) \n theme=light:3024 Day,dark:3024 Night \n window-theme = light")
-        // reload config
-        app.typeKey(",", modifierFlags: [.command, .shift])
+        // User configuration changes apply only on application restart.
+        app.terminate()
+        app.launch()
         try assertTitlebarAppearance(.light, for: app)
     }
 
@@ -103,41 +105,44 @@ final class GhosttyThemeTests: GhosttyCustomConfigCase {
     }
 
     @MainActor
-    func testReloadFromLightWindowThemeToDefaultTheme() async throws {
+    func testRestartFromLightWindowThemeToDefaultTheme() async throws {
         try updateConfig("title=\(windowTitle) \n theme=light:3024 Day,dark:3024 Night")
         XCUIDevice.shared.appearance = .light
         let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         app.launch()
         try assertTitlebarAppearance(.light, for: app)
         try updateConfig("title=\(windowTitle) \n ")
-        // reload config
-        app.typeKey(",", modifierFlags: [.command, .shift])
+        // User configuration changes apply only on application restart.
+        app.terminate()
+        app.launch()
         try assertTitlebarAppearance(.dark, for: app)
     }
 
     @MainActor
-    func testReloadFromDefaultThemeToDarkWindowTheme() async throws {
+    func testRestartFromDefaultThemeToDarkWindowTheme() async throws {
         try updateConfig("title=\(windowTitle) \n ")
         XCUIDevice.shared.appearance = .light
         let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         app.launch()
         try assertTitlebarAppearance(.dark, for: app)
         try updateConfig("title=\(windowTitle) \n theme=light:3024 Day,dark:3024 Night \n window-theme=dark")
-        // reload config
-        app.typeKey(",", modifierFlags: [.command, .shift])
+        // User configuration changes apply only on application restart.
+        app.terminate()
+        app.launch()
         try assertTitlebarAppearance(.dark, for: app)
     }
 
     @MainActor
-    func testReloadingFromDarkThemeToSystemLightTheme() async throws {
+    func testRestartingFromDarkThemeToSystemLightTheme() async throws {
         try updateConfig("title=\(windowTitle) \n theme=light:3024 Day,dark:3024 Night \n window-theme=dark")
         XCUIDevice.shared.appearance = .light
         let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         app.launch()
         try assertTitlebarAppearance(.dark, for: app)
         try updateConfig("title=\(windowTitle) \n theme=light:3024 Day,dark:3024 Night")
-        // reload config
-        app.typeKey(",", modifierFlags: [.command, .shift])
+        // User configuration changes apply only on application restart.
+        app.terminate()
+        app.launch()
         try assertTitlebarAppearance(.light, for: app)
     }
 

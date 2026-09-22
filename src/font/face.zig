@@ -1,7 +1,6 @@
 const std = @import("std");
 const build_config = @import("../build_config.zig");
 const options = @import("main.zig").options;
-const config = @import("../config.zig");
 const freetype = @import("face/freetype.zig");
 const coretext = @import("face/coretext.zig");
 
@@ -21,18 +20,9 @@ pub const Face = switch (options.backend) {
 /// using whatever platform method you can.
 pub const default_dpi = 72;
 
-/// These are the flags to customize how freetype loads fonts. This is
-/// only non-void if the freetype backend is enabled.
-pub const FreetypeLoadFlags = if (options.backend.hasFreetype())
-    config.FreetypeLoadFlags
-else
-    void;
-pub const freetype_load_flags_default: FreetypeLoadFlags = if (FreetypeLoadFlags != void) .{} else {};
-
 /// Options for initializing a font face.
 pub const Options = struct {
     size: DesiredSize,
-    freetype_load_flags: FreetypeLoadFlags = freetype_load_flags_default,
 };
 
 /// The desired size for loading a font.

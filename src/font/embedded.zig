@@ -5,7 +5,10 @@
 //! Be careful to ensure that any fonts you embed are licensed for
 //! redistribution and include their license as necessary.
 
-/// Default fonts that we prefer for Ghostty.
+/// Bundled default; loaded directly without system font registration.
+pub const lxgw_wenkai_mono = @embedFile("lxgw_wenkai_mono");
+
+/// Variable fonts used by font backend tests.
 pub const variable = @embedFile("jetbrains_mono_variable");
 pub const variable_italic = @embedFile("jetbrains_mono_variable_italic");
 

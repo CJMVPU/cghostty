@@ -67,7 +67,7 @@ class ConfigurationErrorsController: NSWindowController, NSWindowDelegate {
         window.contentView = NSHostingView(rootView: ConfigurationErrorsView(
             model: model,
             dismiss: { [weak self] in self?.updateErrors([]) },
-            reload: { [weak app] in app?.reloadConfig() }
+            edit: { [weak app] in app?.openConfig() }
         ))
         window.titlebarAppearsTransparent = true
     }

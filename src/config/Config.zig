@@ -59,41 +59,9 @@ const log = std.log.scoped(.config);
 /// Used on Unixes for some defaults.
 const c = @import("posix_c");
 
-pub const compatibility = std.StaticStringMap(
-    cli.CompatibilityHandler(Config),
-).initComptime(&.{
-    .{ "custom-shader", compatRemovedShader },
-    .{ "custom-shader-animation", compatRemovedShader },
-    // Preserve the previous name for the background blur radius.
-    .{ "background-blur-radius", cli.compatibilityRenamed(Config, "background-blur") },
-
-    // Ghostty 1.2 lets you set `cell-foreground` and `cell-background`
-    // to match the cell foreground and background colors, respectively.
-    // This can be used with `cursor-color` and `cursor-text` to recreate
-    // this behavior. This applies to selection too.
-    .{ "cursor-invert-fg-bg", compatCursorInvertFgBg },
-    .{ "selection-invert-fg-bg", compatSelectionInvertFgBg },
-
-    // Ghostty 1.2 merged `bold-is-bright` into the new `bold-color`
-    // by setting the value to "bright".
-    .{ "bold-is-bright", compatBoldIsBright },
-
-    // Ghostty 1.3 rename the "window" option to "new-window".
-    // See: https://github.com/ghostty-org/ghostty/pull/9764
-    .{ "macos-dock-drop-behavior", compatMacOSDockDropBehavior },
-
-    // Ghostty 1.4 renamed `scrollback-limit` to `scrollback-limit-bytes`
-    // when `scrollback-limit-lines` was added so the units are explicit.
-    .{ "scrollback-limit", cli.compatibilityRenamed(Config, "scrollback-limit-bytes") },
-
-    // Ghostty 1.4 updated "copy-on-select", allow copying to the selection
-    // clipboard (on supported operating systems), the system clipboard, or
-    // both. The semantics also changed but this is the correct mapping.
-    // See: https://github.com/ghostty-org/ghostty/pull/12604
-    .{ "copy-on-select", compatCopyOnSelect },
-});
-
 /// The font families to use.
+/// Unset uses the bundled LXGW WenKai Mono. Bold and italic variants of
+/// this built-in regular face follow `font-synthetic-style`.
 ///
 /// You can generate the list of valid values using the CLI:
 ///
@@ -235,7 +203,7 @@ pub const compatibility = std.StaticStringMap(
 /// On Linux with GTK, font size is scaled according to both display-wide and
 /// text-specific scaling factors, which are often managed by your desktop
 /// environment (e.g. the GNOME display scale and large text settings).
-@"font-size": f32 = 13,
+@"font-size": f32 = 16,
 
 /// A repeatable configuration to set one or more font variations values for
 /// a variable font. A variable font is a single font, usually with a filename
@@ -471,37 +439,6 @@ pub const compatibility = std.StaticStringMap(
 /// This configuration can be changed at runtime but will not affect existing
 /// terminals. Only new terminals will use the new configuration.
 @"grapheme-width-method": GraphemeWidthMethod = .unicode,
-
-/// FreeType load flags to enable. The format of this is a list of flags to
-/// enable separated by commas. If you prefix a flag with `no-` then it is
-/// disabled. If you omit a flag, its default value is used, so you must
-/// explicitly disable flags you don't want. You can also use `true` or `false`
-/// to turn all flags on or off.
-///
-/// This configuration only applies to Ghostty builds that use FreeType.
-/// This is usually the case only for Linux builds. macOS uses CoreText
-/// and does not have an equivalent configuration.
-///
-/// Available flags:
-///
-///   * `hinting` - Enable or disable hinting. Enabled by default.
-///
-///   * `force-autohint` - Always use the freetype auto-hinter instead of
-///     the font's native hinter. Disabled by default.
-///
-///   * `monochrome` - Instructs renderer to use 1-bit monochrome rendering.
-///     This will disable anti-aliasing, and probably not look very good unless
-///     you're using a pixel font. Disabled by default.
-///
-///   * `autohint` - Enable the freetype auto-hinter. Enabled by default.
-///
-///   * `light` - Use a light hinting style, better preserving glyph shapes.
-///     This is the most common setting in GTK apps and therefore also Ghostty's
-///     default. This has no effect if `monochrome` is enabled. Enabled by
-///     default.
-///
-/// Example: `hinting`, `no-hinting`, `force-autohint`, `no-force-autohint`
-@"freetype-load-flags": FreetypeLoadFlags = .{},
 
 /// A theme to use. This can be a built-in theme name, a custom theme
 /// name, or an absolute path to a custom theme file. Ghostty also supports
@@ -1694,7 +1631,7 @@ title: ?[:0]const u8 = null,
 ///    meaning that the associated encoding (if any) will not be sent to the
 ///    running program in the terminal. If you wish to send the encoded value
 ///    to the program, specify the `unconsumed:` prefix before the entire
-///    keybind. For example: `unconsumed:ctrl+a=reload_config`. `global:` and
+///    keybind. For example: `unconsumed:ctrl+a=new_window`. `global:` and
 ///    `all:`-prefixed keybinds will always consume the input regardless of
 ///    this setting. Since they are not associated with a specific terminal
 ///    surface, they're never encoded.
@@ -1725,7 +1662,7 @@ title: ?[:0]const u8 = null,
 /// `global:` keybind will be used.
 ///
 /// Multiple prefixes can be specified. For example,
-/// `global:unconsumed:ctrl+a=reload_config` will make the keybind global
+/// `global:unconsumed:ctrl+a=new_window` will make the keybind global
 /// and not consume the input to reload the config.
 ///
 /// On macOS, this feature requires accessibility permissions to be granted
@@ -2083,13 +2020,10 @@ keybind: Keybinds = .{},
 /// This setting is currently only supported on macOS.
 @"window-colorspace": WindowColorspace = .srgb,
 
-/// The initial window size. This size is in terminal grid cells by default.
-/// Both values must be set to take effect. If only one value is set, it is
-/// ignored.
-///
-/// We don't currently support specifying a size in pixels but a future change
-/// can enable that. If this isn't specified, the app runtime will determine
-/// some default size.
+/// The initial window size in terminal grid cells: 144 columns by 33 rows.
+/// Both effective values must be positive. Setting either value to zero
+/// leaves the initial size to the native app. An omitted value keeps its
+/// built-in default, so either dimension can be overridden independently.
 ///
 /// Note that the window manager may put limits on the size or override the
 /// size. For example, a tiling window manager may force the window to be a
@@ -2104,14 +2038,9 @@ keybind: Keybinds = .{},
 /// value will not affect the size of the window after it has been created. This
 /// is only used for the initial size.
 ///
-/// BUG: On Linux with GTK, the calculated window size will not properly take
-/// into account window decorations. As a result, the grid dimensions will not
-/// exactly match this configuration. If window decorations are disabled (see
-/// `window-decoration`), then this will work as expected.
-///
 /// Windows smaller than 10 wide by 4 high are not allowed.
-@"window-height": u32 = 0,
-@"window-width": u32 = 0,
+@"window-height": u32 = 33,
+@"window-width": u32 = 144,
 
 /// The starting window position. This position is in pixels and is relative
 /// to the top-left corner of the primary monitor. Both values must be set to take
@@ -2370,10 +2299,6 @@ keybind: Keybinds = .{},
 /// * `both` - Copy to both clipboards on Linux, and only the system clipboard
 ///   on macOS. (Available since: 1.4.0)
 ///
-/// For backward compatibility and convenience, a value of `true` is the same as
-/// `primary` on Linux and `clipboard` on macOS, and `false` is an alias for
-/// `none`.
-///
 /// The default value is `primary` on Linux and `none` otherwise.
 @"copy-on-select": CopyOnSelect = .none,
 
@@ -2436,12 +2361,10 @@ keybind: Keybinds = .{},
 /// nested `config-file` value.
 @"config-file": RepeatablePath = .{},
 
-/// When this is true, the default configuration file paths will be loaded.
-/// These include `$XDG_CONFIG_HOME/cghostty/config.ghostty` and
+/// When true, load the user configuration at
 /// `$HOME/Library/Application Support/$CFBundleIdentifier/config.ghostty`.
-/// The Application Support configuration is loaded after the XDG configuration.
 ///
-/// If this is false, the default configuration paths will not be loaded.
+/// If false, the default user configuration will not be loaded.
 /// This is targeted directly at using Ghostty from the CLI in a way
 /// that minimizes external effects.
 ///
@@ -2764,7 +2687,7 @@ keybind: Keybinds = .{},
 /// need KAM, you don't need it.
 @"vt-kam-allowed": bool = false,
 
-/// Native cursor effect. `smooth` moves a stable body with a connected trailing
+/// Enable the native cursor animation. It moves a stable body with a connected trailing
 /// follower, uniformly enlarges the body by up to 12%, and softly rounds it.
 /// Long moves accelerate from rest; short input remains responsive. The
 /// trail connects recent submitted draw positions without a length cap and
@@ -2774,8 +2697,8 @@ keybind: Keybinds = .{},
 /// Shape and size changes reset motion. Hidden cursors are not drawn, but
 /// retain motion across application redraws. Unfocused, hollow, and lock
 /// cursors use the normal cursor. Reduced Motion disables the effect.
-/// Set to `none` to disable. No external shader files are loaded.
-@"cursor-effect": enum { none, smooth } = .smooth,
+/// Set to `false` to disable. Enabled by default.
+@"cursor-effect": bool = true,
 
 /// Bell features to enable if bell support is available in your runtime. Not
 /// all features are available on all runtimes. The format of this is a list of
@@ -3122,9 +3045,7 @@ keybind: Keybinds = .{},
 /// for bold text. For example, if the text is red, then the bold will
 /// use the bright red color. The terminal palette is set with `palette`
 /// but can also be overridden by the terminal application itself using
-/// escape sequences such as OSC 4. (Since Ghostty 1.2.0, the previous
-/// configuration `bold-is-bright` is deprecated and replaced by this
-/// usage).
+/// escape sequences such as OSC 4.
 ///
 /// Available since Ghostty 1.2.0.
 @"bold-color": ?BoldColor = null,
@@ -3176,16 +3097,15 @@ pub fn deinit(self: *Config) void {
 /// Load the configuration according to the default rules:
 ///
 ///   1. Defaults
-///   2. XDG config dir
-///   3. "Application Support" directory (macOS only)
-///   4. CLI flags
-///   5. Recursively defined configuration files
+///   2. Application Support user configuration
+///   3. CLI flags
+///   4. Explicitly referenced configuration files
 ///
 pub fn load(alloc_gpa: Allocator) !Config {
     var result = try default(alloc_gpa);
     errdefer result.deinit();
 
-    // If we have a configuration file in our home directory, parse that first.
+    // Load the single user configuration before command-line overrides.
     try result.loadDefaultFiles(alloc_gpa);
 
     // Parse the config from the CLI args.
@@ -3262,6 +3182,13 @@ fn loadFsFile(self: *Config, alloc: Allocator, file: *std.Io.File, path: []const
     try self.loadReader(alloc, reader, path);
 }
 
+/// Load saved user configuration bytes using the original path for diagnostics
+/// and relative resources. The input bytes are borrowed for this call only.
+pub fn loadData(self: *Config, alloc: Allocator, data: []const u8, path: []const u8) !void {
+    var reader: std.Io.Reader = .fixed(data);
+    try self.loadReader(alloc, &reader, path);
+}
+
 /// Load config from the given Reader.
 fn loadReader(self: *Config, alloc: Allocator, reader: *std.Io.Reader, path: []const u8) !void {
     bom: {
@@ -3322,120 +3249,22 @@ test "handle bom in config files" {
     }
 }
 
-pub const OptionalFileAction = enum { loaded, not_found, @"error" };
-
-/// Load optional configuration file from `path`. All errors are ignored.
-///
-/// Returns the action that was taken.
-pub fn loadOptionalFile(
-    self: *Config,
-    alloc: Allocator,
-    path: []const u8,
-) OptionalFileAction {
-    if (self.loadFile(alloc, path)) {
-        return .loaded;
-    } else |err| switch (err) {
-        error.FileNotFound => return .not_found,
-        else => {
-            std.log.warn(
-                "error reading optional config file, not loading err={} path={s}",
-                .{ err, path },
-            );
-
-            return .@"error";
-        },
-    }
-}
-
-fn writeConfigTemplate(path: []const u8) !void {
-    log.info("creating template config file: path={s}", .{path});
-    if (std.fs.path.dirname(path)) |dir_path| {
-        try std.Io.Dir.cwd().createDirPath(global.io(), dir_path);
-    }
-    const file = try std.Io.Dir.createFileAbsolute(global.io(), path, .{});
-    defer file.close(global.io());
-    var buf: [4096]u8 = undefined;
-    var file_writer = file.writer(global.io(), &buf);
-    const writer = &file_writer.interface;
-    try writer.print(
-        @embedFile("./config-template"),
-        .{ .path = path },
-    );
-    try writer.flush();
-}
-
-/// Load configurations from the default configuration files. The default
-/// configuration file is at `$XDG_CONFIG_HOME/cghostty/config.ghostty`.
-///
-/// `$HOME/Library/Application Support/$CFBundleIdentifier/` is loaded
-/// afterwards, so its settings take precedence.
-///
-/// The legacy `config` file (without extension) is first loaded,
-/// then `config.ghostty`.
+/// Load the single Application Support user configuration, when present.
+/// Missing or empty files leave the built-in defaults intact. Other failures
+/// must be visible instead of silently replacing user settings with defaults.
 pub fn loadDefaultFiles(self: *Config, alloc: Allocator) !void {
-    // Load XDG first
-    const legacy_xdg_path = try file_load.legacyDefaultXdgPath(alloc);
-    defer alloc.free(legacy_xdg_path);
-    const xdg_path = try file_load.defaultXdgPath(alloc);
-    defer alloc.free(xdg_path);
-    const xdg_loaded: bool = xdg_loaded: {
-        const legacy_xdg_action = self.loadOptionalFile(alloc, legacy_xdg_path);
-        const xdg_action = self.loadOptionalFile(alloc, xdg_path);
-        if (xdg_action != .not_found and legacy_xdg_action != .not_found) {
-            log.warn("both config files `{s}` and `{s}` exist.", .{ legacy_xdg_path, xdg_path });
-            log.warn("loading them both in that order", .{});
-            break :xdg_loaded true;
-        }
+    const path = try file_load.defaultPath(alloc);
+    defer alloc.free(path);
 
-        break :xdg_loaded xdg_action != .not_found or
-            legacy_xdg_action != .not_found;
+    var file = file_load.open(global.io(), path) catch |err| switch (err) {
+        error.FileNotFound, error.FileIsEmpty => return,
+        else => {
+            try self.addDiagnosticFmt("unable to read user configuration {s}: {}", .{ path, err });
+            return;
+        },
     };
-
-    // On macOS load the app support directory as well
-    {
-        const legacy_app_support_path = try file_load.legacyDefaultAppSupportPath(alloc);
-        defer alloc.free(legacy_app_support_path);
-        const app_support_path = try file_load.preferredAppSupportPath(alloc);
-        defer alloc.free(app_support_path);
-        const app_support_loaded: bool = loaded: {
-            const legacy_app_support_action = self.loadOptionalFile(
-                alloc,
-                legacy_app_support_path,
-            );
-
-            // The app support path and legacy may be the same, since we
-            // use the `preferred` call above. If its the same, avoid
-            // a double-load.
-            const app_support_action: OptionalFileAction = if (!std.mem.eql(
-                u8,
-                legacy_app_support_path,
-                app_support_path,
-            )) self.loadOptionalFile(
-                alloc,
-                app_support_path,
-            ) else .not_found;
-
-            if (app_support_action != .not_found and legacy_app_support_action != .not_found) {
-                log.warn(
-                    "both config files `{s}` and `{s}` exist.",
-                    .{ legacy_app_support_path, app_support_path },
-                );
-                log.warn("loading them both in that order", .{});
-                break :loaded true;
-            }
-
-            break :loaded app_support_action != .not_found or
-                legacy_app_support_action != .not_found;
-        };
-
-        // If both files are not found, then we create a template file.
-        // For macOS, we only create the template file in the app support
-        if (!app_support_loaded and !xdg_loaded) {
-            writeConfigTemplate(app_support_path) catch |err| {
-                log.warn("error creating template config file err={}", .{err});
-            };
-        }
-    }
+    defer file.close(global.io());
+    try self.loadFsFile(alloc, &file, path);
 }
 
 /// Load and parse the CLI args.
@@ -4044,115 +3873,6 @@ pub fn parseManuallyHook(
 
     // If we didn't find a special case, continue parsing normally
     return true;
-}
-
-fn compatRemovedShader(self: *Config, alloc: Allocator, key: []const u8, _: ?[]const u8) bool {
-    self._diagnostics.append(alloc, .{
-        .key = alloc.dupeZ(u8, key) catch return false,
-        .message = "GLSL shaders are no longer supported; remove this setting and use cursor-effect = smooth (or none).",
-    }) catch return false;
-    return true;
-}
-
-fn compatCursorInvertFgBg(
-    self: *Config,
-    alloc: Allocator,
-    key: []const u8,
-    value_: ?[]const u8,
-) bool {
-    _ = alloc;
-    assert(std.mem.eql(u8, key, "cursor-invert-fg-bg"));
-
-    // We don't do anything if the value is unset, which is technically
-    // not EXACTLY the same as prior behavior since it would fallback
-    // to doing whatever cursor-color/cursor-text were set to, but
-    // I don't want to store what that is separately so this is close
-    // enough.
-    //
-    // Realistically, these fields were mutually exclusive so anyone
-    // relying on that behavior should just upgrade to the new
-    // cursor-color/cursor-text fields.
-    const set = cli.args.parseBool(value_ orelse "t") catch return false;
-    if (set) {
-        self.@"cursor-color" = .@"cell-foreground";
-        self.@"cursor-text" = .@"cell-background";
-    }
-
-    return true;
-}
-
-fn compatSelectionInvertFgBg(
-    self: *Config,
-    alloc: Allocator,
-    key: []const u8,
-    value_: ?[]const u8,
-) bool {
-    _ = alloc;
-    assert(std.mem.eql(u8, key, "selection-invert-fg-bg"));
-
-    const set = cli.args.parseBool(value_ orelse "t") catch return false;
-    if (set) {
-        self.@"selection-foreground" = .@"cell-background";
-        self.@"selection-background" = .@"cell-foreground";
-    }
-
-    return true;
-}
-
-fn compatBoldIsBright(
-    self: *Config,
-    alloc: Allocator,
-    key: []const u8,
-    value_: ?[]const u8,
-) bool {
-    _ = alloc;
-    assert(std.mem.eql(u8, key, "bold-is-bright"));
-
-    const isset = cli.args.parseBool(value_ orelse "t") catch return false;
-    if (isset) {
-        self.@"bold-color" = .bright;
-    }
-
-    return true;
-}
-
-fn compatMacOSDockDropBehavior(
-    self: *Config,
-    alloc: Allocator,
-    key: []const u8,
-    value: ?[]const u8,
-) bool {
-    _ = alloc;
-    assert(std.mem.eql(u8, key, "macos-dock-drop-behavior"));
-
-    if (std.mem.eql(u8, value orelse "", "window")) {
-        self.@"macos-dock-drop-behavior" = .@"new-window";
-        return true;
-    }
-
-    return false;
-}
-
-fn compatCopyOnSelect(
-    self: *Config,
-    alloc: Allocator,
-    key: []const u8,
-    value: ?[]const u8,
-) bool {
-    _ = alloc;
-    assert(std.mem.eql(u8, key, "copy-on-select"));
-
-    if (std.mem.eql(u8, value orelse "", "true")) {
-        self.@"copy-on-select" = .clipboard;
-        return true;
-    }
-
-    if (std.mem.eql(u8, value orelse "", "false")) {
-        self.@"copy-on-select" = .none;
-        return true;
-    }
-
-    return false;
 }
 
 /// Add a diagnostic message to the config with the given string.
@@ -5472,12 +5192,7 @@ pub const Keybinds = struct {
         self.tables = .empty;
         self.chain_target = .root;
 
-        // keybinds for opening and reloading config
-        try self.set.put(
-            alloc,
-            .{ .key = .{ .unicode = ',' }, .mods = inputpkg.ctrlOrSuper(.{ .shift = true }) },
-            .{ .reload_config = {} },
-        );
+        // Open user settings; changes apply on the next application launch.
         try self.set.put(
             alloc,
             .{ .key = .{ .unicode = ',' }, .mods = inputpkg.ctrlOrSuper(.{}) },
@@ -8382,21 +8097,6 @@ pub const BackgroundImageFit = enum {
     none,
 };
 
-/// See freetype-load-flag
-pub const FreetypeLoadFlags = packed struct {
-    // The defaults here at the time of writing this match the defaults
-    // for Freetype itself. Ghostty hasn't made any opinionated changes
-    // to these defaults. (Strictly speaking, `light` isn't FreeType's
-    // own default, but appears to be the effective default with most
-    // Fontconfig-aware software using FreeType, so until Ghostty
-    // implements Fontconfig support we default to `light`.)
-    hinting: bool = true,
-    @"force-autohint": bool = false,
-    monochrome: bool = false,
-    autohint: bool = true,
-    light: bool = true,
-};
-
 /// See background-blur
 pub const BackgroundBlur = union(enum) {
     false,
@@ -9684,128 +9384,19 @@ test "clipboard write limit" {
     );
 }
 
-test "compatibility: scrollback-limit renamed to bytes" {
+test "config native cursor effect toggle" {
     const testing = std.testing;
     const alloc = testing.allocator;
-
-    var cfg = try Config.default(alloc);
-    defer cfg.deinit();
-    var it: TestIterator = .{ .data = &.{
-        "--scrollback-limit=1234",
-    } };
-    try cfg.loadIter(alloc, &it);
-
-    try testing.expectEqual(
-        @as(usize, 1234),
-        cfg.@"scrollback-limit-bytes".value,
-    );
-
-    var unlimited_it: TestIterator = .{ .data = &.{
-        "--scrollback-limit=unlimited",
-    } };
-    try cfg.loadIter(alloc, &unlimited_it);
-
-    try testing.expectEqual(
-        std.math.maxInt(usize),
-        cfg.@"scrollback-limit-bytes".value,
-    );
-}
-
-test "compatibility: removed cursor-invert-fg-bg" {
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    {
-        var cfg = try Config.default(alloc);
-        defer cfg.deinit();
-        var it: TestIterator = .{ .data = &.{
-            "--cursor-invert-fg-bg",
-        } };
-        try cfg.loadIter(alloc, &it);
-        try cfg.finalize();
-
-        try testing.expectEqual(
-            TerminalColor.@"cell-foreground",
-            cfg.@"cursor-color",
-        );
-        try testing.expectEqual(
-            TerminalColor.@"cell-background",
-            cfg.@"cursor-text",
-        );
-    }
-}
-
-test "compatibility: removed selection-invert-fg-bg" {
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    {
-        var cfg = try Config.default(alloc);
-        defer cfg.deinit();
-        var it: TestIterator = .{ .data = &.{
-            "--selection-invert-fg-bg",
-        } };
-        try cfg.loadIter(alloc, &it);
-        try cfg.finalize();
-
-        try testing.expectEqual(
-            TerminalColor.@"cell-background",
-            cfg.@"selection-foreground",
-        );
-        try testing.expectEqual(
-            TerminalColor.@"cell-foreground",
-            cfg.@"selection-background",
-        );
-    }
-}
-
-test "compatibility: removed bold-is-bright" {
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    {
-        var cfg = try Config.default(alloc);
-        defer cfg.deinit();
-        var it: TestIterator = .{ .data = &.{
-            "--bold-is-bright",
-        } };
-        try cfg.loadIter(alloc, &it);
-        try cfg.finalize();
-
-        try testing.expectEqual(
-            BoldColor.bright,
-            cfg.@"bold-color",
-        );
-    }
-}
-
-test "compatibility: window new-window" {
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    {
-        var cfg = try Config.default(alloc);
-        defer cfg.deinit();
-        var it: TestIterator = .{ .data = &.{
-            "--macos-dock-drop-behavior=window",
-        } };
-        try cfg.loadIter(alloc, &it);
-        try cfg.finalize();
-        try testing.expectEqual(
-            MacOSDockDropBehavior.@"new-window",
-            cfg.@"macos-dock-drop-behavior",
-        );
-    }
-}
-
-test "config native cursor effect and removed GLSL diagnostics" {
-    const alloc = std.testing.allocator;
     var config = try Config.default(alloc);
     defer config.deinit();
-    try std.testing.expect(config.@"cursor-effect" == .smooth);
-    var iter: TestIterator = .{ .data = &.{ "--cursor-effect=none", "--custom-shader=obsolete.glsl" } };
-    try config.loadIter(alloc, &iter);
-    try std.testing.expect(config.@"cursor-effect" == .none);
-    try std.testing.expectEqual(@as(usize, 1), config._diagnostics.list.items.len);
-    try std.testing.expect(std.mem.indexOf(u8, config._diagnostics.list.items[0].message, "cursor-effect = smooth") != null);
+    try testing.expect(config.@"cursor-effect");
+
+    var disable: TestIterator = .{ .data = &.{"--cursor-effect=false"} };
+    try config.loadIter(alloc, &disable);
+    try testing.expect(!config.@"cursor-effect");
+
+    var enable: TestIterator = .{ .data = &.{"--cursor-effect=true"} };
+    try config.loadIter(alloc, &enable);
+    try testing.expect(config.@"cursor-effect");
+    try testing.expectEqual(@as(usize, 0), config._diagnostics.list.items.len);
 }

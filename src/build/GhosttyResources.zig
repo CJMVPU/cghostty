@@ -108,6 +108,12 @@ pub fn init(b: *std.Build, cfg: *const Config, deps: *const SharedDeps) !Ghostty
         try steps.append(b.allocator, &install_step.step);
     }
 
+    // The embedded font's redistribution license must ship with the app.
+    if (b.lazyDependency("lxgw_wenkai", .{})) |wenkai| {
+        const license = b.addInstallFile(wenkai.path("OFL.txt"), "share/cghostty/licenses/LXGW-WenKai-OFL.txt");
+        try steps.append(b.allocator, &license.step);
+    }
+
     // Themes
     if (cfg.emit_themes) {
         if (b.lazyDependency("iterm2_themes", .{})) |upstream| {
