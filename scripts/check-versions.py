@@ -14,9 +14,6 @@ TABLE_END = "<!-- dependency-versions:end -->"
 
 # URL shapes, not a second set of version pins. Versions live in build.zig.zon.
 SOURCE_ARCHIVES = (
-    ("freetype", "FreeType", "https://download.savannah.gnu.org/releases/freetype/freetype-{version}.tar.xz"),
-    ("libpng", "libpng", "https://github.com/pnggroup/libpng/archive/refs/tags/v{version}.tar.gz"),
-    ("zlib", "zlib", "https://github.com/madler/zlib/releases/download/v{version}/zlib-{version}.tar.gz"),
     ("pcre2", "PCRE2", "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-{version}/pcre2-{version}.tar.gz"),
     ("highway", "Highway", "https://github.com/google/highway/releases/download/{version}/highway-{version}.tar.gz"),
 )
@@ -54,21 +51,6 @@ def dependency_table():
 
     simdutf = package_version("simdutf")
     rows.append(f"| simdutf | {simdutf} | [内置源码](simdutf/vendor/simdutf.h) |")
-
-    imgui = package_version("dcimgui").replace("+", "") + "-docking"
-    imgui_url = source_url("dcimgui", "imgui")
-    if imgui_url != f"https://github.com/ocornut/imgui/archive/refs/tags/v{imgui}.tar.gz":
-        raise ValueError(f"dcimgui manifest does not match ImGui source URL {imgui_url}")
-    bindings_url = source_url("dcimgui", "bindings")
-    bindings = re.fullmatch(
-        r"https://github.com/dearimgui/dear_bindings/releases/download/"
-        r"(DearBindings_v([0-9.]+)_ImGui_v([^/]+))/\1\.zip",
-        bindings_url,
-    )
-    if bindings is None or bindings[3] != imgui:
-        raise ValueError(f"Dear Bindings must target ImGui {imgui}: {bindings_url}")
-    rows.append(f"| Dear ImGui | {imgui} | [源码归档]({imgui_url}) |")
-    rows.append(f"| Dear Bindings | {bindings[2]}（ImGui {imgui}） | [生成绑定]({bindings_url}) |")
 
     wuffs_url = source_url("wuffs", "wuffs")
     snapshot = re.fullmatch(r"https://deps\.files\.ghostty\.org/wuffs-([0-9a-f]{40})\.tar\.gz", wuffs_url)
@@ -110,11 +92,6 @@ def check_versions():
     vendored = capture("pkg/simdutf/vendor/simdutf.h", r'#define SIMDUTF_VERSION "([^"]+)"')
     if declared != vendored:
         raise ValueError(f"simdutf manifest {declared} does not match vendored source {vendored}")
-
-    png = capture("pkg/libpng/build.zig.zon", r'\.version\s*=\s*"([^"]+)"')
-    png_config = capture("pkg/libpng/pnglibconf.h", r'libpng version ([0-9.]+)')
-    if png != png_config:
-        raise ValueError(f"libpng manifest {png} does not match generated configuration {png_config}")
 
     return toolchain, vendored
 

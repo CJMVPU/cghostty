@@ -4,6 +4,8 @@
 
 已移除的项目责任：
 
+- Inspector 调试面板、诊断覆盖层、专用事件采集/导出与菜单/动作桥接；Dear ImGui、Dear Bindings、FreeType 以及仅供其使用的 libpng、独立 zlib 依赖。
+
 - GTK / GObject / Wayland / X11 应用运行时，Linux / Windows 系统适配、容器环境处理及相关平台测试。
 - GLSL / Shadertoy 文件加载、glslang / SPIRV-Cross 转换依赖及其测试；以原生 MSL 平滑光标替代，暂不提供 CRT。
 - OpenGL / WebGL / Canvas 渲染和字体后端，WASM 浏览器入口与分配器，iOS 视图桥接。
@@ -18,7 +20,7 @@
 保留的内容：
 
 - Zig 终端核心及其测试；Swift 原生应用和测试；Metal 4 命令体系、MSL 4.1、CoreText、字体解析、Unicode、图片、主题及 shell 集成。
-- Inspector 调试面板及其 FreeType 依赖；纯文本 CLI 列表和配置文件主题加载。
+- 纯文本 CLI 列表、配置文件主题加载、常规日志及自动化测试。
 - 应用需要的 `include/ghostty.h`、`GhosttyKit` C 模块和内部静态库，作为内部桥接而非对外库产品。
 - 帮助、终端描述、命令补全、主题、命令面板的原生中英日翻译资源以及可选手册/性能工具生成。这些直接用于应用或维护核心，不属于网站流程。
 - `TERM=xterm-ghostty` 和必要的协议/接口名称；当前配置字段及 `config.ghostty` 文件格式；默认用户配置仅使用 `~/Library/Application Support/com.cjmvpu.cghostty/config.ghostty`，不扫描 XDG 或旧文件名。显式文件引用和主题资源查找仍保留。

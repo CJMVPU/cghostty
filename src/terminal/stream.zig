@@ -1211,7 +1211,7 @@ pub fn Stream(comptime H: type) type {
 
             // The fast paths below dispatch actions directly rather than
             // going through Parser.next, so they'd bypass a handler's
-            // vtRaw hook. Handlers with vtRaw (e.g. the inspector) use
+            // vtRaw hook. Handlers with vtRaw use
             // the general path for anything that produces an action.
             const has_vt_raw = comptime @hasDecl(T, "vtRaw");
 

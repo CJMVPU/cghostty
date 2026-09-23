@@ -5645,13 +5645,6 @@ pub const Keybinds = struct {
             .{ .performable = true },
         );
 
-        // Inspector, matching Chromium
-        try self.set.put(
-            alloc,
-            .{ .key = .{ .unicode = 'i' }, .mods = .{ .alt = true, .super = true } },
-            .{ .inspector = .toggle },
-        );
-
         // Alternate keybind, common to Mac programs
         try self.set.put(
             alloc,

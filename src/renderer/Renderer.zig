@@ -17,7 +17,6 @@ const noMinContrast = cellpkg.noMinContrast;
 const constraintWidth = cellpkg.constraintWidth;
 const isCovering = cellpkg.isCovering;
 const rowNeverExtendBg = @import("row.zig").neverExtendBg;
-const Overlay = @import("Overlay.zig");
 const imagepkg = @import("image.zig");
 const ImageState = imagepkg.State;
 const SmoothCursor = @import("SmoothCursor.zig");
@@ -184,9 +183,6 @@ terminal_state: terminal.RenderState = .empty,
 /// 15 minutes at 120Hz) to prevent wasted memory buildup from
 /// a large screen.
 terminal_state_frame_count: usize = 0,
-
-/// Our overlay state, if any.
-overlay: ?Overlay = null,
 
 /// The base timestamp for the Kitty graphics animation clock.
 /// Animation frame timing is expressed as milliseconds since
@@ -608,7 +604,6 @@ pub fn deinit(self: *Self) void {
     self.images.deinit(self.alloc);
     if (self.bg_image) |img| img.deinit(self.alloc);
 
-    if (self.overlay) |*overlay| overlay.deinit(self.alloc);
     self.terminal_state.deinit(self.alloc);
     if (self.search_selected_match) |*m| m.arena.deinit();
     if (self.search_matches) |*m| m.arena.deinit();
@@ -976,7 +971,6 @@ pub fn updateFrame(
         mouse: renderer.State.Mouse,
         preedit: ?renderer.State.Preedit,
         scrollbar: terminal.Scrollbar,
-        overlay_features: []const Overlay.Feature,
     };
 
     // Update all our data as tightly as possible within the mutex.
@@ -1117,20 +1111,11 @@ pub fn updateFrame(
             };
         };
 
-        const overlay_features: []const Overlay.Feature = overlay: {
-            const insp = state.inspector orelse break :overlay &.{};
-            const renderer_info = insp.rendererInfo();
-            break :overlay renderer_info.overlayFeatures(
-                arena_alloc,
-            ) catch &.{};
-        };
-
         break :critical .{
             .links = links,
             .mouse = state.mouse,
             .preedit = preedit,
             .scrollbar = scrollbar,
-            .overlay_features = overlay_features,
         };
     };
 
@@ -1209,17 +1194,6 @@ pub fn updateFrame(
     // Reset our dirty state after updating.
     defer self.terminal_state.dirty = .false;
 
-    // Rebuild the overlay image if we have one. We can do this
-    // outside of any critical areas.
-    self.rebuildOverlay(
-        critical.overlay_features,
-    ) catch |err| {
-        log.warn(
-            "error rebuilding overlay surface err={}",
-            .{err},
-        );
-    };
-
     // Acquire the draw mutex for all remaining state updates.
     {
         self.draw_mutex.lockUncancelable(global.io());
@@ -1268,16 +1242,6 @@ pub fn updateFrame(
 
             else => {},
         }
-
-        // Prepare our overlay image for upload (or unload). This
-        // has to use our general allocator since it modifies
-        // state that survives frames.
-        self.images.overlayUpdate(
-            self.alloc,
-            self.overlay,
-        ) catch |err| {
-            log.warn("error updating overlay images err={}", .{err});
-        };
     }
 
     // Start the display link now that the rebuilt frame is ready.
@@ -1570,14 +1534,6 @@ fn drawFrameLocked(
             self.shaders.pipelines.image,
             &pass,
             .kitty_above_text,
-        );
-
-        // Draw the debug overlay above terminal content.
-        if (self.overlay != null) self.images.draw(
-            &self.api,
-            self.shaders.pipelines.image,
-            &pass,
-            .overlay,
         );
     }
 
@@ -1940,66 +1896,6 @@ fn updateSmoothCursor(self: *Self) ?CursorMotion.Frame {
     self.uniforms.smooth_bounds_min = lo - @as(SmoothCursor.Vec, @splat(1));
     self.uniforms.smooth_bounds_max = hi + @as(SmoothCursor.Vec, @splat(1));
     return frame;
-}
-
-/// Build the overlay as configured. Returns null if there is no
-/// overlay currently configured.
-fn rebuildOverlay(
-    self: *Self,
-    features: []const Overlay.Feature,
-) Overlay.InitError!void {
-    const alloc = self.alloc;
-
-    // If we have no features enabled, don't build an overlay.
-    // If we had a previous overlay, deallocate it.
-    if (features.len == 0) {
-        if (self.overlay) |*old| {
-            old.deinit(alloc);
-            self.overlay = null;
-        }
-
-        return;
-    }
-
-    // If we had a previous overlay, clear it. Otherwise, init.
-    const overlay: *Overlay = overlay: {
-        if (self.overlay) |*v| existing: {
-            // Verify that our overlay size matches our screen
-            // size as we know it now. If not, deinit and reinit.
-            // Note: these intCasts are always safe because z2d
-            // stores as i32 but we always init with a u32.
-            const width: u32 = @intCast(v.surface.getWidth());
-            const height: u32 = @intCast(v.surface.getHeight());
-            const term_size = self.size.terminal();
-            if (width != term_size.width or
-                height != term_size.height) break :existing;
-
-            // We also depend on cell size.
-            if (v.cell_size.width != self.size.cell.width or
-                v.cell_size.height != self.size.cell.height) break :existing;
-
-            // Everything matches, so we can just reset the surface
-            // and redraw.
-            v.reset();
-            break :overlay v;
-        }
-
-        // If we reached this point we want to reset our overlay.
-        if (self.overlay) |*v| {
-            v.deinit(alloc);
-            self.overlay = null;
-        }
-
-        assert(self.overlay == null);
-        const new: Overlay = try .init(alloc, self.size);
-        self.overlay = new;
-        break :overlay &self.overlay.?;
-    };
-    overlay.applyFeatures(
-        alloc,
-        &self.terminal_state,
-        features,
-    );
 }
 
 const PreeditRange = struct {

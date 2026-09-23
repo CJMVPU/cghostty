@@ -671,11 +671,6 @@ pub const Action = union(enum) {
     /// Only implemented on macOS.
     reset_window_size,
 
-    /// Control the visibility of the terminal inspector.
-    ///
-    /// Valid arguments: `toggle`, `show`, `hide`.
-    inspector: InspectorMode,
-
     /// Show the on-screen keyboard if one is present.
     ///
     /// Only implemented on Linux (GTK). On GNOME, the "Screen Keyboard"
@@ -1152,13 +1147,6 @@ pub const Action = union(enum) {
         }
     };
 
-    // Extern because it is used in the embedded runtime ABI.
-    pub const InspectorMode = enum {
-        toggle,
-        show,
-        hide,
-    };
-
     pub const CloseTabMode = enum {
         this,
         other,
@@ -1415,7 +1403,6 @@ pub const Action = union(enum) {
             .toggle_readonly,
             .resize_split,
             .equalize_splits,
-            .inspector,
             => .surface,
         };
     }
@@ -4476,6 +4463,12 @@ test "Action: clone" {
         var a: Action = .{ .text = "foo" };
         const b = try a.clone(alloc);
         try testing.expect(b == .text);
+    }
+}
+
+test "parse: removed inspector actions are rejected" {
+    for ([_][]const u8{ "a=inspector:toggle", "a=inspector:show", "a=inspector:hide" }) |value| {
+        try std.testing.expectError(Error.InvalidAction, parseSingle(value));
     }
 }
 

@@ -79,9 +79,6 @@ flags: packed struct {
     /// True if linefeed mode is enabled. This is duplicated here so that the
     /// write thread doesn't need to grab a lock to check this on every write.
     linefeed_mode: bool = false,
-
-    /// This is true when the inspector is active.
-    has_inspector: bool = false,
 } = .{},
 
 /// Initialize the thread. This does not START the thread. This only sets
@@ -248,7 +245,6 @@ fn drainMailbox(
                 defer config.alloc.destroy(config.ptr);
                 try io.changeConfig(config.ptr);
             },
-            .inspector => |v| self.flags.has_inspector = v,
             .resize => |v| self.handleResize(cb, v),
             .size_report => |v| try io.sizeReport(data, v),
             .clear_screen => |v| try io.clearScreen(data, v.history),

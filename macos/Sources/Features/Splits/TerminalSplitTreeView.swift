@@ -96,7 +96,7 @@ private struct TerminalSplitLeaf: View {
 
     var body: some View {
         GeometryReader { geometry in
-            Ghostty.InspectableSurface(
+            Ghostty.SurfaceWrapper(
                 surfaceView: surfaceView,
                 isSplit: isSplit)
             .background {

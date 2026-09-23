@@ -155,62 +155,6 @@ pub fn add(
         .optimize = optimize,
     });
 
-    // Freetype. We always include this even if our font backend doesn't
-    // use it because Dear Imgui uses Freetype.
-    _ = b.systemIntegrationOption("freetype", .{}); // Shows it in help
-    if (b.lazyDependency("freetype", .{
-        .target = target,
-        .optimize = optimize,
-        .@"enable-libpng" = true,
-    })) |freetype_dep| {
-        step.root_module.addImport(
-            "freetype",
-            freetype_dep.module("freetype"),
-        );
-
-        if (b.systemIntegrationOption("freetype", .{})) {
-            step.root_module.linkSystemLibrary("bzip2", dynamic_link_opts);
-            step.root_module.linkSystemLibrary("freetype2", dynamic_link_opts);
-        } else {
-            step.root_module.linkLibrary(freetype_dep.artifact("freetype"));
-            try static_libs.append(
-                b.allocator,
-                freetype_dep.artifact("freetype").getEmittedBin(),
-            );
-        }
-    }
-
-    // Libpng - Ghostty doesn't actually use this directly, its only used
-    // through dependencies, so we only need to add it to our static
-    // libs list if we're not using system integration. The dependencies
-    // will handle linking it.
-    if (!b.systemIntegrationOption("libpng", .{})) {
-        if (b.lazyDependency("libpng", .{
-            .target = target,
-            .optimize = optimize,
-        })) |libpng_dep| {
-            step.root_module.linkLibrary(libpng_dep.artifact("png"));
-            try static_libs.append(
-                b.allocator,
-                libpng_dep.artifact("png").getEmittedBin(),
-            );
-        }
-    }
-
-    // Zlib - same as libpng, only used through dependencies.
-    if (!b.systemIntegrationOption("zlib", .{})) {
-        if (b.lazyDependency("zlib", .{
-            .target = target,
-            .optimize = optimize,
-        })) |zlib_dep| {
-            step.root_module.linkLibrary(zlib_dep.artifact("z"));
-            try static_libs.append(
-                b.allocator,
-                zlib_dep.artifact("z").getEmittedBin(),
-            );
-        }
-    }
-
     // PCRE2: the pinned UTF-8 static library, shared by link consumers.
     if (b.lazyDependency("pcre2", .{
         .target = target,
@@ -285,23 +229,6 @@ pub fn add(
         try static_libs.append(
             b.allocator,
             macos_dep.artifact("macos").getEmittedBin(),
-        );
-    }
-
-    // cimgui
-    if (b.lazyDependency("dcimgui", .{
-        .target = target,
-        .optimize = optimize,
-        .freetype = true,
-        .@"backend-metal" = true,
-        .@"backend-osx" = true,
-        .@"backend-opengl3" = false,
-    })) |dep| {
-        step.root_module.addImport("dcimgui", dep.module("dcimgui"));
-        step.root_module.linkLibrary(dep.artifact("dcimgui"));
-        try static_libs.append(
-            b.allocator,
-            dep.artifact("dcimgui").getEmittedBin(),
         );
     }
 

@@ -144,7 +144,6 @@ extension Ghostty {
         // Cancellable for the debounced accessibility selection-change post.
         private var accessibilitySelectionTask: Task<Void, Never>?
         weak var scrollContainer: SurfaceScrollView?
-        weak var inspectorView: InspectorView?
 
         // Whether the pointer should be visible or not
         private(set) var pointerStyle: CursorStyle {
@@ -237,27 +236,6 @@ extension Ghostty {
         // Returns true if the process in this surface has exited.
         var processExited: Bool {
             surfaceModel?.processExited ?? true
-        }
-
-        // Returns the inspector instance for this surface, or nil if the
-        // surface has been closed or no inspector is active.
-        var inspector: Ghostty.Inspector? {
-            guard let surface = self.surfaceModel else { return nil }
-            return surface.inspector
-        }
-
-        // True if the inspector should be visible
-        var inspectorVisible: Bool {
-            get { state.inspectorVisible }
-            set {
-                let oldValue = state.inspectorVisible
-                state.inspectorVisible = newValue
-
-                if oldValue && !inspectorVisible {
-                    guard let surface = self.surfaceModel else { return }
-                    surface.freeInspector()
-                }
-            }
         }
 
         /// Stable session ownership; detaching AppKit presentation is not teardown.
@@ -782,14 +760,6 @@ extension Ghostty {
             scrollContainer?.handleScrollbarUpdate(value)
         }
 
-        func controlInspector(_ visibility: Ghostty.Inspector.Visibility) {
-            switch visibility {
-            case .toggle: inspectorVisible.toggle()
-            case .show: inspectorVisible = true
-            case .hide: inspectorVisible = false
-            }
-        }
-
         @objc private func windowDidChangeScreen(notification: SwiftUI.Notification) {
             guard let window = self.window else { return }
             guard let object = notification.object as? NSWindow, window == object else { return }
@@ -1180,8 +1150,6 @@ extension Ghostty {
             menu.addItem(.separator())
             item = menu.addItem(withTitle: "Reset Terminal", action: #selector(resetTerminal(_:)), keyEquivalent: "")
             item.setImageIfDesired(systemSymbolName: "arrow.trianglehead.2.clockwise")
-            item = menu.addItem(withTitle: "Toggle Terminal Inspector", action: #selector(toggleTerminalInspector(_:)), keyEquivalent: "")
-            item.setImageIfDesired(systemSymbolName: "scope")
             item = menu.addItem(withTitle: "Terminal Read-only", action: #selector(toggleReadonly(_:)), keyEquivalent: "")
             item.setImageIfDesired(systemSymbolName: "eye.fill")
             item.state = readonly ? .on : .off
@@ -1272,10 +1240,6 @@ extension Ghostty {
 
         @objc func resetTerminal(_ sender: Any) {
             performMenuCommand(.reset)
-        }
-
-        @objc func toggleTerminalInspector(_ sender: Any) {
-            performMenuCommand(.toggleInspector)
         }
 
         @IBAction func changeTitle(_ sender: Any) {

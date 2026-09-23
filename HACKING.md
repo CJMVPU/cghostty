@@ -66,9 +66,9 @@ CI 只缓存 `zig-pkg`，键由工具链和依赖清单决定；不再缓存 `.z
 
 ## 工具链与依赖
 
-Zig 安装版本和 Apple Silicon 归档 SHA-256 集中在 `scripts/zig-toolchain.json`；安装脚本和 CI 读取同一份记录。更新工具链时同步 `build.zig.zon` 的 `minimum_zig_version`。`scripts/check-versions.py` 检查两者一致，并检查 simdutf 内置源码和 libpng 配置头与各自包清单的版本一致。
+Zig 安装版本和 Apple Silicon 归档 SHA-256 集中在 `scripts/zig-toolchain.json`；安装脚本和 CI 读取同一份记录。更新工具链时同步 `build.zig.zon` 的 `minimum_zig_version`。`scripts/check-versions.py` 检查两者一致，并检查 simdutf 内置源码与其包清单的版本一致。
 
-C/C++ 依赖版本表直接从 `pkg/*/build.zig.zon` 生成，见 `pkg/README.md`。更新依赖及生成文件后运行 `python3 scripts/check-versions.py --update-docs`，再运行默认检查。检查同时核对版本与源码归档 URL，以及 ImGui 与 Dear Bindings 的匹配关系；默认模式只读，表格过期时给出更新命令。Wuffs 按源码提交快照记录，维护状态和生成说明保留为人工维护的正文。
+C/C++ 依赖版本表直接从 `pkg/*/build.zig.zon` 生成，见 `pkg/README.md`。更新依赖及生成文件后运行 `python3 scripts/check-versions.py --update-docs`，再运行默认检查。检查同时核对版本与源码归档 URL；默认模式只读，表格过期时给出更新命令。Wuffs 按源码提交快照记录，维护状态和生成说明保留为人工维护的正文。
 
 链接与路径识别使用 PCRE2，渲染高亮和点击定位共用 UTF-8 匹配及资源预算。修改匹配行为时运行 `(cd pkg/pcre2 && zig build test)`，并定向测试 `url regex`、`StringMap`、`renderCellMap`；tmux 控制消息由字节字段解析器处理，对应 `tmux` 过滤测试。封装和升级说明见 `pkg/pcre2/README.md`。
 
@@ -101,7 +101,9 @@ Xcode scheme 和 Swift 模块仍为 `Ghostty`，C 桥接模块为 `GhosttyKit`�
 
 命令面板使用 `macos/Sources/Ghostty/CommandPalette.xcstrings`，支持英文、简体中文、繁体中文和日文，随 macOS 应用语言选择译文。新增内置命令时同步标题、说明和三套译文，运行 `python3 scripts/check-localizations.py` 检查覆盖。自定义命令文本及动作标识不参与翻译。原有译者署名见 `docs/TRANSLATORS.md`；其他语言可从 Git 历史查询。构建无需 gettext。
 
-默认文楷字体安装到应用 `Contents/Resources/cghostty/fonts/LXGWWenKaiMono-Medium.ttf`，由 CoreText 按文件 URL 加载；字体文件不嵌入可执行文件。字体测试使用同一份锁定依赖中的文件。终端字体统一使用 CoreText；Inspector 仍使用其自身的 FreeType 依赖。
+默认文楷字体安装到应用 `Contents/Resources/cghostty/fonts/LXGWWenKaiMono-Medium.ttf`，由 CoreText 按文件 URL 加载；字体文件不嵌入可执行文件。字体测试使用同一份锁定依赖中的文件。终端字体统一使用 CoreText。Inspector 及 Dear ImGui、FreeType、libpng、独立 zlib 依赖已移除；常规日志和自动化测试保留。PNG 解码使用 Wuffs，Kitty 压缩图片解压使用 Zig 标准库。
+
+Inspector 菜单、命令面板入口和默认 `super+alt+i` 绑定已移除。旧配置里的 `inspector:toggle/show/hide` 动作会报无效动作，应删除对应绑定；其他快捷键和配置继续生效。
 
 `+list-themes`、`+list-colors`、`+list-keybinds` 只输出文本，`--plain` 保留兼容。主题名称、主题文件加载及配置中的 `theme = ...` 不变；不再提供终端交互预览或自动写入主题配置。
 

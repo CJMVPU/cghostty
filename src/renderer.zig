@@ -16,7 +16,6 @@ pub const SmoothCursor = @import("renderer/SmoothCursor.zig");
 pub const CursorTrail = @import("renderer/CursorTrail.zig");
 pub const Metal = @import("renderer/Metal.zig");
 pub const Options = @import("renderer/Options.zig");
-pub const Overlay = @import("renderer/Overlay.zig");
 pub const Thread = @import("renderer/Thread.zig");
 pub const State = @import("renderer/State.zig");
 pub const CursorStyle = cursor.Style;

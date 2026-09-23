@@ -35,15 +35,11 @@
         },
 
         // C libs
-        .dcimgui = .{ .path = "./pkg/dcimgui", .lazy = true },
-        .freetype = .{ .path = "./pkg/freetype", .lazy = true },
         .highway = .{ .path = "./pkg/highway", .lazy = true },
-        .libpng = .{ .path = "./pkg/libpng", .lazy = true },
         .macos = .{ .path = "./pkg/macos", .lazy = true },
         .pcre2 = .{ .path = "./pkg/pcre2", .lazy = true },
         .simdutf = .{ .path = "./pkg/simdutf", .lazy = true },
         .wuffs = .{ .path = "./pkg/wuffs", .lazy = true },
-        .zlib = .{ .path = "./pkg/zlib", .lazy = true },
 
         // Fonts
         .lxgw_wenkai = .{

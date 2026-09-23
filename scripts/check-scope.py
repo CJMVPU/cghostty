@@ -27,6 +27,10 @@ for name in ('src/apprt/gtk', 'src/apprt/gtk.zig', 'src/main_wasm.zig',
              'test/wasm-alloc.mjs', 'pkg/glslang', 'pkg/spirv-cross',
              'src/renderer/shadertoy.zig',
              'src/build/GhosttyLibVt.zig', 'src/build/webgen', 'example',
+             'src/inspector', 'src/renderer/Overlay.zig',
+             'pkg/dcimgui', 'pkg/freetype', 'pkg/libpng', 'pkg/zlib',
+             'macos/Sources/Ghostty/Ghostty.Inspector.swift',
+             'macos/Sources/Ghostty/Surface View/InspectorView.swift',
              'src/build/GhosttyI18n.zig', 'src/os/i18n.zig', 'pkg/libintl', 'po',
              'pkg/harfbuzz', 'src/font/backend.zig', 'src/font/face/freetype.zig',
              'src/font/shaper/harfbuzz.zig', 'src/font/shaper/noop.zig', 'src/stb',
@@ -124,6 +128,10 @@ if args.app:
     help_text = subprocess.check_output([str(executables[0]), '+help'], text=True)
     check('+new-window' not in help_text and '+new-tab' not in help_text and '+toggle-quick-terminal' not in help_text,
           'GTK-only IPC action remains in the CLI')
+    actions = subprocess.check_output([str(executables[0]), '+list-actions'], text=True)
+    bindings = subprocess.check_output([str(executables[0]), '+list-keybinds', '--default'], text=True)
+    check('inspector' not in actions.lower() and 'inspector' not in bindings.lower(),
+          'Removed Inspector action or default binding is still exposed')
     subprocess.run(['codesign', '--verify', '--deep', '--strict', str(app)], check=True)
 
 print('PASS: macOS arm64 scope, independent identity, unsupported targets and removed build options' +

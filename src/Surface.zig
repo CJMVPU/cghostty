@@ -33,7 +33,6 @@ const Duration = configpkg.Config.Duration;
 const input = @import("input.zig");
 const App = @import("App.zig");
 const internal_os = @import("os/main.zig");
-const inspectorpkg = @import("inspector/main.zig");
 const SurfaceMouse = @import("surface_mouse.zig");
 const SearchSession = @import("surface/SearchSession.zig");
 const IOSession = @import("surface/IOSession.zig");
@@ -118,9 +117,6 @@ last_binding_trigger: u64 = 0,
 
 /// The terminal IO handler.
 io: *IOSession,
-
-/// Terminal inspector
-inspector: ?*inspectorpkg.Inspector = null,
 
 /// All our sizing information.
 size: rendererpkg.Size,
@@ -675,11 +671,6 @@ pub fn deinit(self: *Surface) void {
     self.io.destroy();
     self.render.destroy();
 
-    if (self.inspector) |v| {
-        v.deinit(self.alloc);
-        self.alloc.destroy(v);
-    }
-
     // Clean up our keyboard state
     for (self.keyboard.sequence_queued.items) |req| req.deinit();
     self.keyboard.sequence_queued.deinit(self.alloc);
@@ -732,55 +723,6 @@ fn queueIo(
     }
 
     self.io.termio.queueMessage(msg, mutex);
-}
-
-/// Activate the inspector. This will begin collecting inspection data.
-/// This will not affect the GUI. The GUI must use performAction to
-/// show/hide the inspector UI.
-pub fn activateInspector(self: *Surface) !void {
-    if (self.inspector != null) return;
-
-    // Setup the inspector
-    const ptr = try self.alloc.create(inspectorpkg.Inspector);
-    errdefer self.alloc.destroy(ptr);
-    ptr.* = try inspectorpkg.Inspector.init(self.alloc);
-    errdefer ptr.deinit(self.alloc);
-    self.inspector = ptr;
-    errdefer self.inspector = null;
-
-    // Put the inspector onto the render state
-    {
-        self.render.state.mutex.lockUncancelable(global.io());
-        defer self.render.state.mutex.unlock(global.io());
-        assert(self.render.state.inspector == null);
-        self.render.state.inspector = self.inspector;
-    }
-
-    // Notify our components we have an inspector active
-    _ = self.render.thread.mailbox.push(global.io(), .{ .inspector = true }, .{ .forever = {} });
-    self.queueIo(.{ .inspector = true }, .unlocked);
-}
-
-/// Deactivate the inspector and stop collecting any information.
-pub fn deactivateInspector(self: *Surface) void {
-    const insp = self.inspector orelse return;
-
-    // Remove the inspector from the render state
-    {
-        self.render.state.mutex.lockUncancelable(global.io());
-        defer self.render.state.mutex.unlock(global.io());
-        assert(self.render.state.inspector != null);
-        self.render.state.inspector = null;
-    }
-
-    // Notify our components we have deactivated inspector
-    _ = self.render.thread.mailbox.push(global.io(), .{ .inspector = false }, .{ .forever = {} });
-    self.queueIo(.{ .inspector = false }, .unlocked);
-
-    // Deinit the inspector
-    insp.deinit(self.alloc);
-    self.alloc.destroy(insp);
-    self.inspector = null;
 }
 
 /// True if the surface requires confirmation to quit. This should be called
@@ -2432,38 +2374,10 @@ pub fn keyCallback(
 
     // Crash metadata in case we crash in here
 
-    // Setup our inspector event if we have an inspector.
-    var insp_ev: ?inspectorpkg.KeyEvent = if (self.inspector != null) ev: {
-        var copy = event;
-        copy.utf8 = "";
-        if (event.utf8.len > 0) copy.utf8 = try self.alloc.dupe(u8, event.utf8);
-        break :ev .{ .event = copy };
-    } else null;
-
-    // When we're done processing, we always want to add the event to
-    // the inspector.
-    defer if (insp_ev) |ev| ev: {
-        // We have to check for the inspector again because our keybinding
-        // might close it.
-        const insp = self.inspector orelse {
-            ev.deinit(self.alloc);
-            break :ev;
-        };
-
-        if (insp.recordKeyEvent(self.alloc, ev)) {
-            self.queueRender() catch {};
-        } else |err| {
-            log.warn("error adding key event to inspector err={}", .{err});
-        }
-    };
-
     // Handle keybindings first. We need to handle this on all events
     // (press, repeat, release) because a press may perform a binding but
     // a release should not encode if we consumed the press.
-    if (try self.maybeHandleBinding(
-        event,
-        if (insp_ev) |*ev| ev else null,
-    )) |v| return v;
+    if (try self.maybeHandleBinding(event)) |v| return v;
     // If we allow KAM and KAM is enabled then we do nothing.
     if (self.config.vt_kam_allowed) {
         self.render.state.mutex.lockUncancelable(global.io());
@@ -2563,10 +2477,7 @@ pub fn keyCallback(
 
     // Encode and send our key. If we didn't encode anything, then we
     // return the effect as ignored.
-    if (try self.encodeKey(
-        event,
-        if (insp_ev) |*ev| ev else null,
-    )) |write_req| {
+    if (try self.encodeKey(event)) |write_req| {
         // If our process is exited and we press a key that results in
         // an encoded value, we close the surface. We want to eventually
         // move this behavior to the apprt probably.
@@ -2613,7 +2524,6 @@ pub fn keyCallback(
 fn maybeHandleBinding(
     self: *Surface,
     event: input.KeyEvent,
-    insp_ev: ?*inspectorpkg.KeyEvent,
 ) !?InputEffect {
     switch (event.action) {
         // Release events never trigger a binding but we need to check if
@@ -2696,7 +2606,7 @@ fn maybeHandleBinding(
             // Store this event so that we can drain and encode on invalid.
             // We don't need to cap this because it is naturally capped by
             // the config validation.
-            if (try self.encodeKey(event, insp_ev)) |req| {
+            if (try self.encodeKey(event)) |req| {
                 self.keyboard.sequence_queued.append(self.alloc, req) catch |err| {
                     req.deinit();
                     return err;
@@ -2822,18 +2732,6 @@ fn maybeHandleBinding(
         // Store our last trigger so we don't encode the release event
         self.keyboard.last_trigger = event.bindingHash();
 
-        if (insp_ev) |ev| {
-            ev.binding = self.alloc.dupe(
-                input.Binding.Action,
-                actions,
-            ) catch |err| binding: {
-                log.warn(
-                    "error allocating binding action for inspector err={}",
-                    .{err},
-                );
-                break :binding &.{};
-            };
-        }
         return .consumed;
     }
 
@@ -2952,7 +2850,6 @@ fn endKeySequence(
 fn encodeKey(
     self: *Surface,
     event: input.KeyEvent,
-    insp_ev: ?*inspectorpkg.KeyEvent,
 ) !?termio.Message.WriteReq {
     const write_req: termio.Message.WriteReq = req: {
         // Build our encoding options, which requires the lock.
@@ -3004,20 +2901,6 @@ fn encodeKey(
             .data = try alloc_writer.toOwnedSlice(),
         } };
     };
-
-    // Copy the encoded data into the inspector event if we have one.
-    // We do this before the mailbox because the IO thread could
-    // release the memory before we get a chance to copy it.
-    if (insp_ev) |ev| pty: {
-        const slice = write_req.slice();
-        const copy = self.alloc.alloc(u8, slice.len) catch |err| {
-            log.warn("error allocating pty data for inspector err={}", .{err});
-            break :pty;
-        };
-        errdefer self.alloc.free(copy);
-        @memcpy(copy, slice);
-        ev.pty = copy;
-    }
 
     return write_req;
 }
@@ -3526,11 +3409,6 @@ pub fn mouseButtonCallback(
     // Crash metadata in case we crash in here
 
     // log.debug("mouse action={} button={} mods={}", .{ action, button, mods });
-
-    // If we have an inspector, we always queue a render
-    if (self.inspector != null) {
-        defer self.queueRender() catch {};
-    }
 
     // Always record our latest mouse state
     self.mouse.click_state[@intCast(@intFromEnum(button))] = action;
@@ -4317,19 +4195,6 @@ pub fn cursorPosCallback(
     // want to set it when we're not selecting or doing any other mouse
     // event.
     self.render.state.mouse.point = null;
-
-    // If we have an inspector, we need to always record position information
-    if (self.inspector) |insp| {
-        insp.mouse.last_xpos = pos.x;
-        insp.mouse.last_ypos = pos.y;
-
-        const screen: *terminal.Screen = self.render.state.terminal.screens.active;
-        insp.mouse.last_point = screen.pages.pin(.{ .viewport = .{
-            .x = pos_vp.x,
-            .y = pos_vp.y,
-        } });
-        try self.queueRender();
-    }
 
     // Handle link hovering
     // We refresh links when
@@ -5165,17 +5030,6 @@ pub fn performBindingAction(self: *Surface, action: input.Binding.Action) !bool 
                 try self.queueRender();
             }
         },
-
-        .inspector => |mode| return try self.rt_app.performAction(
-            .{ .surface = self },
-            .inspector,
-            switch (mode) {
-                inline else => |tag| @field(
-                    apprt.action.Inspector,
-                    @tagName(tag),
-                ),
-            },
-        ),
 
         .close_surface => self.close(),
 

@@ -55,7 +55,6 @@ class AppDelegate: NSObject,
     var menuChangeTabTitle: NSMenuItem?
     var menuReadonly: NSMenuItem?
     var menuQuickTerminal: NSMenuItem?
-    var menuTerminalInspector: NSMenuItem?
     var menuCommandPalette: NSMenuItem?
 
     var menuEqualizeSplits: NSMenuItem?
@@ -982,7 +981,6 @@ extension AppDelegate {
         self.menuCommandPalette?.setImageIfDesired(systemSymbolName: "filemenu.and.selection")
         self.menuQuickTerminal?.setImageIfDesired(systemSymbolName: "apple.terminal")
         self.menuChangeTabTitle?.setImageIfDesired(systemSymbolName: "pencil.line")
-        self.menuTerminalInspector?.setImageIfDesired(systemSymbolName: "scope")
         self.menuReadonly?.setImageIfDesired(systemSymbolName: "eye.fill")
         self.menuSetAsDefaultTerminal?.setImageIfDesired(systemSymbolName: "star.fill")
         self.menuToggleFullScreen?.setImageIfDesired(systemSymbolName: "square.arrowtriangle.4.outward")

@@ -3566,29 +3566,6 @@
         }
       }
     },
-    "Toggle Inspector": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "切换调试器"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "切換檢查工具"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "インスペクタを切り替え"
-          }
-        }
-      }
-    },
     "Toggle Maximize": {
       "extractionState": "manual",
       "localizations": {
@@ -3815,29 +3792,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "現在のウィンドウのフルスクリーン表示を切り替えます。"
-          }
-        }
-      }
-    },
-    "Toggle the inspector.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "切换终端调试器。"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "切換檢查工具。"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "インスペクタの表示を切り替えます。"
           }
         }
       }

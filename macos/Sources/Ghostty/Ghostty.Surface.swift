@@ -77,7 +77,6 @@ extension Ghostty {
             case scrollToSelection
             case toggleReadonly
             case reset
-            case toggleInspector
             case resetFontSize
 
             fileprivate var cValue: ghostty_surface_command_e {
@@ -95,7 +94,6 @@ extension Ghostty {
                 case .scrollToSelection: GHOSTTY_COMMAND_SCROLL_TO_SELECTION
                 case .toggleReadonly: GHOSTTY_COMMAND_TOGGLE_READONLY
                 case .reset: GHOSTTY_COMMAND_RESET
-                case .toggleInspector: GHOSTTY_COMMAND_INSPECTOR
                 case .resetFontSize: GHOSTTY_COMMAND_RESET_FONT_SIZE
                 }
             }
@@ -214,11 +212,6 @@ extension Ghostty {
             guard let value = ghostty_surface_quicklook_font(surface) else { return nil }
             return Unmanaged<CTFont>.fromOpaque(value).takeRetainedValue()
         }
-        @MainActor var inspector: Ghostty.Inspector? {
-            guard let value = ghostty_surface_inspector(surface) else { return nil }
-            return Ghostty.Inspector(cInspector: value)
-        }
-        @MainActor func freeInspector() { ghostty_inspector_free(surface) }
 
         enum SearchDirection {
             case next

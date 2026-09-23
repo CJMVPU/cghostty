@@ -30,7 +30,6 @@ extension Ghostty {
         var derivedConfig: SurfaceView.DerivedConfig
         var backgroundColor: Color?
         var bell: Bool = false
-        var inspectorVisible: Bool = false
 
         init(derivedConfig: SurfaceView.DerivedConfig = .init()) {
             self.derivedConfig = derivedConfig

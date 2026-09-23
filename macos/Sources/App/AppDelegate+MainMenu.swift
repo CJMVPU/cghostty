@@ -149,9 +149,6 @@ extension AppDelegate {
         menuQuickTerminal.target = self
         menuQuickTerminal.keyEquivalentModifierMask = []
         viewMenu.addItem(.separator())
-        let menuTerminalInspector = shortcut("inspector:toggle", viewMenu.addItem(withTitle: "Terminal Inspector", action: NSSelectorFromString("toggleTerminalInspector:"), keyEquivalent: ""))
-        self.menuTerminalInspector = menuTerminalInspector
-        menuTerminalInspector.keyEquivalentModifierMask = []
 
         let windowMenu = NSMenu(title: "Window")
         main.addItem(withTitle: "Window", action: nil, keyEquivalent: "").submenu = windowMenu

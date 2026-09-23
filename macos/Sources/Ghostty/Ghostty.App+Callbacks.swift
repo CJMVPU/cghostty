@@ -307,15 +307,6 @@ extension Ghostty.App {
         case GHOSTTY_ACTION_TOGGLE_SPLIT_ZOOM:
             return toggleSplitZoom(app, target: target)
 
-        case GHOSTTY_ACTION_INSPECTOR:
-            controlInspector(app, target: target, mode: action.action.inspector)
-
-        case GHOSTTY_ACTION_RENDER_INSPECTOR:
-            renderInspector(app, target: target)
-
-        case GHOSTTY_ACTION_EXPORT_TERMINAL_IO:
-            return exportTerminalIO(app, target: target, v: action.action.export_terminal_io)
-
         case GHOSTTY_ACTION_DESKTOP_NOTIFICATION:
             showDesktopNotification(app, target: target, n: action.action.desktop_notification)
 
@@ -1012,50 +1003,6 @@ extension Ghostty.App {
         return true
     }
 
-    private static func controlInspector(
-        _ app: ghostty_app_t,
-        target: ghostty_target_s,
-        mode: ghostty_action_inspector_e) {
-        guard let surfaceView = self.surfaceView(for: target) else { return }
-        guard let visibility = Ghostty.Inspector.Visibility(coreValue: mode) else { return }
-        surfaceView.controlInspector(visibility)
-    }
-
-    private static func exportTerminalIO(
-        _ app: ghostty_app_t,
-        target: ghostty_target_s,
-        v: ghostty_action_export_terminal_io_s
-    ) -> Bool {
-        guard target.tag == GHOSTTY_TARGET_SURFACE,
-              let surface = target.target.surface,
-              let surfaceView = self.surfaceView(from: surface),
-              let window = surfaceView.window,
-              let contents = v.contents
-        else { return false }
-
-        // The action data is borrowed for the duration of this callback,
-        // so copy it before presenting the asynchronous save panel.
-        let data = Data(bytes: contents, count: v.len)
-        DispatchQueue.main.async {
-            let panel = NSSavePanel()
-            panel.allowedContentTypes = [.plainText]
-            panel.canCreateDirectories = true
-            panel.nameFieldStringValue = "cghostty-terminal-io.txt"
-            panel.beginSheetModal(for: window) { response in
-                guard response == .OK, let url = panel.url else { return }
-                do {
-                    try data.write(to: url, options: .atomic)
-                } catch {
-                    Ghostty.logger.error(
-                        "Failed to export terminal IO events: \(error, privacy: .public)"
-                    )
-                }
-            }
-        }
-
-        return true
-    }
-
     private static func showDesktopNotification(
         _ app: ghostty_app_t,
         target: ghostty_target_s,
@@ -1449,13 +1396,6 @@ extension Ghostty.App {
             guard let surfaceView else { return }
             surfaceView.cellSize = surfaceView.convertFromBacking(backingSize)
         }
-    }
-
-    private static func renderInspector(
-        _ app: ghostty_app_t,
-        target: ghostty_target_s) {
-        guard let surfaceView = self.surfaceView(for: target) else { return }
-        surfaceView.inspectorView?.needsDisplay = true
     }
 
     private static func rendererHealth(

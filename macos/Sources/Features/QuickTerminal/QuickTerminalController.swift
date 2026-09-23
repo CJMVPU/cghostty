@@ -625,11 +625,6 @@ class QuickTerminalController: BaseTerminalController {
         surface.perform(.toggleFullscreen)
     }
 
-    @IBAction func toggleTerminalInspector(_ sender: Any?) {
-        guard let surface = focusedSurface?.surfaceModel else { return }
-        surface.perform(.toggleInspector)
-    }
-
     // MARK: Notifications
 
     @objc private func applicationWillTerminate(_ notification: Notification) {

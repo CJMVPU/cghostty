@@ -53,7 +53,7 @@ pub fn init(b: *std.Build, version: []const u8) !Config {
         };
         @field(config, &field) = b.option(bool, "emit-" ++ name, "Build/install " ++ name) orelse @field(config, &field);
     }
-    for ([_][]const u8{ "freetype", "libpng", "zlib", "simdutf" }) |dep| {
+    for ([_][]const u8{"simdutf"}) |dep| {
         _ = b.systemIntegrationOption(dep, .{ .default = false });
     }
     return config;

@@ -120,7 +120,8 @@ protocol behavior remain product requirements.
   debounce task; native title-field frame observers have explicit lifetimes.
   Window focus and the latest scrollbar value belong to SurfaceState. Search focus
   is an explicit command with overlay ownership, so a disappearing old overlay
-  cannot unregister its replacement. Inspector visibility is observable presentation state.
+  cannot unregister its replacement. Terminal leaves directly host SurfaceWrapper;
+  there is no Inspector container or separate debug rendering/input lifecycle.
 - `BaseTerminalController+Splits` centralizes split movement, resizing, zoom, removal,
   focus transfer and inverse undo registration. Empty-tree close/restore stays with
   the concrete window controller. The app owns its expiring undo manager; a cross-window

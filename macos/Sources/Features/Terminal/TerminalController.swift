@@ -1332,11 +1332,6 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         surface.perform(.toggleFullscreen)
     }
 
-    @IBAction func toggleTerminalInspector(_ sender: Any?) {
-        guard let surface = focusedSurface?.surfaceModel else { return }
-        surface.perform(.toggleInspector)
-    }
-
     // MARK: - TerminalViewDelegate
 
     override func focusedSurfaceDidChange(to: Ghostty.SurfaceView?) {

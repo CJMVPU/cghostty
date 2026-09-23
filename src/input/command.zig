@@ -551,12 +551,6 @@ fn actionCommands(action: Action.Key) []const Command {
             .description = "Reset the window size to the default.",
         }},
 
-        .inspector => comptime &.{.{
-            .action = .{ .inspector = .toggle },
-            .title = "Toggle Inspector",
-            .description = "Toggle the inspector.",
-        }},
-
         .show_on_screen_keyboard => comptime &.{.{
             .action = .show_on_screen_keyboard,
             .title = "Show On-Screen Keyboard",

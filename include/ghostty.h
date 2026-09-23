@@ -61,7 +61,6 @@ typedef SSIZE_T ssize_t;
 typedef void* ghostty_app_t;
 typedef void* ghostty_config_t;
 typedef void* ghostty_surface_t;
-typedef void* ghostty_inspector_t;
 
 // All the types below are fully defined and must be kept in sync with
 // their Zig counterparts. Any changes to these types MUST have an associated
@@ -669,18 +668,6 @@ typedef enum {
   GHOSTTY_SECURE_INPUT_TOGGLE,
 } ghostty_action_secure_input_e;
 
-// apprt.action.Inspector
-typedef enum {
-  GHOSTTY_INSPECTOR_TOGGLE,
-  GHOSTTY_INSPECTOR_SHOW,
-  GHOSTTY_INSPECTOR_HIDE,
-} ghostty_action_inspector_e;
-
-// apprt.action.ExportTerminalIO.C
-typedef struct {
-  const char* contents;
-  size_t len;
-} ghostty_action_export_terminal_io_s;
 
 // apprt.action.QuitTimer
 typedef enum {
@@ -955,9 +942,6 @@ typedef enum {
   GHOSTTY_ACTION_CELL_SIZE,
   GHOSTTY_ACTION_SCROLLBAR,
   GHOSTTY_ACTION_RENDER,
-  GHOSTTY_ACTION_INSPECTOR,
-  GHOSTTY_ACTION_RENDER_INSPECTOR,
-  GHOSTTY_ACTION_EXPORT_TERMINAL_IO,
   GHOSTTY_ACTION_DESKTOP_NOTIFICATION,
   GHOSTTY_ACTION_SET_TITLE,
   GHOSTTY_ACTION_SET_TAB_TITLE,
@@ -1022,8 +1006,6 @@ typedef union {
   ghostty_action_initial_size_s initial_size;
   ghostty_action_cell_size_s cell_size;
   ghostty_action_scrollbar_s scrollbar;
-  ghostty_action_inspector_e inspector;
-  ghostty_action_export_terminal_io_s export_terminal_io;
   ghostty_action_desktop_notification_s desktop_notification;
   ghostty_action_set_title_s set_title;
   ghostty_action_set_title_s set_tab_title;
@@ -1203,7 +1185,6 @@ typedef enum {
   GHOSTTY_COMMAND_SCROLL_TO_SELECTION,
   GHOSTTY_COMMAND_TOGGLE_READONLY,
   GHOSTTY_COMMAND_RESET,
-  GHOSTTY_COMMAND_INSPECTOR,
   GHOSTTY_COMMAND_RESET_FONT_SIZE,
 } ghostty_surface_command_e;
 GHOSTTY_API bool ghostty_surface_command(ghostty_surface_t, ghostty_surface_command_e);
@@ -1237,31 +1218,6 @@ GHOSTTY_API void ghostty_surface_free_text(ghostty_surface_t, ghostty_text_s*);
 GHOSTTY_API void ghostty_surface_set_display_id(ghostty_surface_t, uint32_t);
 GHOSTTY_API void* ghostty_surface_quicklook_font(ghostty_surface_t);
 GHOSTTY_API bool ghostty_surface_quicklook_word(ghostty_surface_t, ghostty_text_s*);
-#endif
-
-GHOSTTY_API ghostty_inspector_t ghostty_surface_inspector(ghostty_surface_t);
-GHOSTTY_API void ghostty_inspector_free(ghostty_surface_t);
-GHOSTTY_API void ghostty_inspector_set_focus(ghostty_inspector_t, bool);
-GHOSTTY_API void ghostty_inspector_set_content_scale(ghostty_inspector_t, double, double);
-GHOSTTY_API void ghostty_inspector_set_size(ghostty_inspector_t, uint32_t, uint32_t);
-GHOSTTY_API void ghostty_inspector_mouse_button(ghostty_inspector_t,
-                                                   ghostty_input_mouse_state_e,
-                                                   ghostty_input_mouse_button_e,
-                                                   ghostty_input_mods_e);
-GHOSTTY_API void ghostty_inspector_mouse_pos(ghostty_inspector_t, double, double);
-GHOSTTY_API void ghostty_inspector_mouse_scroll(ghostty_inspector_t,
-                                                   double,
-                                                   double,
-                                                   ghostty_input_scroll_mods_t);
-GHOSTTY_API void ghostty_inspector_key(ghostty_inspector_t,
-                                          ghostty_input_action_e,
-                                          ghostty_input_key_e,
-                                          ghostty_input_mods_e);
-GHOSTTY_API void ghostty_inspector_text(ghostty_inspector_t, const char*);
-
-#ifdef __APPLE__
-GHOSTTY_API bool ghostty_inspector_metal_init(ghostty_inspector_t, void*);
-GHOSTTY_API void ghostty_inspector_metal_render(ghostty_inspector_t, void*, void*);
 #endif
 
 // APIs I'd like to get rid of eventually but are still needed for now.
