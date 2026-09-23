@@ -47,6 +47,25 @@ python3 scripts/check-scope.py --app macos/build/ReleaseLocal/cghostty.app
 
 Zig 改动使用 `zig fmt`；Swift 使用 `swiftlint lint --strict --fix`。完整核心测试为 `zig build test`，通常优先运行相关过滤测试。终端压缩、快照等子目录的测试约定继续适用。
 
+## 构建缓存与磁盘占用
+
+`.zig-cache` 是可重新生成的编译缓存。源码、编译模式和测试过滤条件变化会生成不同的缓存产物，长期开发可能累积几十 GiB。它不是应用安装体积，也不是终端滚动历史。`zig-pkg` 是下载的依赖源码；`zig-out`、`macos/build` 和 `artifacts` 分别包含核心安装产物、应用/测试构建及发行包。
+
+日常使用 `nu macos/build.nu` 时，开始构建前检查 `.zig-cache`；超过 8 GiB 且没有 Zig/Xcode 构建活动时清空编译缓存，下次核心构建会重新编译。依赖下载、应用、测试结果和发行包均保留。8 GiB 是构建前清理阈值，不是运行中的硬配额。根入口 `zig build` 调用应用脚本时，外层 Zig 仍在运行，因此安全检查会跳过清理。长期只直接运行 `zig build test` 的开发者应在构建结束后执行维护命令。
+
+```sh
+python3 scripts/build-cache.py                 # 只查看大小
+python3 scripts/build-cache.py --trim          # 超过 8 GiB 时清理
+python3 scripts/build-cache.py --trim --max-gib 4
+python3 scripts/build-cache.py --clear         # 不论大小清空编译缓存
+```
+
+不要在清理期间另行启动构建。脚本发现构建进程、无法读取进程列表、缓存是符号链接或包含 Git 跟踪文件时不会删除。执行环境禁止读取进程列表时，在正常终端运行维护命令。
+
+CI 只缓存 `zig-pkg`，键由工具链和依赖清单决定；不再缓存 `.zig-cache` 或整个全局 Zig 编译缓存，也不按提交 SHA 新建缓存。不使用旧键的回退恢复，以免重新带入已经删除的依赖。GitHub 中已有的旧缓存不受这次本地清理影响；本改动停止继续创建这种大缓存。
+
+## 工具链与依赖
+
 Zig 安装版本和 Apple Silicon 归档 SHA-256 集中在 `scripts/zig-toolchain.json`；安装脚本和 CI 读取同一份记录。更新工具链时同步 `build.zig.zon` 的 `minimum_zig_version`。`scripts/check-versions.py` 检查两者一致，并检查 simdutf 内置源码和 libpng 配置头与各自包清单的版本一致。
 
 C/C++ 依赖版本表直接从 `pkg/*/build.zig.zon` 生成，见 `pkg/README.md`。更新依赖及生成文件后运行 `python3 scripts/check-versions.py --update-docs`，再运行默认检查。检查同时核对版本与源码归档 URL，以及 ImGui 与 Dear Bindings 的匹配关系；默认模式只读，表格过期时给出更新命令。Wuffs 按源码提交快照记录，维护状态和生成说明保留为人工维护的正文。

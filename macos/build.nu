@@ -31,6 +31,12 @@ def main [
         error make {msg: "--ui-tests and --only-testing require --action test."}
     }
     let root = ($env.FILE_PWD | path dirname)
+    # Bound accumulated compilation generations before starting a new build.
+    # The helper skips cleanup when another Zig/Xcode build is still active.
+    if $action != "clean" {
+        ^python3 ($root | path join "scripts/build-cache.py") --trim
+        if $env.LAST_EXIT_CODE != 0 { exit $env.LAST_EXIT_CODE }
+    }
     let project = ($env.FILE_PWD | path join "Ghostty.xcodeproj")
     # XCTest launches the app and runner from SYMROOT. Keeping these bundles in
     # a checkout under Documents causes TCC requests when they load resources.

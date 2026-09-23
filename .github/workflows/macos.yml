@@ -20,7 +20,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         id: checkout
       - name: Set up Apple Silicon tools
-        id: tools
         run: |
           mkdir -p macos/build/ci-logs
           exec > >(tee macos/build/ci-logs/setup.log) 2>&1
@@ -30,7 +29,6 @@ jobs:
           brew install nushell swiftlint actionlint
           zig_bin="$(bash scripts/install-zig.sh "$RUNNER_TEMP/cghostty-tools")"
           echo "$zig_bin" >> "$GITHUB_PATH"
-          echo "sdk=$(xcrun --show-sdk-build-version)" >> "$GITHUB_OUTPUT"
           xcodebuild -downloadComponent MetalToolchain
           xcrun --toolchain Metal metal --version
       - name: Record build environment
@@ -41,12 +39,10 @@ jobs:
           cat macos/build/ci-logs/environment.md >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: |
-            ~/.cache/zig
-            .zig-cache
-            zig-pkg
-          key: macos-arm64-${{ steps.tools.outputs.sdk }}-${{ hashFiles('scripts/zig-toolchain.json', 'build.zig.zon', 'pkg/**/build.zig.zon') }}-${{ github.sha }}
-          restore-keys: macos-arm64-${{ steps.tools.outputs.sdk }}-${{ hashFiles('scripts/zig-toolchain.json', 'build.zig.zon', 'pkg/**/build.zig.zon') }}-
+          # Downloaded source dependencies only. Compilation generations are
+          # large and disposable; never upload one copy per commit.
+          path: zig-pkg
+          key: zig-packages-v2-${{ hashFiles('scripts/zig-toolchain.json', 'build.zig.zon', 'pkg/**/build.zig.zon') }}
       - name: Check formatting and version records
         run: |
           {
