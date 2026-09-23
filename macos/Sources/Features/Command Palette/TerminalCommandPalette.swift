@@ -57,11 +57,7 @@ struct TerminalCommandPaletteView: View {
             // surface view we were overlaid on top of. There's probably a better way
             // to handle the first responder state here but I don't know it.
             if !newValue {
-                // Has to be on queue because onChange happens on a user-interactive
-                // thread and Xcode is mad about this call on that.
-                DispatchQueue.main.async {
-                    surfaceView.window?.makeFirstResponder(surfaceView)
-                }
+                surfaceView.windowRegistry.owner(of: surfaceView)?.restoreFocusAfterPalette()
             }
         }
     }

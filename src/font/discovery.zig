@@ -7,7 +7,6 @@ const opentype = @import("opentype.zig");
 const Collection = @import("main.zig").Collection;
 const DeferredFace = @import("main.zig").DeferredFace;
 const Face = @import("main.zig").Face;
-const Library = @import("main.zig").Library;
 const Presentation = @import("main.zig").Presentation;
 const Variation = @import("main.zig").face.Variation;
 const global = @import("../global.zig");
@@ -204,8 +203,8 @@ pub const Descriptor = struct {
 };
 
 pub const CoreText = struct {
-    pub fn init(lib: Library) CoreText {
-        _ = lib;
+    pub fn init() CoreText {
+
         // Required for the "interface" but does nothing for CoreText.
         return .{};
     }
@@ -827,10 +826,7 @@ test "coretext" {
     const testing = std.testing;
     const alloc = testing.allocator;
 
-    var lib = try Library.init(alloc);
-    defer lib.deinit();
-
-    var ct = CoreText.init(lib);
+    var ct = CoreText.init();
     defer ct.deinit();
     var it = try ct.discover(alloc, .{ .family = "Monaco", .size = 12 });
     defer it.deinit();
@@ -845,10 +841,7 @@ test "coretext codepoint" {
     const testing = std.testing;
     const alloc = testing.allocator;
 
-    var lib = try Library.init(alloc);
-    defer lib.deinit();
-
-    var ct = CoreText.init(lib);
+    var ct = CoreText.init();
     defer ct.deinit();
     var it = try ct.discover(alloc, .{ .codepoint = 'A', .size = 12 });
     defer it.deinit();

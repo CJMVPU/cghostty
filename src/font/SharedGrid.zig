@@ -29,7 +29,6 @@ const CodepointResolver = font.CodepointResolver;
 const Collection = font.Collection;
 const Face = font.Face;
 const Glyph = font.Glyph;
-const Library = font.Library;
 const Metrics = font.Metrics;
 const Presentation = font.Presentation;
 const Style = font.Style;
@@ -421,16 +420,15 @@ const GlyphKey = struct {
 
 const TestMode = enum { normal };
 
-fn testGrid(mode: TestMode, alloc: Allocator, lib: Library) !SharedGrid {
+fn testGrid(mode: TestMode, alloc: Allocator) !SharedGrid {
     const testFont = font.embedded.regular;
 
     var c = Collection.init();
-    c.load_options = .{ .library = lib };
+    c.load_options = .{};
 
     switch (mode) {
         .normal => {
             _ = try c.add(alloc, try .init(
-                lib,
                 testFont,
                 .{ .size = .{ .points = 12, .xdpi = 96, .ydpi = 96 } },
             ), .{
@@ -452,10 +450,7 @@ test getIndex {
     const alloc = testing.allocator;
     // const testEmoji = @import("test.zig").fontEmoji;
 
-    var lib = try Library.init(alloc);
-    defer lib.deinit();
-
-    var grid = try testGrid(.normal, alloc, lib);
+    var grid = try testGrid(.normal, alloc);
     defer grid.deinit(alloc);
 
     // Visible ASCII.
@@ -485,10 +480,7 @@ test "renderGlyph error after cache insert rolls back cache entry" {
     const testing = std.testing;
     const alloc = testing.allocator;
 
-    var lib = try Library.init(alloc);
-    defer lib.deinit();
-
-    var grid = try testGrid(.normal, alloc, lib);
+    var grid = try testGrid(.normal, alloc);
     defer grid.deinit(alloc);
 
     // Get the font index for 'A'
@@ -542,13 +534,10 @@ test "init error" {
 
         // Create a resolver for testing - we need to set up a minimal one.
         // The caller is responsible for cleaning up the resolver if init fails.
-        var lib = try Library.init(alloc);
-        defer lib.deinit();
 
         var c = Collection.init();
-        c.load_options = .{ .library = lib };
+        c.load_options = .{};
         _ = try c.add(alloc, try .init(
-            lib,
             font.embedded.regular,
             .{ .size = .{ .points = 12, .xdpi = 96, .ydpi = 96 } },
         ), .{

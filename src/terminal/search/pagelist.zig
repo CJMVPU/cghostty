@@ -595,7 +595,7 @@ test "feed discovers pages prepended after exhaustion" {
     // finalize keeps that node's identity, so the pin now has a `prev`.
     const old_first = pages.pages.first.?;
     {
-        var allocation = try pages.allocatePage(.{ .cols = 10, .rows = 2 });
+        var allocation = try PageList.TestSupport.allocatePage(pages, .{ .cols = 10, .rows = 2 });
         defer allocation.deinit();
         const page = allocation.page();
         page.size.rows = 2;

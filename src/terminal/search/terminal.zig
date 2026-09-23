@@ -697,7 +697,7 @@ test "feed after complete discovers prepended history" {
     // Add three older pages without changing the active screen or tracked pins.
     var restored_pages: usize = 0;
     for (0..3) |_| {
-        var allocation = try t.screens.active.pages.allocatePage(.{ .cols = 10, .rows = 1 });
+        var allocation = try @import("../PageList.zig").TestSupport.allocatePage(&t.screens.active.pages, .{ .cols = 10, .rows = 1 });
         defer allocation.deinit();
         const page = allocation.page();
         page.size.rows = 1;

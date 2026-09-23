@@ -805,7 +805,10 @@ extension Ghostty {
 
         override func becomeFirstResponder() -> Bool {
             let result = super.becomeFirstResponder()
-            if result { focusDidChange(true) }
+            if result {
+                windowRegistry.owner(of: self)?.surfaceDidFocus(self)
+                focusDidChange(true)
+            }
             return result
         }
 

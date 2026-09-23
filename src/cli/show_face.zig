@@ -148,10 +148,7 @@ fn runArgs(
         }
     }
 
-    var font_grid_set = font.SharedGridSet.init(alloc) catch |err| {
-        try stderr.print("Unable to initialize font grid set: {}", .{err});
-        return 1;
-    };
+    var font_grid_set = font.SharedGridSet.init(alloc);
     errdefer font_grid_set.deinit();
 
     const font_size: font.face.DesiredSize = .{

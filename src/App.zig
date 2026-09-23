@@ -70,7 +70,7 @@ config_conditional_state: configpkg.ConditionalState,
 /// if they are the first surface.
 first: bool = true,
 
-pub const CreateError = Allocator.Error || font.SharedGridSet.InitError;
+pub const CreateError = Allocator.Error;
 
 /// Create a new app instance. This returns a stable pointer to the app
 /// instance which is required for callbacks.
@@ -110,7 +110,7 @@ pub fn init(
     self: *App,
     alloc: Allocator,
 ) CreateError!void {
-    var font_grid_set = try font.SharedGridSet.init(alloc);
+    var font_grid_set = font.SharedGridSet.init(alloc);
     errdefer font_grid_set.deinit();
 
     self.* = .{

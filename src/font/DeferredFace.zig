@@ -10,7 +10,6 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const macos = @import("macos");
 const font = @import("main.zig");
-const Library = @import("main.zig").Library;
 const Face = @import("main.zig").Face;
 const Presentation = @import("main.zig").Presentation;
 
@@ -40,34 +39,25 @@ pub fn deinit(self: *DeferredFace) void {
     self.* = undefined;
 }
 
-/// Returns the family name of the font.
+/// Returns the family name in the caller's buffer.
 pub fn familyName(self: DeferredFace, buf: []u8) ![]const u8 {
     if (self.ct) |ct| {
         const family_name = ct.font.copyAttribute(.family_name) orelse
             return "unknown";
-        return family_name.cstringPtr(.utf8) orelse unsupported: {
-            break :unsupported family_name.cstring(buf, .utf8) orelse
-                return error.OutOfMemory;
-        };
+        defer family_name.release();
+        return family_name.cstring(buf, .utf8) orelse error.OutOfMemory;
     }
 
     return "";
 }
 
-/// Returns the name of this face. The memory is always owned by the
-/// face so it doesn't have to be freed.
+/// Returns the name of this face in the caller's buffer.
 pub fn name(self: DeferredFace, buf: []u8) ![]const u8 {
     if (self.ct) |ct| {
         const display_name = ct.font.copyDisplayName() orelse
             return self.familyName(buf);
-        return display_name.cstringPtr(.utf8) orelse unsupported: {
-            // "NULL if the internal storage of theString does not allow
-            // this to be returned efficiently." In this case, we need
-            // to allocate. But we can't return an allocated string because
-            // we don't have an allocator. Let's use the stack and log it.
-            break :unsupported display_name.cstring(buf, .utf8) orelse
-                return error.OutOfMemory;
-        };
+        defer display_name.release();
+        return display_name.cstring(buf, .utf8) orelse error.OutOfMemory;
     }
 
     return "";
@@ -76,18 +66,8 @@ pub fn name(self: DeferredFace, buf: []u8) ![]const u8 {
 /// Load the deferred font face. This does nothing if the face is loaded.
 pub fn load(
     self: *DeferredFace,
-    lib: Library,
     opts: font.face.Options,
 ) !Face {
-    return self.loadCoreText(lib, opts);
-}
-
-fn loadCoreText(
-    self: *DeferredFace,
-    lib: Library,
-    opts: font.face.Options,
-) !Face {
-    _ = lib;
     const ct = self.ct.?;
     var face = try Face.initFontCopy(ct.font, opts);
     errdefer face.deinit();
@@ -140,12 +120,10 @@ test "coretext" {
     const alloc = testing.allocator;
 
     // Initialize CoreText
-    var lib = try Library.init(alloc);
-    defer lib.deinit();
 
     // Discover a deferred CoreText face
     var def = def: {
-        var fc = discovery.CoreText.init(lib);
+        var fc = discovery.CoreText.init();
         var it = try fc.discover(alloc, .{ .family = "Monaco", .size = 12 });
         defer it.deinit();
         break :def (try it.next()).?;
@@ -159,7 +137,7 @@ test "coretext" {
     try testing.expect(n.len > 0);
 
     // Load it and verify it works
-    var face = try def.load(lib, .{ .size = .{ .points = 12 } });
+    var face = try def.load(.{ .size = .{ .points = 12 } });
     defer face.deinit();
     try testing.expect(face.glyphIndex(' ') != null);
 }

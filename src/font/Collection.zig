@@ -23,7 +23,6 @@ const font = @import("main.zig");
 const DeferredFace = font.DeferredFace;
 const DesiredSize = font.face.DesiredSize;
 const Face = font.Face;
-const Library = font.Library;
 const Metrics = font.Metrics;
 const Presentation = font.Presentation;
 const Style = font.Style;
@@ -76,8 +75,6 @@ pub fn deinit(self: *Collection, alloc: Allocator) void {
             };
         array.value.deinit(alloc);
     }
-
-    if (self.load_options) |*v| v.deinit(alloc);
 }
 
 /// Options for adding a face to the collection.
@@ -227,7 +224,7 @@ fn getFaceFromEntry(
                 return error.DeferredLoadingUnavailable;
 
             // Load the face.
-            var face = try d.load(opts.library, opts.faceOptions());
+            var face = try d.load(opts.faceOptions());
             errdefer face.deinit();
 
             // Calculate the scale factor for this
@@ -699,18 +696,8 @@ const StyleArray = std.EnumArray(Style, SegmentedList(EntryOrAlias, 0));
 /// Load options are used to configure all the details a Collection
 /// needs to load deferred faces.
 pub const LoadOptions = struct {
-    /// The library to use for loading faces. This is not owned by
-    /// the collection and can be used by multiple collections. When
-    /// deinitializing the collection, the library is not deinitialized.
-    library: Library,
-
     /// The desired font size for all loaded faces.
     size: DesiredSize = .{ .points = 12 },
-
-    pub fn deinit(self: *LoadOptions, alloc: Allocator) void {
-        _ = self;
-        _ = alloc;
-    }
 
     /// The options to use for loading faces.
     pub fn faceOptions(self: *const LoadOptions) font.face.Options {
@@ -947,15 +934,11 @@ test "add full" {
     const alloc = testing.allocator;
     const testFont = font.embedded.regular;
 
-    var lib = try Library.init(alloc);
-    defer lib.deinit();
-
     var c = init();
     defer c.deinit(alloc);
 
     for (0..Index.Special.start - 1) |_| {
         _ = try c.add(alloc, try .init(
-            lib,
             testFont,
             .{ .size = .{ .points = 12 } },
         ), .{
@@ -966,7 +949,6 @@ test "add full" {
     }
 
     var face = try Face.init(
-        lib,
         testFont,
         .{ .size = .{ .points = 12 } },
     );
@@ -1007,14 +989,10 @@ test getFace {
     const alloc = testing.allocator;
     const testFont = font.embedded.regular;
 
-    var lib = try Library.init(alloc);
-    defer lib.deinit();
-
     var c = init();
     defer c.deinit(alloc);
 
     const idx = try c.add(alloc, try .init(
-        lib,
         testFont,
         .{ .size = .{ .points = 12, .xdpi = 96, .ydpi = 96 } },
     ), .{
@@ -1035,14 +1013,10 @@ test getIndex {
     const alloc = testing.allocator;
     const testFont = font.embedded.regular;
 
-    var lib = try Library.init(alloc);
-    defer lib.deinit();
-
     var c = init();
     defer c.deinit(alloc);
 
     _ = try c.add(alloc, try .init(
-        lib,
         testFont,
         .{ .size = .{ .points = 12, .xdpi = 96, .ydpi = 96 } },
     ), .{
@@ -1070,15 +1044,11 @@ test completeStyles {
     const alloc = testing.allocator;
     const testFont = font.embedded.regular;
 
-    var lib = try Library.init(alloc);
-    defer lib.deinit();
-
     var c = init();
     defer c.deinit(alloc);
-    c.load_options = .{ .library = lib };
+    c.load_options = .{};
 
     _ = try c.add(alloc, try .init(
-        lib,
         testFont,
         .{ .size = .{ .points = 12, .xdpi = 96, .ydpi = 96 } },
     ), .{
@@ -1101,15 +1071,11 @@ test setSize {
     const alloc = testing.allocator;
     const testFont = font.embedded.regular;
 
-    var lib = try Library.init(alloc);
-    defer lib.deinit();
-
     var c = init();
     defer c.deinit(alloc);
-    c.load_options = .{ .library = lib };
+    c.load_options = .{};
 
     _ = try c.add(alloc, try .init(
-        lib,
         testFont,
         .{ .size = .{ .points = 12, .xdpi = 96, .ydpi = 96 } },
     ), .{
@@ -1128,15 +1094,11 @@ test hasCodepoint {
     const alloc = testing.allocator;
     const testFont = font.embedded.regular;
 
-    var lib = try Library.init(alloc);
-    defer lib.deinit();
-
     var c = init();
     defer c.deinit(alloc);
-    c.load_options = .{ .library = lib };
+    c.load_options = .{};
 
     const idx = try c.add(alloc, try .init(
-        lib,
         testFont,
         .{ .size = .{ .points = 12, .xdpi = 96, .ydpi = 96 } },
     ), .{
@@ -1154,16 +1116,12 @@ test "metrics" {
     const alloc = testing.allocator;
     const testFont = font.embedded.inconsolata;
 
-    var lib = try Library.init(alloc);
-    defer lib.deinit();
-
     var c = init();
     defer c.deinit(alloc);
     const size: DesiredSize = .{ .points = 12, .xdpi = 96, .ydpi = 96 };
-    c.load_options = .{ .library = lib, .size = size };
+    c.load_options = .{ .size = size };
 
     _ = try c.add(alloc, try .init(
-        lib,
         testFont,
         .{ .size = size },
     ), .{
@@ -1238,17 +1196,13 @@ test "adjusted sizes" {
     const fallback = font.embedded.monaspace_neon;
     const symbol = font.embedded.symbols_nerd_font;
 
-    var lib = try Library.init(alloc);
-    defer lib.deinit();
-
     var c = init();
     defer c.deinit(alloc);
     const size: DesiredSize = .{ .points = 12, .xdpi = 96, .ydpi = 96 };
-    c.load_options = .{ .library = lib, .size = size };
+    c.load_options = .{ .size = size };
 
     // Add our primary face.
     _ = try c.add(alloc, try .init(
-        lib,
         testFont,
         .{ .size = size },
     ), .{
@@ -1262,7 +1216,6 @@ test "adjusted sizes" {
     inline for ([_][]const u8{ "ex_height", "cap_height" }) |metric| {
         // Add the fallback face with the chosen adjustment metric.
         const fallback_idx = try c.add(alloc, try .init(
-            lib,
             fallback,
             .{ .size = size },
         ), .{
@@ -1305,7 +1258,6 @@ test "adjusted sizes" {
     {
         // A reference metric of "none" should leave the size unchanged.
         const fallback_idx = try c.add(alloc, try .init(
-            lib,
             fallback,
             .{ .size = size },
         ), .{
@@ -1333,7 +1285,6 @@ test "adjusted sizes" {
 
     // Add the symbol face.
     const symbol_idx = try c.add(alloc, try .init(
-        lib,
         symbol,
         .{ .size = size },
     ), .{

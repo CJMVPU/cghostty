@@ -41,12 +41,9 @@ pub const Face = struct {
 
     /// Initialize a CoreText-based font from a TTF/TTC in memory.
     pub fn init(
-        lib: font.Library,
         source: [:0]const u8,
         opts: font.face.Options,
     ) !Face {
-        _ = lib;
-
         const data = try macos.foundation.Data.createWithBytesNoCopy(source);
         defer data.release();
 
@@ -179,16 +176,10 @@ pub const Face = struct {
         return @max(@as(f64, points) / 14.0, 1);
     }
 
-    /// Returns the font name. If allocation is required, buf will be used,
-    /// but sometimes allocation isn't required and a static string is
-    /// returned.
+    /// Returns the font name in the caller's buffer.
     pub fn name(self: *const Face, buf: []u8) Allocator.Error![]const u8 {
         const family_name = self.font.copyFamilyName();
-        if (family_name.cstringPtr(.utf8)) |str| return str;
-
-        // "NULL if the internal storage of theString does not allow
-        // this to be returned efficiently." In this case, we need
-        // to allocate.
+        defer family_name.release();
         return family_name.cstring(buf, .utf8) orelse error.OutOfMemory;
     }
 
@@ -1030,10 +1021,7 @@ test "in-memory" {
     var atlas = try font.Atlas.init(alloc, 512, .grayscale);
     defer atlas.deinit(alloc);
 
-    var lib = try font.Library.init(alloc);
-    defer lib.deinit();
-
-    var face = try Face.init(lib, testFont, .{ .size = .{ .points = 12 } });
+    var face = try Face.init(testFont, .{ .size = .{ .points = 12 } });
     defer face.deinit();
 
     // Generate all visible ASCII
@@ -1057,10 +1045,7 @@ test "variable" {
     var atlas = try font.Atlas.init(alloc, 512, .grayscale);
     defer atlas.deinit(alloc);
 
-    var lib = try font.Library.init(alloc);
-    defer lib.deinit();
-
-    var face = try Face.init(lib, testFont, .{ .size = .{ .points = 12 } });
+    var face = try Face.init(testFont, .{ .size = .{ .points = 12 } });
     defer face.deinit();
 
     // Generate all visible ASCII
@@ -1084,10 +1069,7 @@ test "variable set variation" {
     var atlas = try font.Atlas.init(alloc, 512, .grayscale);
     defer atlas.deinit(alloc);
 
-    var lib = try font.Library.init(alloc);
-    defer lib.deinit();
-
-    var face = try Face.init(lib, testFont, .{ .size = .{ .points = 12 } });
+    var face = try Face.init(testFont, .{ .size = .{ .points = 12 } });
     defer face.deinit();
 
     try face.setVariations(&.{
@@ -1109,10 +1091,9 @@ test "variable set variation" {
 
 test "synthetic bold survives italic composition and variation changes" {
     const testing = std.testing;
-    var lib = try font.Library.init(testing.allocator);
-    defer lib.deinit();
+
     const opts: font.face.Options = .{ .size = .{ .points = 16 } };
-    var regular = try Face.init(lib, font.embedded.variable, opts);
+    var regular = try Face.init(font.embedded.variable, opts);
     defer regular.deinit();
     var bold = try regular.syntheticBold(opts);
     defer bold.deinit();
@@ -1133,10 +1114,7 @@ test "svg font table" {
     const alloc = testing.allocator;
     const testFont = font.embedded.julia_mono;
 
-    var lib = try font.Library.init(alloc);
-    defer lib.deinit();
-
-    var face = try Face.init(lib, testFont, .{ .size = .{ .points = 12 } });
+    var face = try Face.init(testFont, .{ .size = .{ .points = 12 } });
     defer face.deinit();
 
     const table = (try face.copyTable(alloc, "SVG ")).?;
@@ -1147,13 +1125,9 @@ test "svg font table" {
 
 test "glyphIndex colored vs text" {
     const testing = std.testing;
-    const alloc = testing.allocator;
     const testFont = font.embedded.julia_mono;
 
-    var lib = try font.Library.init(alloc);
-    defer lib.deinit();
-
-    var face = try Face.init(lib, testFont, .{ .size = .{ .points = 12 } });
+    var face = try Face.init(testFont, .{ .size = .{ .points = 12 } });
     defer face.deinit();
 
     {

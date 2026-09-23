@@ -1,8 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-const library = @import("library.zig");
-
 pub const Atlas = @import("Atlas.zig");
 pub const discovery = @import("discovery.zig");
 pub const embedded = @import("embedded.zig");
@@ -26,7 +24,6 @@ pub const Sprite = sprite.Sprite;
 pub const SpriteFace = sprite.Face;
 pub const Descriptor = discovery.Descriptor;
 pub const Discover = discovery.Discover;
-pub const Library = library.Library;
 
 /// The styles that a family can take.
 pub const Style = enum(u3) {

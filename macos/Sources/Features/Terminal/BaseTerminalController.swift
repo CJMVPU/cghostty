@@ -22,22 +22,60 @@ class BaseTerminalController: NSWindowController,
     /// Restoration waits for actual AppKit attachment, without retaining a
     /// removed surface or scheduling retries after its window has closed.
     private weak var pendingRestoredFocus: Ghostty.SurfaceView?
+    private weak var focusRequestResponder: NSResponder?
+    private weak var focusRequestTextDelegate: AnyObject?
+    private var focusRequestID = UUID()
+    private var focusMayLeaveTextInput = false
 
     func restoreFocus(to view: Ghostty.SurfaceView) {
+        requestFocus(to: view, allowTextInput: false)
+    }
+
+    func requestFocus(to view: Ghostty.SurfaceView, from: Ghostty.SurfaceView? = nil, allowTextInput: Bool = true) {
         guard surfaceTree.contains(view) else { return }
+        cancelRestoredFocus()
         pendingRestoredFocus = view
+        focusRequestResponder = isWindowLoaded ? window?.firstResponder : nil
+        focusRequestTextDelegate = (focusRequestResponder as? NSTextView)?.delegate
+        focusMayLeaveTextInput = allowTextInput
+        if let from, from !== view { _ = from.resignFirstResponder() }
         focusedSurface = view
         surfaceDidAttach(view)
     }
 
     func cancelRestoredFocus() {
         pendingRestoredFocus = nil
+        focusRequestResponder = nil
+        focusRequestTextDelegate = nil
+        focusRequestID = UUID()
     }
 
     func surfaceDidAttach(_ view: Ghostty.SurfaceView) {
         guard pendingRestoredFocus === view else { return }
         // SwiftUI finishes assigning its default focused values in this turn.
-        DispatchQueue.main.async { [weak self] in self?.completeRestoredFocus() }
+        let id = focusRequestID
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.focusRequestID == id else { return }
+            self.completeRestoredFocus()
+        }
+    }
+
+    /// A real responder change takes precedence over queued focus requests.
+    func surfaceDidFocus(_ view: Ghostty.SurfaceView) {
+        if pendingRestoredFocus !== view { cancelRestoredFocus() }
+        focusedSurface = view
+    }
+
+    func restoreFocusAfterPalette() {
+        let id = focusRequestID
+        let responder = window?.firstResponder
+        DispatchQueue.main.async { [weak self, weak responder] in
+            guard let self, self.focusRequestID == id,
+                  !self.commandPaletteIsShowing, self.window?.isKeyWindow == true,
+                  self.window?.firstResponder === responder,
+                  self.pendingRestoredFocus == nil, let focusedSurface = self.focusedSurface else { return }
+            self.requestFocus(to: focusedSurface)
+        }
     }
 
     private func completeRestoredFocus() {
@@ -48,7 +86,9 @@ class BaseTerminalController: NSWindowController,
         }
         guard isWindowLoaded, let window, view.window === window else { return }
         // An explicit text edit takes precedence over a pending restoration.
-        guard !(window.firstResponder is NSTextView) else {
+        guard !(window.firstResponder is NSTextView) ||
+                (focusMayLeaveTextInput && window.firstResponder === focusRequestResponder &&
+                 (window.firstResponder as? NSTextView)?.delegate === focusRequestTextDelegate) else {
             cancelRestoredFocus()
             return
         }
@@ -274,16 +314,12 @@ class BaseTerminalController: NSWindowController,
     func focusSurface(_ view: Ghostty.SurfaceView) {
         // Check if target surface is in our tree
         guard surfaceTree.contains(view) else { return }
-        cancelRestoredFocus()
-
         // Move focus to the target surface and activate the window/app
-        DispatchQueue.main.async {
-            Ghostty.moveFocus(to: view)
-            view.window?.makeKeyAndOrderFront(nil)
-            if !NSApp.isActive {
-                NSApp.activate(ignoringOtherApps: true)
-            }
+        window?.makeKeyAndOrderFront(nil)
+        if !NSApp.isActive {
+            NSApp.activate(ignoringOtherApps: true)
         }
+        requestFocus(to: view)
     }
 
     /// Called when the surfaceTree variable changed.
@@ -531,10 +567,8 @@ class BaseTerminalController: NSWindowController,
         // Bring the window to front and focus the surface.
         window?.makeKeyAndOrderFront(nil)
 
-        // We use a small delay to ensure this runs after any UI cleanup
-        // (e.g., command palette restoring focus to its original surface).
+        // Palette dismissal uses the current target through this same coordinator.
         Ghostty.moveFocus(to: target)
-        Ghostty.moveFocus(to: target, delay: 0.1)
 
         // Show a brief highlight to help the user locate the presented terminal.
         target.highlight()

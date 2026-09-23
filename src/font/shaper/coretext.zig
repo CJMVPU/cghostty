@@ -15,7 +15,6 @@ const Collection = font.Collection;
 const DeferredFace = font.DeferredFace;
 const Group = font.Group;
 const GroupCache = font.GroupCache;
-const Library = font.Library;
 const SharedGrid = font.SharedGrid;
 const Style = font.Style;
 const Presentation = font.Presentation;
@@ -2520,13 +2519,11 @@ const TestShaper = struct {
     alloc: Allocator,
     shaper: Shaper,
     grid: *SharedGrid,
-    lib: Library,
 
     pub fn deinit(self: *TestShaper) void {
         self.shaper.deinit();
         self.grid.deinit(self.alloc);
         self.alloc.destroy(self.grid);
-        self.lib.deinit();
     }
 };
 
@@ -2555,15 +2552,11 @@ fn testShaperWithFont(alloc: Allocator, font_req: TestFont) !TestShaper {
         .nerd_font => font.embedded.test_nerd_font,
     };
 
-    var lib = try Library.init(alloc);
-    errdefer lib.deinit();
-
     var c = Collection.init();
-    c.load_options = .{ .library = lib };
+    c.load_options = .{};
 
     // Setup group
     _ = try c.add(alloc, try .init(
-        lib,
         testFont,
         .{ .size = .{ .points = 12 } },
     ), .{
@@ -2574,7 +2567,7 @@ fn testShaperWithFont(alloc: Allocator, font_req: TestFont) !TestShaper {
 
     {
         // On CoreText we want to load Apple Emoji, we should have it.
-        var disco = font.Discover.init(lib);
+        var disco = font.Discover.init();
         defer disco.deinit();
         var disco_it = try disco.discover(alloc, .{
             .family = "Apple Color Emoji",
@@ -2591,7 +2584,6 @@ fn testShaperWithFont(alloc: Allocator, font_req: TestFont) !TestShaper {
         });
     }
     _ = try c.add(alloc, try .init(
-        lib,
         testEmojiText,
         .{ .size = .{ .points = 12 } },
     ), .{
@@ -2615,21 +2607,17 @@ fn testShaperWithFont(alloc: Allocator, font_req: TestFont) !TestShaper {
         .alloc = alloc,
         .shaper = shaper,
         .grid = grid_ptr,
-        .lib = lib,
     };
 }
 
 /// Return a fully initialized shaper by discovering a named font on the system.
 fn testShaperWithDiscoveredFont(alloc: Allocator, font_req: [:0]const u8) !TestShaper {
-    var lib = try Library.init(alloc);
-    errdefer lib.deinit();
-
     var c = Collection.init();
-    c.load_options = .{ .library = lib };
+    c.load_options = .{};
 
     // Discover and add our font to the collection.
     {
-        var disco = font.Discover.init(lib);
+        var disco = font.Discover.init();
         defer disco.deinit();
         var disco_it = try disco.discover(alloc, .{
             .family = font_req,
@@ -2641,7 +2629,7 @@ fn testShaperWithDiscoveredFont(alloc: Allocator, font_req: [:0]const u8) !TestS
         errdefer face.deinit();
         _ = try c.add(
             alloc,
-            try face.load(lib, .{ .size = .{ .points = 12 } }),
+            try face.load(.{ .size = .{ .points = 12 } }),
             .{
                 .style = .regular,
                 .fallback = false,
@@ -2662,6 +2650,5 @@ fn testShaperWithDiscoveredFont(alloc: Allocator, font_req: [:0]const u8) !TestS
         .alloc = alloc,
         .shaper = shaper,
         .grid = grid_ptr,
-        .lib = lib,
     };
 }

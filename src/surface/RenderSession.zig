@@ -160,7 +160,7 @@ test "RenderSession unstarted worker releases queued configuration and search sn
         .thread = undefined,
         .state = .{ .mutex = &mutex, .terminal = &term },
     };
-    var grids = try font.SharedGridSet.init(t.allocator);
+    var grids = font.SharedGridSet.init(t.allocator);
     defer grids.deinit();
     var font_config = try font.SharedGridSet.DerivedConfig.init(t.allocator, &config);
     defer font_config.deinit();

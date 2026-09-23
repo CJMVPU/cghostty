@@ -18,7 +18,6 @@ const CodepointResolver = font.CodepointResolver;
 const Collection = font.Collection;
 const Discover = font.Discover;
 const Style = font.Style;
-const Library = font.Library;
 const Metrics = font.Metrics;
 const CodepointMap = font.CodepointMap;
 const DesiredSize = font.face.DesiredSize;
@@ -36,26 +35,17 @@ alloc: Allocator,
 /// The map of font configurations to SharedGrid instances.
 map: Map = .{},
 
-/// The font library that is used for all font groups.
-font_lib: Library,
-
 /// Font discovery mechanism.
 font_discover: ?Discover = null,
 
 /// Lock to protect multi-threaded access to the map.
 lock: std.Io.Mutex = .init,
 
-pub const InitError = Library.InitError;
-
 /// Initialize a new SharedGridSet.
-pub fn init(alloc: Allocator) InitError!SharedGridSet {
-    var font_lib = try Library.init(alloc);
-    errdefer font_lib.deinit();
-
+pub fn init(alloc: Allocator) SharedGridSet {
     return .{
         .alloc = alloc,
         .map = .{},
-        .font_lib = font_lib,
     };
 }
 
@@ -70,8 +60,6 @@ pub fn deinit(self: *SharedGridSet) void {
     self.map.deinit(self.alloc);
 
     if (self.font_discover) |*v| v.deinit();
-
-    self.font_lib.deinit();
 }
 
 /// Returns the number of cached grids.
@@ -152,12 +140,11 @@ pub fn ref(
 /// The bundled default face is Medium. Synthesize styles using the same
 /// user-controlled policy as configured fonts, without storing duplicate TTFs.
 fn bundledFace(
-    self: *SharedGridSet,
     style: Style,
     opts: font.face.Options,
     synthetic: Config.FontSyntheticStyle,
 ) !font.Face {
-    var face = try font.bundled.load(self.font_lib, opts);
+    var face = try font.bundled.load(opts);
     errdefer face.deinit();
     const enabled = switch (style) {
         .regular => false,
@@ -189,11 +176,9 @@ fn collection(
     config: *const DerivedConfig,
 ) !Collection {
     // A quick note on memory management:
-    // - font_lib is owned by the SharedGridSet
     // - metric_modifiers is owned by the key which is freed only when
     //   the ref count for this grid reaches zero.
     const load_options: Collection.LoadOptions = .{
-        .library = self.font_lib,
         .size = size,
     };
 
@@ -216,7 +201,7 @@ fn collection(
                     (desc.style == null or std.ascii.eqlIgnoreCase(desc.style.?, font.embedded.default_style)))
                 {
                     const requested: Style = if (desc.bold and desc.italic) .bold_italic else if (desc.bold) .bold else if (desc.italic) .italic else .regular;
-                    var face = try self.bundledFace(requested, load_options.faceOptions(), config.@"font-synthetic-style");
+                    var face = try bundledFace(requested, load_options.faceOptions(), config.@"font-synthetic-style");
                     errdefer face.deinit();
                     _ = try c.add(self.alloc, face, .{ .style = style, .fallback = false, .size_adjustment = .none });
                     continue;
@@ -285,7 +270,7 @@ fn collection(
 
     // Complete configured styles first so the bundled family remains a fallback.
     inline for (std.meta.tags(Style)) |style| {
-        var face = try self.bundledFace(style, load_options.faceOptions(), config.@"font-synthetic-style");
+        var face = try bundledFace(style, load_options.faceOptions(), config.@"font-synthetic-style");
         errdefer face.deinit();
         _ = try c.add(self.alloc, face, .{
             .style = style,
@@ -298,7 +283,6 @@ fn collection(
     _ = try c.add(
         self.alloc,
         try .init(
-            self.font_lib,
             font.embedded.symbols_nerd_font,
             load_options.faceOptions(),
         ),
@@ -402,7 +386,7 @@ fn discover(self: *SharedGridSet) !*Discover {
     // If we initialized, use it
     if (self.font_discover) |*v| return v;
 
-    self.font_discover = .init(self.font_lib);
+    self.font_discover = .init();
     return &self.font_discover.?;
 }
 
@@ -783,7 +767,7 @@ test SharedGridSet {
     const testing = std.testing;
     const alloc = testing.allocator;
 
-    var set = try SharedGridSet.init(alloc);
+    var set = SharedGridSet.init(alloc);
     defer set.deinit();
 
     var cfg = try Config.default(alloc);
@@ -815,7 +799,7 @@ test SharedGridSet {
 test "bundled WenKai resolves all styles and preserves configured fonts" {
     const testing = std.testing;
     const alloc = testing.allocator;
-    var set = try SharedGridSet.init(alloc);
+    var set = SharedGridSet.init(alloc);
     defer set.deinit();
 
     for ([_][]const u8{ "", "font-family = LXGW WenKai Mono\nfont-style = Medium\n", "font-family = Monaco\n", "font-synthetic-style = false\n" }, 0..) |data, scenario| {
@@ -899,7 +883,7 @@ test "Key includes style policies and compares content rather than hashes" {
 test "bundled style pixels remain distinct after collection sizing" {
     const testing = std.testing;
     const alloc = testing.allocator;
-    var set = try SharedGridSet.init(alloc);
+    var set = SharedGridSet.init(alloc);
     defer set.deinit();
     for ([_][]const u8{ "", "font-family = LXGW WenKai Mono\nfont-style = Medium\n", "font-synthetic-style = false\n" }, 0..) |data, scenario| {
         var cfg = try Config.default(alloc);

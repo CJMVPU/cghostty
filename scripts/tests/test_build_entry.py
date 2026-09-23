@@ -22,7 +22,8 @@ class BuildEntryTests(unittest.TestCase):
                     ('core', ['-Doptimize=ReleaseFast'], ['zig', 'build', '-Demit-macos-app=false', '-Doptimize=ReleaseFast']),
                     ('native', ['--action', 'test'], ['nu', str(root / 'macos/build.nu'), '--action', 'test']),
                 ):
-                    with patch.object(build.subprocess, 'run') as run:
+                    with patch.object(build.subprocess, 'run') as run, patch.object(
+                            build.results, 'prepare', return_value=(arguments, None)):
                         run.return_value.returncode = 7
                         self.assertEqual(build.run(mode, arguments), 7)
                         self.assertEqual(run.call_args.args[0], expected)

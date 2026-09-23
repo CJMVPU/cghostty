@@ -29,6 +29,7 @@ class QuickTerminalController: BaseTerminalController {
     private var awaitingKeyWindow = false
     private let presentation = PresentationGate()
     private var entranceID: UUID?
+    private var transitionID = UUID()
     private var entranceFinished = false
 
     /// The previously running application when the terminal is shown. This is NEVER Ghostty.
@@ -327,6 +328,7 @@ class QuickTerminalController: BaseTerminalController {
         // Set our visibility state
         guard !visible else { return }
         visible = true
+        transitionID = UUID()
         entranceID = presentation.begin()
         entranceFinished = false
 
@@ -377,6 +379,7 @@ class QuickTerminalController: BaseTerminalController {
         // Set our visibility state
         guard visible else { return }
         visible = false
+        transitionID = UUID()
         entranceID = nil
         entranceFinished = false
         presentation.cancel()
@@ -524,6 +527,7 @@ class QuickTerminalController: BaseTerminalController {
     }
 
     private func animateWindowOut(window: NSWindow, to position: QuickTerminalPosition) {
+        let id = transitionID
         saveScreenState(exitFullscreen: true)
 
         // If we hid the dock then we unhide it.
@@ -576,6 +580,7 @@ class QuickTerminalController: BaseTerminalController {
             // This causes the window to be removed from the screen list and macOS
             // handles what should be focused next.
             MainActor.assumeIsolated {
+                guard self.transitionID == id, !self.visible else { return }
                 window.orderOut(self)
                 // If our application was hidden previously, hide it again.
                 if (self.ghostty.delegate as? AppDelegate)?.hiddenState != nil {

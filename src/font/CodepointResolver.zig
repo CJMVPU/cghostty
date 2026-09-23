@@ -22,7 +22,6 @@ const Discover = font.Discover;
 const DiscoveryDescriptor = font.discovery.Descriptor;
 const Face = font.Face;
 const Glyph = font.Glyph;
-const Library = font.Library;
 const Presentation = font.Presentation;
 const RenderOptions = font.Glyph.RenderOptions;
 const SpriteFace = font.SpriteFace;
@@ -382,16 +381,12 @@ test getIndex {
     const testFont = font.embedded.regular;
     const testEmojiText = font.embedded.emoji_text;
 
-    var lib = try Library.init(alloc);
-    defer lib.deinit();
-
     var c = Collection.init();
-    c.load_options = .{ .library = lib };
+    c.load_options = .{};
 
     {
         errdefer c.deinit(alloc);
         _ = try c.add(alloc, try .init(
-            lib,
             testFont,
             .{ .size = .{ .points = 12, .xdpi = 96, .ydpi = 96 } },
         ), .{
@@ -400,7 +395,6 @@ test getIndex {
             .size_adjustment = .none,
         });
         _ = try c.add(alloc, try .init(
-            lib,
             testEmojiText,
             .{ .size = .{ .points = 12 } },
         ), .{
@@ -454,14 +448,10 @@ test "getIndex disabled font style" {
     var atlas_grayscale = try font.Atlas.init(alloc, 512, .grayscale);
     defer atlas_grayscale.deinit(alloc);
 
-    var lib = try Library.init(alloc);
-    defer lib.deinit();
-
     var c = Collection.init();
-    c.load_options = .{ .library = lib };
+    c.load_options = .{};
 
     _ = try c.add(alloc, try .init(
-        lib,
         testFont,
         .{ .size = .{ .points = 12, .xdpi = 96, .ydpi = 96 } },
     ), .{
@@ -470,7 +460,6 @@ test "getIndex disabled font style" {
         .size_adjustment = .none,
     });
     _ = try c.add(alloc, try .init(
-        lib,
         testFont,
         .{ .size = .{ .points = 12, .xdpi = 96, .ydpi = 96 } },
     ), .{
@@ -479,7 +468,6 @@ test "getIndex disabled font style" {
         .size_adjustment = .none,
     });
     _ = try c.add(alloc, try .init(
-        lib,
         testFont,
         .{ .size = .{ .points = 12, .xdpi = 96, .ydpi = 96 } },
     ), .{
@@ -517,9 +505,6 @@ test "getIndex disabled font style" {
 test "getIndex box glyph" {
     const testing = std.testing;
     const alloc = testing.allocator;
-
-    var lib = try Library.init(alloc);
-    defer lib.deinit();
 
     const c = Collection.init();
 

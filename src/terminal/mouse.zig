@@ -73,9 +73,6 @@ pub const Shape = enum(c_int) {
         return string_map.get(v);
     }
 
-    /// Make this a valid gobject if we're in a GTK environment.
-    pub const getGObjectType = void;
-
     test "ghostty.h MouseShape" {
         try lib.checkGhosttyHEnum(Shape, "GHOSTTY_MOUSE_SHAPE_");
     }

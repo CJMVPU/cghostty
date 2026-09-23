@@ -8095,9 +8095,6 @@ pub const WindowDecoration = enum(c_int) {
     server,
     none,
 
-    /// Make this a valid gobject if we're in a GTK environment.
-    pub const getGObjectType = void;
-
     pub fn parseCLI(input_: ?[]const u8) !WindowDecoration {
         const input = input_ orelse return .auto;
 

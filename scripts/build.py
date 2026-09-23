@@ -10,6 +10,9 @@ ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('build_cache', ROOT / 'scripts/build-cache.py')
 cache = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(cache)
+result_spec = importlib.util.spec_from_file_location('test_results', ROOT / 'scripts/test-results.py')
+results = importlib.util.module_from_spec(result_spec)
+result_spec.loader.exec_module(results)
 
 
 def run(mode, arguments):
@@ -27,7 +30,18 @@ def run(mode, arguments):
             cache.maintain_locked(ROOT, trim=True)
         env = os.environ.copy()
         env['CGHOSTTY_BUILD_LOCK_ROOT'] = str(ROOT)
-        return subprocess.run(command, cwd=ROOT, env=env).returncode
+        directory = None
+        if mode == 'native':
+            arguments, directory = results.prepare(ROOT, arguments)
+            command = ['nu', str(ROOT / 'macos/build.nu'), *arguments]
+        completed = False
+        try:
+            code = subprocess.run(command, cwd=ROOT, env=env).returncode
+            completed = True
+            return code
+        finally:
+            if completed and directory is not None:
+                results.maintain(directory)
 
 
 def main():

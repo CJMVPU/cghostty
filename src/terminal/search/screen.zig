@@ -2043,7 +2043,7 @@ test "feed after complete discovers prepended history pages" {
     // Restore the newest history page: a full match on its first row and a
     // soft-wrapped last row ending in "Te" which joins the screen's "st".
     {
-        var allocation = try list.allocatePage(.{ .cols = 10, .rows = 2 });
+        var allocation = try PageList.TestSupport.allocatePage(list, .{ .cols = 10, .rows = 2 });
         defer allocation.deinit();
         const page = allocation.page();
         page.size.rows = 2;
@@ -2097,7 +2097,7 @@ test "feed after complete discovers prepended history pages" {
     // Restore an even older page. Each incremental step is discovered from
     // the frontier left behind by the previous one.
     {
-        var allocation = try list.allocatePage(.{ .cols = 10, .rows = 2 });
+        var allocation = try PageList.TestSupport.allocatePage(list, .{ .cols = 10, .rows = 2 });
         defer allocation.deinit();
         const page = allocation.page();
         page.size.rows = 2;

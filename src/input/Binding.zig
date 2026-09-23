@@ -955,9 +955,6 @@ pub const Action = union(enum) {
 
     pub const Key = @typeInfo(Action).@"union".tag_type.?;
 
-    /// Make this a valid gobject if we're in a GTK environment.
-    pub const getGObjectType = void;
-
     pub const CrashThread = enum {
         main,
         io,

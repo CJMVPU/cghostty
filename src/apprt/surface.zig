@@ -168,9 +168,6 @@ pub const Message = union(enum) {
     pub const ChildExited = extern struct {
         exit_code: u32,
         runtime_ms: u64,
-
-        /// Make this a valid gobject if we're in a GTK environment.
-        pub const getGObjectType = void;
     };
 };
 

@@ -86,9 +86,8 @@ fn runArgs(alloc_gpa: Allocator, argsIter: anytype) !u8 {
     var map: std.StringHashMap(std.ArrayListUnmanaged([]const u8)) = .init(alloc);
 
     // Discover installed families alongside the built-in default face.
-    var font_lib = try font.Library.init(alloc);
-    defer font_lib.deinit();
-    var disco = font.Discover.init(font_lib);
+
+    var disco = font.Discover.init();
     defer disco.deinit();
     var disco_it = try disco.discover(alloc, .{
         .family = config.family,

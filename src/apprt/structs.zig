@@ -193,9 +193,6 @@ pub const ClipboardRequest = union(ClipboardRequestType) {
             arena.deinit();
         }
     };
-
-    /// Make this a valid gobject if we're in a GTK environment.
-    pub const getGObjectType = void;
 };
 
 /// The color scheme in use (light vs dark).

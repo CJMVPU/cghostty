@@ -13,6 +13,77 @@ import Testing
         return config
     }
 
+    @Test func queuedFocusCannotOverrideNewSurfaceChoice() async throws {
+        let app = Ghostty.App(configPath: "/dev/null")
+        let first = Ghostty.SurfaceView(app, baseConfig: isolatedSurfaceConfiguration)
+        let second = Ghostty.SurfaceView(app, baseConfig: isolatedSurfaceConfiguration)
+        let tree = try SplitTree(view: first).inserting(view: second, at: first, direction: .right)
+        let controller = BaseTerminalController(app, surfaceTree: tree)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 200),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        controller.window = window
+        window.delegate = controller
+        defer { window.close() }
+        window.contentView?.addSubview(first)
+        window.contentView?.addSubview(second)
+        controller.requestFocus(to: first)
+        #expect(window.makeFirstResponder(second))
+        await drainMainQueue()
+        #expect(window.firstResponder === second)
+        controller.requestFocus(to: first)
+        controller.requestFocus(to: second)
+        await drainMainQueue()
+        #expect(window.firstResponder === second)
+    }
+
+    @Test func queuedFocusCannotOverrideNewTextEditOrClosedWindow() async throws {
+        let app = Ghostty.App(configPath: "/dev/null")
+        let view = Ghostty.SurfaceView(app, baseConfig: isolatedSurfaceConfiguration)
+        let controller = BaseTerminalController(app, surfaceTree: .init(view: view))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 200),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        controller.window = window
+        window.delegate = controller
+        defer { window.close() }
+        let editor = NSTextView(frame: .zero)
+        window.contentView?.addSubview(view)
+        window.contentView?.addSubview(editor)
+        controller.requestFocus(to: view)
+        #expect(window.makeFirstResponder(editor))
+        await drainMainQueue()
+        #expect(window.firstResponder === editor)
+        controller.requestFocus(to: view)
+        controller.windowWillClose(.init(name: NSWindow.willCloseNotification, object: window))
+        await drainMainQueue()
+        #expect(window.firstResponder !== view)
+    }
+
+    @Test func quickTerminalIgnoresInterruptedHideCompletion() async throws {
+        let config = try TemporaryConfig("quick-terminal-animation-duration = 0\nquick-terminal-autohide = false")
+        let app = Ghostty.App(configPath: config.temporaryFile.path)
+        let controller = QuickTerminalController(app, baseConfig: isolatedSurfaceConfiguration)
+        let window = try #require(controller.window)
+        defer { controller.animateOut(); window.close() }
+        controller.animateIn()
+        await drainMainQueue()
+        controller.animateOut()
+        controller.animateIn()
+        // Zero-duration animation completions still enqueue AppKit callbacks.
+        await drainMainQueue()
+        await drainMainQueue()
+        #expect(controller.visible)
+        #expect(window.isVisible)
+        controller.animateOut()
+        controller.animateIn()
+        controller.animateOut()
+        await drainMainQueue()
+        await drainMainQueue()
+        #expect(!controller.visible)
+        #expect(!window.isVisible)
+    }
+
     @Test func restoredFocusWaitsForAttachmentAndCompletesOnce() async throws {
         let app = Ghostty.App(configPath: "/dev/null")
         let view = Ghostty.SurfaceView(app, baseConfig: isolatedSurfaceConfiguration)

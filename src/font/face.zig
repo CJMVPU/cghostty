@@ -25,9 +25,6 @@ pub const DesiredSize = struct {
         // 1 point = 1/72 inch
         return (self.points * @as(f32, @floatFromInt(self.ydpi))) / 72;
     }
-
-    /// Make this a valid gobject if we're in a GTK environment.
-    pub const getGObjectType = void;
 };
 
 /// A font variation setting. The best documentation for this I know of
