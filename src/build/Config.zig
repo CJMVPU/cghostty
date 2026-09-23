@@ -2,15 +2,12 @@
 const Config = @This();
 const std = @import("std");
 const builtin = @import("builtin");
-const FontBackend = @import("../font/backend.zig").Backend;
 const TerminalBuildOptions = @import("../terminal/build_options.zig").Options;
 
 optimize: std.builtin.OptimizeMode,
 target: std.Build.ResolvedTarget,
 env: *const std.process.Environ.Map,
-font_backend: FontBackend = .coretext,
 simd: bool = true,
-i18n: bool = true,
 exe_entrypoint: ExeEntrypoint = .ghostty,
 version: std.SemanticVersion,
 strip: bool = false,
@@ -44,9 +41,7 @@ pub fn init(b: *std.Build, version: []const u8) !Config {
         .env = &b.graph.environ_map,
         .version = try std.SemanticVersion.parse(b.option([]const u8, "version-string", "cghostty semantic version") orelse version),
         .strip = b.option(bool, "strip", "Strip release symbols") orelse (optimize == .ReleaseFast or optimize == .ReleaseSmall),
-        .font_backend = b.option(FontBackend, "font-backend", "macOS font backend") orelse .coretext,
         .simd = b.option(bool, "simd", "Enable SIMD acceleration") orelse true,
-        .i18n = b.option(bool, "i18n", "Build gettext translations") orelse true,
     };
     inline for (.{ "bench", "docs", "helpgen", "macos-app", "terminfo", "termcap", "test-exe", "themes", "unicode-table-gen" }) |name| {
         const field = comptime blk: {
@@ -58,7 +53,7 @@ pub fn init(b: *std.Build, version: []const u8) !Config {
         };
         @field(config, &field) = b.option(bool, "emit-" ++ name, "Build/install " ++ name) orelse @field(config, &field);
     }
-    for ([_][]const u8{ "freetype", "harfbuzz", "libpng", "zlib", "simdutf", "libintl" }) |dep| {
+    for ([_][]const u8{ "freetype", "libpng", "zlib", "simdutf" }) |dep| {
         _ = b.systemIntegrationOption(dep, .{ .default = false });
     }
     return config;
@@ -66,8 +61,6 @@ pub fn init(b: *std.Build, version: []const u8) !Config {
 
 pub fn addOptions(self: *const Config, step: *std.Build.Step.Options) !void {
     step.addOption(bool, "simd", self.simd);
-    step.addOption(bool, "i18n", self.i18n);
-    step.addOption(FontBackend, "font_backend", self.font_backend);
     step.addOption(ExeEntrypoint, "exe_entrypoint", self.exe_entrypoint);
     step.addOption(std.SemanticVersion, "app_version", self.version);
     var buffer: [1024]u8 = undefined;
@@ -96,7 +89,7 @@ pub fn baselineTarget(self: *const Config, io: std.Io) std.Build.ResolvedTarget 
 
 pub fn fromOptions() Config {
     const options = @import("build_options");
-    return .{ .optimize = undefined, .target = undefined, .env = undefined, .version = options.app_version, .simd = options.simd, .font_backend = std.meta.stringToEnum(FontBackend, @tagName(options.font_backend)).?, .exe_entrypoint = std.meta.stringToEnum(ExeEntrypoint, @tagName(options.exe_entrypoint)).?, .i18n = options.i18n };
+    return .{ .optimize = undefined, .target = undefined, .env = undefined, .version = options.app_version, .simd = options.simd, .exe_entrypoint = std.meta.stringToEnum(ExeEntrypoint, @tagName(options.exe_entrypoint)).? };
 }
 fn macOSTarget(b: *std.Build) std.Build.ResolvedTarget {
     return b.resolveTargetQuery(.{

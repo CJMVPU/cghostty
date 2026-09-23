@@ -1,3 +1,4 @@
+import Foundation
 import GhosttyKit
 
 extension Ghostty {
@@ -17,10 +18,17 @@ extension Ghostty {
         let actionKey: String
 
         init(cValue: ghostty_command_s) {
-            self.title = String(cString: cValue.title)
-            self.description = String(cString: cValue.description)
+            self.title = Self.localizedText(String(cString: cValue.title), builtIn: cValue.localize)
+            self.description = Self.localizedText(String(cString: cValue.description), builtIn: cValue.localize)
             self.action = String(cString: cValue.action)
             self.actionKey = String(cString: cValue.action_key)
+        }
+
+        /// Custom command prose is always literal, even when it matches an
+        /// English built-in title. Action identifiers are never localized.
+        static func localizedText(_ value: String, builtIn: Bool, bundle: Bundle = .main) -> String {
+            guard builtIn, !value.isEmpty else { return value }
+            return String(localized: String.LocalizationValue(value), table: "CommandPalette", bundle: bundle)
         }
     }
 }

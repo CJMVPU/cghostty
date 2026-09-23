@@ -39,7 +39,7 @@ pub fn run(_: Allocator) !u8 {
     try stdout.print("  - Zig version   : {s}\n", .{builtin.zig_version_string});
     try stdout.print("  - build mode    : {}\n", .{builtin.mode});
     try stdout.print("  - app runtime   : {s}\n", .{if (build_config.artifact == .lib) "embedded" else "cli"});
-    try stdout.print("  - font engine   : {}\n", .{build_config.font_backend});
+    try stdout.writeAll("  - font engine   : CoreText\n");
     try stdout.print("  - renderer      : {}\n", .{renderer.Renderer});
     try stdout.print("  - libxev        : {t}\n", .{xev.backend});
 

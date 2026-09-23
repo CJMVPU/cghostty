@@ -420,6 +420,7 @@ typedef struct {
   const char* action;
   const char* title;
   const char* description;
+  bool localize;
 } ghostty_command_s;
 
 typedef enum {

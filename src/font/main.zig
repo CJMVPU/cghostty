@@ -1,13 +1,12 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const build_config = @import("../build_config.zig");
 
 const library = @import("library.zig");
 
 pub const Atlas = @import("Atlas.zig");
-pub const Backend = @import("backend.zig").Backend;
 pub const discovery = @import("discovery.zig");
 pub const embedded = @import("embedded.zig");
+pub const bundled = @import("bundled.zig");
 pub const face = @import("face.zig");
 pub const CodepointMap = @import("CodepointMap.zig");
 pub const CodepointResolver = @import("CodepointResolver.zig");
@@ -15,7 +14,6 @@ pub const Collection = @import("Collection.zig");
 pub const DeferredFace = @import("DeferredFace.zig");
 pub const Face = face.Face;
 pub const Glyph = @import("Glyph.zig");
-pub const glyf_rasterize = @import("glyf_rasterize.zig");
 pub const Metrics = @import("Metrics.zig");
 pub const opentype = @import("opentype.zig");
 pub const shape = @import("shape.zig");
@@ -29,12 +27,6 @@ pub const SpriteFace = sprite.Face;
 pub const Descriptor = discovery.Descriptor;
 pub const Discover = discovery.Discover;
 pub const Library = library.Library;
-
-pub const options: struct {
-    backend: Backend,
-} = .{
-    .backend = build_config.font_backend,
-};
 
 /// The styles that a family can take.
 pub const Style = enum(u3) {

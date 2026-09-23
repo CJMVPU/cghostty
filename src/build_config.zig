@@ -34,8 +34,6 @@ pub const artifact = Artifact.detect();
 /// comments in BuildConfig for details on each.
 const config = BuildConfig.fromOptions();
 pub const exe_entrypoint = config.exe_entrypoint;
-pub const font_backend: font.Backend = config.font_backend;
-pub const i18n: bool = config.i18n;
 
 /// The bundle ID for the app. This is used in many places and is currently
 /// hardcoded here. We could make this configurable in the future if there

@@ -1145,8 +1145,8 @@ pub fn updateFrame(
         arena_alloc,
         &critical.links,
         &self.terminal_state,
-        state.mouse.point,
-        state.mouse.mods,
+        critical.mouse.point,
+        critical.mouse.mods,
     ) catch |err| {
         log.warn("error searching for regex links err={}", .{err});
     };

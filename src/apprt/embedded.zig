@@ -2381,10 +2381,6 @@ pub const CAPI = struct {
         /// regardless of the selected text. If coretext is not in use
         /// then this will return nothing.
         export fn ghostty_surface_quicklook_font(ptr: *Surface) ?*anyopaque {
-            // For non-CoreText we just return null.
-            if (comptime font.options.backend != .coretext) {
-                return null;
-            }
 
             // We'll need content scale so fail early if we can't get it.
             const content_scale = ptr.getContentScale() catch return null;

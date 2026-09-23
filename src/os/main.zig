@@ -14,7 +14,6 @@ const resourcesdir = @import("resourcesdir.zig");
 // Namespaces
 pub const edit = @import("edit.zig");
 pub const hostname = @import("hostname.zig");
-pub const i18n = @import("i18n.zig");
 pub const mach = @import("mach.zig");
 pub const path = @import("path.zig");
 pub const passwd = @import("passwd.zig");
@@ -49,7 +48,6 @@ test {
     _ = openpkg;
     _ = stderr;
     _ = edit;
-    _ = i18n;
     _ = path;
     _ = uri;
     _ = shell;

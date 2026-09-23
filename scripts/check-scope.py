@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Check source boundaries and reject unsupported build targets; optionally inspect an app."""
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -26,6 +27,12 @@ for name in ('src/apprt/gtk', 'src/apprt/gtk.zig', 'src/main_wasm.zig',
              'test/wasm-alloc.mjs', 'pkg/glslang', 'pkg/spirv-cross',
              'src/renderer/shadertoy.zig',
              'src/build/GhosttyLibVt.zig', 'src/build/webgen', 'example',
+             'src/build/GhosttyI18n.zig', 'src/os/i18n.zig', 'pkg/libintl', 'po',
+             'pkg/harfbuzz', 'src/font/backend.zig', 'src/font/face/freetype.zig',
+             'src/font/shaper/harfbuzz.zig', 'src/font/shaper/noop.zig', 'src/stb',
+             'src/terminal/apc/glyph', 'src/terminal/apc/glyph.zig',
+             'src/font/opentype/glyf.zig', 'src/font/glyf_rasterize.zig',
+             'src/config/ErrorList.zig', 'src/input/KeymapNoop.zig', 'src/lib/c_abi.zig',
              'src/build/GitVersion.zig', 'src/build/xcframework.zig',
              'src/build/CombineArchivesStep.zig',
              'src/renderer/backend.zig', 'src/apprt/runtime.zig', 'src/cli/tui.zig',
@@ -71,7 +78,7 @@ for target, diagnostic in (('x86_64-macos', 'Apple Silicon'), ('aarch64-linux', 
     check(result.returncode != 0 and diagnostic in result.stdout,
           f'Expected explicit rejection for {target}:\n{result.stdout}')
 
-for flag in ('emit-lib-vt', 'emit-webdata', 'emit-lib', 'xcframework-target'):
+for flag in ('emit-lib-vt', 'emit-webdata', 'emit-lib', 'xcframework-target', 'font-backend', 'i18n'):
     value = 'universal' if flag == 'xcframework-target' else 'true'
     result = subprocess.run([zig, 'build', '--help', f'-D{flag}={value}'], cwd=ROOT,
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
@@ -94,6 +101,15 @@ if args.app:
     check((app / 'Contents/Resources/cghostty/shell-integration').is_dir(), 'Shell integration missing')
     check((app / 'Contents/Resources/cghostty/licenses/LXGW-WenKai-OFL.txt').is_file(),
           'Bundled LXGW WenKai font license missing')
+    font = app / 'Contents/Resources/cghostty/fonts/LXGWWenKaiMono-Medium.ttf'
+    check(font.is_file(), 'Bundled default font resource missing')
+    check(hashlib.sha256(font.read_bytes()).hexdigest() ==
+          '7a674f448b15a1b3df781c3498973d77f71d270788f7f921080c1344e9d739e1',
+          'Bundled default font differs from the pinned Medium face')
+    check(not (app / 'Contents/Resources/locale').exists(), 'Legacy gettext catalogs remain')
+    localized = {path.parent.name for path in (app / 'Contents/Resources').glob('*.lproj/CommandPalette.strings')}
+    check(localized == {'en.lproj', 'zh-Hans.lproj', 'zh-Hant.lproj', 'ja.lproj'},
+          f'Unexpected command palette localizations: {localized}')
     check((app / 'Contents/Resources/terminfo/78/xterm-ghostty').exists() or
           (app / 'Contents/Resources/terminfo/x/xterm-ghostty').exists(), 'Terminal description missing')
     version = subprocess.check_output([str(executables[0]), '+version'], text=True)

@@ -76,7 +76,7 @@ cursor-effect = false
 
 - **生效时机**：退出并重新启动应用
 - **运行期间**：新窗口、标签页和分屏沿用启动配置
-- **默认字体**：`font-family` 未指定时使用内置 LXGW WenKai Mono Medium；粗体与斜体由渲染器合成
+- **默认字体**：`font-family` 未指定时使用应用 Resources 中的 LXGW WenKai Mono Medium；粗体与斜体由渲染器合成
 - **模板注释**：无需全部启用；示例值不等于默认值
 
 ### 校验与恢复
@@ -119,11 +119,11 @@ CGHOSTTY="/Applications/cghostty.app/Contents/MacOS/cghostty"
 在仓库根目录执行：
 
 ```sh
-brew install nushell gettext
+brew install nushell
 xcodebuild -downloadComponent MetalToolchain
 
 cghostty_zig_bin="$(bash scripts/install-zig.sh)"
-export PATH="$cghostty_zig_bin:$(brew --prefix gettext)/bin:$PATH"
+export PATH="$cghostty_zig_bin:$PATH"
 
 nu macos/build.nu --configuration ReleaseLocal
 ```

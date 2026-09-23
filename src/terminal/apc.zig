@@ -2,7 +2,6 @@ const std = @import("std");
 const build_options = @import("terminal_options");
 const Allocator = std.mem.Allocator;
 
-pub const glyph = @import("apc/glyph.zig");
 const kitty_gfx = @import("kitty/graphics.zig");
 
 const log = std.log.scoped(.terminal_apc);
@@ -23,7 +22,6 @@ pub const Handler = struct {
     /// use `.initFull`.
     max_bytes: std.EnumMap(Protocol, usize) = .initFullWith(.{
         .kitty = Protocol.defaultMaxBytes(.kitty),
-        .glyph = Protocol.defaultMaxBytes(.glyph),
     }),
 
     /// Protocols recognized by this APC handler. When a protocol is absent,
@@ -36,7 +34,7 @@ pub const Handler = struct {
 
     pub fn start(self: *Handler) void {
         self.state.deinit();
-        self.state = .{ .identify = .{} };
+        self.state = .identify;
     }
 
     /// Enable or disable APC protocol recognition for future APC sequences.
@@ -57,83 +55,23 @@ pub const Handler = struct {
             .unknown => |*unknown| unknown.append(&.{byte}),
 
             // We identify the APC command by the first byte.
-            .identify => |*id| id: {
-                // Kitty graphics is detected immediately on the `G` byte,
-                // since commands begin immediately after with no termination
-                // character after the 'G'.
-                if (id.len == 0 and byte == 'G') {
+            .identify => {
+                if (byte == 'G') {
                     if (comptime build_options.kitty_graphics) {
                         if (self.enabled.contains(.kitty)) {
-                            self.state = .{ .kitty = .init(
-                                alloc,
-                                self.max_bytes.get(.kitty) orelse
-                                    Protocol.defaultMaxBytes(.kitty),
-                            ) };
-                        } else {
-                            self.state = .ignore;
-                        }
-                    } else {
-                        self.state = .ignore;
-                    }
-                    break :id;
-                }
-
-                // If we hit `;` then identify...
-                if (byte == ';') {
-                    const str = id.buf[0..id.len];
-                    if (std.mem.eql(u8, str, glyph.identifier)) {
-                        if (comptime build_options.glyph_protocol) {
-                            if (self.enabled.contains(.glyph)) {
-                                self.state = .{ .glyph = .init(
-                                    alloc,
-                                    self.max_bytes.get(.glyph) orelse
-                                        Protocol.defaultMaxBytes(.glyph),
-                                ) };
-                            } else {
-                                self.state = .ignore;
-                            }
-                        } else {
-                            self.state = .ignore;
-                        }
-                    } else {
-                        self.beginUnknown(alloc, str, &.{byte});
-                    }
-
-                    break :id;
-                }
-
-                // If we're out of identification space, the identifier is
-                // unsupported. Preserve the buffered prefix before replacing
-                // the identify union state.
-                if (id.len >= id.buf.len) {
-                    self.beginUnknown(alloc, id.buf[0..id.len], &.{byte});
-                    break :id;
-                }
-
-                const expected_idx: usize = id.len;
-                id.buf[id.len] = byte;
-                id.len += 1;
-
-                // Once the buffered input is no longer a prefix of a known
-                // protocol, it is an unsupported identifier.
-                if (self.unknown_max_bytes > 0 and
-                    byte != glyph.identifier[expected_idx])
-                {
-                    self.beginUnknown(alloc, id.buf[0..id.len], &.{});
+                            self.state = .{ .kitty = .init(alloc, self.max_bytes.get(.kitty) orelse Protocol.defaultMaxBytes(.kitty)) };
+                        } else self.state = .ignore;
+                    } else self.state = .ignore;
+                } else {
+                    // Unsupported APCs, including the unimplemented Glyph
+                    // protocol, are consumed without advertising support.
+                    self.beginUnknown(alloc, &.{byte}, &.{});
                 }
             },
 
             .kitty => |*p| if (comptime build_options.kitty_graphics) {
                 p.feed(byte) catch |err| {
                     log.warn("kitty graphics protocol error: {}", .{err});
-                    p.deinit();
-                    self.state = .ignore;
-                };
-            } else unreachable,
-
-            .glyph => |*p| if (comptime build_options.glyph_protocol) {
-                p.feed(byte) catch |err| {
-                    log.warn("glyph protocol error: {}", .{err});
                     p.deinit();
                     self.state = .ignore;
                 };
@@ -196,15 +134,6 @@ pub const Handler = struct {
                     };
                     return;
                 } else unreachable,
-
-                .glyph => |*p| if (comptime build_options.glyph_protocol) {
-                    p.feedSlice(rem) catch |err| {
-                        log.warn("glyph protocol error: {}", .{err});
-                        p.deinit();
-                        self.state = .ignore;
-                    };
-                    return;
-                } else unreachable,
             }
         }
     }
@@ -233,17 +162,6 @@ pub const Handler = struct {
 
                 break :kitty .{ .kitty = command };
             },
-
-            .glyph => |*p| glyph_cmd: {
-                if (comptime !build_options.glyph_protocol) unreachable;
-
-                const command = p.complete(p.alloc) catch |err| {
-                    log.warn("glyph protocol error: {}", .{err});
-                    break :glyph_cmd null;
-                };
-
-                break :glyph_cmd .{ .glyph = command };
-            },
         };
     }
 };
@@ -256,29 +174,12 @@ pub const State = union(enum) {
     /// recognized became invalid. We're just dropping bytes.
     ignore,
 
-    /// We're waiting to identify the APC sequence. The way this is done
-    /// is pretty fluid depending on supported APC protocols, but for now
-    /// our rule is:
-    ///
-    ///  * 'G' - immediate transition to Kitty graphics protocol
-    ///  * Buffer up to `;` and the bytes before dictate the protocol.
-    ///    If we overflow then we're immediately invalid because we don't
-    ///    support anything longer than this.
-    ///
-    identify: struct {
-        len: u3 = 0,
-        buf: [glyph.identifier.len]u8 = undefined,
-    },
+    /// The first byte identifies Kitty graphics; all other APCs are unknown.
+    identify,
 
     /// Kitty graphics protocol
     kitty: if (build_options.kitty_graphics)
         kitty_gfx.CommandParser
-    else
-        void,
-
-    /// Glyph protocol
-    glyph: if (build_options.glyph_protocol)
-        glyph.CommandParser
     else
         void,
 
@@ -291,10 +192,6 @@ pub const State = union(enum) {
         switch (self.*) {
             .inactive, .ignore, .identify => {},
             .unknown => |*v| v.deinit(),
-            .glyph => |*v| if (comptime build_options.glyph_protocol)
-                v.deinit()
-            else
-                unreachable,
             .kitty => |*v| if (comptime build_options.kitty_graphics)
                 v.deinit()
             else
@@ -395,7 +292,6 @@ pub const Unknown = struct {
 /// Possible APC command types.
 pub const Protocol = enum {
     kitty,
-    glyph,
 
     /// Returns the default maximum bytes for the given protocol.
     pub fn defaultMaxBytes(self: Protocol) usize {
@@ -403,10 +299,6 @@ pub const Protocol = enum {
             // Kitty graphics payloads can be very large (e.g. full images
             // encoded as base64), so the default is set to 65 MiB.
             .kitty => 65 * 1024 * 1024,
-            // Glyph protocol messages carry single glyf outlines which
-            // are small, but base64 encoding inflates them. 1 MiB is
-            // generous for any single simple-glyph record.
-            .glyph => 1 * 1024 * 1024,
         };
     }
 
@@ -429,21 +321,11 @@ pub const Command = union(enum) {
     else
         void,
 
-    glyph: if (build_options.glyph_protocol)
-        glyph.Request
-    else
-        void,
-
     unknown: Unknown,
 
     pub fn deinit(self: *Command, alloc: Allocator) void {
         switch (self.*) {
             .kitty => |*v| if (comptime build_options.kitty_graphics)
-                v.deinit(alloc)
-            else
-                unreachable,
-
-            .glyph => |*v| if (comptime build_options.glyph_protocol)
                 v.deinit(alloc)
             else
                 unreachable,
@@ -502,23 +384,6 @@ test "capture short unknown APC command" {
     try testing.expectEqualStrings("X", truncated.content);
     try testing.expect(truncated.truncated);
     result.deinit(alloc);
-}
-
-test "disabled known APC protocol is not unknown" {
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    var h: Handler = .{ .unknown_max_bytes = 64 };
-    defer h.deinit();
-    h.enable(.glyph, false);
-    h.start();
-    h.feedSlice(alloc, "25a1;q;cp=E0A0");
-    try testing.expect(h.end() == null);
-
-    // An incomplete known protocol identifier is malformed, not unknown.
-    h.start();
-    h.feedSlice(alloc, "25a");
-    try testing.expect(h.end() == null);
 }
 
 test "garbage Kitty command" {
@@ -657,22 +522,6 @@ test "garbage glyph command" {
     try testing.expect(h.end() == null);
 }
 
-test "valid glyph command" {
-    if (comptime !build_options.glyph_protocol) return error.SkipZigTest;
-
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    var h: Handler = .{};
-    h.start();
-    for ("25a1;q;cp=E0A0") |c| h.feed(alloc, c);
-
-    var result = h.end().?;
-    defer result.deinit(alloc);
-    try testing.expect(result == .glyph);
-    try testing.expect(result.glyph == .query);
-}
-
 test "feedSlice valid Kitty command" {
     if (comptime !build_options.kitty_graphics) return error.SkipZigTest;
 
@@ -723,22 +572,6 @@ test "feedSlice unknown APC command is ignored" {
     try testing.expect(h.end() == null);
 }
 
-test "feedSlice valid glyph command" {
-    if (comptime !build_options.glyph_protocol) return error.SkipZigTest;
-
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    var h: Handler = .{};
-    h.start();
-    h.feedSlice(alloc, "25a1;q;cp=E0A0");
-
-    var result = h.end().?;
-    defer result.deinit(alloc);
-    try testing.expect(result == .glyph);
-    try testing.expect(result.glyph == .query);
-}
-
 test "feedSlice kitty max bytes exceeded" {
     if (comptime !build_options.kitty_graphics) return error.SkipZigTest;
 
@@ -754,13 +587,11 @@ test "feedSlice kitty max bytes exceeded" {
     try testing.expect(h.state == .ignore);
 }
 
-test "disabled glyph command is ignored" {
-    const testing = std.testing;
-    const alloc = testing.allocator;
-
-    var h: Handler = .{};
-    h.enable(.glyph, false);
+test "disabled Kitty protocol is not captured as unknown" {
+    var h: Handler = .{ .unknown_max_bytes = 64 };
+    defer h.deinit();
+    h.enable(.kitty, false);
     h.start();
-    for ("25a1;q;cp=e0a0") |c| h.feed(alloc, c);
-    try testing.expect(h.end() == null);
+    h.feedSlice(std.testing.allocator, "Gf=24,s=1,v=1;AAAA");
+    try std.testing.expect(h.end() == null);
 }

@@ -4,7 +4,6 @@ const build_config = @import("build_config.zig");
 const build_options = @import("build_options");
 const cli = @import("cli.zig");
 const internal_os = @import("os/main.zig");
-const harfbuzz = @import("harfbuzz");
 const renderer = @import("renderer.zig");
 const apprt = @import("apprt.zig");
 const assert = @import("quirks.zig").inlineAssert;
@@ -154,10 +153,7 @@ pub fn init(opts: InitOpts) !void {
     std.log.info("cghostty version={s}", .{build_config.version_string});
     std.log.info("cghostty build optimize={s}", .{build_config.mode_string});
     std.log.info("runtime={s}", .{if (build_config.artifact == .lib) "embedded" else "cli"});
-    std.log.info("font_backend={}", .{build_config.font_backend});
-    if (comptime build_config.font_backend.hasHarfbuzz()) {
-        std.log.info("dependency harfbuzz={s}", .{harfbuzz.versionString()});
-    }
+    std.log.info("font_backend=CoreText", .{});
 
     std.log.info("renderer={}", .{renderer.Renderer});
     std.log.info("libxev default backend={t}", .{xev.backend});
@@ -176,11 +172,6 @@ pub fn init(opts: InitOpts) !void {
     // hereafter can use this cached value.
     self.resources_dir = try apprt.runtime.resourcesDir(self.alloc);
     errdefer self.resources_dir.deinit(self.alloc);
-
-    // Setup i18n
-    if (self.resources_dir.app()) |v| internal_os.i18n.init(v) catch |err| {
-        std.log.warn("failed to init i18n, translations will not be available err={}", .{err});
-    };
 }
 
 /// Cleans up the global state. This doesn't _need_ to be called but

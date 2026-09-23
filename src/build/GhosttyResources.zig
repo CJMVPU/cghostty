@@ -108,8 +108,10 @@ pub fn init(b: *std.Build, cfg: *const Config, deps: *const SharedDeps) !Ghostty
         try steps.append(b.allocator, &install_step.step);
     }
 
-    // Ship the embedded font's redistribution license.
+    // Ship the exact default font alongside its redistribution license.
     if (b.lazyDependency("lxgw_wenkai", .{})) |wenkai| {
+        const file = b.addInstallFile(wenkai.path("LXGWWenKaiMono-Medium.ttf"), "share/cghostty/fonts/LXGWWenKaiMono-Medium.ttf");
+        try steps.append(b.allocator, &file.step);
         const license = b.addInstallFile(wenkai.path("OFL.txt"), "share/cghostty/licenses/LXGW-WenKai-OFL.txt");
         try steps.append(b.allocator, &license.step);
     }

@@ -157,7 +157,7 @@ fn bundledFace(
     opts: font.face.Options,
     synthetic: Config.FontSyntheticStyle,
 ) !font.Face {
-    var face = try font.Face.init(self.font_lib, font.embedded.default_face, opts);
+    var face = try font.bundled.load(self.alloc, opts);
     errdefer face.deinit();
     const enabled = switch (style) {
         .regular => false,

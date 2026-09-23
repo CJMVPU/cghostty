@@ -5,10 +5,9 @@
 //! Be careful to ensure that any fonts you embed are licensed for
 //! redistribution and include their license as necessary.
 
-/// Built-in terminal font, loaded directly without system installation.
+/// Bundled terminal font identity. Its TTF lives in application Resources.
 pub const default_family = "LXGW WenKai Mono";
 pub const default_style = "Medium";
-pub const default_face = @embedFile("lxgw_wenkai_mono");
 
 /// Variable fonts used by font backend tests.
 pub const variable = @embedFile("jetbrains_mono_variable");

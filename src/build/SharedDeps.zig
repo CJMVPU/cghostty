@@ -21,40 +21,8 @@ metallib: *MetallibStep,
 unicode_tables: UnicodeTables,
 uucode_tables: std.Build.LazyPath,
 
-/// Singleton uucode module, instantiated once in `init` and reused
-/// everywhere so that ghostty and vaxis share the same compiled tables in
-/// each final binary instead of each linking its own copy.
-///
-/// Sharing one instance is also a hard requirement (not just an
-/// optimization) for Zig 0.16's strict module model. `SharedDeps.add` runs
-/// for the macOS arm64 artifacts in Debug and ReleaseFast modes. On each
-/// call we have to wire uucode into both the step's root module and into
-/// vaxis_mod (because vaxis's `Parser.zig` does `@import("uucode")` and
-/// we pass `external_uucode = true` to vaxis's build.zig so vaxis doesn't
-/// instantiate its own uucode dep). If those two import bindings ever
-/// resolve to *different* `*Module` pointers within a single Compile
-/// step's analysis, Zig fails with:
-///
-///     vaxis/src/Parser.zig: file exists in modules 'uucode' and 'uucode0'
-///
-/// because all those uucode module instances share the same physical
-/// `uucode/src/root.zig` file on disk, and Zig requires every file to belong
-/// to exactly one module within a Compile graph.
-///
-/// The natural way to keep them the same would be to call
-/// `b.lazyDependency("uucode", .{ .tables_path, .build_config_path })`
-/// from each call site and let Zig's dependency cache deduplicate
-/// identical args. That fails because of a bug in Zig's
-/// `userLazyPathsAreTheSame` (Build.zig) where the `.src_path` and
-/// `.generated` equality checks are inverted: `if (std.mem.eql(...))
-/// return false` instead of `if (!std.mem.eql(...)) return false`. The
-/// dep cache key therefore always misses whenever any arg is a
-/// `b.path(...)` LazyPath, so each call returns a fresh `*Dependency`
-/// with a fresh `*Module`. Hoisting the dep into one eager
-/// `b.dependency` call here sidesteps the cache entirely.
-///
-/// This conflict is independent of whether vaxis itself is acquired as a
-/// singleton or per-target dep.
+/// One module instance shared by build artifacts to keep Zig module identity
+/// stable when generated table paths are used as dependency arguments.
 uucode_mod: *std.Build.Module,
 
 /// Used to keep track of a list of file sources.
@@ -69,8 +37,7 @@ pub fn init(b: *std.Build, cfg: *const Config) !SharedDeps {
         break :blk uucode.namedLazyPath("tables.zig");
     };
 
-    // Instantiate the singleton uucode module that both ghostty and vaxis
-    // import. See the doc comment on `uucode_mod`.
+    // Reuse one uucode module with the generated tables.
     const uucode_mod = b.dependency("uucode", .{
         .tables_path = uucode_tables,
         .build_config_path = b.path("src/build/uucode_config.zig"),
@@ -213,32 +180,6 @@ pub fn add(
         }
     }
 
-    // Harfbuzz
-    _ = b.systemIntegrationOption("harfbuzz", .{}); // Shows it in help
-    if (self.config.font_backend.hasHarfbuzz()) {
-        if (b.lazyDependency("harfbuzz", .{
-            .target = target,
-            .optimize = optimize,
-            .@"enable-freetype" = self.config.font_backend.hasFreetype(),
-            .@"enable-coretext" = true,
-        })) |harfbuzz_dep| {
-            step.root_module.addImport(
-                "harfbuzz",
-                harfbuzz_dep.module("harfbuzz"),
-            );
-            if (b.systemIntegrationOption("harfbuzz", .{})) {
-                step.root_module.linkSystemLibrary("harfbuzz", dynamic_link_opts);
-            } else {
-                step.root_module.linkLibrary(harfbuzz_dep.artifact("harfbuzz"));
-                try static_libs.append(
-                    b.allocator,
-                    harfbuzz_dep.artifact("harfbuzz").getEmittedBin(),
-                );
-            }
-        }
-    }
-
-    // Fontconfig
     // Libpng - Ghostty doesn't actually use this directly, its only used
     // through dependencies, so we only need to add it to our static
     // libs list if we're not using system integration. The dependencies
@@ -287,24 +228,7 @@ pub fn add(
         &static_libs,
     );
 
-    // nothings/stb headers
-    try translate_c.addImportToModule(b, "stb_c", step.root_module, .{
-        .source = .{ .includes = .{ .files = &.{
-            .{ .path = "stb_image.h" },
-            .{ .path = "stb_image_resize.h" },
-        } } },
-        .target = target,
-        .optimize = optimize,
-        .include_paths = &.{b.path("src/stb")},
-    });
-
-    // C files
     step.root_module.link_libc = true;
-    step.root_module.addIncludePath(b.path("src/stb"));
-    step.root_module.addCSourceFiles(.{
-        .files = &.{"src/stb/stb.c"},
-        .flags = &.{},
-    });
 
     // libc++ is required for the app's C++ dependencies.
     step.root_module.link_libcpp = true;
@@ -317,15 +241,6 @@ pub fn add(
     });
 
     // Other dependencies, mostly pure Zig
-    if (b.lazyDependency("vaxis", .{
-        .target = target,
-        .optimize = optimize,
-        .external_uucode = true,
-    })) |dep| {
-        const vaxis = dep.module("vaxis");
-        step.root_module.addImport("vaxis", vaxis);
-        vaxis.addImport("uucode", self.uucode_mod);
-    }
     if (b.lazyDependency("wuffs", .{
         .target = target,
         .optimize = optimize,
@@ -343,13 +258,6 @@ pub fn add(
         .optimize = optimize,
     })) |dep| {
         step.root_module.addImport("z2d", dep.module("z2d"));
-    }
-    if (b.lazyDependency("zf", .{
-        .target = target,
-        .optimize = optimize,
-        .with_tui = false,
-    })) |dep| {
-        step.root_module.addImport("zf", dep.module("zf"));
     }
 
     // Native macOS dependencies.
@@ -380,21 +288,6 @@ pub fn add(
         );
     }
 
-    // Apple platforms do not include libc libintl so we bundle it.
-    // This is LGPL but since our source code is open source we are
-    // in compliance with the LGPL since end users can modify this
-    // build script to replace the bundled libintl with their own.
-    if (b.lazyDependency("libintl", .{
-        .target = target,
-        .optimize = optimize,
-    })) |libintl_dep| {
-        step.root_module.linkLibrary(libintl_dep.artifact("intl"));
-        try static_libs.append(
-            b.allocator,
-            libintl_dep.artifact("intl").getEmittedBin(),
-        );
-    }
-
     // cimgui
     if (b.lazyDependency("dcimgui", .{
         .target = target,
@@ -415,10 +308,9 @@ pub fn add(
     // Fonts
     {
         if (b.lazyDependency("lxgw_wenkai", .{})) |wenkai| {
-            step.root_module.addAnonymousImport(
-                "lxgw_wenkai_mono",
-                .{ .root_source_file = wenkai.path("LXGWWenKaiMono-Medium.ttf") },
-            );
+            const resources = b.addOptions();
+            resources.addOption([]const u8, "wenkai", wenkai.path("LXGWWenKaiMono-Medium.ttf").getPath(b));
+            step.root_module.addOptions("font_resources", resources);
         }
 
         // JetBrains Mono

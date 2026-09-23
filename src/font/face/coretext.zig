@@ -3,7 +3,6 @@ const builtin = @import("builtin");
 const assert = @import("../../quirks.zig").inlineAssert;
 const Allocator = std.mem.Allocator;
 const macos = @import("macos");
-const harfbuzz = @import("harfbuzz");
 const font = @import("../main.zig");
 const opentype = @import("../opentype.zig");
 const quirks = @import("../../quirks.zig");
@@ -13,10 +12,6 @@ const log = std.log.scoped(.font_face);
 pub const Face = struct {
     /// Our font face
     font: *macos.text.Font,
-
-    /// Harfbuzz font corresponding to this face. We only use this
-    /// if we're using Harfbuzz.
-    hb_font: if (harfbuzz_shaper) harfbuzz.Font else void,
 
     /// Set quirks.disableDefaultFontFeatures
     quirks_disable_default_font_features: bool = false,
@@ -33,10 +28,6 @@ pub const Face = struct {
 
     /// The current size this font is set to.
     size: font.face.DesiredSize,
-
-    /// True if our build is using Harfbuzz. If we're not, we can avoid
-    /// some Harfbuzz-specific code paths.
-    const harfbuzz_shaper = font.options.backend.hasHarfbuzz();
 
     /// The matrix applied to a regular font to auto-italicize it.
     pub const italic_skew = macos.graphics.AffineTransform{
@@ -69,6 +60,23 @@ pub const Face = struct {
         return try initFontCopy(ct_font, opts);
     }
 
+    /// Load the exact font file without registering or looking up its family
+    /// in the process/system font database.
+    pub fn initFile(path: []const u8, opts: font.face.Options) !Face {
+        const path_string = try macos.foundation.String.createWithBytes(path, .utf8, false);
+        defer path_string.release();
+        const url = try macos.foundation.URL.createWithFileSystemPath(path_string, .posix, false);
+        defer url.release();
+        const descriptors = macos.text.createFontDescriptorsFromURL(url) orelse
+            return error.FontInitFailure;
+        defer descriptors.release();
+        if (descriptors.getCount() != 1) return error.FontInitFailure;
+        const descriptor = descriptors.getValueAtIndex(macos.text.FontDescriptor, 0);
+        const base = try macos.text.Font.createWithFontDescriptor(descriptor, 12);
+        defer base.release();
+        return initFontCopy(base, opts);
+    }
+
     /// Initialize a CoreText-based face from another initialized font face
     /// but with a new size. This is often how CoreText fonts are initialized
     /// because the font is loaded at a default size during discovery, and then
@@ -92,14 +100,6 @@ pub const Face = struct {
     pub fn initFont(ct_font: *macos.text.Font, opts: font.face.Options) !Face {
         const traits = ct_font.getSymbolicTraits();
 
-        var hb_font = if (comptime harfbuzz_shaper) font: {
-            var hb_font = try harfbuzz.coretext.createFont(ct_font);
-            const pixels: opentype.sfnt.F26Dot6 = .from(opts.size.pixels());
-            hb_font.setScale(@bitCast(pixels), @bitCast(pixels));
-            break :font hb_font;
-        } else {};
-        errdefer if (comptime harfbuzz_shaper) hb_font.destroy();
-
         const color: ?ColorState = if (traits.color_glyphs)
             try .init(ct_font)
         else
@@ -108,7 +108,6 @@ pub const Face = struct {
 
         var result: Face = .{
             .font = ct_font,
-            .hb_font = hb_font,
             .color = color,
             .size = opts.size,
         };
@@ -164,7 +163,6 @@ pub const Face = struct {
 
     pub fn deinit(self: *Face) void {
         self.font.release();
-        if (comptime harfbuzz_shaper) self.hb_font.destroy();
         if (self.color) |v| v.deinit();
         self.* = undefined;
     }

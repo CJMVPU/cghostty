@@ -24,7 +24,6 @@ def main():
         ("Metal", ["xcrun", "--toolchain", "Metal", "metal", "--version"]),
         ("Zig", ["zig", "version"]),
         ("Nushell", ["nu", "--version"]),
-        ("gettext", ["msgfmt", "--version"]),
         ("SwiftLint", ["swiftlint", "version"]),
         ("actionlint", ["actionlint", "--version"]),
         ("Python", ["python3", "--version"]),

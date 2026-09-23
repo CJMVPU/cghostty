@@ -3,7 +3,6 @@ const Allocator = std.mem.Allocator;
 const Action = @import("ghostty.zig").Action;
 const args = @import("args.zig");
 const x11_color = @import("../terminal/main.zig").x11_color;
-const vaxis = @import("vaxis");
 const global = @import("../global.zig");
 
 pub const Options = struct {
@@ -11,7 +10,7 @@ pub const Options = struct {
         _ = self;
     }
 
-    /// If `true`, print without formatting even if printing to a tty
+    /// Accepted for compatibility; output is always plain.
     plain: bool = false,
 
     /// Enables "-h" and "--help" to work.
@@ -26,8 +25,7 @@ pub const Options = struct {
 ///
 /// Flags:
 ///
-///   * `--plain`: will disable formatting and make the output more
-///     friendly for Unix tooling. This is default when not printing to a tty.
+///   * `--plain`: accepted for compatibility; output is always plain text.
 pub fn run(alloc: Allocator) !u8 {
     var opts: Options = .{};
     defer opts.deinit();
@@ -49,11 +47,7 @@ pub fn run(alloc: Allocator) !u8 {
     }.lessThan);
 
     var stdout: std.Io.File = .stdout();
-    if (!opts.plain and try stdout.isTty(global.io())) {
-        var arena = std.heap.ArenaAllocator.init(alloc);
-        defer arena.deinit();
-        return prettyPrint(arena.allocator(), keys.items);
-    } else {
+    {
         var buffer: [4096]u8 = undefined;
         var stdout_writer = stdout.writer(global.io(), &buffer);
         const writer = &stdout_writer.interface;
@@ -66,133 +60,7 @@ pub fn run(alloc: Allocator) !u8 {
                 rgb.b,
             });
         }
-    }
-
-    return 0;
-}
-
-fn prettyPrint(alloc: Allocator, keys: [][]const u8) !u8 {
-    var env_map = try global.environMap();
-    defer env_map.deinit();
-
-    // Set up vaxis
-    var buf: [1024]u8 = undefined;
-    var tty = try vaxis.Tty.init(global.io(), &buf);
-    defer tty.deinit();
-    var vx = try vaxis.init(global.io(), alloc, &env_map, .{});
-    defer vx.deinit(alloc, tty.writer());
-
-    // We know we are ghostty, so let's enable mode 2027. Vaxis normally does this but you need an
-    // event loop to auto-enable it.
-    vx.caps.unicode = .unicode;
-    try tty.writer().writeAll(vaxis.ctlseqs.unicode_set);
-    defer tty.writer().writeAll(vaxis.ctlseqs.unicode_reset) catch {};
-
-    const winsize: vaxis.Winsize = try tty.getWinsize();
-    try vx.resize(alloc, tty.writer(), winsize);
-
-    const win = vx.window();
-
-    var max_name_len: usize = 0;
-    for (keys) |name| {
-        if (name.len > max_name_len) max_name_len = name.len;
-    }
-
-    // max name length plus " = #RRGGBB XX" plus "  " gutter between columns
-    const column_size = max_name_len + 15;
-    // add two to take into account lack of gutter after last column
-    const columns: usize = @divFloor(win.width + 2, column_size);
-
-    var i: usize = 0;
-    const step = @divFloor(keys.len, columns) + 1;
-    while (i < step) : (i += 1) {
-        win.clear();
-
-        var result: vaxis.Window.PrintResult = .{ .col = 0, .row = 0, .overflow = false };
-
-        for (0..columns) |j| {
-            const k = i + (step * j);
-            if (k >= keys.len) continue;
-
-            const name = keys[k];
-            const rgb = x11_color.map.get(name).?;
-
-            const style1: vaxis.Style = .{
-                .fg = .{
-                    .rgb = .{ rgb.r, rgb.g, rgb.b },
-                },
-            };
-            const style2: vaxis.Style = .{
-                .fg = .{
-                    .rgb = .{ rgb.r, rgb.g, rgb.b },
-                },
-                .bg = .{
-                    .rgb = .{ rgb.r, rgb.g, rgb.b },
-                },
-            };
-
-            // name of the color
-            result = win.printSegment(
-                .{ .text = name },
-                .{ .col_offset = result.col },
-            );
-            // push the color data to the end of the column
-            for (0..max_name_len - name.len) |_| {
-                result = win.printSegment(
-                    .{ .text = " " },
-                    .{ .col_offset = result.col },
-                );
-            }
-            result = win.printSegment(
-                .{ .text = " = " },
-                .{ .col_offset = result.col },
-            );
-            // rgb triple
-            result = win.printSegment(.{
-                .text = try std.fmt.allocPrint(
-                    alloc,
-                    "#{x:0>2}{x:0>2}{x:0>2}",
-                    .{
-                        rgb.r, rgb.g, rgb.b,
-                    },
-                ),
-                .style = style1,
-            }, .{ .col_offset = result.col });
-            result = win.printSegment(
-                .{ .text = " " },
-                .{ .col_offset = result.col },
-            );
-            // colored block
-            result = win.printSegment(
-                .{
-                    .text = "  ",
-                    .style = style2,
-                },
-                .{ .col_offset = result.col },
-            );
-            // add the gutter if needed
-            if (j + 1 < columns) {
-                result = win.printSegment(
-                    .{
-                        .text = "  ",
-                    },
-                    .{ .col_offset = result.col },
-                );
-            }
-        }
-
-        // clear the rest of the line
-        while (result.col != 0) {
-            result = win.printSegment(
-                .{
-                    .text = " ",
-                },
-                .{ .col_offset = result.col },
-            );
-        }
-
-        // output the data
-        try vx.prettyPrint(tty.writer());
+        try writer.flush();
     }
 
     return 0;

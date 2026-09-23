@@ -4,7 +4,6 @@ const assert = @import("../quirks.zig").inlineAssert;
 const macos = @import("macos");
 const objc = @import("objc");
 const internal_os = @import("main.zig");
-const i18n = internal_os.i18n;
 
 const log = std.log.scoped(.os_locale);
 
@@ -106,102 +105,6 @@ fn setLangFromCocoa() void {
             return;
         }
     }
-
-    // Get our preferred languages and set that to the LANGUAGE
-    // env var in case our language differs from our locale.
-    language: {
-        var buf: [1024]u8 = undefined;
-        const pref_ = preferredLanguageFromCocoa(
-            &buf,
-            NSLocale,
-        ) catch |err| {
-            log.warn("error getting preferred languages. err={}", .{err});
-            break :language;
-        };
-
-        const pref = pref_ orelse break :language;
-        log.debug(
-            "setting LANGUAGE from preferred languages value={s}",
-            .{pref},
-        );
-        _ = setenv("LANGUAGE", @ptrCast(pref), 1);
-    }
-}
-
-/// Sets the LANGUAGE environment variable based on the preferred languages
-/// as reported by NSLocale.
-///
-/// macOS has a concept of preferred languages separate from the system
-/// locale. The set of preferred languages is a list in priority order
-/// of what translations the user prefers. A user can have, for example,
-/// "fr_FR" as their locale but "en" as their preferred language. This would
-/// mean that they want to use French units, date formats, etc. but they
-/// prefer English translations.
-///
-/// gettext uses the LANGUAGE environment variable to override only
-/// translations and a priority order can be specified by separating
-/// the languages with colons. For example, "en:fr" would mean that
-/// English translations are preferred but if they are not available
-/// then French translations should be used.
-///
-/// To further complicate things, Apple reports the languages in BCP-47
-/// format which is not compatible with gettext's POSIX locale format so
-/// we have to canonicalize them.
-fn preferredLanguageFromCocoa(
-    buf: []u8,
-    NSLocale: objc.Class,
-) error{NoSpaceLeft}!?[:0]const u8 {
-    var writer: std.Io.Writer = .fixed(buf);
-
-    // We need to get our app's preferred languages. These may not
-    // match the system locale (NSLocale.currentLocale).
-    const preferred: *macos.foundation.Array = array: {
-        const ns = NSLocale.msgSend(
-            objc.Object,
-            objc.sel("preferredLanguages"),
-            .{},
-        );
-        break :array @ptrCast(ns.value);
-    };
-    for (0..preferred.getCount()) |i| {
-        var str_buf: [255:0]u8 = undefined;
-        const str = preferred.getValueAtIndex(macos.foundation.String, i);
-        const c_str = str.cstring(&str_buf, .utf8) orelse {
-            // I don't think this can happen but if it does then I want
-            // to know about it if a user has translation issues.
-            log.warn("failed to convert a preferred language to UTF-8", .{});
-            continue;
-        };
-
-        // Append our separator if we have any previous languages
-        if (writer.end > 0) {
-            _ = writer.writeByte(':') catch
-                return error.NoSpaceLeft;
-        }
-
-        // Apple languages are in BCP-47 format, and we need to
-        // canonicalize them to the POSIX format.
-        const canon = try i18n.canonicalizeLocale(
-            writer.buffer[writer.end..],
-            c_str,
-        );
-        writer.end += canon.len;
-
-        // The canonicalized locale never contains the encoding and
-        // all of our translations require UTF-8 so we add that.
-        _ = writer.writeAll(".UTF-8") catch return error.NoSpaceLeft;
-    }
-
-    // If we had no preferred languages then we return nothing.
-    if (writer.end == 0) return null;
-
-    // Null terminate it
-    _ = writer.writeByte(0) catch return error.NoSpaceLeft;
-
-    // Get our slice, this won't be null terminated so we have to
-    // reslice it with the null terminator.
-    const slice = writer.buffered();
-    return slice[0 .. slice.len - 1 :0];
 }
 
 const c = @import("locale-c");

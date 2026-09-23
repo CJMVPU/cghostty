@@ -47,7 +47,7 @@ python3 scripts/check-scope.py --app macos/build/ReleaseLocal/cghostty.app
 
 Zig 改动使用 `zig fmt`；Swift 使用 `swiftlint lint --strict --fix`。完整核心测试为 `zig build test`，通常优先运行相关过滤测试。终端压缩、快照等子目录的测试约定继续适用。
 
-Zig 安装版本和 Apple Silicon 归档 SHA-256 集中在 `scripts/zig-toolchain.json`；安装脚本和 CI 读取同一份记录。更新工具链时同步 `build.zig.zon` 的 `minimum_zig_version`。`scripts/check-versions.py` 检查两者一致，并检查 simdutf 内置源码、libpng 配置头和 libintl 生成头与各自包清单的版本一致。
+Zig 安装版本和 Apple Silicon 归档 SHA-256 集中在 `scripts/zig-toolchain.json`；安装脚本和 CI 读取同一份记录。更新工具链时同步 `build.zig.zon` 的 `minimum_zig_version`。`scripts/check-versions.py` 检查两者一致，并检查 simdutf 内置源码和 libpng 配置头与各自包清单的版本一致。
 
 C/C++ 依赖版本表直接从 `pkg/*/build.zig.zon` 生成，见 `pkg/README.md`。更新依赖及生成文件后运行 `python3 scripts/check-versions.py --update-docs`，再运行默认检查。检查同时核对版本与源码归档 URL，以及 ImGui 与 Dear Bindings 的匹配关系；默认模式只读，表格过期时给出更新命令。Wuffs 按源码提交快照记录，维护状态和生成说明保留为人工维护的正文。
 
@@ -80,7 +80,11 @@ Xcode scheme 和 Swift 模块仍为 `Ghostty`，C 桥接模块为 `GhosttyKit`�
 
 内部核心只构建 arm64 静态库，由 Xcode 直接链接，没有 XCFramework 包装、Universal 目标选择、独立 pkg-config 安装或静态库 dSYM 分支。版本直接来自 `build.zig.zon` 或显式 `--version`，不依赖 Git 探测。归档规范化与 libSystem 符号处理仍是当前 Zig/Xcode 链接所需步骤。
 
-`zig build update-translations` 直接从共享命令面板提取 gettext 模板，合并现有译文并移除 obsolete 条目；不再生成 GTK/Python 中间模板。译者署名保留，删除的界面译文可从 Git 历史查询。
+命令面板使用 `macos/Sources/Ghostty/CommandPalette.xcstrings`，支持英文、简体中文、繁体中文和日文，随 macOS 应用语言选择译文。新增内置命令时同步标题、说明和三套译文，运行 `python3 scripts/check-localizations.py` 检查覆盖。自定义命令文本及动作标识不参与翻译。原有译者署名见 `docs/TRANSLATORS.md`；其他语言可从 Git 历史查询。构建无需 gettext。
+
+默认文楷字体安装到应用 `Contents/Resources/cghostty/fonts/LXGWWenKaiMono-Medium.ttf`，由 CoreText 按文件 URL 加载；字体文件不嵌入可执行文件。字体测试使用同一份锁定依赖中的文件。终端字体统一使用 CoreText；Inspector 仍使用其自身的 FreeType 依赖。
+
+`+list-themes`、`+list-colors`、`+list-keybinds` 只输出文本，`--plain` 保留兼容。主题名称、主题文件加载及配置中的 `theme = ...` 不变；不再提供终端交互预览或自动写入主题配置。
 
 Metal 编译通过 `xcrun --toolchain Metal` 调用安装的工具链。缺失时先执行 `xcodebuild -downloadComponent MetalToolchain`。无需 Linux 容器、Nix、Flatpak、Snap、独立 CMake SDK 或网站数据生成环境。
 
@@ -174,7 +178,7 @@ Metal 4 每个在途帧独占可复用的命令缓冲区、分配器、参数表
 CI 使用 GitHub `xcode-27` arm64 预览镜像，并在运行测试前验证系统为 macOS 27+。
 CI 在构建前检查 Zig 格式、严格 SwiftLint、版本记录和工作流语法。`.github/actionlint.yaml` 补充校验器尚未内置的 `xcode-27` 官方预览标签，不改变 runner 的选择方式。日志与指定的 `.xcresult` 结果包以 `cghostty-ci-diagnostics` 产物保存 14 天，失败时也尝试上传；打包 ZIP 和校验文件仍使用独立的 `cghostty-macos-arm64` 产物。Action 均锁定提交 SHA，缓存键包含 SDK 构建号和工具链记录。
 
-工具安装后，`scripts/record-build-environment.py` 记录 macOS、架构、Xcode、SDK、Swift、Metal、Zig、Nushell、gettext、SwiftLint、actionlint 和 Python 的实际版本。报告写入 `macos/build/ci-logs/environment.md`，同时显示在 Actions 运行摘要中，并随诊断产物上传。工具安装失败时也尝试记录，缺失或失败的命令标记为 `Unavailable`；报告本身不替代构建检查。Homebrew 工具随安装时可用版本变化，环境记录用于定位差异，不代表整个构建环境已完全固定。仅记录选定的公开 runner 元数据，不导出完整环境变量。
+工具安装后，`scripts/record-build-environment.py` 记录 macOS、架构、Xcode、SDK、Swift、Metal、Zig、Nushell、SwiftLint、actionlint 和 Python 的实际版本。报告写入 `macos/build/ci-logs/environment.md`，同时显示在 Actions 运行摘要中，并随诊断产物上传。工具安装失败时也尝试记录，缺失或失败的命令标记为 `Unavailable`；报告本身不替代构建检查。Homebrew 工具随安装时可用版本变化，环境记录用于定位差异，不代表整个构建环境已完全固定。仅记录选定的公开 runner 元数据，不导出完整环境变量。
 
 本地可运行 `python3 scripts/record-build-environment.py` 查看相同格式的报告。
 

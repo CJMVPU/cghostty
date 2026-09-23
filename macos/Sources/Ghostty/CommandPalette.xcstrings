@@ -1,0 +1,3962 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "Change Tab Title…": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "タブのタイトルを変更…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更改标签页标题…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "變更分頁標題…"
+          }
+        }
+      }
+    },
+    "Change Terminal Title…": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更改终端标题…"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "變更終端機標題…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ターミナルのタイトルを変更…"
+          }
+        }
+      }
+    },
+    "Check for Updates": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "检查更新"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "檢查更新"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アップデートを確認"
+          }
+        }
+      }
+    },
+    "Check for updates to the application.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "检查应用是否有版本更新。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "檢查應用程式是否有更新。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アプリのアップデートを確認します。"
+          }
+        }
+      }
+    },
+    "Clear Screen": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清除屏幕"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清除螢幕"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面をクリア"
+          }
+        }
+      }
+    },
+    "Clear the screen and scrollback.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清除屏幕和回滚内容。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清除螢幕與捲動緩衝區。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面とスクロールバックを消去します。"
+          }
+        }
+      }
+    },
+    "Close All Windows": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭所有窗口"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "關閉所有視窗"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "すべてのウィンドウを閉じる"
+          }
+        }
+      }
+    },
+    "Close Other Tabs": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭其他标签页"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "關閉其他分頁"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ほかのタブを閉じる"
+          }
+        }
+      }
+    },
+    "Close Tab": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "タブを閉じる"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭标签页"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "關閉分頁"
+          }
+        }
+      }
+    },
+    "Close Tabs to the Right": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭右侧标签页"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "關閉右側的分頁"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "右側のタブを閉じる"
+          }
+        }
+      }
+    },
+    "Close Terminal": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭终端"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "關閉終端機"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ターミナルを閉じる"
+          }
+        }
+      }
+    },
+    "Close Window": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ウィンドウを閉じる"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭窗口"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "關閉視窗"
+          }
+        }
+      }
+    },
+    "Close all tabs in this window except the current one.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭当前窗口内除了当前标签页以外的所有标签页。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "關閉此視窗中目前分頁以外的所有分頁。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このウィンドウの現在のタブ以外をすべて閉じます。"
+          }
+        }
+      }
+    },
+    "Close all tabs to the right of the current one.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭当前标签页右侧的所有标签页。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "關閉目前分頁右側的所有分頁。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在のタブより右側にあるタブをすべて閉じます。"
+          }
+        }
+      }
+    },
+    "Close all windows.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭所有窗口。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "關閉所有視窗。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "すべてのウィンドウを閉じます。"
+          }
+        }
+      }
+    },
+    "Close the current tab.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭当前标签页。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "關閉目前分頁。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在のタブを閉じます。"
+          }
+        }
+      }
+    },
+    "Close the current terminal.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭当前终端。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "關閉目前終端機。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在のターミナルを閉じます。"
+          }
+        }
+      }
+    },
+    "Close the current window.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭当前窗口。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "關閉目前視窗。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在のウィンドウを閉じます。"
+          }
+        }
+      }
+    },
+    "Copy Screen as ANSI Sequences to Temporary File and Copy Path": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "以 ANSI 序列格式复制屏幕内容到临时文件并复制路径"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將螢幕內容以 ANSI 跳脫序列複製到暫存檔並複製路徑"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面をANSIシーケンスとして一時ファイルに保存してパスをコピー"
+          }
+        }
+      }
+    },
+    "Copy Screen as ANSI Sequences to Temporary File and Open": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "以 ANSI 序列格式复制屏幕内容到临时文件并打开"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將螢幕內容以 ANSI 跳脫序列複製到暫存檔並開啟"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面をANSIシーケンスとして一時ファイルに保存して開く"
+          }
+        }
+      }
+    },
+    "Copy Screen as ANSI Sequences to Temporary File and Paste Path": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "以 ANSI 序列格式复制屏幕内容到临时文件并粘贴路径"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將螢幕內容以 ANSI 跳脫序列複製到暫存檔並貼上路徑"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面をANSIシーケンスとして一時ファイルに保存してパスをペースト"
+          }
+        }
+      }
+    },
+    "Copy Screen as HTML to Temporary File and Copy Path": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "以 HTML 格式复制屏幕内容到临时文件并复制路径"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將螢幕內容以 HTML 複製到暫存檔並複製路徑"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面をHTMLとして一時ファイルに保存してパスをコピー"
+          }
+        }
+      }
+    },
+    "Copy Screen as HTML to Temporary File and Open": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "以 HTML 格式复制屏幕内容到临时文件并打开"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將螢幕內容以 HTML 複製到暫存檔並開啟"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面をHTMLとして一時ファイルに保存して開く"
+          }
+        }
+      }
+    },
+    "Copy Screen as HTML to Temporary File and Paste Path": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "以 HTML 格式复制屏幕内容到临时文件并粘贴路径"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將螢幕內容以 HTML 複製到暫存檔並貼上路徑"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面をHTMLとして一時ファイルに保存してパスをペースト"
+          }
+        }
+      }
+    },
+    "Copy Screen to Temporary File and Copy Path": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复制屏幕内容到临时文件并复制路径"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將螢幕內容複製到暫存檔並複製路徑"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面を一時ファイルに保存してパスをコピー"
+          }
+        }
+      }
+    },
+    "Copy Screen to Temporary File and Open": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复制屏幕内容到临时文件并打开"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將螢幕內容複製到暫存檔並開啟"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面を一時ファイルに保存して開く"
+          }
+        }
+      }
+    },
+    "Copy Screen to Temporary File and Paste Path": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复制屏幕内容到临时文件并粘贴路径"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將螢幕內容複製到暫存檔並貼上路徑"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面を一時ファイルに保存してパスをペースト"
+          }
+        }
+      }
+    },
+    "Copy Selection as ANSI Sequences to Clipboard": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将选区以 ANSI 序列格式复制到剪贴板"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將選取範圍以 ANSI 跳脫序列複製到剪貼簿"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択範囲をANSIエスケープシーケンスとしてクリップボードにコピー"
+          }
+        }
+      }
+    },
+    "Copy Selection as ANSI Sequences to Temporary File and Copy Path": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "以 ANSI 序列格式复制选区到临时文件并复制路径"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將選取範圍以 ANSI 跳脫序列複製到暫存檔並複製路徑"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択範囲をANSIシーケンスとして一時ファイルに保存してパスをコピー"
+          }
+        }
+      }
+    },
+    "Copy Selection as ANSI Sequences to Temporary File and Open": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "以 ANSI 序列格式复制选区到临时文件并打开"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將選取範圍以 ANSI 跳脫序列複製到暫存檔並開啟"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択範囲をANSIシーケンスとして一時ファイルに保存して開く"
+          }
+        }
+      }
+    },
+    "Copy Selection as ANSI Sequences to Temporary File and Paste Path": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "以 ANSI 序列格式复制选区到临时文件并粘贴路径"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將選取範圍以 ANSI 跳脫序列複製到暫存檔並貼上路徑"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択範囲をANSIシーケンスとして一時ファイルに保存してパスをペースト"
+          }
+        }
+      }
+    },
+    "Copy Selection as HTML to Clipboard": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将选区以 HTML 格式复制到剪贴板"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將選取範圍以 HTML 複製到剪貼簿"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択範囲をHTMLとしてクリップボードにコピー"
+          }
+        }
+      }
+    },
+    "Copy Selection as HTML to Temporary File and Copy Path": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "以 HTML 格式复制选区到临时文件并复制路径"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將選取範圍以 HTML 複製到暫存檔並複製路徑"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択範囲をHTMLとして一時ファイルに保存してパスをコピー"
+          }
+        }
+      }
+    },
+    "Copy Selection as HTML to Temporary File and Open": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "以 HTML 格式复制选区到临时文件并打开"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將選取範圍以 HTML 複製到暫存檔並開啟"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択範囲をHTMLとして一時ファイルに保存して開く"
+          }
+        }
+      }
+    },
+    "Copy Selection as HTML to Temporary File and Paste Path": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "以 HTML 格式复制选区到临时文件并粘贴路径"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將選取範圍以 HTML 複製到暫存檔並貼上路徑"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択範囲をHTMLとして一時ファイルに保存してパスをペースト"
+          }
+        }
+      }
+    },
+    "Copy Selection as Plain Text to Clipboard": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将选区以纯文本格式复制到剪贴板"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將選取範圍以純文字複製到剪貼簿"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択範囲をプレーンテキストとしてクリップボードにコピー"
+          }
+        }
+      }
+    },
+    "Copy Selection to Temporary File and Copy Path": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将选区复制到临时文件并复制路径"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將選取範圍複製到暫存檔並複製路徑"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択範囲を一時ファイルに保存してパスをコピー"
+          }
+        }
+      }
+    },
+    "Copy Selection to Temporary File and Open": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复制选区到临时文件并打开"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將選取範圍複製到暫存檔並開啟"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択範囲を一時ファイルに保存して開く"
+          }
+        }
+      }
+    },
+    "Copy Selection to Temporary File and Paste Path": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复制选区到临时文件并粘贴路径"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將選取範圍複製到暫存檔並貼上路徑"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択範囲を一時ファイルに保存してパスをペースト"
+          }
+        }
+      }
+    },
+    "Copy Terminal Title to Clipboard": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复制终端标题到剪贴板"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將終端機標題複製到剪貼簿"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ターミナルのタイトルをクリップボードにコピー"
+          }
+        }
+      }
+    },
+    "Copy URL to Clipboard": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复制 URL 到剪贴板"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將 URL 複製到剪貼簿"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "URLをクリップボードにコピー"
+          }
+        }
+      }
+    },
+    "Copy the URL under the cursor to the clipboard.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将光标下的 URL 复制到剪贴板。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將游標下的 URL 複製到剪貼簿。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "カーソル位置のURLをクリップボードにコピーします。"
+          }
+        }
+      }
+    },
+    "Copy the screen contents as ANSI escape sequences to a temporary file and copy the path to the clipboard.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将屏幕内容以 ANSI 转义序列格式复制到一个临时文件，并将其路径复制到剪贴板。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將螢幕內容以 ANSI 跳脫序列複製到暫存檔，並將路徑複製到剪貼簿。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面の内容をANSIエスケープシーケンスとして一時ファイルに保存し、パスをクリップボードにコピーします。"
+          }
+        }
+      }
+    },
+    "Copy the screen contents as ANSI escape sequences to a temporary file and open it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将屏幕内容以 ANSI 转义序列格式复制到一个临时文件，并打开。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將螢幕內容以 ANSI 跳脫序列複製到暫存檔並開啟。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面の内容をANSIエスケープシーケンスとして一時ファイルに保存し、そのファイルを開きます。"
+          }
+        }
+      }
+    },
+    "Copy the screen contents as ANSI escape sequences to a temporary file and paste the path to the file.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将屏幕内容以 ANSI 转义序列格式复制到一个临时文件，并将其路径粘贴进终端。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將螢幕內容以 ANSI 跳脫序列複製到暫存檔，並貼上該檔案的路徑。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面の内容をANSIエスケープシーケンスとして一時ファイルに保存し、ファイルのパスをペーストします。"
+          }
+        }
+      }
+    },
+    "Copy the screen contents as HTML to a temporary file and copy the path to the clipboard.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将屏幕内容以 HTML 格式复制到一个临时文件，并将其路径复制到剪贴板。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將螢幕內容以 HTML 複製到暫存檔，並將路徑複製到剪貼簿。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面の内容をHTMLとして一時ファイルに保存し、パスをクリップボードにコピーします。"
+          }
+        }
+      }
+    },
+    "Copy the screen contents as HTML to a temporary file and open it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将屏幕内容以 HTML 格式复制到一个临时文件，并打开。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將螢幕內容以 HTML 複製到暫存檔並開啟。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面の内容をHTMLとして一時ファイルに保存し、そのファイルを開きます。"
+          }
+        }
+      }
+    },
+    "Copy the screen contents as HTML to a temporary file and paste the path to the file.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将屏幕内容以 HTML 格式复制到一个临时文件，并将其路径粘贴进终端。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將螢幕內容以 HTML 複製到暫存檔，並貼上該檔案的路徑。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面の内容をHTMLとして一時ファイルに保存し、ファイルのパスをペーストします。"
+          }
+        }
+      }
+    },
+    "Copy the screen contents to a temporary file and copy the path to the clipboard.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将屏幕内容复制到一个临时文件，并将其路径复制到剪贴板。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將螢幕內容複製到暫存檔，並將路徑複製到剪貼簿。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面の内容を一時ファイルに保存し、パスをクリップボードにコピーします。"
+          }
+        }
+      }
+    },
+    "Copy the screen contents to a temporary file and open it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将屏幕内容复制到一个临时文件，并打开。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將螢幕內容複製到暫存檔並開啟。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面の内容を一時ファイルに保存し、そのファイルを開きます。"
+          }
+        }
+      }
+    },
+    "Copy the screen contents to a temporary file and paste the path to the file.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将屏幕内容复制到一个临时文件，并将其路径粘贴进终端。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將螢幕內容複製到暫存檔，並貼上該檔案的路徑。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面の内容を一時ファイルに保存し、ファイルのパスをペーストします。"
+          }
+        }
+      }
+    },
+    "Copy the selected text as ANSI escape sequences to the clipboard.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "以 ANSI 转义序列格式，将选中的文本复制到剪贴板。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將選取的文字以 ANSI 跳脫序列複製到剪貼簿。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択したテキストをANSIエスケープシーケンスとしてクリップボードにコピーします。"
+          }
+        }
+      }
+    },
+    "Copy the selected text as HTML to the clipboard.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "以 HTML 格式，将选中的文本复制到剪贴板。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將選取的文字以 HTML 複製到剪貼簿。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択したテキストをHTMLとしてクリップボードにコピーします。"
+          }
+        }
+      }
+    },
+    "Copy the selected text as plain text to the clipboard.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "以纯文本格式，将选中的文本复制到剪贴板。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將選取的文字以純文字複製到剪貼簿。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択したテキストをプレーンテキストとしてクリップボードにコピーします。"
+          }
+        }
+      }
+    },
+    "Copy the selected text to the clipboard in both plain and styled formats.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同时以纯文本与样式文本两种格式，将选中的文本复制到剪贴板。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將選取的文字同時以純文字與 HTML 兩種格式複製到剪貼簿。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択したテキストをプレーンテキストと書式付きの両形式でクリップボードにコピーします。"
+          }
+        }
+      }
+    },
+    "Copy the selection contents as ANSI escape sequences to a temporary file and copy the path to the clipboard.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将选中文本以 ANSI 转义序列格式复制到临时文件，并将其路径复制到剪贴板。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將選取範圍的內容以 ANSI 跳脫序列複製到暫存檔，並將路徑複製到剪貼簿。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択範囲の内容をANSIエスケープシーケンスとして一時ファイルに保存し、パスをクリップボードにコピーします。"
+          }
+        }
+      }
+    },
+    "Copy the selection contents as ANSI escape sequences to a temporary file and open it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将选中文本以 ANSI 转义序列格式复制到临时文件，并打开。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將選取範圍的內容以 ANSI 跳脫序列複製到暫存檔並開啟。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択範囲の内容をANSIエスケープシーケンスとして一時ファイルに保存し、そのファイルを開きます。"
+          }
+        }
+      }
+    },
+    "Copy the selection contents as ANSI escape sequences to a temporary file and paste the path to the file.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将选中文本以 ANSI 转义序列格式复制到临时文件，并将其路径粘贴进终端。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將選取範圍的內容以 ANSI 跳脫序列複製到暫存檔，並貼上該檔案的路徑。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択範囲の内容をANSIエスケープシーケンスとして一時ファイルに保存し、ファイルのパスをペーストします。"
+          }
+        }
+      }
+    },
+    "Copy the selection contents as HTML to a temporary file and copy the path to the clipboard.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将选中文本以 HTML 格式复制到临时文件，并将其路径复制到剪贴板。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將選取範圍的內容以 HTML 複製到暫存檔，並將路徑複製到剪貼簿。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択範囲の内容をHTMLとして一時ファイルに保存し、パスをクリップボードにコピーします。"
+          }
+        }
+      }
+    },
+    "Copy the selection contents as HTML to a temporary file and open it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将选中文本以 HTML 格式复制到临时文件，并打开。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將選取範圍的內容以 HTML 複製到暫存檔並開啟。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択範囲の内容をHTMLとして一時ファイルに保存し、そのファイルを開きます。"
+          }
+        }
+      }
+    },
+    "Copy the selection contents as HTML to a temporary file and paste the path to the file.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将选中文本以 HTML 格式复制到临时文件，并将其路径粘贴进终端。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將選取範圍的內容以 HTML 複製到暫存檔，並貼上該檔案的路徑。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択範囲の内容をHTMLとして一時ファイルに保存し、ファイルのパスをペーストします。"
+          }
+        }
+      }
+    },
+    "Copy the selection contents to a temporary file and copy the path to the clipboard.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将选中文本复制到临时文件，并将其路径复制到剪贴板。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將選取範圍的內容複製到暫存檔，並將路徑複製到剪貼簿。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択範囲の内容を一時ファイルに保存し、パスをクリップボードにコピーします。"
+          }
+        }
+      }
+    },
+    "Copy the selection contents to a temporary file and open it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将选中文本复制到临时文件，并打开。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將選取範圍的內容複製到暫存檔並開啟。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択範囲の内容を一時ファイルに保存し、そのファイルを開きます。"
+          }
+        }
+      }
+    },
+    "Copy the selection contents to a temporary file and paste the path to the file.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将选中文本复制到临时文件，并将其路径粘贴进终端。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將選取範圍的內容複製到暫存檔，並貼上該檔案的路徑。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択範囲の内容を一時ファイルに保存し、ファイルのパスをペーストします。"
+          }
+        }
+      }
+    },
+    "Copy the terminal title to the clipboard. If the terminal title is not set this has no effect.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将终端标题复制到剪贴板。没有设置终端标题时没有任何效果。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將終端機標題複製到剪貼簿。若未設定終端機標題，此操作將不會有任何作用。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ターミナルのタイトルをクリップボードにコピーします。タイトルが設定されていない場合は何もしません。"
+          }
+        }
+      }
+    },
+    "Copy to Clipboard": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复制到剪贴板"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "複製到剪貼簿"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "クリップボードにコピー"
+          }
+        }
+      }
+    },
+    "Decrease Font Size": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "缩小字号"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "縮小字型"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フォントサイズを縮小"
+          }
+        }
+      }
+    },
+    "Decrease the font size by 1 point.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将字体大小缩小 1pt。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將字型大小縮小 1 pt。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フォントサイズを1ポイント縮小します。"
+          }
+        }
+      }
+    },
+    "End Search": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "结束查找"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "結束搜尋"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "検索を終了"
+          }
+        }
+      }
+    },
+    "End the current search if any and hide any GUI elements.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "结束当前进行中的查找，并隐藏相关界面。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "結束目前的搜尋（若有）並隱藏所有 GUI 元件。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "検索中の場合は検索を終了し、検索用の画面要素を非表示にします。"
+          }
+        }
+      }
+    },
+    "Equalize Splits": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "均分分屏大小"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "均分窗格"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "分割サイズを均等にする"
+          }
+        }
+      }
+    },
+    "Equalize the size of all splits.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使所有分屏大小相等。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將所有窗格的大小均分。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "すべての分割ペインのサイズを均等にします。"
+          }
+        }
+      }
+    },
+    "Focus Split: Down": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聚焦下方分屏"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聚焦窗格：下"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下の分割ペインにフォーカス"
+          }
+        }
+      }
+    },
+    "Focus Split: Left": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聚焦左侧分屏"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聚焦窗格：左"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "左の分割ペインにフォーカス"
+          }
+        }
+      }
+    },
+    "Focus Split: Next": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聚焦下一个分屏"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聚焦窗格：下一個"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "次の分割ペインにフォーカス"
+          }
+        }
+      }
+    },
+    "Focus Split: Previous": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聚焦上一个分屏"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聚焦窗格：上一個"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "前の分割ペインにフォーカス"
+          }
+        }
+      }
+    },
+    "Focus Split: Right": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聚焦右侧分屏"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聚焦窗格：右"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "右の分割ペインにフォーカス"
+          }
+        }
+      }
+    },
+    "Focus Split: Up": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聚焦上方分屏"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聚焦窗格：上"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上の分割ペインにフォーカス"
+          }
+        }
+      }
+    },
+    "Focus Window: Next": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聚焦下一个窗口"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聚焦視窗：下一個"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "次のウィンドウにフォーカス"
+          }
+        }
+      }
+    },
+    "Focus Window: Previous": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聚焦上一个窗口"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聚焦視窗：上一個"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "前のウィンドウにフォーカス"
+          }
+        }
+      }
+    },
+    "Focus the next split, if any.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "如果存在，将焦点移动到下一个分屏。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聚焦下一個窗格（若有）。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "次の分割ペインがあればフォーカスします。"
+          }
+        }
+      }
+    },
+    "Focus the next window, if any.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "如果可能，将焦点移动到下一个窗口。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聚焦下一個視窗（若有）。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "次のウィンドウがあればフォーカスします。"
+          }
+        }
+      }
+    },
+    "Focus the previous split, if any.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "如果存在，将焦点移动到上一个分屏。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聚焦上一個窗格（若有）。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "前の分割ペインがあればフォーカスします。"
+          }
+        }
+      }
+    },
+    "Focus the previous window, if any.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "如果可能，将焦点移动到上一个窗口。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聚焦上一個視窗（若有）。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "前のウィンドウがあればフォーカスします。"
+          }
+        }
+      }
+    },
+    "Focus the split above, if it exists.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "如果存在，将焦点移动到上方的分屏。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聚焦上方的窗格（若存在）。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上の分割ペインがあればフォーカスします。"
+          }
+        }
+      }
+    },
+    "Focus the split below, if it exists.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "如果存在，将焦点移动到下方的分屏。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聚焦下方的窗格（若存在）。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下の分割ペインがあればフォーカスします。"
+          }
+        }
+      }
+    },
+    "Focus the split to the left, if it exists.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "如果存在，将焦点移动到左侧的分屏。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聚焦左側的窗格（若存在）。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "左の分割ペインがあればフォーカスします。"
+          }
+        }
+      }
+    },
+    "Focus the split to the right, if it exists.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "如果存在，将焦点移动到右侧的分屏。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聚焦右側的窗格（若存在）。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "右の分割ペインがあればフォーカスします。"
+          }
+        }
+      }
+    },
+    "Ghostty": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ghostty"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ghostty"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ghostty"
+          }
+        }
+      }
+    },
+    "Increase Font Size": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "放大字号"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "放大字型"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フォントサイズを拡大"
+          }
+        }
+      }
+    },
+    "Increase the font size by 1 point.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将字体大小增大 1pt。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將字型大小放大 1 pt。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フォントサイズを1ポイント拡大します。"
+          }
+        }
+      }
+    },
+    "Move Tab Left": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "标签页左移"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向左移動分頁"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "タブを左に移動"
+          }
+        }
+      }
+    },
+    "Move Tab Right": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "标签页右移"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向右移動分頁"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "タブを右に移動"
+          }
+        }
+      }
+    },
+    "Move Tab to New Window": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将标签页移至新窗口"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將分頁移至新視窗"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "タブを新しいウィンドウに移動"
+          }
+        }
+      }
+    },
+    "Move the current tab to a new window.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将当前标签页移动到一个新的窗口。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將目前的分頁移至新視窗。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在のタブを新しいウィンドウに移動します。"
+          }
+        }
+      }
+    },
+    "Move the current tab to the left.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将当前标签页向左移动。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將目前的分頁向左移動。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在のタブを左に移動します。"
+          }
+        }
+      }
+    },
+    "Move the current tab to the right.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将当前标签页向右移动。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將目前的分頁向右移動。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在のタブを右に移動します。"
+          }
+        }
+      }
+    },
+    "Navigate to the next search result, if any.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "如果可能，移动到下一个匹配项。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "前往下一個搜尋結果（若有）。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "次の検索結果があれば移動します。"
+          }
+        }
+      }
+    },
+    "Navigate to the previous search result, if any.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "如果可能，移动到上一个匹配项。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "前往上一個搜尋結果（若有）。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "前の検索結果があれば移動します。"
+          }
+        }
+      }
+    },
+    "New Tab": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新しいタブ"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新建标签页"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開新分頁"
+          }
+        }
+      }
+    },
+    "New Window": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新しいウィンドウ"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新建窗口"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開新視窗"
+          }
+        }
+      }
+    },
+    "Next Search Result": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下一个匹配项"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下一個搜尋結果"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "次の検索結果"
+          }
+        }
+      }
+    },
+    "Open Config Using OS editor": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用系统编辑器打开配置"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用作業系統編輯器開啟設定"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "標準エディタで設定を開く"
+          }
+        }
+      }
+    },
+    "Open Config in New Terminal Window": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在新终端窗口打开配置"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在新終端機視窗中開啟設定"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新しいターミナルウィンドウで設定を開く"
+          }
+        }
+      }
+    },
+    "Open a new tab.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新建一个标签页。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開啟新分頁。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新しいタブを開きます。"
+          }
+        }
+      }
+    },
+    "Open a new window.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新建一个窗口。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開啟新視窗。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新しいウィンドウを開きます。"
+          }
+        }
+      }
+    },
+    "Open the config file in a new window using $EDITOR or $VISUAL.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在新终端窗口内用 $EDITOR 或 $VISUAL 程序打开配置文件。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用 $EDITOR 或 $VISUAL 在新視窗中開啟設定檔。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "$EDITORまたは$VISUALを使い、新しいウィンドウで設定ファイルを開きます。"
+          }
+        }
+      }
+    },
+    "Open the config file with the OS's default editor.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用系统默认的编辑器打开配置文件。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用作業系統的預設編輯器開啟設定檔。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OSの標準エディタで設定ファイルを開きます。"
+          }
+        }
+      }
+    },
+    "Paste from Clipboard": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "粘贴剪贴板内容"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "從剪貼簿貼上"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "クリップボードからペースト"
+          }
+        }
+      }
+    },
+    "Paste from Selection": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "粘贴主选区内容"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "從選取範圍貼上"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択用クリップボードからペースト"
+          }
+        }
+      }
+    },
+    "Paste the contents of the main clipboard.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将主剪贴板的内容粘贴进终端。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "貼上主剪貼簿的內容。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "メインクリップボードの内容をペーストします。"
+          }
+        }
+      }
+    },
+    "Paste the contents of the selection clipboard.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将主选区的内容粘贴进终端。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "貼上選取剪貼簿的內容。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択用クリップボードの内容をペーストします。"
+          }
+        }
+      }
+    },
+    "Previous Search Result": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上一个匹配项"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上一個搜尋結果"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "前の検索結果"
+          }
+        }
+      }
+    },
+    "Prompt for a new title for the current tab.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更改当前标签页的标题。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "提示輸入目前分頁的新標題。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在のタブの新しいタイトルを入力します。"
+          }
+        }
+      }
+    },
+    "Prompt for a new title for the current terminal.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更改当前终端的标题。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "提示輸入目前終端機的新標題。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在のターミナルの新しいタイトルを入力します。"
+          }
+        }
+      }
+    },
+    "Put a little Ghostty in your terminal.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "把一只小 Ghostty 塞进终端里。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在您的終端機裡放一隻小小的 Ghostty。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ターミナルに小さなGhosttyを表示します。"
+          }
+        }
+      }
+    },
+    "Quit": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "終了"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "退出"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "結束"
+          }
+        }
+      }
+    },
+    "Quit the application.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "退出应用。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "結束應用程式。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アプリを終了します。"
+          }
+        }
+      }
+    },
+    "Redo": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重做"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重做"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "やり直す"
+          }
+        }
+      }
+    },
+    "Redo the last undone action.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重做上一个撤销的操作。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重做上一個已復原的動作。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最後に取り消した操作をやり直します。"
+          }
+        }
+      }
+    },
+    "Reset Font Size": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重置字号"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重設字型大小"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フォントサイズをリセット"
+          }
+        }
+      }
+    },
+    "Reset Terminal": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重置终端"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重設終端機"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ターミナルをリセット"
+          }
+        }
+      }
+    },
+    "Reset Window Size": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重置窗口大小"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重設視窗大小"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ウィンドウサイズをリセット"
+          }
+        }
+      }
+    },
+    "Reset the font size to the default.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将字体大小重置到默认值。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將字型大小重設為預設值。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フォントサイズを既定値に戻します。"
+          }
+        }
+      }
+    },
+    "Reset the terminal to a clean state.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将终端重置回初始状态。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將終端機重設為初始狀態。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ターミナルを初期状態に戻します。"
+          }
+        }
+      }
+    },
+    "Reset the window size to the default.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将窗口重置到默认大小。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將視窗大小重設為預設值。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ウィンドウサイズを既定値に戻します。"
+          }
+        }
+      }
+    },
+    "Scroll Page Down": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向下滚动一页"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向下捲動一頁"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1ページ下にスクロール"
+          }
+        }
+      }
+    },
+    "Scroll Page Up": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向上滚动一页"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向上捲動一頁"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1ページ上にスクロール"
+          }
+        }
+      }
+    },
+    "Scroll the screen down by a page.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将屏幕向下滚动一页。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將螢幕向下捲動一頁。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面を1ページ下にスクロールします。"
+          }
+        }
+      }
+    },
+    "Scroll the screen up by a page.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将屏幕向上滚动一页。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "將螢幕向上捲動一頁。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面を1ページ上にスクロールします。"
+          }
+        }
+      }
+    },
+    "Scroll to Bottom": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "滚动到底部"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "捲動到底端"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "末尾にスクロール"
+          }
+        }
+      }
+    },
+    "Scroll to Selection": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "滚动到选区"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "捲動到選取範圍"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択範囲にスクロール"
+          }
+        }
+      }
+    },
+    "Scroll to Top": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "滚动到顶部"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "捲動到頂端"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "先頭にスクロール"
+          }
+        }
+      }
+    },
+    "Scroll to the bottom of the screen.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "滚动到屏幕底部。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "捲動到螢幕底端。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面の末尾にスクロールします。"
+          }
+        }
+      }
+    },
+    "Scroll to the selected text.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "滚动到选中的文本。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "捲動到選取的文字。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択したテキストまでスクロールします。"
+          }
+        }
+      }
+    },
+    "Scroll to the top of the screen.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "滚动到屏幕顶部。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "捲動到螢幕頂端。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面の先頭にスクロールします。"
+          }
+        }
+      }
+    },
+    "Search Selection": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在选区内查找"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜尋選取範圍"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択範囲を検索"
+          }
+        }
+      }
+    },
+    "Select All": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全选"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全選"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "すべてを選択"
+          }
+        }
+      }
+    },
+    "Select all text on the screen.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择屏幕上所有文本。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選取螢幕上的所有文字。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面上のすべてのテキストを選択します。"
+          }
+        }
+      }
+    },
+    "Show On-Screen Keyboard": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示屏幕键盘"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "顯示螢幕鍵盤"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "スクリーンキーボードを表示"
+          }
+        }
+      }
+    },
+    "Show the on-screen keyboard if present.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "如果可能，显示屏幕键盘。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "顯示螢幕鍵盤（若存在）。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "スクリーンキーボードが利用可能な場合は表示します。"
+          }
+        }
+      }
+    },
+    "Split Down": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下に分割"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向下分屏"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向下分割"
+          }
+        }
+      }
+    },
+    "Split Left": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "左に分割"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向左分屏"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向左分割"
+          }
+        }
+      }
+    },
+    "Split Right": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "右に分割"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向右分屏"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向右分割"
+          }
+        }
+      }
+    },
+    "Split Up": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上に分割"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向上分屏"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向上分割"
+          }
+        }
+      }
+    },
+    "Split the terminal down.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向下创建新分屏。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向下分割終端機。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ターミナルを下に分割します。"
+          }
+        }
+      }
+    },
+    "Split the terminal to the left.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向左创建新分屏。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向左分割終端機。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ターミナルを左に分割します。"
+          }
+        }
+      }
+    },
+    "Split the terminal to the right.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向右创建新分屏。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向右分割終端機。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ターミナルを右に分割します。"
+          }
+        }
+      }
+    },
+    "Split the terminal up.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向上创建新分屏。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向上分割終端機。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ターミナルを上に分割します。"
+          }
+        }
+      }
+    },
+    "Start Search": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "开始查找"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開始搜尋"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "検索を開始"
+          }
+        }
+      }
+    },
+    "Start a search for the current text selection.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在选中的文本当中开始查找。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "以目前選取的文字開始搜尋。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在選択しているテキストを検索します。"
+          }
+        }
+      }
+    },
+    "Start a search if one isn't already active.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未在进行查找时，可开始新一次查找。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "若目前沒有進行中的搜尋，則開始搜尋。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "検索していない場合は検索を開始します。"
+          }
+        }
+      }
+    },
+    "Toggle Background Opacity": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切换背景透明度"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切換背景不透明度"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "背景の不透明度を切り替え"
+          }
+        }
+      }
+    },
+    "Toggle Float on Top": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切换窗口置顶"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切換置頂"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最前面表示を切り替え"
+          }
+        }
+      }
+    },
+    "Toggle Fullscreen": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切换全屏"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切換全螢幕"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フルスクリーンを切り替え"
+          }
+        }
+      }
+    },
+    "Toggle Inspector": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切换调试器"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切換檢查工具"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "インスペクタを切り替え"
+          }
+        }
+      }
+    },
+    "Toggle Maximize": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切换最大化"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切換最大化"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最大化を切り替え"
+          }
+        }
+      }
+    },
+    "Toggle Mouse Reporting": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切换鼠标事件上报"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切換滑鼠回報"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "マウスイベント通知を切り替え"
+          }
+        }
+      }
+    },
+    "Toggle Read-Only Mode": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切换只读模式"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切換唯讀模式"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "読み取り専用モードを切り替え"
+          }
+        }
+      }
+    },
+    "Toggle Secure Input": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切换安全输入"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切換安全輸入"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "セキュア入力を切り替え"
+          }
+        }
+      }
+    },
+    "Toggle Split Zoom": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切换分屏放大"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切換窗格縮放"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "分割ペインのズームを切り替え"
+          }
+        }
+      }
+    },
+    "Toggle read-only mode for the current surface.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切换当前分屏的只读状态。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切換目前終端機的唯讀模式。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在のターミナルの読み取り専用モードを切り替えます。"
+          }
+        }
+      }
+    },
+    "Toggle secure input mode.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切换安全输入模式。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切換安全輸入模式。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "セキュア入力モードを切り替えます。"
+          }
+        }
+      }
+    },
+    "Toggle the background opacity of a window that started transparent.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切换最初透明的窗口的背景透明度。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切換以透明狀態啟動之視窗的背景不透明度。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "背景を透過して起動したウィンドウの不透明度を切り替えます。"
+          }
+        }
+      }
+    },
+    "Toggle the float on top state of the current window.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切换当前窗口的置顶状态。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切換目前視窗的置頂狀態。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在のウィンドウの最前面表示を切り替えます。"
+          }
+        }
+      }
+    },
+    "Toggle the fullscreen state of the current window.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切换当前窗口的全屏状态。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切換目前視窗的全螢幕狀態。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在のウィンドウのフルスクリーン表示を切り替えます。"
+          }
+        }
+      }
+    },
+    "Toggle the inspector.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切换终端调试器。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切換檢查工具。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "インスペクタの表示を切り替えます。"
+          }
+        }
+      }
+    },
+    "Toggle the maximized state of the current window.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切换当前窗口的最大化状态。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切換目前視窗的最大化狀態。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在のウィンドウの最大化状態を切り替えます。"
+          }
+        }
+      }
+    },
+    "Toggle the zoom state of the current split.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切换当前分屏的放大状态。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切換目前窗格的縮放狀態。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在の分割ペインのズーム状態を切り替えます。"
+          }
+        }
+      }
+    },
+    "Toggle whether mouse events are reported to terminal applications.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切换是否向终端应用上报鼠标事件。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切換是否將滑鼠事件回報給終端機應用程式。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ターミナルアプリケーションにマウスイベントを通知するかどうかを切り替えます。"
+          }
+        }
+      }
+    },
+    "Undo": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "撤销"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "復原"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取り消す"
+          }
+        }
+      }
+    },
+    "Undo the last action.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "撤销上一个操作。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "復原上一個動作。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最後の操作を取り消します。"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

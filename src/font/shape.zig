@@ -1,12 +1,9 @@
 const std = @import("std");
-const options = @import("main.zig").options;
 const run = @import("shaper/run.zig");
 const feature = @import("shaper/feature.zig");
 const configpkg = @import("../config.zig");
 const terminal = @import("../terminal/main.zig");
 const SharedGrid = @import("main.zig").SharedGrid;
-pub const noop = @import("shaper/noop.zig");
-pub const harfbuzz = @import("shaper/harfbuzz.zig");
 pub const coretext = @import("shaper/coretext.zig");
 pub const Cache = @import("shaper/Cache.zig");
 pub const TextRun = run.TextRun;
@@ -15,19 +12,7 @@ pub const Feature = feature.Feature;
 pub const FeatureList = feature.FeatureList;
 pub const default_features = feature.default_features;
 
-/// Shaper implementation for our compile options.
-pub const Shaper = switch (options.backend) {
-    .coretext_freetype,
-    .coretext_harfbuzz,
-    => harfbuzz.Shaper,
-
-    // Note that coretext_freetype cannot use the coretext
-    // shaper because the coretext shaper requests CoreText
-    // font faces.
-    .coretext => coretext.Shaper,
-
-    .coretext_noshape => noop.Shaper,
-};
+pub const Shaper = coretext.Shaper;
 
 /// A cell is a single glyph within a terminal that should be rendered
 /// for a shaping call. Not all terminal cells may be present; only
@@ -90,7 +75,4 @@ pub const RunOptions = struct {
 test {
     _ = Cache;
     _ = Shaper;
-
-    // Always test noop
-    _ = noop;
 }

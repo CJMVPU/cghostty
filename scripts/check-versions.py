@@ -18,8 +18,6 @@ SOURCE_ARCHIVES = (
     ("libpng", "libpng", "https://github.com/pnggroup/libpng/archive/refs/tags/v{version}.tar.gz"),
     ("zlib", "zlib", "https://github.com/madler/zlib/releases/download/v{version}/zlib-{version}.tar.gz"),
     ("pcre2", "PCRE2", "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-{version}/pcre2-{version}.tar.gz"),
-    ("harfbuzz", "HarfBuzz", "https://github.com/harfbuzz/harfbuzz/releases/download/{version}/harfbuzz-{version}.tar.xz"),
-    ("libintl", "GNU gettext / libintl", "https://ftp.gnu.org/pub/gnu/gettext/gettext-{version}.tar.gz"),
     ("highway", "Highway", "https://github.com/google/highway/releases/download/{version}/highway-{version}.tar.gz"),
 )
 
@@ -46,9 +44,9 @@ def dependency_table():
     rows = ["| 包 | 锁定源码版本 | 源码记录 |", "| --- | --- | --- |"]
     for package, label, template in SOURCE_ARCHIVES:
         version = package_version(package)
-        dependency = "gettext" if package == "libintl" else package
-        # GNU gettext and PCRE2 use two-part release names for x.y.0.
-        source_version = version.removesuffix(".0") if package in ("libintl", "pcre2") else version
+        dependency = package
+        # PCRE2 uses two-part release names for x.y.0.
+        source_version = version.removesuffix(".0") if package == "pcre2" else version
         url = source_url(package, dependency)
         if url != template.format(version=source_version):
             raise ValueError(f"{package} manifest {version} does not match source URL {url}")
@@ -118,17 +116,6 @@ def check_versions():
     if png != png_config:
         raise ValueError(f"libpng manifest {png} does not match generated configuration {png_config}")
 
-    intl = capture("pkg/libintl/build.zig.zon", r'\.version\s*=\s*"([^"]+)"')
-    major, minor, patch = map(int, intl.split("."))
-    expected_intl = (major << 16) | (minor << 8) | patch
-    for header in ("libintl.h", "libgnuintl.h"):
-        generated = capture(f"pkg/libintl/{header}", r'#define LIBINTL_VERSION (0x[0-9a-fA-F]+)')
-        if int(generated, 16) != expected_intl:
-            raise ValueError(f"libintl manifest {intl} does not match generated {header} {generated}")
-    intl_config = capture("pkg/libintl/config.h", r'#define PACKAGE_VERSION "([^"]+)"')
-    parts = [int(part) for part in intl_config.split(".")]
-    if (parts + [0, 0])[:3] != [major, minor, patch]:
-        raise ValueError(f"libintl manifest {intl} does not match generated configuration {intl_config}")
     return toolchain, vendored
 
 

@@ -27,8 +27,7 @@ jobs:
           test "$(uname -m)" = arm64
           test "$(sw_vers -productVersion | cut -d. -f1)" -ge 27
           python3 scripts/check-versions.py
-          brew install nushell gettext swiftlint actionlint
-          echo "$(brew --prefix gettext)/bin" >> "$GITHUB_PATH"
+          brew install nushell swiftlint actionlint
           zig_bin="$(bash scripts/install-zig.sh "$RUNNER_TEMP/cghostty-tools")"
           echo "$zig_bin" >> "$GITHUB_PATH"
           echo "sdk=$(xcrun --show-sdk-build-version)" >> "$GITHUB_OUTPUT"
@@ -54,6 +53,7 @@ jobs:
             zig fmt --check build.zig build.zig.zon src pkg
             swiftlint lint --strict --no-cache
             python3 scripts/check-versions.py
+            python3 scripts/check-localizations.py
             python3 -m unittest discover -s scripts/tests
             python3 scripts/check-swift6.py
             actionlint
@@ -64,7 +64,8 @@ jobs:
         run: |
           zig build test -Dtest-filter=renderer -Dtest-filter=config -Dtest-filter=Command -Dtest-filter=Terminal \
             -Dtest-filter=input -Dtest-filter=os. -Dtest-filter=termio -Dtest-filter=pty \
-            -Dtest-filter=StringMap -Dtest-filter=tmux \
+            -Dtest-filter=StringMap -Dtest-filter=tmux -Dtest-filter=font \
+            -Dtest-filter=Session -Dtest-filter=terminal.search \
             2>&1 | tee macos/build/ci-logs/core-tests.log
       - name: PCRE2 binding tests
         working-directory: pkg/pcre2

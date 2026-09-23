@@ -1,19 +1,5 @@
 const std = @import("std");
-const build_config = @import("../build_config.zig");
-const options = @import("main.zig").options;
-const freetype = @import("face/freetype.zig");
-const coretext = @import("face/coretext.zig");
-
-/// Face implementation for the compile options.
-pub const Face = switch (options.backend) {
-    .coretext_freetype,
-    => freetype.Face,
-
-    .coretext,
-    .coretext_harfbuzz,
-    .coretext_noshape,
-    => coretext.Face,
-};
+pub const Face = @import("face/coretext.zig").Face;
 
 /// If a DPI can't be calculated, this DPI is used. This is probably
 /// wrong on modern devices so it is highly recommended you get the DPI

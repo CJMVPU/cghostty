@@ -4,7 +4,6 @@ const Allocator = std.mem.Allocator;
 const assert = @import("../quirks.zig").inlineAssert;
 const macos = @import("macos");
 const opentype = @import("opentype.zig");
-const options = @import("main.zig").options;
 const Collection = @import("main.zig").Collection;
 const DeferredFace = @import("main.zig").DeferredFace;
 const Face = @import("main.zig").Face;
@@ -384,13 +383,6 @@ pub const CoreText = struct {
         desc: Descriptor,
     ) !?*macos.text.FontDescriptor {
         _ = self;
-
-        if (comptime options.backend.hasFreetype()) {
-            // If we have freetype, we can't use CoreText to find a font
-            // that supports a specific codepoint because we need to
-            // have a CoreText font to be able to do so.
-            return null;
-        }
 
         assert(desc.codepoint > 0);
 
@@ -832,9 +824,6 @@ test "descriptor hash family names" {
 }
 
 test "coretext" {
-    if (options.backend != .coretext and options.backend != .coretext_freetype)
-        return error.SkipZigTest;
-
     const testing = std.testing;
     const alloc = testing.allocator;
 
@@ -853,9 +842,6 @@ test "coretext" {
 }
 
 test "coretext codepoint" {
-    if (options.backend != .coretext and options.backend != .coretext_freetype)
-        return error.SkipZigTest;
-
     const testing = std.testing;
     const alloc = testing.allocator;
 

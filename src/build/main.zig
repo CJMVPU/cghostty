@@ -9,7 +9,6 @@ pub const GhosttyBench = @import("GhosttyBench.zig");
 pub const GhosttyDocs = @import("GhosttyDocs.zig");
 pub const GhosttyLib = @import("GhosttyLib.zig");
 pub const GhosttyResources = @import("GhosttyResources.zig");
-pub const GhosttyI18n = @import("GhosttyI18n.zig");
 
 pub const HelpStrings = @import("HelpStrings.zig");
 pub const SharedDeps = @import("SharedDeps.zig");

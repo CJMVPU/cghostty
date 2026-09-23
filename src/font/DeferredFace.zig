@@ -10,7 +10,6 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const macos = @import("macos");
 const font = @import("main.zig");
-const options = @import("main.zig").options;
 const Library = @import("main.zig").Library;
 const Face = @import("main.zig").Face;
 const Presentation = @import("main.zig").Presentation;
@@ -37,31 +36,19 @@ pub const CoreText = struct {
 };
 
 pub fn deinit(self: *DeferredFace) void {
-    switch (options.backend) {
-        .coretext,
-        .coretext_freetype,
-        .coretext_harfbuzz,
-        .coretext_noshape,
-        => if (self.ct) |*ct| ct.deinit(),
-    }
+    if (self.ct) |*ct| ct.deinit();
     self.* = undefined;
 }
 
 /// Returns the family name of the font.
 pub fn familyName(self: DeferredFace, buf: []u8) ![]const u8 {
-    switch (options.backend) {
-        .coretext,
-        .coretext_freetype,
-        .coretext_harfbuzz,
-        .coretext_noshape,
-        => if (self.ct) |ct| {
-            const family_name = ct.font.copyAttribute(.family_name) orelse
-                return "unknown";
-            return family_name.cstringPtr(.utf8) orelse unsupported: {
-                break :unsupported family_name.cstring(buf, .utf8) orelse
-                    return error.OutOfMemory;
-            };
-        },
+    if (self.ct) |ct| {
+        const family_name = ct.font.copyAttribute(.family_name) orelse
+            return "unknown";
+        return family_name.cstringPtr(.utf8) orelse unsupported: {
+            break :unsupported family_name.cstring(buf, .utf8) orelse
+                return error.OutOfMemory;
+        };
     }
 
     return "";
@@ -70,23 +57,17 @@ pub fn familyName(self: DeferredFace, buf: []u8) ![]const u8 {
 /// Returns the name of this face. The memory is always owned by the
 /// face so it doesn't have to be freed.
 pub fn name(self: DeferredFace, buf: []u8) ![]const u8 {
-    switch (options.backend) {
-        .coretext,
-        .coretext_freetype,
-        .coretext_harfbuzz,
-        .coretext_noshape,
-        => if (self.ct) |ct| {
-            const display_name = ct.font.copyDisplayName() orelse
-                return self.familyName(buf);
-            return display_name.cstringPtr(.utf8) orelse unsupported: {
-                // "NULL if the internal storage of theString does not allow
-                // this to be returned efficiently." In this case, we need
-                // to allocate. But we can't return an allocated string because
-                // we don't have an allocator. Let's use the stack and log it.
-                break :unsupported display_name.cstring(buf, .utf8) orelse
-                    return error.OutOfMemory;
-            };
-        },
+    if (self.ct) |ct| {
+        const display_name = ct.font.copyDisplayName() orelse
+            return self.familyName(buf);
+        return display_name.cstringPtr(.utf8) orelse unsupported: {
+            // "NULL if the internal storage of theString does not allow
+            // this to be returned efficiently." In this case, we need
+            // to allocate. But we can't return an allocated string because
+            // we don't have an allocator. Let's use the stack and log it.
+            break :unsupported display_name.cstring(buf, .utf8) orelse
+                return error.OutOfMemory;
+        };
     }
 
     return "";
@@ -98,13 +79,7 @@ pub fn load(
     lib: Library,
     opts: font.face.Options,
 ) !Face {
-    return switch (options.backend) {
-        .coretext, .coretext_harfbuzz, .coretext_noshape => try self.loadCoreText(lib, opts),
-        .coretext_freetype => try self.loadCoreTextFreetype(lib, opts),
-
-        // Unreachable because we must be already loaded or have the
-        // proper configuration for one of the other deferred mechanisms.
-    };
+    return self.loadCoreText(lib, opts);
 }
 
 fn loadCoreText(
@@ -120,51 +95,6 @@ fn loadCoreText(
     return face;
 }
 
-fn loadCoreTextFreetype(
-    self: *DeferredFace,
-    lib: Library,
-    opts: font.face.Options,
-) !Face {
-    const ct = self.ct.?;
-
-    // Get the URL for the font so we can get the filepath
-    const url = ct.font.copyAttribute(.url) orelse
-        return error.FontHasNoFile;
-    defer url.release();
-
-    // Get the path from the URL
-    const path = url.copyPath() orelse return error.FontHasNoFile;
-    defer path.release();
-
-    // URL decode the path
-    const blank = try macos.foundation.String.createWithBytes("", .utf8, false);
-    defer blank.release();
-    const decoded = try macos.foundation.URL.createStringByReplacingPercentEscapes(
-        path,
-        blank,
-    );
-    defer decoded.release();
-
-    // Decode into a c string. 1024 bytes should be enough for anybody.
-    var buf: [1024]u8 = undefined;
-    const path_slice = decoded.cstring(buf[0..1023], .utf8) orelse
-        return error.FontPathCantDecode;
-
-    // Freetype requires null-terminated. We always leave space at
-    // the end for a zero so we set that up here.
-    buf[path_slice.len] = 0;
-
-    const postscript = ct.font.copyPostScriptName();
-    defer postscript.release();
-    var name_buf: [256]u8 = undefined;
-    const ps_name = postscript.cstring(&name_buf, .utf8) orelse return error.FontNameCantDecode;
-    var face = try Face.initFile(lib, buf[0..path_slice.len :0], ps_name, opts);
-    errdefer face.deinit();
-    try face.setVariations(ct.variations, opts);
-
-    return face;
-}
-
 /// Returns true if this face can satisfy the given codepoint and
 /// presentation. If presentation is null, then it just checks if the
 /// codepoint is present at all.
@@ -173,36 +103,30 @@ fn loadCoreTextFreetype(
 /// discovery mechanism (i.e. fontconfig). If no discovery is used,
 /// the face is always expected to be loaded.
 pub fn hasCodepoint(self: DeferredFace, cp: u32, p: ?Presentation) bool {
-    switch (options.backend) {
-        .coretext,
-        .coretext_freetype,
-        .coretext_harfbuzz,
-        .coretext_noshape,
-        => {
-            // If we are using coretext, we check the loaded CT font.
-            if (self.ct) |ct| {
-                // This presentation check isn't as detailed as isColorGlyph
-                // because forced presentation modes are only used for emoji and
-                // emoji should always have color glyphs set. This can be
-                // more correct by using the isColorGlyph logic but I'd want
-                // to find a font that actually requires this so we can write
-                // a test for it before changing it.
-                if (p) |desired_p| {
-                    const traits = ct.font.getSymbolicTraits();
-                    const actual_p: Presentation = if (traits.color_glyphs) .emoji else .text;
-                    if (actual_p != desired_p) return false;
-                }
-
-                // Turn UTF-32 into UTF-16 for CT API
-                var unichars: [2]u16 = undefined;
-                const pair = macos.foundation.stringGetSurrogatePairForLongCharacter(cp, &unichars);
-                const len: usize = if (pair) 2 else 1;
-
-                // Get our glyphs
-                var glyphs = [2]macos.graphics.Glyph{ 0, 0 };
-                return ct.font.getGlyphsForCharacters(unichars[0..len], glyphs[0..len]);
+    {
+        // If we are using coretext, we check the loaded CT font.
+        if (self.ct) |ct| {
+            // This presentation check isn't as detailed as isColorGlyph
+            // because forced presentation modes are only used for emoji and
+            // emoji should always have color glyphs set. This can be
+            // more correct by using the isColorGlyph logic but I'd want
+            // to find a font that actually requires this so we can write
+            // a test for it before changing it.
+            if (p) |desired_p| {
+                const traits = ct.font.getSymbolicTraits();
+                const actual_p: Presentation = if (traits.color_glyphs) .emoji else .text;
+                if (actual_p != desired_p) return false;
             }
-        },
+
+            // Turn UTF-32 into UTF-16 for CT API
+            var unichars: [2]u16 = undefined;
+            const pair = macos.foundation.stringGetSurrogatePairForLongCharacter(cp, &unichars);
+            const len: usize = if (pair) 2 else 1;
+
+            // Get our glyphs
+            var glyphs = [2]macos.graphics.Glyph{ 0, 0 };
+            return ct.font.getGlyphsForCharacters(unichars[0..len], glyphs[0..len]);
+        }
     }
 
     // This is unreachable because discovery mechanisms terminate, and
@@ -211,17 +135,15 @@ pub fn hasCodepoint(self: DeferredFace, cp: u32, p: ?Presentation) bool {
 }
 
 test "coretext" {
-    if (options.backend != .coretext) return error.SkipZigTest;
-
     const discovery = @import("main.zig").discovery;
     const testing = std.testing;
     const alloc = testing.allocator;
 
-    // Load freetype
+    // Initialize CoreText
     var lib = try Library.init(alloc);
     defer lib.deinit();
 
-    // Get a deferred face from fontconfig
+    // Discover a deferred CoreText face
     var def = def: {
         var fc = discovery.CoreText.init(lib);
         var it = try fc.discover(alloc, .{ .family = "Monaco", .size = 12 });
@@ -240,31 +162,4 @@ test "coretext" {
     var face = try def.load(lib, .{ .size = .{ .points = 12 } });
     defer face.deinit();
     try testing.expect(face.glyphIndex(' ') != null);
-}
-
-test "CoreText-selected collection face matches FreeType style" {
-    if (options.backend != .coretext_freetype) return error.SkipZigTest;
-    const testing = std.testing;
-    const alloc = testing.allocator;
-    var lib = try Library.init(alloc);
-    defer lib.deinit();
-    var disco = font.Discover.init(lib);
-    defer disco.deinit();
-    for (std.meta.tags(font.Style)) |style| {
-        var it = try disco.discover(alloc, .{
-            .family = "Menlo",
-            .bold = style == .bold or style == .bold_italic,
-            .italic = style == .italic or style == .bold_italic,
-        });
-        defer it.deinit();
-        var deferred = (try it.next()) orelse return error.FontNotFound;
-        defer deferred.deinit();
-        var face = try deferred.load(lib, .{ .size = .{ .points = 16 } });
-        defer face.deinit();
-        const expected = deferred.ct.?.font.copyPostScriptName();
-        defer expected.release();
-        var buf: [256]u8 = undefined;
-        const actual = @import("freetype").c.FT_Get_Postscript_Name(face.face.handle);
-        try testing.expectEqualStrings(expected.cstring(&buf, .utf8).?, std.mem.span(actual));
-    }
 }

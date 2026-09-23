@@ -20,7 +20,6 @@ const Allocator = std.mem.Allocator;
 const config = @import("../config.zig");
 const comparison = @import("../datastruct/comparison.zig");
 const font = @import("main.zig");
-const options = font.options;
 const DeferredFace = font.DeferredFace;
 const DesiredSize = font.face.DesiredSize;
 const Face = font.Face;
