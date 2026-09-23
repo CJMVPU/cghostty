@@ -1,55 +1,44 @@
-# cghostty 0.2.1
+# cghostty 0.2.2
 
-本次更新恢复内置文楷字体、修复合成粗体丢失，并将默认窗口调整为 133 列 × 33 行。
-同时包含配置入口、成功快照和字体配置维护方面的整理。
+本次更新精简字体、调试与本地化实现，移除未完成的 Glyph 协议和终端交互预览，
+并修复渲染状态读取及构建缓存持续积累的问题。
 
-## 默认字体与窗口
+## 字体与本地化
 
-- 内置 LXGW WenKai Mono 1.522 Medium，默认笔画更厚实，无需额外安装；粗体与斜体在 Medium 基础上由渲染器合成。
-- 修复合成粗体在字体初始化或调整字号后丢失的问题。
-- 保留 Nerd Font 图标与系统 Emoji 回退；随应用附带字体 OFL 许可。
-- 默认字号改为 16 pt，新窗口初始尺寸改为 133 列 × 33 行。
-  用户已有配置仍优先；恢复窗口及屏幕尺寸限制保持原有行为。
+- 终端字体统一使用 CoreText，删除可选 FreeType、HarfBuzz 和 noshape 后端。
+- LXGW WenKai Mono Medium 改为随应用 Resources 分发，由 CoreText 按文件 URL 加载，
+  不再嵌入可执行文件。默认字体、合成粗体与斜体、Nerd Font 符号及系统字体回退继续保留。
+- 命令面板从 gettext 迁移到原生 String Catalog，支持英文、中文（简体和繁体）及日文。
+  其余语言移除，缺失的日文译文已补齐；自定义命令文本和动作标识保持原样。
+- 删除 gettext、libintl 和翻译编译步骤；本地与 CI 构建不再需要安装 gettext。
 
-## 配置编辑
+## 功能与依赖精简
 
-- 应用菜单 **Settings…**（⌘,）直接打开用户配置文件：
-  `~/Library/Application Support/com.cjmvpu.cghostty/config.ghostty`。
-- 首次主动打开时生成八类配置模板：常规、外观、窗口与分屏、快捷终端、
-  输入与快捷键、终端行为、通知与安全、高级。
-- 模板覆盖 171 个可编辑字段，每项包含中英文名称、当前版本默认值和有效示例，
-  并按字段提供可选值、单位、范围或继承说明。默认值及示例均为注释，
-  取消需要修改的示例行前的 `#` 才启用设置，避免模板覆盖主题。
-- 现有配置首次加入模板前自动备份，保留原有内容、重复项顺序和符号链接。
-  已有模板不重复追加；启动时不会主动创建或改写用户文件。
+- 完整移除 Inspector 调试面板及菜单、右键菜单、命令面板入口、默认 ⌘⌥I 快捷键，
+  同步删除专用数据采集、事件导出、诊断覆盖层和内部桥接。
+- 删除 Dear ImGui、Dear Bindings、FreeType，以及仅由其使用的 libpng 和独立 zlib 库。
+  常规运行日志、错误日志和自动化测试保留；PNG 解码继续使用 Wuffs，
+  Kitty 压缩图片解压继续使用 Zig 标准库。
+- 移除尚未接入字体渲染的 Glyph APC 协议，不再向终端程序声明支持。
+  未知 APC 安全忽略，Kitty 图形协议继续保留。
+- 主题、颜色和快捷键列表改为纯文本输出，删除终端中的交互浏览及主题预览，
+  同时移除 vaxis、zf 依赖。`--plain` 参数保留兼容。
+- 删除未引用代码和仅供已移除功能使用的实现。
 
-## 生效与恢复
+## 修复与构建维护
 
-- 配置修改统一在退出并重新启动应用后生效。新窗口、标签页和分屏沿用启动配置。
-  删除手动重载菜单、默认快捷键、命令面板入口及 `reload_config` 用户动作。
-- 启动检查主文件是否变化；与成功快照和当前构建一致时复用保存内容重建配置。
-- 完整校验成功后更新快照。错误配置整份回退到上一次通过校验的主文件；
-  没有有效快照时使用内置默认值。错误窗口显示诊断并可打开文件修正，原文件保留。
-- 新增 **Restore Default Settings…**。确认后备份当前文件、恢复当前版本的注释模板，
-  并重置成功快照；重启生效，当前终端继续运行。快照写入失败时恢复原文件。
-- 成功快照只保存主配置内容。外部配置引用和主题资源仍在启动时重新校验，
-  不作为资源文件备份。系统深浅色切换继续使用已加载配置。
+- 修复渲染器链接匹配读取鼠标共享状态的位置，使用锁内取得的状态快照。
+- 补齐 renderer 辅助模块的测试收集，CI 增加字体、会话和搜索回归覆盖。
+- 日常应用构建前检查 Zig 编译缓存：超过 8 GiB 且没有活动构建时清理，
+  保留依赖下载、应用产物、测试结果和发行包。清理后首次核心编译需要重新执行。
+- 新增缓存查看与清理工具；CI 只缓存依赖源码，不再按每次提交保存整份编译缓存。
 
-## 旧配置整理
+## 配置兼容
 
-- 默认配置入口收敛到 Application Support 中的 `config.ghostty`。
-  XDG 目录及旧的无扩展名 `config` 文件不再自动加载。
-  升级前应备份并按原加载顺序整理这些文件；显式 `config-file` 引用仍有效。
-- 光标动画统一为 `cursor-effect = true`／`false`，默认开启。
-  旧的 `smooth`／`none` 值需要分别改为 `true`／`false`。
-- 删除旧名称及旧枚举值的兼容映射；例如 `background-blur-radius`、
-  `scrollback-limit` 应改用 `background-blur`、`scrollback-limit-bytes`。
-  配置中显式绑定 `reload_config` 的行应删除。
-- 删除无消费路径的 GTK／Linux 配置：`window-subtitle`、`window-show-tab-bar`、
-  `window-titlebar-background`、`window-titlebar-foreground`、`app-notifications`、
-  `quit-after-last-window-closed-delay`、`quick-terminal-keyboard-interactivity`、`async-backend`。
-- 删除 `freetype-load-flags`；可选 FreeType 后端继续使用原有固定默认参数。
-  模板不包含仅用于启动参数的 `config-default-files`，也不包含没有可用用户解析器的内部 `link` 规则列表。
-  `link-url`、`link-osc8` 等实际链接设置保留。
+- 配置文件仍可通过 `theme = ...` 更换主题，也继续支持深浅色双主题。
+  配置修改仍在退出并重新启动应用后生效。
+- 如果旧配置显式绑定了 `inspector:toggle`、`inspector:show` 或 `inspector:hide`，
+  请删除对应快捷键或自定义命令项；这些动作现在会报告 `InvalidAction`。
+- 没有使用上述 Inspector 动作的配置无需因此修改。
 
 支持 macOS 27+，仅提供 Apple Silicon（arm64）版本。
