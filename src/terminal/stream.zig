@@ -5,7 +5,6 @@ const assert = @import("../quirks.zig").inlineAssert;
 const testing = std.testing;
 const Allocator = std.mem.Allocator;
 const simd = @import("../simd/main.zig");
-const lib = @import("lib.zig");
 const Parser = @import("Parser.zig");
 const ansi = @import("ansi.zig");
 const charsets = @import("charsets.zig");
@@ -230,7 +229,7 @@ pub const Action = union(Key) {
         kitty_dnd = 96,
     };
 
-    /// C ABI functions.
+    /// Action payload lookup for native handlers.
     pub const Tag = Key;
     pub fn Value(comptime tag: Key) type {
         return @FieldType(@This(), @tagName(tag));
@@ -239,14 +238,6 @@ pub const Action = union(Key) {
     /// Field types
     pub const Print = struct {
         cp: u21,
-
-        pub const C = extern struct {
-            cp: u32,
-        };
-
-        pub fn cval(self: Print) Print.C {
-            return .{ .cp = @intCast(self.cp) };
-        }
     };
 
     /// A run of printable codepoints. This is emitted instead of
@@ -259,28 +250,10 @@ pub const Action = union(Key) {
     /// The slice is only valid for the duration of the handler call.
     pub const PrintSlice = struct {
         cps: []const u32,
-
-        pub const C = extern struct {
-            cps: [*]const u32,
-            len: usize,
-        };
-
-        pub fn cval(self: PrintSlice) PrintSlice.C {
-            return .{ .cps = self.cps.ptr, .len = self.cps.len };
-        }
     };
 
     pub const ApcPutSlice = struct {
         bytes: []const u8,
-
-        pub const C = extern struct {
-            bytes: [*]const u8,
-            len: usize,
-        };
-
-        pub fn cval(self: ApcPutSlice) ApcPutSlice.C {
-            return .{ .bytes = self.bytes.ptr, .len = self.bytes.len };
-        }
     };
 
     pub const ApcEnd = extern struct {
@@ -309,22 +282,10 @@ pub const Action = union(Key) {
 
     pub const DeviceStatus = struct {
         request: device_status.Request,
-
-        pub const C = u16;
-
-        pub fn cval(self: DeviceStatus) DeviceStatus.C {
-            return @bitCast(self.request);
-        }
     };
 
     pub const Mode = struct {
         mode: modes.Mode,
-
-        pub const C = u16;
-
-        pub fn cval(self: Mode) Mode.C {
-            return @bitCast(self.mode);
-        }
     };
 
     pub const RawMode = extern struct {
@@ -339,84 +300,30 @@ pub const Action = union(Key) {
 
     pub const KittyKeyboardFlags = struct {
         flags: kitty.KeyFlags,
-
-        pub const C = u8;
-
-        pub fn cval(self: KittyKeyboardFlags) KittyKeyboardFlags.C {
-            return @intCast(self.flags.int());
-        }
     };
 
     pub const WindowTitle = struct {
         title: []const u8,
-
-        pub const C = lib.String;
-
-        pub fn cval(self: WindowTitle) WindowTitle.C {
-            return .init(self.title);
-        }
     };
 
     pub const ReportPwd = struct {
         url: []const u8,
-
-        pub const C = lib.String;
-
-        pub fn cval(self: ReportPwd) ReportPwd.C {
-            return .init(self.url);
-        }
     };
 
     pub const ShowDesktopNotification = struct {
         title: []const u8,
         body: []const u8,
-
-        pub const C = extern struct {
-            title: lib.String,
-            body: lib.String,
-        };
-
-        pub fn cval(self: ShowDesktopNotification) ShowDesktopNotification.C {
-            return .{
-                .title = .init(self.title),
-                .body = .init(self.body),
-            };
-        }
     };
 
     pub const StartHyperlink = struct {
         uri: []const u8,
         id: ?[]const u8,
-
-        pub const C = extern struct {
-            uri: lib.String,
-            id: lib.String,
-        };
-
-        pub fn cval(self: StartHyperlink) StartHyperlink.C {
-            return .{
-                .uri = .init(self.uri),
-                .id = .init(self.id orelse ""),
-            };
-        }
     };
 
     pub const ClipboardContents = struct {
         kind: u8,
         data: []const u8,
         terminator: osc.Terminator,
-
-        pub const C = extern struct {
-            kind: u8,
-            data: lib.String,
-        };
-
-        pub fn cval(self: ClipboardContents) ClipboardContents.C {
-            return .{
-                .kind = self.kind,
-                .data = .init(self.data),
-            };
-        }
     };
 
     pub const ConfigureCharset = struct {
@@ -428,12 +335,6 @@ pub const Action = union(Key) {
         op: osc.color.Operation,
         requests: osc.color.List,
         terminator: osc.Terminator,
-
-        pub const C = void;
-
-        pub fn cval(_: ColorOperation) ColorOperation.C {
-            return {};
-        }
     };
 
     pub const SemanticPrompt = osc.Command.SemanticPrompt;

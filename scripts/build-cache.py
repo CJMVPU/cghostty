@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Report or clear this checkout's disposable Zig compilation cache."""
 import argparse
+from contextlib import contextmanager
+import fcntl
 import math
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -31,7 +34,25 @@ def active_builds():
     return names & {'zig', 'build', 'cghostty-test', 'xcodebuild', 'swift-frontend'}
 
 
-def maintain(root, *, trim=False, clear=False, max_bytes=8 * GIB):
+@contextmanager
+def build_lock(root):
+    """Serialize managed builds and cleanup; the OS releases the lock on exit."""
+    path = root / '.cghostty-build.lock'
+    fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(fd)
+
+
+def maintain(root, **kwargs):
+    with build_lock(root):
+        return maintain_locked(root, **kwargs)
+
+
+def maintain_locked(root, *, trim=False, clear=False, max_bytes=8 * GIB):
+    """The caller must hold build_lock for this checkout."""
     cache = root / '.zig-cache'
     before = cache_bytes(cache)
     print(f'Zig compilation cache: {before / GIB:.2f} GiB ({cache})', flush=True)

@@ -1,5 +1,4 @@
 import AppKit
-import SwiftUI
 
 extension NSView {
     /// Returns true if this view is currently in the responder chain
@@ -24,18 +23,22 @@ extension NSView {
 // MARK: Screenshot
 
 extension NSView {
-    /// Take a screenshot of just this view.
-    func screenshot() -> NSImage? {
-        guard let bitmapRep = bitmapImageRepForCachingDisplay(in: bounds) else { return nil }
-        cacheDisplay(in: bounds, to: bitmapRep)
-        let image = NSImage(size: bounds.size)
-        image.addRepresentation(bitmapRep)
-        return image
-    }
-
-    func screenshot() -> Image? {
-        guard let nsImage: NSImage = self.screenshot() else { return nil }
-        return Image(nsImage: nsImage)
+    /// Render a bounded thumbnail once, ready for App Intents to reuse.
+    func thumbnailPNG(maxDimension: CGFloat = 256) -> Data? {
+        guard bounds.width.isFinite, bounds.height.isFinite,
+              bounds.width > 0, bounds.height > 0,
+              maxDimension.isFinite, maxDimension >= 1 else { return nil }
+        let scale = min(1, maxDimension / max(bounds.width, bounds.height))
+        guard let bitmap = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: max(1, Int((bounds.width * scale).rounded(.down))),
+            pixelsHigh: max(1, Int((bounds.height * scale).rounded(.down))),
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+            isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+        )?.retagging(with: .sRGB) else { return nil }
+        bitmap.size = bounds.size
+        cacheDisplay(in: bounds, to: bitmap)
+        return bitmap.representation(using: .png, properties: [:])
     }
 }
 

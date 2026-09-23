@@ -24,6 +24,7 @@ subprocess.run([sys.executable, str(ROOT / 'scripts/check-bridge.py')], check=Tr
 for name in ('src/apprt/gtk', 'src/apprt/gtk.zig', 'src/main_wasm.zig',
              'src/lib_vt.zig', 'src/terminal/c', 'include/ghostty',
              'src/terminal/snapshot', 'src/terminal/stream_continuation.zig',
+             'src/crc32c.zig', 'src/lib/struct.zig', 'src/lib/union.zig', 'src/lib/packed.zig',
              'src/renderer/Dmabuf.zig', 'src/renderer/shaders/glsl',
              'test/wasm-alloc.mjs', 'pkg/glslang', 'pkg/spirv-cross',
              'src/renderer/shadertoy.zig',

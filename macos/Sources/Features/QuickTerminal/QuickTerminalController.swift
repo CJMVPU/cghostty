@@ -27,6 +27,9 @@ class QuickTerminalController: BaseTerminalController {
     /// The current state of the quick terminal
     private(set) var visible: Bool = false
     private var awaitingKeyWindow = false
+    private let presentation = PresentationGate()
+    private var entranceID: UUID?
+    private var entranceFinished = false
 
     /// The previously running application when the terminal is shown. This is NEVER Ghostty.
     /// If this is set then when the quick terminal is animated out then we will restore this
@@ -97,6 +100,7 @@ class QuickTerminalController: BaseTerminalController {
     }
 
     isolated deinit {
+        presentation.cancel()
         // Remove all of our notificationcenter subscriptions
         let center = NotificationCenter.default
         center.removeObserver(self)
@@ -139,6 +143,7 @@ class QuickTerminalController: BaseTerminalController {
     override func windowDidBecomeKey(_ notification: Notification) {
         super.windowDidBecomeKey(notification)
         awaitingKeyWindow = false
+        completePresentationIfReady()
 
         // If we're not visible we don't care to run the logic below. It only
         // applies if we can be seen.
@@ -322,6 +327,8 @@ class QuickTerminalController: BaseTerminalController {
         // Set our visibility state
         guard !visible else { return }
         visible = true
+        entranceID = presentation.begin()
+        entranceFinished = false
 
         // Notify the change
         (ghostty.delegate as? AppDelegate)?.quickTerminalVisibilityDidChange(self)
@@ -370,6 +377,9 @@ class QuickTerminalController: BaseTerminalController {
         // Set our visibility state
         guard visible else { return }
         visible = false
+        entranceID = nil
+        entranceFinished = false
+        presentation.cancel()
         awaitingKeyWindow = false
         cancelRestoredFocus()
 
@@ -396,7 +406,13 @@ class QuickTerminalController: BaseTerminalController {
     }
 
     private func animateWindowIn(window: NSWindow, from position: QuickTerminalPosition) {
-        guard let screen = derivedConfig.quickTerminalScreen.screen else { return }
+        guard let id = entranceID else { return }
+        guard let screen = derivedConfig.quickTerminalScreen.screen else {
+            visible = false
+            entranceID = nil
+            presentation.cancel()
+            return
+        }
 
         // Grab our last closed frame to use from the cache.
         let closedFrame = screenStateCache.frame(for: screen)
@@ -415,6 +431,7 @@ class QuickTerminalController: BaseTerminalController {
 
         // Move it to the visible position since animation requires this
         DispatchQueue.main.async {
+            guard self.entranceID == id else { return }
             window.makeKeyAndOrderFront(nil)
         }
 
@@ -446,6 +463,7 @@ class QuickTerminalController: BaseTerminalController {
             // There is a very minor delay here so waiting at least an event loop tick
             // keeps us safe from the view not being on the window.
             DispatchQueue.main.async {
+                guard self.entranceID == id else { return }
                 // If we canceled our animation clean up some state.
                 guard self.visible else {
                     self.hiddenDock = nil
@@ -464,6 +482,7 @@ class QuickTerminalController: BaseTerminalController {
                 // Once our animation is done, we must grab focus since we can't grab
                 // focus of a non-visible window.
                 self.awaitingKeyWindow = true
+                self.entranceFinished = true
                 self.makeWindowKey(window)
 
                 // If our application is not active, then we grab focus. Its important
@@ -494,6 +513,14 @@ class QuickTerminalController: BaseTerminalController {
         window.makeKeyAndOrderFront(nil)
         window.makeFirstResponder(focusedSurface)
         if window.isKeyWindow { awaitingKeyWindow = false }
+        completePresentationIfReady()
+    }
+
+    private func completePresentationIfReady() {
+        guard entranceFinished, visible, let id = entranceID,
+              let window, window.isVisible, window.isKeyWindow,
+              focusedSurface?.window === window else { return }
+        presentation.complete(id)
     }
 
     private func animateWindowOut(window: NSWindow, to position: QuickTerminalPosition) {
@@ -592,10 +619,10 @@ class QuickTerminalController: BaseTerminalController {
 
     override func confirmCloseAsync(messageText: String, informativeText: String, confirmButtonTitle: String = "Close") async -> NSApplication.ModalResponse? {
 
-        let waitTime = visible ? 0 : 0.25
+        guard !Task.isCancelled else { return nil }
         animateIn()
-
-        try? await Task.sleep(for: .seconds(waitTime))
+        guard await presentation.wait(), !Task.isCancelled,
+              visible, window?.isVisible == true else { return nil }
 
         return await super.confirmCloseAsync(messageText: messageText, informativeText: informativeText, confirmButtonTitle: confirmButtonTitle)
     }

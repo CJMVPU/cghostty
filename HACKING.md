@@ -8,7 +8,7 @@
 # 默认同时更新 Zig 核心和 Swift 应用
 nu macos/build.nu
 # 仅更新内部框架与资源
-zig build -Demit-macos-app=false
+python3 scripts/build.py core
 # 核心已更新后单独编译 Swift
 nu macos/build.nu --skip-core
 # Swift 单元测试；自动跳过需要桌面交互的 UI 测试
@@ -25,10 +25,10 @@ python3 scripts/check-swift6.py
 # 工作流校验（brew install actionlint）
 actionlint
 # 核心回归测试
-zig build test -Dtest-filter=config
-zig build test -Dtest-filter=Command
-zig build test -Dtest-filter=Terminal
-zig build test -Dtest-filter=input -Dtest-filter=os. -Dtest-filter=termio -Dtest-filter=pty
+python3 scripts/build.py test -Dtest-filter=config
+python3 scripts/build.py test -Dtest-filter=Command
+python3 scripts/build.py test -Dtest-filter=terminal.
+python3 scripts/build.py test -Dtest-filter=input -Dtest-filter=os. -Dtest-filter=termio -Dtest-filter=pty
 # 验证构建入口拒绝其他平台、Intel Mac 和被移除的独立产物
 python3 scripts/check-scope.py
 # 只检查原生业务层与内部 C 桥接边界（范围检查也会运行）
@@ -45,13 +45,15 @@ python3 scripts/check-scope.py --app macos/build/ReleaseLocal/cghostty.app
 
 `zig build` 也可作为根入口，会调用同一个 `macos/build.nu`。日常应用开发直接使用 Nushell 脚本。核心安装步骤记录版本、优化模式、Zig／SDK、源码输入及归档摘要。`--skip-core` 会核对这些记录，缺少记录或任一项不匹配时拒绝复用；切换 Debug / ReleaseLocal 或修改核心后重新构建完整应用。仅修改 Swift 或 README／AGENTS 说明不影响核心复用；嵌入的 Markdown、字体、着色器等构建输入仍参与校验。
 
-Zig 改动使用 `zig fmt`；Swift 使用 `swiftlint lint --strict --fix`。完整核心测试为 `zig build test`，通常优先运行相关过滤测试。终端压缩、快照等子目录的测试约定继续适用。
+Zig 改动使用 `zig fmt`；Swift 使用 `swiftlint lint --strict --fix`。完整核心测试为 `python3 scripts/build.py test`，通常优先运行相关模块过滤测试。终端压缩等子目录的测试约定继续适用。CI 的普通运行覆盖整个 `terminal.` 模块，发行标签运行完整核心测试。
 
 ## 构建缓存与磁盘占用
 
 `.zig-cache` 是可重新生成的编译缓存。源码、编译模式和测试过滤条件变化会生成不同的缓存产物，长期开发可能累积几十 GiB。它不是应用安装体积，也不是终端滚动历史。`zig-pkg` 是下载的依赖源码；`zig-out`、`macos/build` 和 `artifacts` 分别包含核心安装产物、应用/测试构建及发行包。
 
-日常使用 `nu macos/build.nu` 时，开始构建前检查 `.zig-cache`；超过 8 GiB 且没有 Zig/Xcode 构建活动时清空编译缓存，下次核心构建会重新编译。依赖下载、应用、测试结果和发行包均保留。8 GiB 是构建前清理阈值，不是运行中的硬配额。根入口 `zig build` 调用应用脚本时，外层 Zig 仍在运行，因此安全检查会跳过清理。长期只直接运行 `zig build test` 的开发者应在构建结束后执行维护命令。
+日常核心构建与测试使用 `python3 scripts/build.py core/test`，原生应用继续使用 `nu macos/build.nu`。两者与手动缓存清理共用仓库根目录的 `.cghostty-build.lock`，锁覆盖清理及整个构建过程；同时启动会排队，进程退出后由系统释放锁，锁文件本身不删除。
+
+开始构建前检查 `.zig-cache`；超过 8 GiB 且没有 Zig/Xcode 构建活动时清空编译缓存，下次核心构建会重新编译。依赖下载、应用、测试结果和发行包均保留。8 GiB 是构建前清理阈值，不是运行中的硬配额。直接运行原始 `zig build test` 不参与项目锁或自动维护；请优先使用统一入口。进程检查仍保守防护未通过入口启动的构建，但不能为不使用锁的外部命令提供原子互斥保证。
 
 ```sh
 python3 scripts/build-cache.py                 # 只查看大小
@@ -90,7 +92,7 @@ C/C++ 依赖版本表直接从 `pkg/*/build.zig.zon` 生成，见 `pkg/README.md
 - 颜色转换和输入枚举等纯值操作显式 `nonisolated`。
 - 核心的 `wakeup_cb` 是明确非隔离的 Sendable C 回调，只负责把 tick 排入主队列。其他 UI 回调遵守核心主线程调用约定。通知权限等系统后台回调必须主动切回主线程。
 - `MainActor.assumeIsolated` 只用于已注册在主运行循环/主队列的同步回调，以及 AppKit 的同步加载、Cocoa scripting 入口。少量 `nonisolated(unsafe)` 局部引用用于传递尚无隔离标注的 Objective-C 参数/返回值；作用域只覆盖同步调用，配合运行时主线程断言，不声明这些系统对象可以任意跨线程共享。
-- 拖放提供器通过 `Mutex` 保护异步加载结果，再完成 AppKit 要求的同步返回。终端详情通过 Zip 同时订阅标题和路径，保留两个独立的超时回退。
+- 拖放提供器通过 `Mutex` 保护异步加载结果，再完成 AppKit 要求的同步返回。终端详情通过 Observation 同时观察标题和路径，以一秒为失败截止时间，元数据就绪后立即继续。快捷指令缩略图直接生成最长边 256 像素的 PNG，在实体中保存编码结果供重复展示复用。
 - Swift Testing 的参数化数据必须能安全传递；依赖 UI 隔离的泛型类型在测试函数内部构建，保持原有案例覆盖。
 
 ## 内部名称

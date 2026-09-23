@@ -1,7 +1,6 @@
 import AppKit
 import AppIntents
 import Observation
-import SwiftUI
 
 struct TerminalEntity: AppEntity {
     let id: UUID
@@ -21,7 +20,7 @@ struct TerminalEntity: AppEntity {
     @Property(title: "Kind")
     var kind: Kind
 
-    var screenshot: NSImage?
+    private var screenshotData: Data?
 
     static var typeDisplayRepresentation: TypeDisplayRepresentation {
         TypeDisplayRepresentation(name: "Terminal")
@@ -29,8 +28,7 @@ struct TerminalEntity: AppEntity {
 
     nonisolated var displayRepresentation: DisplayRepresentation {
         var rep = DisplayRepresentation(title: "\(title)")
-        if let screenshot,
-           let data = screenshot.tiffRepresentation {
+        if let data = screenshotData {
             rep.image = .init(data: data)
         }
 
@@ -57,9 +55,7 @@ struct TerminalEntity: AppEntity {
         self.workingDirectory = view.pwd
         self.pid = view.surfaceModel?.foregroundPID
         self.tty = view.surfaceModel?.ttyName
-        if let nsImage = ImageRenderer(content: view.screenshot()).nsImage {
-            self.screenshot = nsImage
-        }
+        self.screenshotData = view.thumbnailPNG()
 
         // Determine the kind based on the window controller type
         if view.window?.windowController is QuickTerminalController {
@@ -73,9 +69,6 @@ struct TerminalEntity: AppEntity {
     /// Observation reads both fields together and cancellation ends the loser.
     @MainActor
     init(view: Ghostty.SurfaceView) async {
-        self.id = view.id
-        self.tty = view.surfaceModel?.ttyName
-
         await withTaskGroup(of: Void.self) { group in
             group.addTask { await Self.waitForMetadata(view) }
             group.addTask {
@@ -84,22 +77,8 @@ struct TerminalEntity: AppEntity {
             await group.next()
             group.cancelAll()
         }
-        self.title = view.title
+        self.init(view)
         self.workingDirectory = view.pwd ?? ""
-
-        // Wait for the title and pwd then get latest pid and screenshots.
-        // This should gave SurfaceView enough time to layout in the window and we can get the most recent process's PID
-        // Determine the kind based on the window controller type
-        if view.window?.windowController is QuickTerminalController {
-            self.kind = .quick
-        } else {
-            self.kind = .normal
-        }
-
-        self.pid = view.surfaceModel?.foregroundPID
-        if let nsImage = ImageRenderer(content: view.screenshot()).nsImage {
-            self.screenshot = nsImage
-        }
     }
     @MainActor private static func waitForMetadata(_ view: Ghostty.SurfaceView) async {
         let metadata = Observations { (view.title, view.pwd) }

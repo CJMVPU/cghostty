@@ -72,10 +72,8 @@ const c = @import("posix_c");
 /// font. This is particularly useful for multiple languages, symbolic fonts,
 /// etc.
 ///
-/// Notes on emoji specifically: On macOS, Ghostty by default will always use
-/// Apple Color Emoji and on Linux will always use Noto Emoji. You can
-/// override this behavior by specifying a font family here that contains
-/// emoji glyphs.
+/// Apple Color Emoji is the default emoji fallback. Override it by specifying
+/// a font family here that contains emoji glyphs.
 ///
 /// The specific styles (bold, italic, bold italic) do not need to be
 /// explicitly set. If a style is not set, then the regular style (font-family)
@@ -193,16 +191,9 @@ const c = @import("posix_c");
 ///
 /// For example, 13.5pt @ 2px/pt = 27px
 ///
-/// Changing this configuration at runtime will only affect existing
-/// terminals that have NOT manually adjusted their font size in some way
-/// (e.g. increased or decreased the font size). Terminals that have manually
-/// adjusted their font size will retain their manually adjusted size.
-/// Otherwise, the font size of existing terminals will be updated on
-/// reload.
+/// Configuration file changes take effect after restarting cghostty.
+/// Runtime actions such as keyboard shortcuts do not reload the file.
 ///
-/// On Linux with GTK, font size is scaled according to both display-wide and
-/// text-specific scaling factors, which are often managed by your desktop
-/// environment (e.g. the GNOME display scale and large text settings).
 @"font-size": f32 = 16,
 
 /// A repeatable configuration to set one or more font variations values for
@@ -242,8 +233,8 @@ const c = @import("posix_c");
 /// This configuration can be repeated multiple times to specify multiple
 /// codepoint mappings.
 ///
-/// Changing this configuration at runtime will only affect new terminals,
-/// i.e. new windows, tabs, etc.
+/// Configuration file changes take effect after restarting cghostty.
+/// Runtime actions such as keyboard shortcuts do not reload the file.
 @"font-codepoint-map": RepeatableCodepointMap = .{},
 
 /// Map specific Unicode codepoints to replacement values when copying text
@@ -319,8 +310,7 @@ const c = @import("posix_c");
 ///
 /// Valid values:
 ///
-/// * `native` - Perform alpha blending in the native color space for the OS.
-///   On macOS this corresponds to Display P3, and on Linux it's sRGB.
+/// * `native` - Perform alpha blending in the native Display P3 color space.
 ///
 /// * `linear` - Perform alpha blending in linear space. This will eliminate
 ///   the darkening artifacts around the edges of text that are very visible
@@ -436,8 +426,8 @@ const c = @import("posix_c");
 /// width will be forced regardless of this configuration. When mode 2027 is
 /// reset, this configuration will be used again.
 ///
-/// This configuration can be changed at runtime but will not affect existing
-/// terminals. Only new terminals will use the new configuration.
+/// Configuration file changes take effect after restarting cghostty.
+/// Runtime actions such as keyboard shortcuts do not reload the file.
 @"grapheme-width-method": GraphemeWidthMethod = .unicode,
 
 /// A theme to use. This can be a built-in theme name, a custom theme
@@ -928,24 +918,11 @@ palette: Palette = .{},
 ///     reasonable for a good looking blur. Higher blur intensities may
 ///     cause strange rendering and performance issues.
 ///
-/// On macOS 26.0 and later, there are additional special values that
-/// can be set to use the native macOS glass effects:
+/// Additional values enable the native macOS glass effects:
 ///
 ///   * `macos-glass-regular` - Standard glass effect with some opacity
 ///   * `macos-glass-clear` - Highly transparent glass effect
 ///
-/// If the macOS values are set, then this implies `background-blur = true`
-/// on non-macOS platforms.
-///
-/// On Linux, the exact blur intensity is ignored and any positive integer
-/// or `true` value will enable background blur. On Wayland, Ghostty uses
-/// the [`ext-background-effect-v1`](https://wayland.app/protocols/ext-background-effect-v1)
-/// protocol to enable the blur effect, but this is not always supported
-/// on all compositors. Check the documentation of your compositor or
-/// desktop environment for blur support and how to configure it.
-///
-/// On X11, blur can only be enabled when using the KWin compositor
-/// as a part of KDE Plasma.
 @"background-blur": BackgroundBlur = .false,
 
 /// The opacity level (opposite of transparency) of an unfocused split.
@@ -1054,10 +1031,8 @@ command: ?Command = null,
 /// surface created when Ghostty starts. Subsequent terminal surfaces will use
 /// the `command` configuration.
 ///
-/// After the first terminal surface is created (or closed), there is no
-/// way to run this initial command again automatically. As such, setting
-/// this at runtime works but will only affect the next terminal surface
-/// if it is the first one ever created.
+/// The initial command runs once per application launch. Restart cghostty to
+/// apply a changed initial command.
 ///
 /// If you're using the `ghostty` CLI there is also a shortcut to set this
 /// with arguments directly: you can use the `-e` flag. For example: `ghostty -e
@@ -1093,10 +1068,6 @@ command: ?Command = null,
 /// Command finished notifications requires that either shell integration is
 /// enabled, or that your shell sends OSC 133 escape sequences to mark the start
 /// and end of commands.
-///
-/// On GTK, there is a context menu item that will enable command finished
-/// notifications for a single command, overriding the `never` and `unfocused`
-/// options.
 ///
 /// Available since 1.3.0.
 @"notify-on-command-finish": NotifyOnCommandFinish = .never,
@@ -1227,8 +1198,8 @@ env: RepeatableStringMap = .{},
 /// will be sent. Input sources are not verified until the terminal
 /// is starting, so missing paths will not show up in config validation.
 ///
-/// Changing this configuration at runtime will only affect new
-/// terminals.
+/// Configuration file changes take effect after restarting cghostty.
+/// Runtime actions such as keyboard shortcuts do not reload the file.
 ///
 /// Available since: 1.2.0
 input: RepeatableReadableIO = .{},
@@ -1245,8 +1216,7 @@ input: RepeatableReadableIO = .{},
 /// to be abnormal. This is used to show an error message when the process exits
 /// too quickly.
 ///
-/// On Linux, this must be paired with a non-zero exit code. On macOS, we allow
-/// any exit code because of the way shell processes are launched via the login
+/// Any exit code is allowed because shell processes are launched via the login
 /// command.
 @"abnormal-command-exit-runtime": u32 = 250,
 
@@ -1278,7 +1248,8 @@ input: RepeatableReadableIO = .{},
 ///
 /// The default is 50 MB. Set this to `unlimited` to remove the byte limit.
 ///
-/// This can be changed at runtime but will only affect new terminal surfaces.
+/// Configuration file changes take effect after restarting cghostty.
+/// Runtime actions such as keyboard shortcuts do not reload the file.
 @"scrollback-limit-bytes": Limit(usize, 50_000_000) = .default,
 
 /// The maximum number of lines of scrollback to retain. This excludes
@@ -1296,7 +1267,8 @@ input: RepeatableReadableIO = .{},
 /// `scrollback-limit-bytes`; if both limits are set, then the first one reached
 /// will determine when scrollback is removed.
 ///
-/// This can be changed at runtime but will only affect new terminal surfaces.
+/// Configuration file changes take effect after restarting cghostty.
+/// Runtime actions such as keyboard shortcuts do not reload the file.
 @"scrollback-limit-lines": Limit(usize, std.math.maxInt(usize)) = .default,
 
 /// Whether to compress scrollback pages while the terminal is idle.
@@ -1319,8 +1291,8 @@ input: RepeatableReadableIO = .{},
 /// see a decrease in virtual memory usage, but you will see a decrease
 /// in physical/memory usage.
 ///
-/// Changing this at runtime affects future compression work. Pages which are
-/// already compressed remain compressed until their contents are accessed.
+/// Configuration file changes take effect after restarting cghostty.
+/// Runtime actions such as keyboard shortcuts do not reload the file.
 @"scrollback-compression": bool = true,
 
 /// Control when the scrollbar is shown to scroll the scrollback buffer.
@@ -1353,9 +1325,8 @@ scrollbar: Scrollbar = .system,
 /// TODO: This can't currently be set!
 link: RepeatableLink = .{},
 
-/// Enable URL matching. URLs are matched on hover with control (Linux) or
-/// command (macOS) pressed and open using the default system application for
-/// the linked URL.
+/// Enable URL matching. Hold Command while hovering to highlight URLs and open
+/// them using the default system application.
 ///
 /// The URL matcher is always lowest priority of any configured links (see
 /// `link`). If you want to customize URL matching, use `link` and disable this.
@@ -1396,12 +1367,11 @@ maximize: bool = false,
 ///   * `true` - Start in native fullscreen
 ///   * `non-native` - (macOS only) Start in non-native fullscreen, hiding the
 ///     menu bar. This is faster than native fullscreen since it doesn't use
-///     animations. On non-macOS platforms, this behaves the same as `true`.
+///     animations.
 ///   * `non-native-visible-menu` - (macOS only) Start in non-native fullscreen,
-///     keeping the menu bar visible. On non-macOS platforms, behaves like `true`.
+///     keeping the menu bar visible.
 ///   * `non-native-padded-notch` - (macOS only) Start in non-native fullscreen,
 ///     hiding the menu bar but padding for the notch on applicable devices.
-///     On non-macOS platforms, behaves like `true`.
 ///
 /// Important: tabs DO NOT WORK with non-native fullscreen modes. Non-native
 /// fullscreen removes the titlebar and macOS native tabs require the titlebar.
@@ -1421,11 +1391,8 @@ fullscreen: Fullscreen = .false,
 /// This is necessary because setting a blank value resets the title to the
 /// default value of the running program.
 ///
-/// This configuration can be reloaded at runtime. If it is set, the title
-/// will update for all windows. If it is unset, the next title change escape
-/// sequence will be honored but previous changes will not retroactively
-/// be set. This latter case may require you to restart programs such as Neovim
-/// to get the new title.
+/// Configuration file changes take effect after restarting cghostty.
+/// Runtime actions such as keyboard shortcuts do not reload the file.
 title: ?[:0]const u8 = null,
 
 /// The directory to change to after starting the command.
@@ -1436,10 +1403,8 @@ title: ?[:0]const u8 = null,
 /// setting will be used. Typically, this setting is used only for the first
 /// window.
 ///
-/// The default is `inherit` except in special scenarios listed next. On macOS,
-/// if Ghostty can detect it is launched from launchd (double-clicked) or
-/// `open`, then it defaults to `home`. On Linux with GTK, if Ghostty can detect
-/// it was launched from a desktop launcher, then it defaults to `home`.
+/// The default is `inherit`. When launched by launchd or `open` (for example,
+/// by double-clicking the app), the default is `home`.
 ///
 /// The value of this must be an absolute path, a path prefixed with `~/`
 /// (the tilde will be expanded to the user's home directory), or
@@ -1623,8 +1588,6 @@ title: ?[:0]const u8 = null,
 ///    Note: this does not work in all environments; see the additional notes
 ///    below for more information.
 ///
-///    Available since: 1.0.0 on macOS, 1.2.0 on GTK
-///
 ///  * `unconsumed:`
 ///
 ///    Do not consume the input. By default, a keybind will consume the input,
@@ -1662,15 +1625,13 @@ title: ?[:0]const u8 = null,
 /// `global:` keybind will be used.
 ///
 /// Multiple prefixes can be specified. For example,
-/// `global:unconsumed:ctrl+a=new_window` will make the keybind global
-/// and not consume the input to reload the config.
+/// `global:unconsumed:ctrl+a=new_window` makes the binding global while allowing
+/// the application receiving the key to process it too.
 ///
-/// On macOS, this feature requires accessibility permissions to be granted
-/// to Ghostty. When a `global:` keybind is specified and Ghostty is launched
-/// or reloaded, Ghostty will attempt to request these permissions.
-/// If the permissions are not granted, the keybind will not work. On macOS,
-/// you can find these permissions in System Preferences -> Privacy & Security
-/// -> Accessibility.
+/// Global bindings require Accessibility permission. cghostty requests it at
+/// launch when a `global:` binding is configured. Grant it in System Settings
+/// > Privacy & Security > Accessibility. Without permission the binding will
+/// not work.
 ///
 /// ## Chained Actions
 ///
@@ -1818,8 +1779,8 @@ keybind: Keybinds = .{},
 /// to pick a reasonable value. If you pick an unreasonable value, a warning
 /// will appear in the logs.
 ///
-/// Changing this configuration at runtime will only affect new terminals, i.e.
-/// new windows, tabs, etc.
+/// Configuration file changes take effect after restarting cghostty.
+/// Runtime actions such as keyboard shortcuts do not reload the file.
 ///
 /// To set a different left and right padding, specify two numerical values
 /// separated by a comma. For example, `window-padding-x = 2,4` will set the
@@ -1837,8 +1798,8 @@ keybind: Keybinds = .{},
 /// to pick a reasonable value. If you pick an unreasonable value, a warning
 /// will appear in the logs.
 ///
-/// Changing this configuration at runtime will only affect new terminals,
-/// i.e. new windows, tabs, etc.
+/// Configuration file changes take effect after restarting cghostty.
+/// Runtime actions such as keyboard shortcuts do not reload the file.
 ///
 /// To set a different top and bottom padding, specify two numerical values
 /// separated by a comma. For example, `window-padding-y = 2,4` will set the
@@ -1901,7 +1862,8 @@ keybind: Keybinds = .{},
 /// displays over some hardware such as DisplayLink. If you want to minimize
 /// input latency, set this to false with the known aforementioned risks.
 ///
-/// Changing this value at runtime will only affect new terminals.
+/// Configuration file changes take effect after restarting cghostty.
+/// Runtime actions such as keyboard shortcuts do not reload the file.
 ///
 /// This setting is only supported currently on macOS.
 @"window-vsync": bool = true,
@@ -1955,13 +1917,7 @@ keybind: Keybinds = .{},
 ///
 ///  * `server`
 ///
-///    Prefer server-side decorations. This is only relevant on Linux with GTK,
-///    either on X11, or Wayland on a compositor that supports the
-///    `org_kde_kwin_server_decoration` protocol (e.g. KDE Plasma, but almost
-///    any non-GNOME desktop supports this protocol).
-///
-///    If `server` is set but the environment doesn't support server-side
-///    decorations, client-side decorations will be used instead.
+///    Compatibility value: native window decorations are used.
 ///
 ///    Available since: 1.1.0
 ///
@@ -1970,9 +1926,6 @@ keybind: Keybinds = .{},
 /// For the sake of backwards compatibility and convenience, this setting also
 /// accepts boolean true and false values. If set to `true`, this is equivalent
 /// to `auto`. If set to `false`, this is equivalent to `none`.
-/// This is convenient for users who live primarily on systems that don't
-/// differentiate between client and server-side decorations (e.g. macOS and
-/// Windows).
 ///
 /// macOS: To hide the titlebar without removing the native window borders
 ///        or rounded corners, use `macos-titlebar-style = hidden` instead.
@@ -1985,7 +1938,6 @@ keybind: Keybinds = .{},
 /// Note: any font available on the system may be used, this font is not
 /// required to be a fixed-width font.
 ///
-/// Available since: 1.0.0 on macOS, 1.1.0 on GTK
 @"window-title-font-family": ?[:0]const u8 = null,
 
 /// The theme to use for the windows. Valid values:
@@ -1998,14 +1950,14 @@ keybind: Keybinds = .{},
 ///   * `light` - Use the light theme regardless of system theme.
 ///   * `dark` - Use the dark theme regardless of system theme.
 ///   * `ghostty` - Use the background and foreground colors specified in the
-///     Ghostty configuration. This is only supported on Linux builds.
+///     configuration. Compatibility value; uses the native appearance on macOS.
 ///
 /// On macOS, if `macos-titlebar-style` is `tabs` or `transparent`, the window theme will be
 /// automatically set based on the luminosity of the terminal background color.
 /// This only applies to terminal windows. This setting will still apply to
 /// non-terminal windows within Ghostty.
 ///
-/// This is currently only supported on macOS and Linux.
+/// This setting controls the native macOS window appearance.
 @"window-theme": WindowTheme = .auto,
 
 /// The color space to use when interpreting terminal colors. "Terminal colors"
@@ -2062,9 +2014,6 @@ keybind: Keybinds = .{},
 /// the visible screen area. This means that if the menu bar is visible, the
 /// window will be placed below the menu bar.
 ///
-/// Note: this is only supported on macOS. The GTK runtime does not support
-/// setting the window position, as windows are only allowed position
-/// themselves in X11 and not Wayland.
 @"window-position-x": ?i16 = null,
 @"window-position-y": ?i16 = null,
 
@@ -2097,7 +2046,6 @@ keybind: Keybinds = .{},
 ///
 /// The default value is `default`.
 ///
-/// This is currently only supported on macOS. This has no effect on Linux.
 @"window-save-state": WindowSaveState = .default,
 
 /// Resize the window in discrete increments of the focused surface's cell size.
@@ -2125,9 +2073,6 @@ keybind: Keybinds = .{},
 ///  - `auto` *(default)*
 ///
 ///    Automatically show and hide the drag handle.
-///
-///    On Linux, the handle is only shown when there are two or
-///    more splits present.
 ///
 ///    On macOS, the handle is only hidden when there's one split
 ///    in **fullscreen** mode, otherwise it's shown when hovered.
@@ -2242,8 +2187,8 @@ keybind: Keybinds = .{},
 /// write. To reject clipboard writes entirely, use `clipboard-write = deny`
 /// instead.
 ///
-/// This can be changed at runtime and applies to writes that begin
-/// after the change.
+/// Configuration file changes take effect after restarting cghostty.
+/// Runtime actions such as keyboard shortcuts do not reload the file.
 ///
 /// Available since: 1.4.0
 @"clipboard-write-limit-bytes": Limit(usize, 64 * 1024 * 1024) = .default,
@@ -2291,15 +2236,13 @@ keybind: Keybinds = .{},
 ///
 /// * `none` - Do not copy selected text automatically.
 ///
-/// * `primary` - On Linux, copy to the selection clipboard only. This has no
-///   effect on macOS. (Available since: 1.4.0)
+/// * `primary` - Compatibility value; has no effect on macOS.
 ///
 /// * `clipboard` - Copy text to the system clipboard only.
 ///
-/// * `both` - Copy to both clipboards on Linux, and only the system clipboard
-///   on macOS. (Available since: 1.4.0)
+/// * `both` - Copy to the system clipboard, equivalent to `clipboard`.
 ///
-/// The default value is `primary` on Linux and `none` otherwise.
+/// The default value is `none`.
 @"copy-on-select": CopyOnSelect = .none,
 
 /// The action to take when the user right-clicks on the terminal surface.
@@ -2318,8 +2261,7 @@ keybind: Keybinds = .{},
 /// The action to take when the user middle-clicks on the terminal surface.
 ///
 /// Valid values:
-///   * `primary-paste` - Paste from the selection clipboard on Linux.
-///      Does nothing on macOS.
+///   * `primary-paste` - Compatibility value; does nothing on macOS.
 ///   * `clipboard-paste` - Paste from the system clipboard.
 ///   * `ignore` - Do nothing, ignore the middle click.
 ///
@@ -2431,10 +2373,6 @@ keybind: Keybinds = .{},
 /// `1h1h` is equivalent to `2h`. This is confusing and should be avoided.
 /// A future update may disallow this.
 ///
-/// This configuration is only supported on macOS. Linux doesn't
-/// support undo operations at all so this configuration has no
-/// effect.
-///
 /// Available since: 1.2.0
 @"undo-timeout": Duration = .{ .duration = 5 * std.time.ns_per_s },
 
@@ -2499,18 +2437,13 @@ keybind: Keybinds = .{},
 /// The default value is `main` because this is the recommended screen
 /// by the operating system.
 ///
-/// On macOS, `macos-menu-bar` uses the screen containing the menu bar.
-/// On Linux/Wayland, `macos-menu-bar` is treated as equivalent to `main`.
+/// `macos-menu-bar` uses the screen containing the menu bar.
 ///
-/// Note: On Linux, there is no universal concept of a "primary" monitor.
-/// Ghostty uses the compositor-reported primary output when available and
-/// falls back to the first monitor reported by GDK if no primary output can
-/// be resolved.
 @"quick-terminal-screen": QuickTerminalScreen = .main,
 
 /// Duration (in seconds) of the quick terminal enter and exit animation.
-/// Set it to 0 to disable animation completely. This can be changed at
-/// runtime.
+/// Set to 0 to disable animation. Configuration file changes apply after
+/// restarting cghostty.
 ///
 /// Only implemented on macOS.
 @"quick-terminal-animation-duration": f64 = 0.2,
@@ -2518,11 +2451,7 @@ keybind: Keybinds = .{},
 /// Automatically hide the quick terminal when focus shifts to another window.
 /// Set it to false for the quick terminal to remain open even when it loses focus.
 ///
-/// Defaults to true on macOS and on false on Linux/BSD. This is because global
-/// shortcuts on Linux require system configuration and are considerably less
-/// accessible than on macOS, meaning that it is more preferable to keep the
-/// quick terminal open until the user has completed their task.
-/// This default may change in the future.
+/// Defaults to true.
 @"quick-terminal-autohide": bool = true,
 
 /// This configuration option determines the behavior of the quick terminal
@@ -2540,9 +2469,6 @@ keybind: Keybinds = .{},
 ///    space.
 ///
 /// The default value is `move`.
-///
-/// Only implemented on macOS.
-/// On Linux the behavior is always equivalent to `move`.
 ///
 /// Available since: 1.1.0
 @"quick-terminal-space-behavior": QuickTerminalSpaceBehavior = .move,
@@ -2700,8 +2626,7 @@ keybind: Keybinds = .{},
 /// Set to `false` to disable. Enabled by default.
 @"cursor-effect": bool = true,
 
-/// Bell features to enable if bell support is available in your runtime. Not
-/// all features are available on all runtimes. The format of this is a list of
+/// Bell features to enable. The format of this is a list of
 /// features to enable separated by commas. If you prefix a feature with `no-`
 /// then it is disabled. If you omit a feature, its default value is used.
 ///
@@ -2709,13 +2634,7 @@ keybind: Keybinds = .{},
 ///
 ///  * `system`
 ///
-///    Instruct the system to notify the user using built-in system functions.
-///    This could result in an audiovisual effect, a notification, or something
-///    else entirely. Changing these effects require altering system settings:
-///    for instance under the "Sound > Alert Sound" setting in GNOME,
-///    or the "Accessibility > System Bell" settings in KDE Plasma.
-///
-///    On macOS, this plays the system alert sound.
+///    Play the system alert sound, as configured in System Settings.
 ///
 ///  * `audio`
 ///
@@ -2723,20 +2642,7 @@ keybind: Keybinds = .{},
 ///
 ///  * `attention` *(enabled by default)*
 ///
-///    Request the user's attention when Ghostty is unfocused, until it has
-///    received focus again. On macOS, this will bounce the app icon in the
-///    dock once. On Linux, the behavior depends on the desktop environment
-///    and/or the window manager/compositor:
-///
-///    - On KDE, the background of the desktop icon in the task bar would be
-///      highlighted;
-///
-///    - On GNOME, you may receive a notification that, when clicked, would
-///      bring the Ghostty window into focus;
-///
-///    - On Sway, the window may be decorated with a distinctly colored border;
-///
-///    - On other systems this may have no effect at all.
+///    Request attention when cghostty is unfocused by bouncing the Dock icon.
 ///
 ///  * `title` *(enabled by default)*
 ///
@@ -2747,8 +2653,6 @@ keybind: Keybinds = .{},
 ///
 ///    Display a border around the alerted surface until the terminal is
 ///    re-focused or interacted with (such as on keyboard input).
-///
-///    Available since: 1.2.0 on GTK, 1.2.1 on macOS
 ///
 /// Example: `audio`, `no-audio`, `system`, `no-system`
 ///
@@ -2761,14 +2665,12 @@ keybind: Keybinds = .{},
 /// directory if this is used as a CLI flag. The path may be prefixed with `~/`
 /// to reference the user's home directory.
 ///
-/// Available since: 1.2.0 on GTK, 1.3.0 on macOS.
 @"bell-audio-path": ?Path = null,
 
 /// If `audio` is an enabled bell feature, this is the volume to play the audio
 /// file at (relative to the system volume). This is a floating point number
 /// ranging from 0.0 (silence) to 1.0 (as loud as possible). The default is 0.5.
 ///
-/// Available since: 1.2.0 on GTK, 1.3.0 on macOS.
 @"bell-audio-volume": f64 = 0.5,
 
 /// If anything other than false, fullscreen mode on macOS will not use the
@@ -2797,9 +2699,8 @@ keybind: Keybinds = .{},
 ///     devices. The area around the notch will remain transparent currently,
 ///     but in the future we may fill it with the window background color.
 ///
-/// Changing this option at runtime works, but will only apply to the next
-/// time the window is made fullscreen. If a window is already fullscreen,
-/// it will retain the previous setting until fullscreen is exited.
+/// Configuration file changes take effect after restarting cghostty.
+/// Runtime actions such as keyboard shortcuts do not reload the file.
 @"macos-non-native-fullscreen": NonNativeFullscreen = .false,
 
 /// Whether the window buttons in the macOS titlebar are visible. The window
@@ -2818,7 +2719,8 @@ keybind: Keybinds = .{},
 ///
 /// The default value is `visible`.
 ///
-/// Changing this option at runtime only applies to new windows.
+/// Configuration file changes take effect after restarting cghostty.
+/// Runtime actions such as keyboard shortcuts do not reload the file.
 ///
 /// Available since: 1.2.0
 @"macos-window-buttons": MacWindowButtons = .visible,
@@ -2862,7 +2764,8 @@ keybind: Keybinds = .{},
 /// but its one I think is the most aesthetically pleasing and works in
 /// most cases.
 ///
-/// Changing this option at runtime only applies to new windows.
+/// Configuration file changes take effect after restarting cghostty.
+/// Runtime actions such as keyboard shortcuts do not reload the file.
 @"macos-titlebar-style": MacTitlebarStyle = .transparent,
 
 /// Whether the proxy icon in the macOS titlebar is visible. The proxy icon
@@ -2879,11 +2782,8 @@ keybind: Keybinds = .{},
 ///
 /// The default value is `visible`.
 ///
-/// This setting can be changed at runtime and will affect all currently
-/// open windows but only after their working directory changes again.
-/// Therefore, to make this work after changing the setting, you must
-/// usually `cd` to a different directory, open a different file in an
-/// editor, etc.
+/// Configuration file changes take effect after restarting cghostty.
+/// Runtime actions such as keyboard shortcuts do not reload the file.
 @"macos-titlebar-proxy-icon": MacTitlebarProxyIcon = .visible,
 
 /// Controls the windowing behavior when dropping a file or folder
@@ -7112,16 +7012,13 @@ pub const CopyOnSelect = enum {
     /// Disables copy on select entirely. This is the default on macOS.
     none,
 
-    /// Copy on select is enabled, but goes to the selection clipboard.
-    /// This is not supported on platforms such as macOS. This is the default
-    /// on Linux.
+    /// Compatibility value for the selection clipboard; no effect on macOS.
     primary,
 
     /// Copy on select is enabled and goes to the system clipboard.
     clipboard,
 
-    /// Copy on select is enabled and goes to both the system clipboard
-    /// and the selection clipboard (for Linux).
+    /// Copy on select is enabled and goes to the system clipboard.
     both,
 };
 

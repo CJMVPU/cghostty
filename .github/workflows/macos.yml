@@ -58,11 +58,14 @@ jobs:
         run: python3 scripts/check-scope.py 2>&1 | tee macos/build/ci-logs/scope.log
       - name: Core regression tests
         run: |
-          zig build test -Dtest-filter=renderer -Dtest-filter=config -Dtest-filter=Command -Dtest-filter=Terminal \
-            -Dtest-filter=input -Dtest-filter=os. -Dtest-filter=termio -Dtest-filter=pty \
-            -Dtest-filter=StringMap -Dtest-filter=tmux -Dtest-filter=font \
-            -Dtest-filter=Session -Dtest-filter=terminal.search \
-            2>&1 | tee macos/build/ci-logs/core-tests.log
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            python3 scripts/build.py test
+          else
+            python3 scripts/build.py test -Dtest-filter=terminal. \
+              -Dtest-filter=renderer -Dtest-filter=config -Dtest-filter=Command \
+              -Dtest-filter=input -Dtest-filter=os. -Dtest-filter=termio -Dtest-filter=pty \
+              -Dtest-filter=StringMap -Dtest-filter=tmux -Dtest-filter=font -Dtest-filter=Session
+          fi 2>&1 | tee macos/build/ci-logs/core-tests.log
       - name: PCRE2 binding tests
         working-directory: pkg/pcre2
         run: zig build test 2>&1 | tee ../../macos/build/ci-logs/pcre2-tests.log

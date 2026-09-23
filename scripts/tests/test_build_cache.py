@@ -3,6 +3,7 @@ import importlib.util
 import io
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -71,6 +72,39 @@ class BuildCacheTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'tracked'):
             self.run_maintenance(clear=True)
         self.assertTrue((self.root / '.zig-cache/o/old/object.o').exists())
+
+
+    def test_build_lock_serializes_processes_and_releases_on_exit(self):
+        child = '''
+import importlib.util, pathlib, sys
+spec = importlib.util.spec_from_file_location('cache', sys.argv[1])
+cache = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(cache)
+print('attempting', flush=True)
+with cache.build_lock(pathlib.Path(sys.argv[2])):
+    print('acquired', flush=True)
+'''
+        with cache.build_lock(self.root):
+            process = subprocess.Popen([sys.executable, '-c', child, str(SCRIPT), str(self.root)],
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            self.addCleanup(lambda: process.kill() if process.poll() is None else None)
+            self.assertEqual(process.stdout.readline().strip(), 'attempting')
+            self.assertIsNone(process.poll())
+        output, errors = process.communicate(timeout=5)
+        self.assertEqual(process.returncode, 0, errors)
+        self.assertEqual(output.strip(), 'acquired')
+        # Keep the lock inode stable while other processes may be waiting.
+        with cache.build_lock(self.root):
+            self.assertTrue((self.root / '.cghostty-build.lock').is_file())
+
+    def test_lock_symlink_is_rejected(self):
+        target = self.root / 'keep'
+        target.write_text('untouched')
+        (self.root / '.cghostty-build.lock').symlink_to(target)
+        with self.assertRaises(OSError):
+            with cache.build_lock(self.root):
+                self.fail('A symlink lock must not be opened')
+        self.assertEqual(target.read_text(), 'untouched')
 
 
 if __name__ == '__main__':

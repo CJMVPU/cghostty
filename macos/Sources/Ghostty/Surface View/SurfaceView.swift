@@ -288,7 +288,8 @@ extension Ghostty {
                 // Sleep chosen arbitrarily... a better long term solution would be to detect
                 // when the size stabilizes (coalesce a value) for the first time and then after
                 // that show the resize overlay consistently.
-                try? await Task.sleep(nanoseconds: 500 * 1_000_000)
+                do { try await Task.sleep(for: .milliseconds(500)) } catch { return }
+                guard !Task.isCancelled else { return }
                 ready = true
             }
             .task(id: geoSize) {
@@ -299,9 +300,9 @@ extension Ghostty {
                 // We only sleep if we're ready. If we're not ready then we want to set
                 // our last size right away to avoid a flash.
                 if ready {
-                    try? await Task.sleep(nanoseconds: UInt64(duration) * 1_000_000)
+                    do { try await Task.sleep(for: .milliseconds(duration)) } catch { return }
                 }
-
+                guard !Task.isCancelled else { return }
                 lastSize = geoSize
             }
         }

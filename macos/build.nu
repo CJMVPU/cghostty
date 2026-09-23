@@ -31,11 +31,18 @@ def main [
         error make {msg: "--ui-tests and --only-testing require --action test."}
     }
     let root = ($env.FILE_PWD | path dirname)
-    # Bound accumulated compilation generations before starting a new build.
-    # The helper skips cleanup when another Zig/Xcode build is still active.
-    if $action != "clean" {
-        ^python3 ($root | path join "scripts/build-cache.py") --trim
-        if $env.LAST_EXIT_CODE != 0 { exit $env.LAST_EXIT_CODE }
+    # The parent owns the checkout lock for both core and Xcode operations.
+    # Keep direct invocations of this entrypoint on the same managed path.
+    if ($env.CGHOSTTY_BUILD_LOCK_ROOT? | default "") != $root {
+        let forwarded = [--configuration $configuration --action $action
+            --version $version --result-bundle $result_bundle --build-dir $build_dir
+            --only-testing $only_testing]
+        let flags = ([
+            (if $skip_core { "--skip-core" } else { null })
+            (if $ui_tests { "--ui-tests" } else { null })
+        ] | compact)
+        ^python3 ($root | path join "scripts/build.py") native ...$forwarded ...$flags
+        exit $env.LAST_EXIT_CODE
     }
     let project = ($env.FILE_PWD | path join "Ghostty.xcodeproj")
     # XCTest launches the app and runner from SYMROOT. Keeping these bundles in
