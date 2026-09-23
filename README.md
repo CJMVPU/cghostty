@@ -1,6 +1,6 @@
 # cghostty
 
-基于 [Ghostty](https://github.com/ghostty-org/ghostty) 独立维护的原生 macOS 终端。
+基于 [Ghostty](https://github.com/ghostty-org/ghostty) 独立维护的原生 macOS 终端
 
 **macOS 27+ · Apple Silicon · SwiftUI · Metal 4**
 
@@ -8,10 +8,10 @@
 
 ## 功能
 
-- **窗口**：多窗口、原生标签页、分屏、窗口恢复、快速终端。
-- **交互**：终端搜索、命令面板、自定义快捷键、shell 集成、AppleScript。
-- **显示**：主题、透明背景、平滑光标、Metal 渲染。
-- **配置**：中英文配置模板、启动校验、成功快照、恢复默认设置。
+- **窗口**：多窗口、原生标签页、分屏、窗口恢复、快速终端
+- **交互**：终端搜索、命令面板、自定义快捷键、shell 集成、AppleScript
+- **显示**：主题、透明背景、平滑光标、Metal 渲染
+- **配置**：中英文配置模板、启动校验、成功快照、恢复默认设置
 
 ## 默认设置
 
@@ -22,18 +22,18 @@
 | 新窗口 | 133 列 × 33 行 |
 | 平滑光标 | 开启 |
 
-- 内置 Nerd Font 符号，Emoji 优先使用系统 Apple Color Emoji。
-- 粗体、斜体和粗斜体遵循 `font-synthetic-style` 合成规则。
-- 用户配置优先；窗口恢复和屏幕空间可能影响实际尺寸。
+- 内置 Nerd Font 符号，Emoji 优先使用系统 Apple Color Emoji
+- 粗体、斜体和粗斜体遵循 `font-synthetic-style` 合成规则
+- 用户配置优先；窗口恢复和屏幕空间可能影响实际尺寸
 
 ## 安装
 
-1. 从 [Releases](https://github.com/CJMVPU/cghostty/releases) 下载 `cghostty-<版本>-macos-arm64.zip`。
-2. 解压，将 `cghostty.app` 拖入“应用程序”并启动。
+1. 从 [Releases](https://github.com/CJMVPU/cghostty/releases) 下载 `cghostty-<版本>-macos-arm64.zip`
+2. 解压，将 `cghostty.app` 拖入“应用程序”并启动
 
-- **更新**：应用内“检查更新”打开 Releases，手动下载并替换。
-- **签名**：默认打包使用 ad-hoc 签名，具体签名及公证状态以发布说明为准。
-- **平台**：仅支持 macOS 27+、Apple Silicon（arm64）。
+- **更新**：应用内“检查更新”打开 Releases，手动下载并替换
+- **签名**：默认打包使用 ad-hoc 签名，具体签名及公证状态以发布说明为准
+- **平台**：仅支持 macOS 27+、Apple Silicon
 
 ## 配置
 
@@ -45,9 +45,9 @@
 ~/Library/Application Support/com.cjmvpu.cghostty/config.ghostty
 ```
 
-- 文件缺失或为空时，使用内置默认值。
-- 主动打开配置时，生成带中英文名称、默认值和示例的模板。
-- 现有配置首次加入模板前自动备份，保留原有内容。
+- 文件缺失或为空时，使用内置默认值
+- 主动打开配置时，生成带中英文名称、默认值和示例的模板
+- 现有配置首次加入模板前自动备份，保留原有内容
 
 ### 分类
 
@@ -67,17 +67,17 @@
 只取消需要修改的示例行前的 `#`，填写数值后保存：
 
 ```ini
-# 自定义字号；内置默认值为 16。
+# 自定义字号；内置默认值为 16
 font-size = 18
 
-# 关闭平滑光标。
+# 关闭平滑光标
 cursor-effect = false
 ```
 
-- **生效时机**：退出并重新启动应用。
-- **运行期间**：新窗口、标签页和分屏沿用启动配置。
-- **默认字体**：`font-family` 未指定时使用内置 LXGW WenKai Mono Medium；粗体与斜体由渲染器合成。
-- **模板注释**：无需全部启用；示例值不等于默认值。
+- **生效时机**：退出并重新启动应用
+- **运行期间**：新窗口、标签页和分屏沿用启动配置
+- **默认字体**：`font-family` 未指定时使用内置 LXGW WenKai Mono Medium；粗体与斜体由渲染器合成
+- **模板注释**：无需全部启用；示例值不等于默认值
 
 ### 校验与恢复
 
@@ -88,14 +88,14 @@ cursor-effect = false
 | 没有可用快照 | 使用内置默认值，保留错误文件 |
 | 选择 **Restore Default Settings…** | 确认后备份当前配置、恢复默认模板，重启生效 |
 
-成功快照只保存主文件；引用的配置和主题资源仍需有效。
+成功快照只保存主文件；引用的配置和主题资源仍需有效
 
 ### 配置优先级
 
-- 普通单值：后写的有效值覆盖前值；`#` 注释中的默认值和示例不参与加载。
-- 覆盖顺序：内置默认值 → 主题 → 主配置 → 启动参数 → `config-file` 引用文件。
-- 字体列表、调色板、快捷键等按各自的追加／替换规则处理，详见配置注释。
-- 自定义主题目录：`~/Library/Application Support/com.cjmvpu.cghostty/themes/`。
+- 普通单值：后写的有效值覆盖前值；`#` 注释中的默认值和示例不参与加载
+- 覆盖顺序：内置默认值 → 主题 → 主配置 → 启动参数 → `config-file` 引用文件
+- 字体列表、调色板、快捷键等按各自的追加／替换规则处理，详见配置注释
+- 自定义主题目录：`~/Library/Application Support/com.cjmvpu.cghostty/themes/`
 
 ### 命令行
 
@@ -114,7 +114,7 @@ CGHOSTTY="/Applications/cghostty.app/Contents/MacOS/cghostty"
 
 ## 构建
 
-**环境**：macOS 27+、Apple Silicon、Xcode 27+、Python 3、Homebrew。
+**环境**：macOS 27+、Apple Silicon、Xcode 27+、Python 3、Homebrew
 
 在仓库根目录执行：
 
@@ -128,10 +128,10 @@ export PATH="$cghostty_zig_bin:$(brew --prefix gettext)/bin:$PATH"
 nu macos/build.nu --configuration ReleaseLocal
 ```
 
-- **Zig**：由仓库安装脚本下载锁定版本并校验。
-- **产物**：`macos/build/ReleaseLocal/cghostty.app`。
-- **测试与检查**：[HACKING.md](HACKING.md)。
-- **打包与签名**：[PACKAGING.md](PACKAGING.md)。
+- **Zig**：由仓库安装脚本下载锁定版本并校验
+- **产物**：`macos/build/ReleaseLocal/cghostty.app`
+- **测试与检查**：[HACKING.md](HACKING.md)
+- **打包与签名**：[PACKAGING.md](PACKAGING.md)
 
 ## 项目结构
 
@@ -147,6 +147,6 @@ nu macos/build.nu --configuration ReleaseLocal
 
 ## 许可
 
-- **应用**：[MIT](LICENSE)，保留 Ghostty 上游版权声明。
-- **默认字体**：[LXGW WenKai Mono](https://github.com/lxgw/LxgwWenKai)，采用 SIL OFL 1.1；许可及版权说明随应用提供。
-- **其他依赖**：遵循各自许可，见 [pkg/README.md](pkg/README.md)。
+- **应用**：[MIT](LICENSE)，保留 Ghostty 上游版权声明
+- **默认字体**：[LXGW WenKai Mono](https://github.com/lxgw/LxgwWenKai)，采用 SIL OFL 1.1；许可及版权说明随应用提供
+- **其他依赖**：遵循各自许可，见 [pkg/README.md](pkg/README.md)
