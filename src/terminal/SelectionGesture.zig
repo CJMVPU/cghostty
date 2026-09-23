@@ -71,7 +71,6 @@ const builtin = @import("builtin");
 const assert = std.debug.assert;
 const testing = std.testing;
 const Allocator = std.mem.Allocator;
-const lib = @import("lib.zig");
 const PageList = @import("PageList.zig");
 const Pin = PageList.Pin;
 const Screen = @import("Screen.zig");
@@ -120,26 +119,19 @@ left_drag_autoscroll: Autoscroll,
 ///
 /// This is used to implement selection above/below the viewport that
 /// wants to drag the viewport.
-pub const Autoscroll = lib.Enum(lib.target, &.{
-    "none",
-    "up",
-    "down",
-});
+pub const Autoscroll = enum(u2) {
+    none = 0,
+    up = 1,
+    down = 2,
+};
 
 /// The selection behavior for a click and subsequent drag.
-pub const Behavior = lib.Enum(lib.target, &.{
-    // Cell-granular drag selection. Press returns null to clear selection.
-    "cell",
-
-    // Word selection on press and word-granular drag selection.
-    "word",
-
-    // Line selection on press and line-granular drag selection.
-    "line",
-
-    // Semantic command output selection on press and drag.
-    "output",
-});
+pub const Behavior = enum(u2) {
+    cell = 0,
+    word = 1,
+    line = 2,
+    output = 3,
+};
 
 /// Standard terminal selection behavior for single-, double-, and triple-clicks.
 ///

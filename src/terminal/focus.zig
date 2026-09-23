@@ -1,5 +1,4 @@
 const std = @import("std");
-const lib = @import("lib.zig");
 
 /// Maximum number of bytes that `encode` will write. Any users of this
 /// should be resilient to this changing, so this is always a specific
@@ -8,10 +7,10 @@ pub const max_encode_size = 3;
 
 /// A focus event that can be reported to the application running in the
 /// terminal when focus reporting mode (mode 1004) is enabled.
-pub const Event = lib.Enum(lib.target, &.{
-    "gained",
-    "lost",
-});
+pub const Event = enum(u1) {
+    gained = 0,
+    lost = 1,
+};
 
 /// Encode a focus in/out report (CSI I / CSI O).
 pub fn encode(

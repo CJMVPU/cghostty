@@ -8,7 +8,6 @@ const ansi = @import("ansi.zig");
 const charsets = @import("charsets.zig");
 const fastmem = @import("../fastmem.zig");
 const kitty = @import("kitty.zig");
-const lib = @import("lib.zig");
 const sgr = @import("sgr.zig");
 const tripwire = @import("../tripwire.zig");
 const unicode = @import("../unicode/main.zig");
@@ -75,10 +74,7 @@ protected_mode: ansi.ProtectedMode = .off,
 kitty_keyboard: kitty.KeyFlagStack = .{},
 
 /// Kitty graphics protocol state.
-kitty_images: if (build_options.kitty_graphics)
-    kitty.graphics.ImageStorage
-else
-    struct {} = .{},
+kitty_images: kitty.graphics.ImageStorage = .{},
 
 /// Semantic prompt (OSC133) state.
 semantic_prompt: SemanticPrompt = .disabled,
@@ -116,10 +112,11 @@ pub const SemanticPrompt = struct {
         .click = .none,
     };
 
-    pub const SemanticClickKind = lib.Enum(
-        lib.target,
-        &.{ "none", "click_events", "cl" },
-    );
+    pub const SemanticClickKind = enum(u2) {
+        none = 0,
+        click_events = 1,
+        cl = 2,
+    };
 
     pub const SemanticClick = union(SemanticClickKind) {
         none,
@@ -272,16 +269,10 @@ pub const Options = struct {
 
     /// The total storage limit for Kitty images in bytes for this
     /// screen. Kitty image storage is per-screen.
-    kitty_image_storage_limit: usize = switch (build_options.artifact) {
-        .ghostty => 320 * 1000 * 1000, // 320MB
-        .lib => 10 * 1000 * 1000, // 10MB
-    },
+    kitty_image_storage_limit: usize = 320 * 1000 * 1000,
 
     /// The limits for what medium types are allowed for Kitty image loading.
-    kitty_image_loading_limits: if (build_options.kitty_graphics)
-        kitty.graphics.LoadingImage.Limits
-    else
-        void = if (build_options.kitty_graphics) .direct else {},
+    kitty_image_loading_limits: kitty.graphics.LoadingImage.Limits = .direct,
 
     /// A simple, default terminal. If you rely on specific dimensions or
     /// scrollback (or lack of) then do not use this directly. This is just
@@ -333,7 +324,7 @@ pub fn init(
         },
     };
 
-    if (comptime build_options.kitty_graphics) {
+    {
         result.kitty_images.setLimit(
             io,
             alloc,
@@ -347,7 +338,7 @@ pub fn init(
 }
 
 pub fn deinit(self: *Screen) void {
-    if (comptime build_options.kitty_graphics) {
+    {
         self.kitty_images.deinit(self.alloc, self);
     }
     self.cursor.deinit(self.alloc);
@@ -425,7 +416,7 @@ pub fn reset(self: *Screen) void {
         .page_cell = cursor_rac.cell,
     };
 
-    if (comptime build_options.kitty_graphics) {
+    {
         // Reset kitty graphics storage
         const image_limits = self.kitty_images.image_limits;
         const total_limit = self.kitty_images.total_limit;
@@ -924,7 +915,7 @@ pub fn cursorDownScroll(self: *Screen) !void {
     assert(self.cursor.y == self.pages.rows - 1);
     defer self.assertIntegrity();
 
-    if (comptime build_options.kitty_graphics) {
+    {
         // Scrolling dirties the images because it updates their placements pins.
         self.kitty_images.dirty = true;
     }
@@ -1626,7 +1617,7 @@ pub const Scroll = union(enum) {
 pub inline fn scroll(self: *Screen, behavior: Scroll) void {
     defer self.assertIntegrity();
 
-    if (comptime build_options.kitty_graphics) {
+    {
         // No matter what, scrolling marks our image state as dirty since
         // it could move placements. If there are no placements or no images
         // this is still a very cheap operation.
@@ -1651,7 +1642,7 @@ pub inline fn scrollClear(self: *Screen) !void {
     try self.pages.scrollClear();
     self.cursorReload();
 
-    if (comptime build_options.kitty_graphics) {
+    {
         // No matter what, scrolling marks our image state as dirty since
         // it could move placements. If there are no placements or no images
         // this is still a very cheap operation.
@@ -1815,7 +1806,7 @@ pub fn clearCells(
         }
     }
 
-    if (comptime build_options.kitty_graphics) {
+    {
         if (row.kitty_virtual_placeholder and
             cells.len == page.size.cols)
         {
@@ -2122,7 +2113,7 @@ pub inline fn resize(
     errdefer comptime unreachable;
 
     // Resizing moves image placements, so mark their geometry as dirty.
-    if (comptime build_options.kitty_graphics) self.kitty_images.dirty = true;
+    self.kitty_images.dirty = true;
 
     // If we have no scrollback and we shrunk our rows, we must explicitly
     // erase our history. This is because PageList always keeps at least
@@ -8038,7 +8029,7 @@ test "Screen: resize errors preserve state" {
             .charset = s.charset,
         };
 
-        if (comptime build_options.kitty_graphics) {
+        {
             s.kitty_images.dirty = false;
         }
 
@@ -8091,7 +8082,7 @@ test "Screen: resize errors preserve state" {
             before_page,
             s.pages.pages.first.?.page().memory,
         );
-        if (comptime build_options.kitty_graphics) {
+        {
             try testing.expectEqual(
                 before.kitty_images.dirty,
                 s.kitty_images.dirty,

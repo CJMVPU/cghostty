@@ -418,8 +418,8 @@ pub fn colorSchemeEvent(
     // impact the colors of the app.
     _ = try rt_app.performAction(
         .app,
-        .reload_config,
-        .{ .soft = true },
+        .apply_theme,
+        {},
     );
 }
 

@@ -22,12 +22,11 @@ pub const page = @import("page.zig");
 pub const parse_table = @import("parse_table.zig");
 pub const paste = @import("paste.zig");
 pub const search = @import("search.zig");
-pub const snapshot = @import("snapshot/main.zig");
 pub const sgr = @import("sgr.zig");
 pub const size = @import("size.zig");
 pub const size_report = @import("size_report.zig");
 pub const sys = @import("sys.zig");
-pub const tmux = if (options.tmux_control_mode) @import("tmux.zig") else struct {};
+pub const tmux = @import("tmux.zig");
 pub const x11_color = @import("x11_color.zig");
 
 pub const Charset = charsets.Charset;

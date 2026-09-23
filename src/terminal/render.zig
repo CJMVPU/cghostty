@@ -3,7 +3,6 @@ const assert = @import("../quirks.zig").inlineAssert;
 const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 const fastmem = @import("../fastmem.zig");
-const lib = @import("lib.zig");
 const color = @import("color.zig");
 const cursor = @import("cursor.zig");
 const highlight = @import("highlight.zig");
@@ -278,19 +277,11 @@ pub const RenderState = struct {
     };
 
     // Dirty state.
-    pub const Dirty = lib.Enum(lib.target, &.{
-        // Not dirty at all. Can skip rendering if prior state was
-        // already rendered.
-        "false",
-
-        // Some rows changed but not all. None of the global state
-        // changed such as colors.
-        "partial",
-
-        // Global state changed or dimensions changed. All rows should
-        // be redrawn.
-        "full",
-    });
+    pub const Dirty = enum(u2) {
+        false = 0,
+        partial = 1,
+        full = 2,
+    };
 
     const SelectionCache = struct {
         selection: Selection,

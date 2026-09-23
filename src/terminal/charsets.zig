@@ -1,25 +1,27 @@
 const std = @import("std");
-const build_options = @import("terminal_options");
 const assert = @import("../quirks.zig").inlineAssert;
-const LibEnum = @import("../lib/enum.zig").Enum;
 
 /// The available charset slots for a terminal.
-pub const Slots = LibEnum(
-    if (build_options.c_abi) .c else .zig,
-    &.{ "G0", "G1", "G2", "G3" },
-);
+pub const Slots = enum(u2) {
+    G0 = 0,
+    G1 = 1,
+    G2 = 2,
+    G3 = 3,
+};
 
 /// The name of the active slots.
-pub const ActiveSlot = LibEnum(
-    if (build_options.c_abi) .c else .zig,
-    &.{ "GL", "GR" },
-);
+pub const ActiveSlot = enum(u1) {
+    GL = 0,
+    GR = 1,
+};
 
 /// The list of supported character sets and their associated tables.
-pub const Charset = LibEnum(
-    if (build_options.c_abi) .c else .zig,
-    &.{ "utf8", "ascii", "british", "dec_special" },
-);
+pub const Charset = enum(u2) {
+    utf8 = 0,
+    ascii = 1,
+    british = 2,
+    dec_special = 3,
+};
 
 /// The table for the given charset. This returns a pointer to a
 /// slice that is guaranteed to be 255 chars that can be used to map

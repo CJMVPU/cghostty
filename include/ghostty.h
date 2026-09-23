@@ -834,11 +834,6 @@ typedef struct {
   ghostty_config_t config;
 } ghostty_action_config_change_s;
 
-// apprt.action.ReloadConfig
-typedef struct {
-  bool soft;
-} ghostty_action_reload_config_s;
-
 // apprt.action.OpenUrlKind
 typedef enum {
   GHOSTTY_ACTION_OPEN_URL_KIND_UNKNOWN,
@@ -959,7 +954,7 @@ typedef enum {
   GHOSTTY_ACTION_KEY_SEQUENCE,
   GHOSTTY_ACTION_KEY_TABLE,
   GHOSTTY_ACTION_COLOR_CHANGE,
-  GHOSTTY_ACTION_RELOAD_CONFIG,
+  GHOSTTY_ACTION_APPLY_THEME,
   GHOSTTY_ACTION_CONFIG_CHANGE,
   GHOSTTY_ACTION_CLOSE_WINDOW,
   GHOSTTY_ACTION_RING_BELL,
@@ -1021,7 +1016,6 @@ typedef union {
   ghostty_action_key_sequence_s key_sequence;
   ghostty_action_key_table_s key_table;
   ghostty_action_color_change_s color_change;
-  ghostty_action_reload_config_s reload_config;
   ghostty_action_config_change_s config_change;
   ghostty_action_open_url_s open_url;
   ghostty_action_close_tab_mode_e close_tab_mode;

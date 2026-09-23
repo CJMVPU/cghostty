@@ -5,7 +5,6 @@ const Terminal = @This();
 
 const std = @import("std");
 const build_options = @import("terminal_options");
-const lib = @import("lib.zig");
 const assert = @import("../quirks.zig").inlineAssert;
 const tripwire = @import("../tripwire.zig");
 const testing = std.testing;
@@ -286,23 +285,13 @@ pub const Options = struct {
 
     /// The total storage limit for Kitty images in bytes. Has no effect
     /// if kitty images are disabled at build-time.
-    kitty_image_storage_limit: usize = switch (build_options.artifact) {
-        .ghostty => 320 * 1000 * 1000, // 320MB
-
-        // libghostty we start with a much lower limit since this is an
-        // embedded library and we want to be more conservative with memory
-        // usage by default.
-        .lib => 10 * 1000 * 1000, // 10MB
-    },
+    kitty_image_storage_limit: usize = 320 * 1000 * 1000,
 
     /// The limits for what medium types are allowed for Kitty image loading.
     /// Has no effect if kitty images are disabled otherwise. For example,
     // if no `sys.decode_png` hook is specified, png formats are disabled
     // no matter what.
-    kitty_image_loading_limits: if (build_options.kitty_graphics)
-        kitty.graphics.LoadingImage.Limits
-    else
-        void = if (build_options.kitty_graphics) .direct else {},
+    kitty_image_loading_limits: kitty.graphics.LoadingImage.Limits = .direct,
 };
 
 /// Initialize a new terminal.
@@ -646,7 +635,7 @@ fn printSliceFast(
     }
 
     if (!allow_unicode) return 0;
-    if (comptime build_options.kitty_graphics) {
+    {
         // The Kitty graphics placeholder requires row bookkeeping.
         if (cp0 == kitty.graphics.unicode.placeholder) return 0;
     }
@@ -736,7 +725,7 @@ const PrintSliceWidth = enum(u1) {
 /// fast path with the given width class.
 inline fn printSliceEligible(cp: u32, comptime width: PrintSliceWidth) bool {
     assert(cp > 0xFF);
-    if (comptime build_options.kitty_graphics) {
+    {
         if (cp == kitty.graphics.unicode.placeholder) return false;
     }
 
@@ -1724,7 +1713,7 @@ fn printCell(
 
     // If this is a Kitty unicode placeholder then we need to mark the
     // row so that the renderer can lookup rows with these much faster.
-    if (comptime build_options.kitty_graphics) {
+    {
         if (c == kitty.graphics.unicode.placeholder) {
             @branchHint(.unlikely);
             self.screens.active.cursor.page_row.kitty_virtual_placeholder = true;
@@ -2366,7 +2355,7 @@ pub fn index(self: *Terminal) !void {
         screen.cursor.x >= self.scrolling_region.left and
         screen.cursor.x <= self.scrolling_region.right)
     {
-        if (comptime build_options.kitty_graphics) {
+        {
             // Scrolling dirties the images because it updates their placements pins.
             screen.kitty_images.dirty = true;
         }
@@ -2390,7 +2379,7 @@ pub fn index(self: *Terminal) !void {
             // present case is handled out of line so this hot path
             // only pays a count check (a load from a cache line we
             // already write, above).
-            if (comptime build_options.kitty_graphics) {
+            {
                 if (screen.kitty_images.placements.count() != 0) {
                     @branchHint(.unlikely);
                     try self.indexScrollWithImages(.window_shift);
@@ -2413,7 +2402,7 @@ pub fn index(self: *Terminal) !void {
 
         // Kitty image placements may need adjusting around the scroll;
         // handled out of line like the scrollback path above.
-        if (comptime build_options.kitty_graphics) {
+        {
             if (screen.kitty_images.placements.count() != 0) {
                 @branchHint(.unlikely);
                 try self.indexScrollWithImages(.in_place);
@@ -2454,15 +2443,7 @@ fn indexScrollWithImages(
     }
 }
 
-// Handle when Kitty graphics is disabled.
-const KittyScrollMargins = if (build_options.kitty_graphics)
-    kitty.graphics.ImageStorage.ScrollMargins
-else
-    struct {
-        pub inline fn end(self: *@This()) void {
-            _ = self;
-        }
-    };
+const KittyScrollMargins = kitty.graphics.ImageStorage.ScrollMargins;
 
 /// Begin adjusting kitty image placements for a scroll of the
 /// scrolling region by delta rows (negative moves content up). If
@@ -2473,8 +2454,7 @@ else
 /// placements then follow their anchored rows via pin tracking which
 /// matches kitty's marginless behavior.
 ///
-/// Callers must comptime-gate on build_options.kitty_graphics and
-/// check that placements exist before calling, which keeps the cost
+/// Callers must comptime-gate on /// check that placements exist before calling, which keeps the cost
 /// on the hot scroll paths cheap.
 fn kittyScrollMarginsBegin(
     self: *Terminal,
@@ -2630,7 +2610,7 @@ pub fn scrollDown(self: *Terminal, count: usize) void {
     // alone for IL/DL.
     var kitty_scroll: ?KittyScrollMargins = null;
     defer if (kitty_scroll) |*state| state.end();
-    if (comptime build_options.kitty_graphics) {
+    {
         if (self.screens.active.kitty_images.placements.count() != 0) {
             @branchHint(.unlikely);
             const region_height: usize =
@@ -2670,7 +2650,7 @@ pub fn scrollUp(self: *Terminal, count: usize) !void {
     // alone for IL/DL.
     var kitty_scroll: ?KittyScrollMargins = null;
     defer if (kitty_scroll) |*state| state.end();
-    if (comptime build_options.kitty_graphics) {
+    {
         if (self.screens.active.kitty_images.placements.count() != 0) {
             @branchHint(.unlikely);
 
@@ -2708,7 +2688,7 @@ pub fn scrollUp(self: *Terminal, count: usize) !void {
             self.scrolling_region.bottom == self.rows - 1))
     {
         // Scrolling dirties the images because it updates their placements pins.
-        if (comptime build_options.kitty_graphics) {
+        {
             self.screens.active.kitty_images.dirty = true;
         }
 
@@ -2750,23 +2730,12 @@ pub const ScrollViewport = union(Tag) {
     /// This is the same row space as PageList.Scrollbar offset.
     row: usize,
 
-    pub const Tag = lib.Enum(lib.target, &.{
-        "top",
-        "bottom",
-        "delta",
-        "row",
-    });
-
-    const c_union = lib.TaggedUnion(
-        lib.target,
-        @This(),
-        // Padding: largest variant is isize (8 bytes on 64-bit).
-        // Use [2]u64 (16 bytes) for future expansion.
-        .{ .padding = [2]u64 },
-    );
-    pub const C = c_union.C;
-    pub const CValue = c_union.CValue;
-    pub const cval = c_union.cval;
+    pub const Tag = enum(u2) {
+        top = 0,
+        bottom = 1,
+        delta = 2,
+        row = 3,
+    };
 };
 
 /// Scroll the viewport of the terminal grid.
@@ -2803,20 +2772,20 @@ pub fn compressionActivity(self: *const Terminal) u64 {
 ///
 /// The declaration order is part of the libghostty-vt C ABI. Removed values
 /// must leave a `null` hole so later values retain their integer values.
-pub const CompressionMode = lib.Enum(lib.target, &.{
-    "incremental",
-    "full",
-});
+pub const CompressionMode = enum(u1) {
+    incremental = 0,
+    full = 1,
+};
 
 /// The scheduling result of a `compress` call.
 ///
 /// The declaration order is part of the libghostty-vt C ABI. Removed values
 /// must leave a `null` hole so later values retain their integer values.
-pub const CompressionResult = lib.Enum(lib.target, &.{
-    "unsupported",
-    "pending",
-    "complete",
-});
+pub const CompressionResult = enum(u2) {
+    unsupported = 0,
+    pending = 1,
+    complete = 2,
+};
 
 /// Compress cold memory to save resident memory space.
 ///
@@ -2956,7 +2925,7 @@ pub fn insertLines(self: *Terminal, count: usize) void {
         self.screens.active.cursor.x < self.scrolling_region.left or
         self.screens.active.cursor.x > self.scrolling_region.right) return;
 
-    if (comptime build_options.kitty_graphics) {
+    {
         // Scrolling dirties the images because it updates their placements pins.
         self.screens.active.kitty_images.dirty = true;
     }
@@ -3130,7 +3099,7 @@ pub fn deleteLines(self: *Terminal, count: usize) void {
         self.screens.active.cursor.x < self.scrolling_region.left or
         self.screens.active.cursor.x > self.scrolling_region.right) return;
 
-    if (comptime build_options.kitty_graphics) {
+    {
         // Scrolling dirties the images because it updates their placements pins.
         self.screens.active.kitty_images.dirty = true;
     }
@@ -3588,7 +3557,7 @@ pub fn eraseDisplay(
             // Unsets pending wrap state
             self.screens.active.cursor.pending_wrap = false;
 
-            if (comptime build_options.kitty_graphics) {
+            {
                 // Clear only placements still visible after moving the active
                 // area into scrollback.
                 self.screens.active.kitty_images.clearScreen(
@@ -3646,7 +3615,7 @@ pub fn eraseDisplay(
             // Unsets pending wrap state
             self.screens.active.cursor.pending_wrap = false;
 
-            if (comptime build_options.kitty_graphics) {
+            {
                 // ED2 clears visible placements but preserves graphics that
                 // are wholly in scrollback.
                 self.screens.active.kitty_images.clearScreen(
@@ -3793,7 +3762,6 @@ pub fn setKittyGraphicsSizeLimit(
     alloc: Allocator,
     limit: usize,
 ) void {
-    if (comptime !build_options.kitty_graphics) return;
     var it = self.screens.all.iterator();
     while (it.next()) |entry| {
         const screen: *Screen = entry.value.*;
@@ -3807,7 +3775,6 @@ pub fn setKittyGraphicsLoadingLimits(
     self: *Terminal,
     limits: kitty.graphics.LoadingImage.Limits,
 ) void {
-    if (comptime !build_options.kitty_graphics) return;
     var it = self.screens.all.iterator();
     while (it.next()) |entry| {
         const screen: *Screen = entry.value.*;
@@ -4121,13 +4088,8 @@ pub fn resize(
                 .cols = opts.cols,
                 .rows = opts.rows,
                 .max_scrollback_bytes = 0,
-                .kitty_image_storage_limit = if (comptime build_options.kitty_graphics)
-                    primary.kitty_images.total_limit
-                else
-                    0,
-                .kitty_image_loading_limits = if (comptime build_options.kitty_graphics)
-                    primary.kitty_images.image_limits
-                else {},
+                .kitty_image_storage_limit = primary.kitty_images.total_limit,
+                .kitty_image_loading_limits = primary.kitty_images.image_limits,
             },
         ) catch |init_err| {
             log.warn(
@@ -4735,13 +4697,8 @@ pub fn switchScreen(self: *Terminal, key: ScreenSet.Key) !?*Screen {
 
                 // Inherit our Kitty image settings from the primary
                 // screen if we have to initialize.
-                .kitty_image_storage_limit = if (comptime build_options.kitty_graphics)
-                    primary.kitty_images.total_limit
-                else
-                    0,
-                .kitty_image_loading_limits = if (comptime build_options.kitty_graphics)
-                    primary.kitty_images.image_limits
-                else {},
+                .kitty_image_storage_limit = primary.kitty_images.total_limit,
+                .kitty_image_loading_limits = primary.kitty_images.image_limits,
             },
         );
     };
@@ -4755,7 +4712,7 @@ pub fn switchScreen(self: *Terminal, key: ScreenSet.Key) !?*Screen {
     // Clear our selection
     new.clearSelection();
 
-    if (comptime build_options.kitty_graphics) {
+    {
         // Mark kitty images as dirty so they redraw. Without this set
         // the images will remain where they were (the dirty bit on
         // the screen only tracks the terminal grid, not the images).
@@ -6951,8 +6908,6 @@ test "Terminal: print invoke charset single" {
 }
 
 test "Terminal: print kitty unicode placeholder" {
-    if (comptime !build_options.kitty_graphics) return error.SkipZigTest;
-
     var t = try init(testing.io, testing.allocator, .{ .cols = 10, .rows = 10 });
     defer t.deinit(testing.allocator);
 
@@ -15672,8 +15627,6 @@ test "Terminal: fullReset status display" {
 }
 
 test "Terminal: fullReset preserves kitty graphics limits" {
-    if (comptime !build_options.kitty_graphics) return error.SkipZigTest;
-
     const alloc = testing.allocator;
     const temp_dir = "/tmp/ghostty-kitty-images";
 

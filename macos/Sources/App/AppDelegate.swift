@@ -472,10 +472,8 @@ class AppDelegate: NSObject,
         // Make the signal source and register our event handle. We keep a weak
         // ref to ourself so we don't create a retain cycle.
         let sigusr2 = DispatchSource.makeSignalSource(signal: SIGUSR2, queue: .main)
-        sigusr2.setEventHandler { [weak self] in
-            guard let self else { return }
+        sigusr2.setEventHandler {
             Ghostty.logger.notice("SIGUSR2 received; user configuration changes apply after restart")
-            self.ghostty.reloadConfig()
         }
 
         // The signal source starts unactivated, so we have to resume it once

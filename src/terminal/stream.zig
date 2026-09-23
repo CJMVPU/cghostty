@@ -131,122 +131,111 @@ pub const Action = union(Key) {
     kitty_clipboard: KittyClipboard,
     kitty_dnd: KittyDnd,
 
-    pub const Key = lib.Enum(
-        lib.target,
-        &.{
-            "print",
-            "print_slice",
-            "print_repeat",
-            "bell",
-            "backspace",
-            "horizontal_tab",
-            "horizontal_tab_back",
-            "linefeed",
-            "carriage_return",
-            "enquiry",
-            "invoke_charset",
-            "cursor_up",
-            "cursor_down",
-            "cursor_left",
-            "cursor_right",
-            "cursor_col",
-            "cursor_row",
-            "cursor_col_relative",
-            "cursor_row_relative",
-            "cursor_pos",
-            "cursor_style",
-            "erase_display_below",
-            "erase_display_above",
-            "erase_display_complete",
-            "erase_display_scrollback",
-            "erase_display_scroll_complete",
-            "erase_line_right",
-            "erase_line_left",
-            "erase_line_complete",
-            "erase_line_right_unless_pending_wrap",
-            "delete_chars",
-            "erase_chars",
-            "insert_lines",
-            "insert_blanks",
-            "delete_lines",
-            "scroll_up",
-            "scroll_down",
-            "tab_clear_current",
-            "tab_clear_all",
-            "tab_set",
-            "tab_reset",
-            "index",
-            "next_line",
-            "reverse_index",
-            "full_reset",
-            "set_mode",
-            "reset_mode",
-            "save_mode",
-            "restore_mode",
-            "request_mode",
-            "request_mode_unknown",
-            "top_and_bottom_margin",
-            "left_and_right_margin",
-            "left_and_right_margin_ambiguous",
-            "save_cursor",
-            "restore_cursor",
-            "modify_key_format",
-            "mouse_shift_capture",
-            "protected_mode_off",
-            "protected_mode_iso",
-            "protected_mode_dec",
-            "size_report",
-            "title_push",
-            "title_pop",
-            "xtversion",
-            "device_attributes",
-            "device_status",
-            "kitty_keyboard_query",
-            "kitty_keyboard_push",
-            "kitty_keyboard_pop",
-            "kitty_keyboard_set",
-            "kitty_keyboard_set_or",
-            "kitty_keyboard_set_not",
-            "dcs_hook",
-            "dcs_put",
-            "dcs_unhook",
-            "apc_start",
-            "apc_end",
-            "apc_put",
-            "apc_put_slice",
-            "end_hyperlink",
-            "active_status_display",
-            "decaln",
-            "window_title",
-            "report_pwd",
-            "show_desktop_notification",
-            "progress_report",
-            "start_hyperlink",
-            "clipboard_contents",
-            "mouse_shape",
-            "configure_charset",
-            "set_attribute",
-            "kitty_color_report",
-            "color_operation",
-            "semantic_prompt",
-            "kitty_clipboard",
-            "kitty_dnd",
-        },
-    );
+    pub const Key = enum(u7) {
+        print = 0,
+        print_slice = 1,
+        print_repeat = 2,
+        bell = 3,
+        backspace = 4,
+        horizontal_tab = 5,
+        horizontal_tab_back = 6,
+        linefeed = 7,
+        carriage_return = 8,
+        enquiry = 9,
+        invoke_charset = 10,
+        cursor_up = 11,
+        cursor_down = 12,
+        cursor_left = 13,
+        cursor_right = 14,
+        cursor_col = 15,
+        cursor_row = 16,
+        cursor_col_relative = 17,
+        cursor_row_relative = 18,
+        cursor_pos = 19,
+        cursor_style = 20,
+        erase_display_below = 21,
+        erase_display_above = 22,
+        erase_display_complete = 23,
+        erase_display_scrollback = 24,
+        erase_display_scroll_complete = 25,
+        erase_line_right = 26,
+        erase_line_left = 27,
+        erase_line_complete = 28,
+        erase_line_right_unless_pending_wrap = 29,
+        delete_chars = 30,
+        erase_chars = 31,
+        insert_lines = 32,
+        insert_blanks = 33,
+        delete_lines = 34,
+        scroll_up = 35,
+        scroll_down = 36,
+        tab_clear_current = 37,
+        tab_clear_all = 38,
+        tab_set = 39,
+        tab_reset = 40,
+        index = 41,
+        next_line = 42,
+        reverse_index = 43,
+        full_reset = 44,
+        set_mode = 45,
+        reset_mode = 46,
+        save_mode = 47,
+        restore_mode = 48,
+        request_mode = 49,
+        request_mode_unknown = 50,
+        top_and_bottom_margin = 51,
+        left_and_right_margin = 52,
+        left_and_right_margin_ambiguous = 53,
+        save_cursor = 54,
+        restore_cursor = 55,
+        modify_key_format = 56,
+        mouse_shift_capture = 57,
+        protected_mode_off = 58,
+        protected_mode_iso = 59,
+        protected_mode_dec = 60,
+        size_report = 61,
+        title_push = 62,
+        title_pop = 63,
+        xtversion = 64,
+        device_attributes = 65,
+        device_status = 66,
+        kitty_keyboard_query = 67,
+        kitty_keyboard_push = 68,
+        kitty_keyboard_pop = 69,
+        kitty_keyboard_set = 70,
+        kitty_keyboard_set_or = 71,
+        kitty_keyboard_set_not = 72,
+        dcs_hook = 73,
+        dcs_put = 74,
+        dcs_unhook = 75,
+        apc_start = 76,
+        apc_end = 77,
+        apc_put = 78,
+        apc_put_slice = 79,
+        end_hyperlink = 80,
+        active_status_display = 81,
+        decaln = 82,
+        window_title = 83,
+        report_pwd = 84,
+        show_desktop_notification = 85,
+        progress_report = 86,
+        start_hyperlink = 87,
+        clipboard_contents = 88,
+        mouse_shape = 89,
+        configure_charset = 90,
+        set_attribute = 91,
+        kitty_color_report = 92,
+        color_operation = 93,
+        semantic_prompt = 94,
+        kitty_clipboard = 95,
+        kitty_dnd = 96,
+    };
 
     /// C ABI functions.
-    const c_union = lib.TaggedUnion(
-        lib.target,
-        @This(),
-        // TODO: Before shipping an ABI-compatible libghostty, verify this.
-        // This was just arbitrarily chosen for now.
-        .{ .padding = [16]u64 },
-    );
-    pub const Tag = c_union.Tag;
-    pub const Value = c_union.Value;
-    pub const C = c_union.C;
-    pub const CValue = c_union.CValue;
-    pub const cval = c_union.cval;
+    pub const Tag = Key;
+    pub fn Value(comptime tag: Key) type {
+        return @FieldType(@This(), @tagName(tag));
+    }
 
     /// Field types
     pub const Print = struct {
@@ -300,11 +289,11 @@ pub const Action = union(Key) {
         terminated: bool,
     };
 
-    pub const InvokeCharset = lib.Struct(lib.target, struct {
+    pub const InvokeCharset = struct {
         bank: charsets.ActiveSlot,
         charset: charsets.Slots,
         locking: bool,
-    });
+    };
 
     pub const CursorMovement = extern struct {
         /// The value of the cursor movement. Depending on the tag of this
@@ -431,10 +420,10 @@ pub const Action = union(Key) {
         }
     };
 
-    pub const ConfigureCharset = lib.Struct(lib.target, struct {
+    pub const ConfigureCharset = struct {
         slot: charsets.Slots,
         charset: charsets.Charset,
-    });
+    };
 
     pub const ColorOperation = struct {
         op: osc.color.Operation,
@@ -3074,12 +3063,6 @@ fn logUnsupportedOnce(
     } else return; // table full: suppress new values too
 
     log.warn(format, args);
-}
-
-test Action {
-    // Forces the C type to be reified when the target is C, ensuring
-    // all our types are C ABI compatible.
-    _ = Action.C;
 }
 
 test "stream: print" {

@@ -7,12 +7,11 @@ const osc = @This();
 
 const std = @import("std");
 const builtin = @import("builtin");
-const build_options = @import("terminal_options");
 const mem = std.mem;
 const assert = @import("../quirks.zig").inlineAssert;
 const Allocator = mem.Allocator;
 const lib = @import("lib.zig");
-const LibEnum = lib.Enum;
+const LibEnum = @import("../lib/enum.zig").Enum;
 const kitty_color = @import("kitty/color.zig");
 const parsers = @import("osc/parsers.zig");
 const encoding = @import("osc/encoding.zig");
@@ -175,39 +174,35 @@ pub const Command = union(Key) {
 
     pub const KittyDesktopNotification = parsers.kitty_desktop_notification.OSC;
 
-    pub const Key = LibEnum(
-        lib.target,
-        // NOTE: Order matters, see LibEnum documentation.
-        &.{
-            "invalid",
-            "change_window_title",
-            "change_window_icon",
-            "semantic_prompt",
-            "clipboard_contents",
-            "report_pwd",
-            "mouse_shape",
-            "color_operation",
-            "kitty_color_protocol",
-            "show_desktop_notification",
-            "hyperlink_start",
-            "hyperlink_end",
-            "conemu_sleep",
-            "conemu_show_message_box",
-            "conemu_change_tab_title",
-            "conemu_progress_report",
-            "conemu_wait_input",
-            "conemu_guimacro",
-            "conemu_run_process",
-            "conemu_output_environment_variable",
-            "conemu_xterm_emulation",
-            "conemu_comment",
-            "kitty_text_sizing",
-            "kitty_clipboard_protocol",
-            "kitty_dnd_protocol",
-            "context_signal",
-            "kitty_desktop_notification",
-        },
-    );
+    pub const Key = enum(u5) {
+        invalid,
+        change_window_title,
+        change_window_icon,
+        semantic_prompt,
+        clipboard_contents,
+        report_pwd,
+        mouse_shape,
+        color_operation,
+        kitty_color_protocol,
+        show_desktop_notification,
+        hyperlink_start,
+        hyperlink_end,
+        conemu_sleep,
+        conemu_show_message_box,
+        conemu_change_tab_title,
+        conemu_progress_report,
+        conemu_wait_input,
+        conemu_guimacro,
+        conemu_run_process,
+        conemu_output_environment_variable,
+        conemu_xterm_emulation,
+        conemu_comment,
+        kitty_text_sizing,
+        kitty_clipboard_protocol,
+        kitty_dnd_protocol,
+        context_signal,
+        kitty_desktop_notification,
+    };
 
     pub const ProgressReport = struct {
         const state_keys = &.{
@@ -218,7 +213,7 @@ pub const Command = union(Key) {
             "pause",
         };
 
-        pub const State = LibEnum(lib.target, state_keys);
+        pub const State = enum(u3) { remove, set, @"error", indeterminate, pause };
 
         state: State,
         progress: ?u8 = null,
@@ -241,7 +236,6 @@ pub const Command = union(Key) {
         }
 
         test "ghostty.h Command.ProgressReport.State" {
-            if (comptime build_options.artifact == .lib) return error.SkipZigTest;
             const CState = LibEnum(.c, state_keys);
             try lib.checkGhosttyHEnum(CState, "GHOSTTY_PROGRESS_STATE_");
         }

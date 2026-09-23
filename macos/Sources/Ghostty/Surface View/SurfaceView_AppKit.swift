@@ -558,9 +558,7 @@ extension Ghostty {
             if let window {
                 alert.beginSheetModal(for: window, completionHandler: completionHandler)
             } else {
-                // On macOS 26 RC, this codepath results in the "OK" button not being
-                // visible. The above codepath should be taken most times but I'm just
-                // noting this as something I noticed consistently.
+                // The windowless modal layout is covered by ModalAlertTests on macOS 27.
                 completionHandler(alert.runModal())
             }
         }

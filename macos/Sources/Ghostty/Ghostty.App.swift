@@ -207,22 +207,14 @@ extension Ghostty {
             }
         }
 
-        /// Reload the configuration.
-        func reloadConfig(soft: Bool = false) {
-            guard let app = self.app else { return }
-
-            // Soft updates just call with our existing config
-            if soft {
-                ghostty_app_update_config(app, config.config!)
-                return
-            }
-
-            // User file changes apply on the next application launch only.
-            Ghostty.logger.notice("Configuration changes require an application restart")
+        /// Reapply the loaded configuration after a light/dark appearance change.
+        func applyTheme() {
+            guard let app, let loadedConfig = config.config else { return }
+            ghostty_app_update_config(app, loadedConfig)
         }
 
-        func reloadConfig(surface: Surface, soft: Bool = false) {
-            if soft { surface.updateConfig(config) } else { Ghostty.logger.notice("Configuration changes require an application restart") }
+        func applyTheme(surface: Surface) {
+            surface.updateConfig(config)
         }
 
         @discardableResult

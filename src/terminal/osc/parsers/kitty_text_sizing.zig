@@ -8,23 +8,22 @@ const assert = @import("../../../quirks.zig").inlineAssert;
 const Parser = @import("../../osc.zig").Parser;
 const Command = @import("../../osc.zig").Command;
 const encoding = @import("../encoding.zig");
-const lib = @import("../../lib.zig");
 
 const log = std.log.scoped(.kitty_text_sizing);
 
 pub const max_payload_length = 4096;
 
-pub const VAlign = lib.Enum(lib.target, &.{
-    "top",
-    "bottom",
-    "center",
-});
+pub const VAlign = enum(u2) {
+    top = 0,
+    bottom = 1,
+    center = 2,
+};
 
-pub const HAlign = lib.Enum(lib.target, &.{
-    "left",
-    "right",
-    "center",
-});
+pub const HAlign = enum(u2) {
+    left = 0,
+    right = 1,
+    center = 2,
+};
 
 pub const OSC = struct {
     scale: u3 = 1, // 1 - 7

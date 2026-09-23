@@ -253,14 +253,9 @@ pub const Action = union(Key) {
     /// such as OSC 10/11.
     color_change: ColorChange,
 
-    /// A request to reload the configuration. The reload request can be
-    /// from a user or for some internal reason. The reload request may
-    /// request it is a soft reload or a full reload. See the struct for
-    /// more documentation.
-    ///
-    /// The configuration should be passed to updateConfig either at the
-    /// app or surface level depending on the target.
-    reload_config: ReloadConfig,
+    /// Reapply the loaded configuration after a light/dark appearance change.
+    /// The target determines whether the app or one surface is updated.
+    apply_theme: void,
 
     /// The configuration has changed. The value is a pointer to the new
     /// configuration. The pointer is only valid for the duration of the
@@ -386,7 +381,7 @@ pub const Action = union(Key) {
         key_sequence,
         key_table,
         color_change,
-        reload_config,
+        apply_theme,
         config_change,
         close_window,
         ring_bell,
@@ -828,13 +823,6 @@ pub const ColorKind = enum(c_int) {
     // test "ghostty.h ColorKind" {
     //     try lib.checkGhosttyHEnum(ColorKind, "GHOSTTY_COLOR_KIND_");
     // }
-};
-
-pub const ReloadConfig = extern struct {
-    /// A soft reload means that the configuration doesn't need to be
-    /// read off disk, but libghostty needs the full config again so call
-    /// updateConfig with it.
-    soft: bool = false,
 };
 
 pub const ConfigChange = struct {

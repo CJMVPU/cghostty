@@ -60,23 +60,6 @@ pub const Face = struct {
         return try initFontCopy(ct_font, opts);
     }
 
-    /// Load the exact font file without registering or looking up its family
-    /// in the process/system font database.
-    pub fn initFile(path: []const u8, opts: font.face.Options) !Face {
-        const path_string = try macos.foundation.String.createWithBytes(path, .utf8, false);
-        defer path_string.release();
-        const url = try macos.foundation.URL.createWithFileSystemPath(path_string, .posix, false);
-        defer url.release();
-        const descriptors = macos.text.createFontDescriptorsFromURL(url) orelse
-            return error.FontInitFailure;
-        defer descriptors.release();
-        if (descriptors.getCount() != 1) return error.FontInitFailure;
-        const descriptor = descriptors.getValueAtIndex(macos.text.FontDescriptor, 0);
-        const base = try macos.text.Font.createWithFontDescriptor(descriptor, 12);
-        defer base.release();
-        return initFontCopy(base, opts);
-    }
-
     /// Initialize a CoreText-based face from another initialized font face
     /// but with a new size. This is often how CoreText fonts are initialized
     /// because the font is loaded at a default size during discovery, and then

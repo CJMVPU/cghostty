@@ -68,8 +68,8 @@ pub fn addOptions(self: *const Config, step: *std.Build.Step.Options) !void {
     step.addOption(ReleaseChannel, "release_channel", if (self.version.pre == null) .stable else .tip);
 }
 
-pub fn terminalOptions(self: *const Config, artifact: TerminalBuildOptions.Artifact, optimize: std.builtin.OptimizeMode) TerminalBuildOptions {
-    return .{ .artifact = artifact, .simd = self.simd, .c_abi = false, .features = .{}, .version = self.version, .slow_runtime_safety = optimize == .Debug };
+pub fn terminalOptions(self: *const Config, optimize: std.builtin.OptimizeMode) TerminalBuildOptions {
+    return .{ .simd = self.simd, .version = self.version, .slow_runtime_safety = optimize == .Debug };
 }
 
 pub fn baselineTarget(self: *const Config, io: std.Io) std.Build.ResolvedTarget {

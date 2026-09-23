@@ -654,46 +654,21 @@ test "no matches selects nothing" {
     try testing.expect(!try search.select(&t, .prev, .if_needed));
 }
 
-test "feed after complete discovers prepended snapshot history" {
+test "feed after complete discovers prepended history" {
     const alloc = testing.allocator;
-    const io = testing.io;
-    const snapshot = @import("../snapshot/main.zig");
-
-    // A source terminal with several pages of scrollback where every line
-    // is a match, so the expected total is simply the number of lines.
-    var source: Terminal = try .init(io, alloc, .{
+    var t: Terminal = try .init(testing.io, alloc, .{
         .cols = 10,
         .rows = 2,
         .max_scrollback_bytes = std.math.maxInt(usize),
     });
-    defer source.deinit(alloc);
-    var needle_count: usize = 0;
-    {
-        var stream = source.vtStream();
-        defer stream.deinit();
-        const list = &source.screens.active.pages;
-        while (list.totalPages() < 4) : (needle_count += 1) {
-            stream.nextSlice("needle\r\n");
-        }
-    }
-
-    var encoded: std.Io.Writer.Allocating = .init(alloc);
-    defer encoded.deinit();
-    try snapshot.encode(alloc, &encoded.writer, &source, .{
-        .continuation = .ground,
-    });
-
-    // Restore only through READY. The terminal is usable while its history
-    // pages are still in flight.
-    var reader: std.Io.Reader = .fixed(encoded.written());
-    var decoder: snapshot.Decoder = .init(&reader);
-    var decoded = try decoder.ready(alloc, io, .{
-        .max_continuation_bytes = 0,
-    });
-    defer decoded.deinit(alloc);
-    var t = decoded.toOwned();
     defer t.deinit(alloc);
+    {
+        var stream = t.vtStream();
+        defer stream.deinit();
+        stream.nextSlice("needle\r\nneedle");
+    }
     const pages_at_ready = t.screens.active.pages.totalPages();
+    const needle_count = 5;
 
     const Pump = struct {
         fn run(search: *TerminalSearch, term: *Terminal) void {
@@ -707,7 +682,7 @@ test "feed after complete discovers prepended snapshot history" {
         }
     };
 
-    // Search the READY state to completion and select the oldest match.
+    // Search the live screen to completion and select the oldest match.
     var search: TerminalSearch = try .init(alloc, "needle");
     defer search.deinit(&t);
     Pump.run(&search, &t);
@@ -719,10 +694,16 @@ test "feed after complete discovers prepended snapshot history" {
     try testing.expectEqual(partial - 1, selected_idx);
     const selected_before = search.activeScreenSearch().?.selectedMatch().?.untracked();
 
-    // Restore every history page below the live terminal.
+    // Add three older pages without changing the active screen or tracked pins.
     var restored_pages: usize = 0;
-    while (try decoder.next(alloc, &t)) |progress| : (restored_pages += 1) {
-        try testing.expect(progress.rows > 0);
+    for (0..3) |_| {
+        var allocation = try t.screens.active.pages.allocatePage(.{ .cols = 10, .rows = 1 });
+        defer allocation.deinit();
+        const page = allocation.page();
+        page.size.rows = 1;
+        for ("needle", 0..) |cp, x| page.getRowAndCell(x, 0).cell.* = .init(cp);
+        try allocation.finalize(.prepend);
+        restored_pages += 1;
     }
     try testing.expect(restored_pages > 0);
     try testing.expectEqual(
@@ -730,7 +711,7 @@ test "feed after complete discovers prepended snapshot history" {
         t.screens.active.pages.totalPages(),
     );
 
-    // Refresh the existing search the way ghostty_search_run does: feed,
+    // Refresh the existing search after prepending history: feed,
     // then tick to completion. It must now cover the restored history.
     search.feed(&t, true);
     Pump.run(&search, &t);

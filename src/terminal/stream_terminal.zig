@@ -1,6 +1,5 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const build_options = @import("terminal_options");
 const testing = std.testing;
 const apc = @import("apc.zig");
 const clipboard = @import("clipboard.zig");
@@ -1837,7 +1836,7 @@ pub const Handler = struct {
                     .truncated = unknown.truncated,
                 } });
             },
-            .kitty => |*kitty_cmd| if (comptime build_options.kitty_graphics) {
+            .kitty => |*kitty_cmd| {
                 if (self.terminal.kittyGraphics(
                     io,
                     alloc,
@@ -5573,8 +5572,6 @@ test "device attributes: custom response" {
 }
 
 test "kitty graphics APC response" {
-    if (comptime !build_options.kitty_graphics) return error.SkipZigTest;
-
     var t: Terminal = try .init(testing.io, testing.allocator, .{ .cols = 10, .rows = 10 });
     defer t.deinit(testing.allocator);
 
@@ -5602,8 +5599,6 @@ test "kitty graphics APC response" {
 }
 
 test "kitty graphics via APC" {
-    if (comptime !build_options.kitty_graphics) return error.SkipZigTest;
-
     var t: Terminal = try .init(testing.io, testing.allocator, .{ .cols = 10, .rows = 10 });
     defer t.deinit(testing.allocator);
 
@@ -6504,51 +6499,6 @@ test "paste: mode 5522 without entropy fails and records no grant" {
         .contents = .{ .memory = &.{.{ .mime = "text/plain", .data = "hello" }} },
     }));
     try testing.expectEqualStrings("hello", S.written.items);
-}
-
-test "paste: mode 5522 DECRQM requires clipboard read effect" {
-    if (comptime build_options.artifact != .lib) return error.SkipZigTest;
-
-    var t: Terminal = try .init(testing.io, testing.allocator, .{ .cols = 80, .rows = 24 });
-    defer t.deinit(testing.allocator);
-
-    const S = PasteCapture;
-    S.reset();
-    defer S.deinit();
-
-    var handler: Handler = .init(&t);
-    handler.effects.write_pty = &S.writePty;
-    var s: Stream = .init(.{ .allocator = testing.allocator, .handler = handler });
-    defer s.deinit();
-
-    // A paste event is unusable if its follow-up read can't be served, so
-    // the mode isn't advertised without a clipboard read effect.
-    s.nextSlice("\x1B[?5522$p");
-    try testing.expectEqualStrings("\x1B[?5522;0$y", S.written.items);
-
-    S.reset();
-    s.nextSlice("\x1B[?5522h");
-    try testing.expect(t.modes.get(.kitty_paste_events));
-    s.nextSlice("\x1B[?5522$p");
-    try testing.expectEqualStrings("\x1B[?5522;0$y", S.written.items);
-
-    // Installing the effect makes the current mode state reportable.
-    S.reset();
-    s.handler.effects.clipboard_read = &S.clipboardRead;
-    s.nextSlice("\x1B[?5522$p");
-    try testing.expectEqualStrings("\x1B[?5522;1$y", S.written.items);
-
-    S.reset();
-    s.nextSlice("\x1B[?5522l");
-    try testing.expect(!t.modes.get(.kitty_paste_events));
-    s.nextSlice("\x1B[?5522$p");
-    try testing.expectEqualStrings("\x1B[?5522;2$y", S.written.items);
-
-    // Removing the effect stops advertising the capability again.
-    S.reset();
-    s.handler.effects.clipboard_read = null;
-    s.nextSlice("\x1B[?5522$p");
-    try testing.expectEqualStrings("\x1B[?5522;0$y", S.written.items);
 }
 
 test "full reset drops kitty clipboard grants" {

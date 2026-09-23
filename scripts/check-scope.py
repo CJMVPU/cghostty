@@ -106,10 +106,14 @@ if args.app:
     check((app / 'Contents/Resources/cghostty/licenses/LXGW-WenKai-OFL.txt').is_file(),
           'Bundled LXGW WenKai font license missing')
     font = app / 'Contents/Resources/cghostty/fonts/LXGWWenKaiMono-Medium.ttf'
-    check(font.is_file(), 'Bundled default font resource missing')
-    check(hashlib.sha256(font.read_bytes()).hexdigest() ==
+    check(not font.exists(), 'Default font must be embedded, not duplicated in Resources')
+    # Verify the pinned in-memory face in the Mach-O, without requiring an external TTF.
+    binary = executables[0].read_bytes()
+    font_header = bytes.fromhex('00010000001101000004001047504f53ddbc79b20182bc28000001a447535542')
+    offset = binary.find(font_header)
+    check(offset >= 0 and hashlib.sha256(binary[offset:offset + 25445000]).hexdigest() ==
           '7a674f448b15a1b3df781c3498973d77f71d270788f7f921080c1344e9d739e1',
-          'Bundled default font differs from the pinned Medium face')
+          'Executable does not contain the pinned Medium font')
     check(not (app / 'Contents/Resources/locale').exists(), 'Legacy gettext catalogs remain')
     localized = {path.parent.name for path in (app / 'Contents/Resources').glob('*.lproj/CommandPalette.strings')}
     check(localized == {'en.lproj', 'zh-Hans.lproj', 'zh-Hant.lproj', 'ja.lproj'},

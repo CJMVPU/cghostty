@@ -10,15 +10,6 @@ const assert = @import("quirks.zig").inlineAssert;
 const allocTmpDir = @import("os/file.zig").allocTmpDir;
 const freeTmpDir = @import("os/file.zig").freeTmpDir;
 
-// This file should only be imported for certain platforms.
-comptime {
-    switch (@import("terminal_options").artifact) {
-        .ghostty => {},
-        // This file is not allowed to be included in libghostty-vt
-        .lib => @compileError("global state cannot be used in libghostty-vt"),
-    }
-}
-
 /// We export the xev backend we want to use so that the rest of
 /// Ghostty can import this once and have access to the proper
 /// backend.

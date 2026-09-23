@@ -1,18 +1,17 @@
 const std = @import("std");
-const lib = @import("lib.zig");
 
 /// The color scheme reported in response to a CSI ? 996 n query.
-pub const ColorScheme = lib.Enum(lib.target, &.{
-    "light",
-    "dark",
-});
+pub const ColorScheme = enum(u1) {
+    light = 0,
+    dark = 1,
+};
 
 /// The visibility state reported in response to a CSI ? 998 n query or when
 /// DEC mode 2033 is enabled.
-pub const Visibility = lib.Enum(lib.target, &.{
-    "potentially_visible",
-    "not_visible",
-});
+pub const Visibility = enum(u1) {
+    potentially_visible = 0,
+    not_visible = 1,
+};
 
 /// Maximum number of bytes that `encodeColorSchemeReport` will write.
 pub const max_color_scheme_report_encode_size = max: {

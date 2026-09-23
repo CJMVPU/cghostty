@@ -4,12 +4,6 @@ const foundation = @import("../foundation.zig");
 const FontDescriptor = @import("./font_descriptor.zig").FontDescriptor;
 const c = @import("c.zig").c;
 
-pub fn createFontDescriptorsFromURL(url: *foundation.URL) ?*foundation.Array {
-    return @ptrFromInt(@intFromPtr(c.CTFontManagerCreateFontDescriptorsFromURL(
-        @ptrCast(url),
-    )));
-}
-
 pub fn createFontDescriptorsFromData(data: *foundation.Data) ?*foundation.Array {
     return @ptrFromInt(@intFromPtr(c.CTFontManagerCreateFontDescriptorsFromData(
         @ptrCast(data),

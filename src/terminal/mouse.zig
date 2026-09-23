@@ -1,17 +1,16 @@
 const std = @import("std");
-const build_options = @import("terminal_options");
 const lib = @import("lib.zig");
 const compat_testing = @import("../lib/compat/testing.zig");
 
 /// The event types that can be reported for mouse-related activities.
 /// These are all mutually exclusive (hence in a single enum).
-pub const Event = lib.Enum(lib.target, &.{
-    "none",
-    "x10", // 9
-    "normal", // 1000
-    "button", // 1002
-    "any", // 1003
-});
+pub const Event = enum(u3) {
+    none = 0,
+    x10 = 1,
+    normal = 2,
+    button = 3,
+    any = 4,
+};
 
 /// Returns true if this event sends motion events.
 pub fn eventSendsMotion(event: Event) bool {
@@ -20,13 +19,13 @@ pub fn eventSendsMotion(event: Event) bool {
 
 /// The format of mouse events when enabled.
 /// These are all mutually exclusive (hence in a single enum).
-pub const Format = lib.Enum(lib.target, &.{
-    "x10",
-    "utf8", // 1005
-    "sgr", // 1006
-    "urxvt", // 1015
-    "sgr_pixels", // 1016
-});
+pub const Format = enum(u3) {
+    x10 = 0,
+    utf8 = 1,
+    sgr = 2,
+    urxvt = 3,
+    sgr_pixels = 4,
+};
 
 /// The possible cursor shapes. Not all app runtimes support these shapes.
 /// The shapes are always based on the W3C supported cursor styles so we
@@ -78,7 +77,6 @@ pub const Shape = enum(c_int) {
     pub const getGObjectType = void;
 
     test "ghostty.h MouseShape" {
-        if (comptime build_options.artifact == .lib) return error.SkipZigTest;
         try lib.checkGhosttyHEnum(Shape, "GHOSTTY_MOUSE_SHAPE_");
     }
 };

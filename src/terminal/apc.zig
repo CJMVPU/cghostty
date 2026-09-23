@@ -1,5 +1,4 @@
 const std = @import("std");
-const build_options = @import("terminal_options");
 const Allocator = std.mem.Allocator;
 
 const kitty_gfx = @import("kitty/graphics.zig");
@@ -57,11 +56,11 @@ pub const Handler = struct {
             // We identify the APC command by the first byte.
             .identify => {
                 if (byte == 'G') {
-                    if (comptime build_options.kitty_graphics) {
+                    {
                         if (self.enabled.contains(.kitty)) {
                             self.state = .{ .kitty = .init(alloc, self.max_bytes.get(.kitty) orelse Protocol.defaultMaxBytes(.kitty)) };
                         } else self.state = .ignore;
-                    } else self.state = .ignore;
+                    }
                 } else {
                     // Unsupported APCs, including the unimplemented Glyph
                     // protocol, are consumed without advertising support.
@@ -69,13 +68,13 @@ pub const Handler = struct {
                 }
             },
 
-            .kitty => |*p| if (comptime build_options.kitty_graphics) {
+            .kitty => |*p| {
                 p.feed(byte) catch |err| {
                     log.warn("kitty graphics protocol error: {}", .{err});
                     p.deinit();
                     self.state = .ignore;
                 };
-            } else unreachable,
+            },
         }
     }
 
@@ -126,14 +125,14 @@ pub const Handler = struct {
                     rem = rem[1..];
                 },
 
-                .kitty => |*p| if (comptime build_options.kitty_graphics) {
+                .kitty => |*p| {
                     p.feedSlice(rem) catch |err| {
                         log.warn("kitty graphics protocol error: {}", .{err});
                         p.deinit();
                         self.state = .ignore;
                     };
                     return;
-                } else unreachable,
+                },
             }
         }
     }
@@ -151,7 +150,6 @@ pub const Handler = struct {
             .ignore, .identify => null,
             .unknown => |*unknown| .{ .unknown = unknown.toOwned() },
             .kitty => |*p| kitty: {
-                if (comptime !build_options.kitty_graphics) unreachable;
 
                 // Use the same allocator that was used to create the parser.
                 const alloc = p.alloc;
@@ -178,10 +176,7 @@ pub const State = union(enum) {
     identify,
 
     /// Kitty graphics protocol
-    kitty: if (build_options.kitty_graphics)
-        kitty_gfx.CommandParser
-    else
-        void,
+    kitty: kitty_gfx.CommandParser,
 
     /// An unsupported APC retained for the optional unknown callback.
     /// Keep this after recognized protocol states so their tag values and
@@ -192,10 +187,7 @@ pub const State = union(enum) {
         switch (self.*) {
             .inactive, .ignore, .identify => {},
             .unknown => |*v| v.deinit(),
-            .kitty => |*v| if (comptime build_options.kitty_graphics)
-                v.deinit()
-            else
-                unreachable,
+            .kitty => |*v| v.deinit(),
         }
     }
 };
@@ -316,19 +308,13 @@ pub const Protocol = enum {
 
 /// A recognized or unsupported APC command.
 pub const Command = union(enum) {
-    kitty: if (build_options.kitty_graphics)
-        kitty_gfx.Command
-    else
-        void,
+    kitty: kitty_gfx.Command,
 
     unknown: Unknown,
 
     pub fn deinit(self: *Command, alloc: Allocator) void {
         switch (self.*) {
-            .kitty => |*v| if (comptime build_options.kitty_graphics)
-                v.deinit(alloc)
-            else
-                unreachable,
+            .kitty => |*v| v.deinit(alloc),
 
             .unknown => |*v| v.deinit(alloc),
         }
@@ -387,8 +373,6 @@ test "capture short unknown APC command" {
 }
 
 test "garbage Kitty command" {
-    if (comptime !build_options.kitty_graphics) return error.SkipZigTest;
-
     const testing = std.testing;
     const alloc = testing.allocator;
 
@@ -399,8 +383,6 @@ test "garbage Kitty command" {
 }
 
 test "Kitty command with overflow u32" {
-    if (comptime !build_options.kitty_graphics) return error.SkipZigTest;
-
     const testing = std.testing;
     const alloc = testing.allocator;
 
@@ -411,8 +393,6 @@ test "Kitty command with overflow u32" {
 }
 
 test "Kitty command with overflow i32" {
-    if (comptime !build_options.kitty_graphics) return error.SkipZigTest;
-
     const testing = std.testing;
     const alloc = testing.allocator;
 
@@ -423,8 +403,6 @@ test "Kitty command with overflow i32" {
 }
 
 test "kitty feed error deinits parser" {
-    if (comptime !build_options.kitty_graphics) return error.SkipZigTest;
-
     const testing = std.testing;
     const alloc = testing.allocator;
 
@@ -439,8 +417,6 @@ test "kitty feed error deinits parser" {
 }
 
 test "kitty max bytes exceeded" {
-    if (comptime !build_options.kitty_graphics) return error.SkipZigTest;
-
     const testing = std.testing;
     const alloc = testing.allocator;
 
@@ -458,8 +434,6 @@ test "kitty max bytes exceeded" {
 }
 
 test "valid Kitty command" {
-    if (comptime !build_options.kitty_graphics) return error.SkipZigTest;
-
     const testing = std.testing;
     const alloc = testing.allocator;
 
@@ -523,8 +497,6 @@ test "garbage glyph command" {
 }
 
 test "feedSlice valid Kitty command" {
-    if (comptime !build_options.kitty_graphics) return error.SkipZigTest;
-
     const testing = std.testing;
     const alloc = testing.allocator;
 
@@ -541,8 +513,6 @@ test "feedSlice valid Kitty command" {
 }
 
 test "feedSlice identify split across slices" {
-    if (comptime !build_options.kitty_graphics) return error.SkipZigTest;
-
     const testing = std.testing;
     const alloc = testing.allocator;
 
@@ -573,8 +543,6 @@ test "feedSlice unknown APC command is ignored" {
 }
 
 test "feedSlice kitty max bytes exceeded" {
-    if (comptime !build_options.kitty_graphics) return error.SkipZigTest;
-
     const testing = std.testing;
     const alloc = testing.allocator;
 

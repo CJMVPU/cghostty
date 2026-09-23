@@ -9,16 +9,15 @@ const ScreenSet = @This();
 
 const std = @import("std");
 const assert = @import("../quirks.zig").inlineAssert;
-const lib = @import("lib.zig");
 const testing = std.testing;
 const Allocator = std.mem.Allocator;
 const Screen = @import("Screen.zig");
 
 /// The possible keys for screens in the screen set.
-pub const Key = lib.Enum(lib.target, &.{
-    "primary",
-    "alternate",
-});
+pub const Key = enum(u1) {
+    primary = 0,
+    alternate = 1,
+};
 
 /// The key value of the currently active screen. Useful for simple
 /// comparisons, e.g. "is this screen the primary screen".

@@ -1,5 +1,3 @@
-const lib = @import("lib.zig");
-
 /// C0 (7-bit) control characters from ANSI.
 ///
 /// This is not complete, control characters are only added to this
@@ -51,18 +49,15 @@ pub const RenditionAspect = enum(u16) {
 };
 
 /// Possible cursor styles (ESC [ q)
-pub const CursorStyle = lib.Enum(
-    lib.target,
-    &.{
-        "default",
-        "blinking_block",
-        "steady_block",
-        "blinking_underline",
-        "steady_underline",
-        "blinking_bar",
-        "steady_bar",
-    },
-);
+pub const CursorStyle = enum(u3) {
+    default = 0,
+    blinking_block = 1,
+    steady_block = 2,
+    blinking_underline = 3,
+    steady_underline = 4,
+    blinking_bar = 5,
+    steady_bar = 6,
+};
 
 /// The status line type for DECSSDT.
 pub const StatusLineType = enum(u16) {
@@ -75,35 +70,26 @@ pub const StatusLineType = enum(u16) {
 };
 
 /// The display to target for status updates (DECSASD).
-pub const StatusDisplay = lib.Enum(
-    lib.target,
-    &.{
-        "main",
-        "status_line",
-    },
-);
+pub const StatusDisplay = enum(u1) {
+    main = 0,
+    status_line = 1,
+};
 
 /// The possible modify key formats to ESC[>{a};{b}m
 /// Note: this is not complete, we should add more as we support more
-pub const ModifyKeyFormat = lib.Enum(
-    lib.target,
-    &.{
-        "legacy",
-        "cursor_keys",
-        "function_keys",
-        "other_keys_none",
-        "other_keys_numeric_except",
-        "other_keys_numeric",
-    },
-);
+pub const ModifyKeyFormat = enum(u3) {
+    legacy = 0,
+    cursor_keys = 1,
+    function_keys = 2,
+    other_keys_none = 3,
+    other_keys_numeric_except = 4,
+    other_keys_numeric = 5,
+};
 
 /// The protection modes that can be set for the terminal. See DECSCA and
 /// ESC V, W.
-pub const ProtectedMode = lib.Enum(
-    lib.target,
-    &.{
-        "off",
-        "iso", // ESC V, W
-        "dec", // CSI Ps " q
-    },
-);
+pub const ProtectedMode = enum(u2) {
+    off = 0,
+    iso = 1,
+    dec = 2,
+};

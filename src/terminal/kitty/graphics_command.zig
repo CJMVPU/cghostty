@@ -2,7 +2,6 @@ const std = @import("std");
 const assert = @import("../../quirks.zig").inlineAssert;
 const Allocator = std.mem.Allocator;
 const simd = @import("../../simd/main.zig");
-const lib = @import("../lib.zig");
 
 const log = std.log.scoped(.kitty_gfx);
 
@@ -515,28 +514,25 @@ pub const Transmission = struct {
     more_chunks: bool = false, // m
     usage: Usage = .default, // N
 
-    pub const Format = lib.Enum(lib.target, &.{
-        "rgb", // 24
-        "rgba", // 32
-        "png", // 100
-        // The following are not supported directly via the protocol
-        // but they are formats that a png may decode to that we
-        // support.
-        "gray_alpha",
-        "gray",
-    });
+    pub const Format = enum(u3) {
+        rgb = 0,
+        rgba = 1,
+        png = 2,
+        gray_alpha = 3,
+        gray = 4,
+    };
 
-    pub const Medium = lib.Enum(lib.target, &.{
-        "direct", // d
-        "file", // f
-        "temporary_file", // t
-        "shared_memory", // s
-    });
+    pub const Medium = enum(u2) {
+        direct = 0,
+        file = 1,
+        temporary_file = 2,
+        shared_memory = 3,
+    };
 
-    pub const Compression = lib.Enum(lib.target, &.{
-        "none",
-        "zlib_deflate", // z
-    });
+    pub const Compression = enum(u1) {
+        none = 0,
+        zlib_deflate = 1,
+    };
 
     /// Usage hints allow for optimising resource consumption strategies.
     ///

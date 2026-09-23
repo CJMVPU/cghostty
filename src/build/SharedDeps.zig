@@ -121,7 +121,7 @@ pub fn add(
     step.root_module.addOptions("build_options", self.options);
 
     // Every exe needs the terminal options
-    self.config.terminalOptions(.ghostty, optimize).add(b, step.root_module);
+    self.config.terminalOptions(optimize).add(b, step.root_module);
 
     // Every exe needs the uucode module
     step.root_module.addImport("uucode", self.uucode_mod);
@@ -235,9 +235,10 @@ pub fn add(
     // Fonts
     {
         if (b.lazyDependency("lxgw_wenkai", .{})) |wenkai| {
-            const resources = b.addOptions();
-            resources.addOption([]const u8, "wenkai", wenkai.path("LXGWWenKaiMono-Medium.ttf").getPath(b));
-            step.root_module.addOptions("font_resources", resources);
+            step.root_module.addAnonymousImport(
+                "lxgw_wenkai_medium",
+                .{ .root_source_file = wenkai.path("LXGWWenKaiMono-Medium.ttf") },
+            );
         }
 
         // JetBrains Mono

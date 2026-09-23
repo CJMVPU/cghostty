@@ -5,7 +5,8 @@
 //! Be careful to ensure that any fonts you embed are licensed for
 //! redistribution and include their license as necessary.
 
-/// Bundled terminal font identity. Its TTF lives in application Resources.
+/// Default terminal font embedded in the executable.
+pub const default_font = @embedFile("lxgw_wenkai_medium");
 pub const default_family = "LXGW WenKai Mono";
 pub const default_style = "Medium";
 
@@ -19,13 +20,9 @@ pub const symbols_nerd_font = @embedFile("nerd_fonts_symbols_only");
 pub const regular = @embedFile("jetbrains_mono_regular");
 
 /// Emoji fonts
-pub const emoji = @embedFile("res/NotoColorEmoji.ttf");
 pub const emoji_text = @embedFile("res/NotoEmoji-Regular.ttf");
 
 // Fonts below are ONLY used for testing.
-
-/// Fonts with general properties
-pub const arabic = @embedFile("res/KawkabMono-Regular.ttf");
 
 /// A font for testing which is patched with nerd font symbols.
 pub const test_nerd_font = @embedFile("res/JetBrainsMonoNerdFont-Regular.ttf");
@@ -37,19 +34,6 @@ pub const geist_mono = @embedFile("res/GeistMono-Regular.ttf");
 pub const jetbrains_mono = @embedFile("res/JetBrainsMonoNoNF-Regular.ttf");
 pub const julia_mono = @embedFile("res/JuliaMono-Regular.ttf");
 
-/// Cozette is a unique font because it embeds some emoji characters
-/// but has a text presentation.
-pub const cozette = @embedFile("res/CozetteVector.ttf");
-
 /// Monaspace has weird ligature behaviors we want to test in our shapers
 /// so we embed it here.
 pub const monaspace_neon = @embedFile("res/MonaspaceNeon-Regular.otf");
-
-/// Terminus TTF is a scalable font with bitmap glyphs at various sizes.
-pub const terminus_ttf = @embedFile("res/TerminusTTF-Regular.ttf");
-
-/// Spleen is a monospaced bitmap font available in multiple formats.
-/// Used for testing bitmap font support across different file formats.
-pub const spleen_bdf = @embedFile("res/spleen-8x16.bdf");
-pub const spleen_pcf = @embedFile("res/spleen-8x16.pcf");
-pub const spleen_otb = @embedFile("res/spleen-8x16.otb");

@@ -1,13 +1,12 @@
 const std = @import("std");
 const testing = std.testing;
-const lib = @import("lib.zig");
 
 /// The device attribute request type (CSI c).
-pub const Req = lib.Enum(lib.target, &.{
-    "primary", // Blank
-    "secondary", // >
-    "tertiary", // =
-});
+pub const Req = enum(u2) {
+    primary = 0,
+    secondary = 1,
+    tertiary = 2,
+};
 
 /// Response data for all device attribute queries.
 pub const Attributes = struct {

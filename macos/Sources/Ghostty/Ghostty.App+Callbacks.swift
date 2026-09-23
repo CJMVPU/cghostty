@@ -379,8 +379,8 @@ extension Ghostty.App {
         case GHOSTTY_ACTION_CONFIG_CHANGE:
             configChange(app, target: target, v: action.action.config_change)
 
-        case GHOSTTY_ACTION_RELOAD_CONFIG:
-            configReload(app, target: target, v: action.action.reload_config)
+        case GHOSTTY_ACTION_APPLY_THEME:
+            applyTheme(app, target: target)
 
         case GHOSTTY_ACTION_COLOR_CHANGE:
             colorChange(app, target: target, change: action.action.color_change)
@@ -1521,24 +1521,23 @@ extension Ghostty.App {
         }
     }
 
-    private static func configReload(
+    private static func applyTheme(
         _ app: ghostty_app_t,
-        target: ghostty_target_s,
-        v: ghostty_action_reload_config_s) {
-        Ghostty.logger.info("config reload notification")
+        target: ghostty_target_s) {
+        Ghostty.logger.info("apply theme notification")
 
         guard let app_ud = ghostty_app_userdata(app) else { return }
         let ghostty = Unmanaged<Ghostty.App>.fromOpaque(app_ud).takeUnretainedValue()
 
         switch target.tag {
         case GHOSTTY_TARGET_APP:
-            ghostty.reloadConfig(soft: v.soft)
+            ghostty.applyTheme()
             return
 
         case GHOSTTY_TARGET_SURFACE:
             guard let surface = target.target.surface else { return }
             if let model = surfaceView(from: surface)?.surfaceModel {
-                ghostty.reloadConfig(surface: model, soft: v.soft)
+                ghostty.applyTheme(surface: model)
             }
 
         default:

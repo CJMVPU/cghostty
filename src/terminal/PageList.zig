@@ -1855,7 +1855,7 @@ const ReflowCursor = struct {
             .codepoint => copyable: {
                 if (cell.wide != .narrow) break :copyable false;
                 if (cell.hyperlink) break :copyable false;
-                if (comptime build_options.kitty_graphics) {
+                {
                     // Placeholders must set a row flag, so they take
                     // the slow path.
                     if (cell.content.codepoint.data ==
@@ -1938,13 +1938,11 @@ const ReflowCursor = struct {
         // tags the content bits are a color, so we skip the check for
         // those (the tag is part of BulkRunMask, making tags uniform
         // per run).
-        const check_placeholder = build_options.kitty_graphics and
-            first.content_tag == .codepoint;
+        const check_placeholder = first.content_tag == .codepoint;
         const placeholder_pattern = comptime pattern: {
             // Never used without kitty graphics (check_placeholder
             // is comptime-false), but it must still compile and the
             // placeholder codepoint doesn't exist in that build.
-            if (!build_options.kitty_graphics) break :pattern 0;
 
             break :pattern PlaceholderMask.pattern(.init(
                 kitty.graphics.unicode.placeholder,
@@ -2201,7 +2199,7 @@ const ReflowCursor = struct {
             self.page_cell.hyperlink = false;
             self.page_cell.style_id = stylepkg.default_id;
 
-            if (comptime build_options.kitty_graphics) {
+            {
                 // Copy Kitty virtual placeholder status
                 if (cell.codepoint() == kitty.graphics.unicode.placeholder) {
                     self.page_row.kitty_virtual_placeholder = true;
@@ -18810,8 +18808,6 @@ test "PageList resize reflow less cols to wrap a multi-codepoint grapheme with a
 }
 
 test "PageList resize reflow less cols copy kitty placeholder" {
-    if (comptime !build_options.kitty_graphics) return error.SkipZigTest;
-
     const testing = std.testing;
     const alloc = testing.allocator;
 
@@ -18851,8 +18847,6 @@ test "PageList resize reflow less cols copy kitty placeholder" {
 }
 
 test "PageList resize reflow more cols clears kitty placeholder" {
-    if (comptime !build_options.kitty_graphics) return error.SkipZigTest;
-
     const testing = std.testing;
     const alloc = testing.allocator;
 
@@ -18894,8 +18888,6 @@ test "PageList resize reflow more cols clears kitty placeholder" {
 }
 
 test "PageList resize reflow wrap moves kitty placeholder" {
-    if (comptime !build_options.kitty_graphics) return error.SkipZigTest;
-
     const testing = std.testing;
     const alloc = testing.allocator;
 

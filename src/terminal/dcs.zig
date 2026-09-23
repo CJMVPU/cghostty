@@ -1,5 +1,4 @@
 const std = @import("std");
-const build_options = @import("terminal_options");
 const assert = @import("../quirks.zig").inlineAssert;
 const Allocator = std.mem.Allocator;
 const terminal = @import("main.zig");
@@ -52,10 +51,6 @@ pub const Handler = struct {
             0 => switch (dcs.final) {
                 // Tmux control mode
                 'p' => tmux: {
-                    if (comptime !build_options.tmux_control_mode) {
-                        log.debug("tmux control mode not enabled in build, ignoring", .{});
-                        break :tmux null;
-                    }
 
                     // Tmux control mode must start with ESC P 1000 p
                     if (dcs.params.len != 1 or dcs.params[0] != 1000) break :tmux null;
@@ -127,11 +122,11 @@ pub const Handler = struct {
             .ignore,
             => {},
 
-            .tmux => |*tmux| if (comptime build_options.tmux_control_mode) {
+            .tmux => |*tmux| {
                 return .{
                     .tmux = (try tmux.put(byte)) orelse return null,
                 };
-            } else unreachable,
+            },
 
             .xtgettcap => |*list| {
                 if (list.written().len >= self.max_bytes) {
@@ -165,10 +160,10 @@ pub const Handler = struct {
             .ignore,
             => null,
 
-            .tmux => if (comptime build_options.tmux_control_mode) tmux: {
+            .tmux => tmux: {
                 self.state.deinit();
                 break :tmux .{ .tmux = .exit };
-            } else unreachable,
+            },
 
             .xtgettcap => |*list| xtgettcap: {
                 // Note: purposely do not deinit our state here because
@@ -212,10 +207,7 @@ pub const Command = union(enum) {
     decrqss: DECRQSS,
 
     /// Tmux control mode
-    tmux: if (build_options.tmux_control_mode)
-        terminal.tmux.ControlNotification
-    else
-        void,
+    tmux: terminal.tmux.ControlNotification,
 
     pub fn deinit(self: *Command) void {
         switch (self.*) {
@@ -332,10 +324,7 @@ const State = union(enum) {
     },
 
     /// Tmux control mode: https://github.com/tmux/tmux/wiki/Control-Mode
-    tmux: if (build_options.tmux_control_mode)
-        terminal.tmux.ControlParser
-    else
-        void,
+    tmux: terminal.tmux.ControlParser,
 
     pub fn deinit(self: *State) void {
         switch (self.*) {
@@ -345,9 +334,9 @@ const State = union(enum) {
 
             .xtgettcap => |*v| v.deinit(),
             .decrqss => {},
-            .tmux => |*v| if (comptime build_options.tmux_control_mode) {
+            .tmux => |*v| {
                 v.deinit();
-            } else unreachable,
+            },
         }
     }
 };
@@ -547,8 +536,6 @@ test "DECRQSS largest response fits fixed buffer" {
 }
 
 test "tmux enter and implicit exit" {
-    if (comptime !build_options.tmux_control_mode) return error.SkipZigTest;
-
     const testing = std.testing;
     const alloc = testing.allocator;
 

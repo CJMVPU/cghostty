@@ -3,7 +3,6 @@
 const std = @import("std");
 const assert = @import("../quirks.zig").inlineAssert;
 const testing = std.testing;
-const lib = @import("lib.zig");
 const color = @import("color.zig");
 const SepList = @import("Parser.zig").Action.CSI.SepList;
 
@@ -77,42 +76,39 @@ pub const Attribute = union(Tag) {
     /// Set foreground color as 256-color palette.
     @"256_fg": u8,
 
-    pub const Tag = lib.Enum(
-        lib.target,
-        &.{
-            "unset",
-            "unknown",
-            "bold",
-            "reset_bold",
-            "italic",
-            "reset_italic",
-            "faint",
-            "underline",
-            "underline_color",
-            "256_underline_color",
-            "reset_underline_color",
-            "overline",
-            "reset_overline",
-            "blink",
-            "reset_blink",
-            "inverse",
-            "reset_inverse",
-            "invisible",
-            "reset_invisible",
-            "strikethrough",
-            "reset_strikethrough",
-            "direct_color_fg",
-            "direct_color_bg",
-            "8_bg",
-            "8_fg",
-            "reset_fg",
-            "reset_bg",
-            "8_bright_bg",
-            "8_bright_fg",
-            "256_bg",
-            "256_fg",
-        },
-    );
+    pub const Tag = enum(u5) {
+        unset = 0,
+        unknown = 1,
+        bold = 2,
+        reset_bold = 3,
+        italic = 4,
+        reset_italic = 5,
+        faint = 6,
+        underline = 7,
+        underline_color = 8,
+        @"256_underline_color" = 9,
+        reset_underline_color = 10,
+        overline = 11,
+        reset_overline = 12,
+        blink = 13,
+        reset_blink = 14,
+        inverse = 15,
+        reset_inverse = 16,
+        invisible = 17,
+        reset_invisible = 18,
+        strikethrough = 19,
+        reset_strikethrough = 20,
+        direct_color_fg = 21,
+        direct_color_bg = 22,
+        @"8_bg" = 23,
+        @"8_fg" = 24,
+        reset_fg = 25,
+        reset_bg = 26,
+        @"8_bright_bg" = 27,
+        @"8_bright_fg" = 28,
+        @"256_bg" = 29,
+        @"256_fg" = 30,
+    };
 
     pub const Unknown = struct {
         /// Full is the full SGR input.
@@ -154,30 +150,9 @@ pub const Attribute = union(Tag) {
     };
 
     /// C ABI functions.
-    const c_union = lib.TaggedUnion(
-        lib.target,
-        @This(),
-        // Padding size for C ABI compatibility.
-        // Largest variant is Unknown.C: 2 pointers + 2 usize = 32 bytes on 64-bit.
-        // We use [8]u64 (64 bytes) to allow room for future expansion while
-        // maintaining ABI compatibility.
-        .{
-            .padding = [8]u64,
-            .field_renames = .{
-                .@"256_underline_color" = "underline_color_256",
-                .@"8_bg" = "bg_8",
-                .@"8_fg" = "fg_8",
-                .@"8_bright_bg" = "bright_bg_8",
-                .@"8_bright_fg" = "bright_fg_8",
-                .@"256_bg" = "bg_256",
-                .@"256_fg" = "fg_256",
-            },
-        },
-    );
-    pub const Value = c_union.Value;
-    pub const C = c_union.C;
-    pub const CValue = c_union.CValue;
-    pub const cval = c_union.cval;
+    pub fn Value(comptime tag: Tag) type {
+        return @FieldType(@This(), @tagName(tag));
+    }
 };
 
 /// Parser parses the attributes from a list of SGR parameters.
@@ -543,10 +518,6 @@ fn testParseColon(params: []const u16) Attribute {
     // Mark all parameters except the last as having a colon after.
     for (0..params.len - 1) |i| p.params_sep.set(i);
     return p.next().?;
-}
-
-test "sgr: Attribute C compat" {
-    _ = Attribute.C;
 }
 
 test "sgr: Parser" {

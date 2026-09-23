@@ -10,15 +10,11 @@
 //! implementations.
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const build_options = @import("terminal_options");
 
 /// Decode PNG data into RGBA pixels. If null, PNG decoding is unsupported
 /// and the exact semantics are up to callers. For example, the Kitty Graphics
 /// Protocol will work but cannot accept PNG images.
-pub var decode_png: ?DecodePngFn = png: {
-    if (build_options.artifact == .lib) break :png null;
-    break :png &decodePngWuffs;
-};
+pub var decode_png: ?DecodePngFn = &decodePngWuffs;
 
 pub const DecodeError = Allocator.Error || error{InvalidData};
 pub const DecodePngFn = *const fn (Allocator, []const u8) DecodeError!Image;

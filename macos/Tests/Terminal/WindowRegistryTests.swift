@@ -64,7 +64,7 @@ import Testing
         #expect(one.isBackgroundOpaque)
         #expect(!two.isBackgroundOpaque)
         try config.reload("background-opacity = 0.8")
-        first.reloadConfig()
+        first.applyTheme()
         #expect(first.config.backgroundOpacity == 0.5)
         let restarted = Ghostty.App(configPath: config.temporaryFile.path)
         #expect(restarted.config.backgroundOpacity == 0.8)

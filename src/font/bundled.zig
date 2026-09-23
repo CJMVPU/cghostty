@@ -1,27 +1,19 @@
-//! The default font is an application resource, not part of the executable.
+//! Load the pinned default font from executable memory, independent of Resources.
 const std = @import("std");
-const builtin = @import("builtin");
 const font = @import("main.zig");
-const global = @import("../global.zig");
 
-pub const relative_path = "fonts/LXGWWenKaiMono-Medium.ttf";
-
-pub fn load(alloc: std.mem.Allocator, options: font.face.Options) !font.Face {
-    // Core tests load the same pinned file via a build-supplied path. Release
-    // code only uses the resolved app resources directory, never the checkout.
-    if (comptime builtin.is_test) {
-        return font.Face.initFile(@import("font_resources").wenkai, options);
-    }
-    const root = global.resourcesDir().app() orelse return error.MissingFontResources;
-    const path = try std.fs.path.join(alloc, &.{ root, relative_path });
-    defer alloc.free(path);
-    return font.Face.initFile(path, options);
+pub fn load(library: font.Library, options: font.face.Options) !font.Face {
+    return font.Face.init(library, font.embedded.default_font, options);
 }
 
-test "bundled font loads exact file and missing file fails" {
-    var face = try load(std.testing.allocator, .{ .size = .{ .points = 16 } });
+test "bundled font uses pinned embedded Medium without filesystem resources" {
+    var library = try font.Library.init(std.testing.allocator);
+    defer library.deinit();
+    var face = try load(library, .{ .size = .{ .points = 16 } });
     defer face.deinit();
     var buffer: [256]u8 = undefined;
     try std.testing.expectEqualStrings("LXGW WenKai Mono", try face.name(&buffer));
-    try std.testing.expectError(error.FontInitFailure, font.Face.initFile("/nonexistent-cghostty-font/LXGWWenKaiMono-Medium.ttf", .{ .size = .{ .points = 16 } }));
+    var hash: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(font.embedded.default_font, &hash, .{});
+    try std.testing.expectEqualStrings("7a674f448b15a1b3df781c3498973d77f71d270788f7f921080c1344e9d739e1", &std.fmt.bytesToHex(hash, .lower));
 }

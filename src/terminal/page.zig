@@ -1006,7 +1006,7 @@ pub const Page = struct {
                         error.NeedsRehash => return error.StyleSetNeedsRehash,
                     } orelse src_cell.style_id;
                 }
-                if (comptime build_options.kitty_graphics) {
+                {
                     if (src_cell.codepoint() == kitty.graphics.unicode.placeholder) {
                         dst_row.kitty_virtual_placeholder = true;
                     }
@@ -1098,7 +1098,7 @@ pub const Page = struct {
                     dst.hyperlink = true;
                     dst_row.hyperlink = true;
                 }
-                if (comptime build_options.kitty_graphics) {
+                {
                     if (src.codepoint() == kitty.graphics.unicode.placeholder) {
                         dst_row.kitty_virtual_placeholder = true;
                     }
@@ -1122,7 +1122,7 @@ pub const Page = struct {
             src_row.grapheme = false;
             src_row.hyperlink = false;
             src_row.styled = false;
-            if (comptime build_options.kitty_graphics) {
+            {
                 src_row.kitty_virtual_placeholder = false;
             }
         }
@@ -1250,7 +1250,7 @@ pub const Page = struct {
             }
         }
 
-        if (comptime build_options.kitty_graphics) {
+        {
             if (row.kitty_virtual_placeholder and
                 cells.len == self.size.cols)
             {

@@ -19,7 +19,6 @@ pub const FontAttribute = font_descriptor.FontAttribute;
 pub const FontTraitKey = font_descriptor.FontTraitKey;
 pub const FontVariationAxisKey = font_descriptor.FontVariationAxisKey;
 pub const FontSymbolicTraits = font_descriptor.FontSymbolicTraits;
-pub const createFontDescriptorsFromURL = font_manager.createFontDescriptorsFromURL;
 pub const createFontDescriptorsFromData = font_manager.createFontDescriptorsFromData;
 pub const createFontDescriptorFromData = font_manager.createFontDescriptorFromData;
 pub const Frame = frame.Frame;

@@ -109,7 +109,7 @@ Xcode scheme 和 Swift 模块仍为 `Ghostty`，C 桥接模块为 `GhosttyKit`�
 
 命令面板使用 `macos/Sources/Ghostty/CommandPalette.xcstrings`，支持英文、简体中文、繁体中文和日文，随 macOS 应用语言选择译文。新增内置命令时同步标题、说明和三套译文，运行 `python3 scripts/check-localizations.py` 检查覆盖。自定义命令文本及动作标识不参与翻译。原有译者署名见 `docs/TRANSLATORS.md`；其他语言可从 Git 历史查询。构建无需 gettext。
 
-默认文楷字体安装到应用 `Contents/Resources/cghostty/fonts/LXGWWenKaiMono-Medium.ttf`，由 CoreText 按文件 URL 加载；字体文件不嵌入可执行文件。字体测试使用同一份锁定依赖中的文件。终端字体统一使用 CoreText。Inspector 及 Dear ImGui、FreeType、libpng、独立 zlib 依赖已移除；常规日志和自动化测试保留。PNG 解码使用 Wuffs，Kitty 压缩图片解压使用 Zig 标准库。
+默认文楷 Medium 使用 `@embedFile` 编入核心，由 CoreText 直接从内存加载，不依赖应用 Resources 中的 TTF 文件。字体测试校验嵌入数据的 SHA-256，并覆盖中文、合成粗体与斜体。OFL 许可仍随应用分发。终端字体统一使用 CoreText。Inspector 及 Dear ImGui、FreeType、libpng、独立 zlib 依赖已移除；常规日志和自动化测试保留。PNG 解码使用 Wuffs，Kitty 压缩图片解压使用 Zig 标准库。
 
 Inspector 菜单、命令面板入口和默认 `super+alt+i` 绑定已移除。旧配置里的 `inspector:toggle/show/hide` 动作会报无效动作，应删除对应绑定；其他快捷键和配置继续生效。
 

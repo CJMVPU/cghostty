@@ -6,16 +6,14 @@ import Cocoa
 struct CommandEntity: AppEntity {
     let id: ID
 
-    // Note: for macOS 26 we can move all the properties to @ComputedProperty.
+    @ComputedProperty(title: "Title")
+    var title: String { command.title }
 
-    @Property(title: "Title")
-    var title: String
+    @ComputedProperty(title: "Description")
+    var description: String { command.description }
 
-    @Property(title: "Description")
-    var description: String
-
-    @Property(title: "Action")
-    var action: String
+    @ComputedProperty(title: "Action")
+    var action: String { command.action }
 
     /// The underlying data model
     let command: Ghostty.Command
@@ -42,9 +40,6 @@ struct CommandEntity: AppEntity {
     init(_ command: Ghostty.Command, for terminal: TerminalEntity) {
         self.id = .init(terminalId: terminal.id, actionKey: command.actionKey)
         self.command = command
-        self.title = command.title
-        self.description = command.description
-        self.action = command.action
     }
 }
 

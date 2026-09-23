@@ -91,7 +91,7 @@ pub const StreamHandler = struct {
     pub const Stream = terminal.Stream(StreamHandler);
 
     /// True if we have tmux control mode built in.
-    pub const tmux_enabled = terminal.options.tmux_control_mode;
+    pub const tmux_enabled = true;
 
     pub fn deinit(self: *StreamHandler) void {
         self.apc.deinit();
