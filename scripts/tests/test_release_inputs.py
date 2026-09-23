@@ -44,6 +44,15 @@ class CoreReuseTests(unittest.TestCase):
                 for kwargs in ({'optimize': 'ReleaseFast'}, {'version': '0.1.10'}):
                     with self.assertRaises(SystemExit):
                         run('check', **kwargs)
+                # Human-only guidance does not invalidate the core, while
+                # embedded Markdown remains a tracked build input.
+                (root / 'src/README.md').write_text('updated guide')
+                (root / 'src/AGENTS.md').write_text('agent instructions')
+                run('check')
+                (root / 'src/help.md').write_text('embedded documentation')
+                with self.assertRaises(SystemExit):
+                    run('check')
+                run('record')
                 (root / 'src/main.zig').write_text('changed source')
                 with self.assertRaises(SystemExit):
                     run('check')

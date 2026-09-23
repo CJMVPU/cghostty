@@ -70,6 +70,8 @@ extension Ghostty {
             set { state.readonly = newValue }
         }
 
+        private var highlightTask: Task<Void, Never>?
+
         /// True when the surface should show a highlight effect (e.g., when presented via goto_split).
         private(set) var highlighted: Bool {
             get { state.highlighted }
@@ -411,6 +413,7 @@ extension Ghostty {
             let center = NotificationCenter.default
             center.removeObserver(self)
 
+            highlightTask?.cancel()
             accessibilitySelectionTask?.cancel()
             titleChangeTimer?.invalidate()
             titleFallbackTimer?.invalidate()
@@ -438,9 +441,12 @@ extension Ghostty {
 
         /// Triggers a brief highlight animation on this surface.
         func highlight() {
+            highlightTask?.cancel()
             highlighted = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            highlightTask = Task { @MainActor [weak self] in
+                do { try await Task.sleep(for: .milliseconds(400)) } catch { return }
                 self?.highlighted = false
+                self?.highlightTask = nil
             }
         }
 
@@ -762,6 +768,7 @@ extension Ghostty {
         }
 
         func selectionDidChange() {
+            highlightTask?.cancel()
             accessibilitySelectionTask?.cancel()
             accessibilitySelectionTask = Task { [weak self] in
                 do { try await Task.sleep(for: .milliseconds(100)) } catch { return }

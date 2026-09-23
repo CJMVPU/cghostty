@@ -26,7 +26,7 @@
 
 ## 维护状态与生成文件
 
-默认字体 LXGW WenKai Mono 的官方发布归档及内容哈希锁定在根目录 `build.zig.zon` 的 `lxgw_wenkai` 依赖。构建只嵌入未修改的 `LXGWWenKaiMono-Regular.ttf`，粗体及斜体沿用运行时合成策略，不把其他字重一并打进应用。官方 `OFL.txt` 原样安装至应用的 `Contents/Resources/cghostty/licenses/LXGW-WenKai-OFL.txt`；应用资源检查要求该文件存在。字体升级应同时核对字形、默认网格尺寸、版权声明与许可。JetBrains Mono 仍用于字体后端测试，不再承担运行时默认字体。
+默认字体为内置 Sarasa Term SC Nerd 的 Unhinted Regular。字体文件、版本、哈希及许可位于 `src/font/res/sarasa-term-sc-nerd/`；粗体与斜体遵循运行时合成设置。Nerd Font 符号保留为用户自选字体的图标后备；JetBrains Mono 仅用于字体后端测试。
 
 版本一致性检查不判断上游维护活跃度，也不替代安全审计。
 

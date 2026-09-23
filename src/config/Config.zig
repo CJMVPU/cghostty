@@ -60,8 +60,8 @@ const log = std.log.scoped(.config);
 const c = @import("posix_c");
 
 /// The font families to use.
-/// Unset uses the bundled LXGW WenKai Mono. Bold and italic variants of
-/// this built-in regular face follow `font-synthetic-style`.
+/// Unset uses bundled Sarasa Term SC Nerd (Unhinted Regular). Bold and
+/// italic variants follow `font-synthetic-style`.
 ///
 /// You can generate the list of valid values using the CLI:
 ///
@@ -455,8 +455,8 @@ const c = @import("posix_c");
 /// include path separators unless it is an absolute pathname.
 ///
 /// The first directory is the `themes` subdirectory of your Ghostty
-/// configuration directory. This is `$XDG_CONFIG_HOME/cghostty/themes` or
-/// `~/.config/cghostty/themes`.
+/// configuration directory:
+/// `~/Library/Application Support/com.cjmvpu.cghostty/themes`.
 ///
 /// The second directory is the `themes` subdirectory of the Ghostty resources
 /// directory. Bundled themes are installed in
@@ -2020,7 +2020,7 @@ keybind: Keybinds = .{},
 /// This setting is currently only supported on macOS.
 @"window-colorspace": WindowColorspace = .srgb,
 
-/// The initial window size in terminal grid cells: 144 columns by 33 rows.
+/// The initial window size in terminal grid cells: 111 columns by 33 rows.
 /// Both effective values must be positive. Setting either value to zero
 /// leaves the initial size to the native app. An omitted value keeps its
 /// built-in default, so either dimension can be overridden independently.
@@ -2040,7 +2040,7 @@ keybind: Keybinds = .{},
 ///
 /// Windows smaller than 10 wide by 4 high are not allowed.
 @"window-height": u32 = 33,
-@"window-width": u32 = 144,
+@"window-width": u32 = 111,
 
 /// The starting window position. This position is in pixels and is relative
 /// to the top-left corner of the primary monitor. Both values must be set to take
@@ -3269,18 +3269,6 @@ pub fn loadDefaultFiles(self: *Config, alloc: Allocator) !void {
 
 /// Load and parse the CLI args.
 pub fn loadCliArgs(self: *Config, alloc_gpa: Allocator) !void {
-
-    // On Linux, we have a special case where if the executing
-    // program is "xdg-terminal-exec" then we treat all CLI
-    // args as if they are a command to execute.
-    //
-    // In this mode, we also behave slightly differently:
-    //
-    //   - The initial window title is set to the full command. This
-    //     can be used with window managers to modify positioning,
-    //     styling, etc. based on the command.
-    //
-    // See: https://github.com/Vladimir-csp/xdg-terminal-exec
 
     // We set config-default-files to true here because this
     // should always be reset so we can detect if it is set

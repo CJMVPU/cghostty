@@ -5,21 +5,18 @@
 //! Be careful to ensure that any fonts you embed are licensed for
 //! redistribution and include their license as necessary.
 
-/// Bundled default; loaded directly without system font registration.
-pub const lxgw_wenkai_mono = @embedFile("lxgw_wenkai_mono");
+/// Built-in terminal font, loaded directly without system installation.
+pub const default_family = "Sarasa Term SC Nerd";
+pub const default_regular = @embedFile("res/sarasa-term-sc-nerd/SarasaTermSCNerd-Regular.ttf");
 
 /// Variable fonts used by font backend tests.
 pub const variable = @embedFile("jetbrains_mono_variable");
-pub const variable_italic = @embedFile("jetbrains_mono_variable_italic");
 
 /// Symbols-only nerd font.
 pub const symbols_nerd_font = @embedFile("nerd_fonts_symbols_only");
 
-/// Static jetbrains mono faces, currently unused.
+/// Regular JetBrains Mono face used by font backend tests.
 pub const regular = @embedFile("jetbrains_mono_regular");
-pub const bold = @embedFile("jetbrains_mono_bold");
-pub const italic = @embedFile("jetbrains_mono_italic");
-pub const bold_italic = @embedFile("jetbrains_mono_bold_italic");
 
 /// Emoji fonts
 pub const emoji = @embedFile("res/NotoColorEmoji.ttf");

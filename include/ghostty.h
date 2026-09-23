@@ -1103,6 +1103,7 @@ GHOSTTY_API void ghostty_string_free(ghostty_string_s);
 GHOSTTY_API ghostty_config_t ghostty_config_new();
 GHOSTTY_API void ghostty_config_free(ghostty_config_t);
 GHOSTTY_API ghostty_config_t ghostty_config_clone(ghostty_config_t);
+GHOSTTY_API bool ghostty_config_has_cli_args(void);
 GHOSTTY_API void ghostty_config_load_cli_args(ghostty_config_t);
 GHOSTTY_API void ghostty_config_load_file(ghostty_config_t, const char*);
 GHOSTTY_API void ghostty_config_load_data(ghostty_config_t, const uint8_t*, size_t, const char*);

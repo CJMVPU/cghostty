@@ -182,11 +182,8 @@ pub fn run(gpa_alloc: std.mem.Allocator) !u8 {
         return 0;
     }
 
-    var theme_config = try Config.default(gpa_alloc);
-    defer theme_config.deinit();
     for (themes.items) |theme| {
-        try theme_config.loadFile(theme_config._arena.?.allocator(), theme.path);
-        if (!shouldIncludeTheme(opts.color, theme_config)) {
+        if (!try matchesThemeFile(gpa_alloc, opts.color, theme.path)) {
             continue;
         }
         if (opts.path)
@@ -348,8 +345,6 @@ const Preview = struct {
 
         self.filtered.clearRetainingCapacity();
 
-        var theme_config = try Config.default(self.allocator);
-        defer theme_config.deinit();
         if (self.text_input.buf.realLength() > 0) {
             const first_half = self.text_input.buf.firstHalf();
             const second_half = self.text_input.buf.secondHalf();
@@ -370,8 +365,7 @@ const Preview = struct {
             while (it.next()) |token| try tokens.append(self.allocator, token);
 
             for (self.themes, 0..) |*theme, i| {
-                try theme_config.loadFile(theme_config._arena.?.allocator(), theme.path);
-                if (!shouldIncludeTheme(self.theme_filter, theme_config)) continue;
+                if (!try matchesThemeFile(self.allocator, self.theme_filter, theme.path)) continue;
 
                 theme.rank = zf.rank(theme.theme, tokens.items, .{
                     // NOTE: Changed from ".to_lower = true" (the option was
@@ -386,8 +380,7 @@ const Preview = struct {
             }
         } else {
             for (self.themes, 0..) |*theme, i| {
-                try theme_config.loadFile(theme_config._arena.?.allocator(), theme.path);
-                if (shouldIncludeTheme(self.theme_filter, theme_config)) {
+                if (try matchesThemeFile(self.allocator, self.theme_filter, theme.path)) {
                     try self.filtered.append(self.allocator, i);
                     theme.rank = null;
                 }
@@ -1801,6 +1794,15 @@ fn preview(allocator: std.mem.Allocator, themes: []ThemeListElement, theme_filte
     try app.run();
 }
 
+// Every theme starts from defaults, for both plain output and preview filtering.
+fn matchesThemeFile(alloc: std.mem.Allocator, filter: ColorScheme, path: []const u8) !bool {
+    if (filter == .all) return true;
+    var config = try Config.default(alloc);
+    defer config.deinit();
+    try config.loadFile(config._arena.?.allocator(), path);
+    return shouldIncludeTheme(filter, config);
+}
+
 fn shouldIncludeTheme(theme_filter: ColorScheme, theme_config: Config) bool {
     const rf = @as(f32, @floatFromInt(theme_config.background.r)) / 255.0;
     const gf = @as(f32, @floatFromInt(theme_config.background.g)) / 255.0;
@@ -1808,4 +1810,21 @@ fn shouldIncludeTheme(theme_filter: ColorScheme, theme_config: Config) bool {
     const luminance = 0.2126 * rf + 0.7152 * gf + 0.0722 * bf;
     const is_dark = luminance < 0.5;
     return (theme_filter == .all) or (theme_filter == .dark and is_dark) or (theme_filter == .light and !is_dark);
+}
+
+test "theme filtering starts each file from defaults" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "light", .data = "background = #ffffff\n" });
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "default", .data = "foreground = #ffffff\n" });
+    const light = try tmp.dir.realPathFileAlloc(testing.io, "light", alloc);
+    defer alloc.free(light);
+    const default = try tmp.dir.realPathFileAlloc(testing.io, "default", alloc);
+    defer alloc.free(default);
+    try testing.expect(try matchesThemeFile(alloc, .light, light));
+    try testing.expect(!try matchesThemeFile(alloc, .light, default));
+    try testing.expect(try matchesThemeFile(alloc, .dark, default));
+    try testing.expect(!try matchesThemeFile(alloc, .dark, light));
 }

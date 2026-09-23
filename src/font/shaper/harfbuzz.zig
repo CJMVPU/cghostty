@@ -2169,7 +2169,6 @@ fn testShaperWithFont(alloc: Allocator, font_req: TestFont) !TestShaper {
 }
 
 fn testShaperWithDiscoveredFont(alloc: Allocator, font_req: [:0]const u8) !TestShaper {
-    if (font.Discover == void) return error.SkipZigTest;
     var lib = try Library.init(alloc);
     errdefer lib.deinit();
 

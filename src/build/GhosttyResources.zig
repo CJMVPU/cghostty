@@ -108,10 +108,13 @@ pub fn init(b: *std.Build, cfg: *const Config, deps: *const SharedDeps) !Ghostty
         try steps.append(b.allocator, &install_step.step);
     }
 
-    // The embedded font's redistribution license must ship with the app.
-    if (b.lazyDependency("lxgw_wenkai", .{})) |wenkai| {
-        const license = b.addInstallFile(wenkai.path("OFL.txt"), "share/cghostty/licenses/LXGW-WenKai-OFL.txt");
-        try steps.append(b.allocator, &license.step);
+    // Preserve the bundled font's license and supplied copyright metadata.
+    for ([_][]const u8{ "LICENSE.txt", "NOTICE.txt" }) |name| {
+        const step = b.addInstallFile(
+            b.path(b.pathJoin(&.{ "src/font/res/sarasa-term-sc-nerd", name })),
+            b.pathJoin(&.{ "share/cghostty/licenses/Sarasa-Term-SC-Nerd", name }),
+        );
+        try steps.append(b.allocator, &step.step);
     }
 
     // Themes

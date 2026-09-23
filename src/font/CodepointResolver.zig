@@ -167,7 +167,7 @@ pub fn getIndex(
     }
 
     // If we are regular, try looking for a fallback using discovery.
-    if (style == .regular and font.Discover != void) {
+    if (style == .regular) {
         log.debug("searching for a fallback font for cp={X}", .{cp});
         if (self.discover) |disco| discover: {
             const load_opts = self.collection.load_options orelse
@@ -234,10 +234,6 @@ fn getIndexCodepointOverride(
     alloc: Allocator,
     cp: u32,
 ) !?Collection.Index {
-    // If discovery is disabled then we can't do codepoint overrides
-    // since the override is based on discovery to find the font.
-    if (comptime font.Discover == void) return null;
-
     // Get our codepoint map. If we have no map set then we have no
     // codepoint overrides and we're done.
     const map = self.codepoint_map orelse return null;

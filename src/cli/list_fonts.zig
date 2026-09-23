@@ -76,22 +76,6 @@ fn runArgs(alloc_gpa: Allocator, argsIter: anytype) !u8 {
     defer arena.deinit();
     const alloc = arena.allocator();
 
-    // Its possible to build Ghostty without font discovery!
-    if (comptime font.Discover == void) {
-        var buffer: [1024]u8 = undefined;
-        var stderr_writer = std.Io.File.stderr().writer(global.io(), &buffer);
-        const stderr = &stderr_writer.interface;
-        try stderr.print(
-            \\Ghostty was built without a font discovery mechanism. This is a compile-time
-            \\option. Please review how Ghostty was built from source, contact the
-            \\maintainer to enable a font discovery mechanism, and try again.
-        ,
-            .{},
-        );
-        try stderr.flush();
-        return 1;
-    }
-
     var buffer: [2048]u8 = undefined;
     var stdout_writer = std.Io.File.stdout().writer(global.io(), &buffer);
     const stdout = &stdout_writer.interface;
@@ -101,9 +85,7 @@ fn runArgs(alloc_gpa: Allocator, argsIter: anytype) !u8 {
     var families: std.ArrayList([]const u8) = .empty;
     var map: std.StringHashMap(std.ArrayListUnmanaged([]const u8)) = .init(alloc);
 
-    // Look up all available fonts. The library is only used by backends
-    // that need it (the Windows backend opens candidate font files with
-    // FreeType); other backends ignore it.
+    // Discover installed families alongside the built-in Regular face.
     var font_lib = try font.Library.init(alloc);
     defer font_lib.deinit();
     var disco = font.Discover.init(font_lib);
@@ -137,6 +119,18 @@ fn runArgs(alloc_gpa: Allocator, argsIter: anytype) !u8 {
             gop.value_ptr.* = .empty;
         }
         try gop.value_ptr.append(alloc, full_name);
+    }
+
+    if ((config.family == null or std.ascii.eqlIgnoreCase(config.family.?, font.embedded.default_family)) and
+        (config.style == null or std.ascii.eqlIgnoreCase(config.style.?, "Regular")) and
+        !config.bold and !config.italic)
+    {
+        const gop = try map.getOrPut(font.embedded.default_family);
+        if (!gop.found_existing) {
+            try families.append(alloc, font.embedded.default_family);
+            gop.value_ptr.* = .empty;
+        }
+        try gop.value_ptr.append(alloc, "SarasaTermSCNerd-Regular (built-in)");
     }
 
     // Sort our keys.

@@ -22,7 +22,6 @@ const Library = font.Library;
 const Metrics = font.Metrics;
 const CodepointMap = font.CodepointMap;
 const DesiredSize = font.face.DesiredSize;
-const Face = font.Face;
 const SharedGrid = font.SharedGrid;
 const discovery = @import("discovery.zig");
 const configpkg = @import("../config.zig");
@@ -70,9 +69,7 @@ pub fn deinit(self: *SharedGridSet) void {
     }
     self.map.deinit(self.alloc);
 
-    if (comptime Discover != void) {
-        if (self.font_discover) |*v| v.deinit();
-    }
+    if (self.font_discover) |*v| v.deinit();
 
     self.font_lib.deinit();
 }
@@ -152,15 +149,15 @@ pub fn ref(
     return .{ gop.key_ptr.*, gop.value_ptr.grid };
 }
 
-/// The upstream default face is Regular. Synthesize styles using the same
+/// The bundled default face is Regular. Synthesize styles using the same
 /// user-controlled policy as configured fonts, without storing duplicate TTFs.
 fn bundledFace(
     self: *SharedGridSet,
     style: Style,
     opts: font.face.Options,
     synthetic: Config.FontSyntheticStyle,
-) !Face {
-    var face = try Face.init(self.font_lib, font.embedded.lxgw_wenkai_mono, opts);
+) !font.Face {
+    var face = try font.Face.init(self.font_lib, font.embedded.default_regular, opts);
     errdefer face.deinit();
     const enabled = switch (style) {
         .regular => false,
@@ -206,14 +203,8 @@ fn collection(
     c.metric_modifiers = key.metric_modifiers;
 
     // Search for fonts
-    if (Discover != void) discover: {
-        const disco = try self.discover() orelse {
-            log.warn(
-                "font discovery not available, cannot search for fonts",
-                .{},
-            );
-            break :discover;
-        };
+    {
+        const disco = try self.discover();
 
         // A buffer we use to store the font names for logging.
         var name_buf: [256]u8 = undefined;
@@ -221,12 +212,11 @@ fn collection(
         inline for (@typeInfo(Style).@"enum".fields) |field| {
             const style = @field(Style, field.name);
             for (key.descriptorsForStyle(style)) |desc| {
-                // Resolve our bundled family before searching installed fonts.
-                if (std.ascii.eqlIgnoreCase(desc.family orelse "", "LXGW WenKai Mono") and
+                if (std.ascii.eqlIgnoreCase(desc.family orelse "", font.embedded.default_family) and
                     (desc.style == null or std.ascii.eqlIgnoreCase(desc.style.?, "Regular")))
                 {
-                    const requested_style: Style = if (desc.bold and desc.italic) .bold_italic else if (desc.bold) .bold else if (desc.italic) .italic else .regular;
-                    var face = try self.bundledFace(requested_style, load_options.faceOptions(), config.@"font-synthetic-style");
+                    const requested: Style = if (desc.bold and desc.italic) .bold_italic else if (desc.bold) .bold else if (desc.italic) .italic else .regular;
+                    var face = try self.bundledFace(requested, load_options.faceOptions(), config.@"font-synthetic-style");
                     errdefer face.deinit();
                     _ = try c.add(self.alloc, face, .{ .style = style, .fallback = false, .size_adjustment = .none });
                     continue;
@@ -290,14 +280,10 @@ fn collection(
         }
     }
 
-    // Complete our styles to ensure we have something to satisfy every
-    // possible style request. We do this before adding our built-in font
-    // because we want to ensure our built-in styles are fallbacks to
-    // the configured styles.
+    // Configured families keep priority, including their synthetic styles.
     try c.completeStyles(self.alloc, config.@"font-synthetic-style");
 
-    // Load the bundled family directly: no system installation or registration.
-    // Complete configured styles first, then provide a fallback for every style.
+    // Complete configured styles first so the bundled family remains a fallback.
     inline for (std.meta.tags(Style)) |style| {
         var face = try self.bundledFace(style, load_options.faceOptions(), config.@"font-synthetic-style");
         errdefer face.deinit();
@@ -329,13 +315,13 @@ fn collection(
     // people add other emoji fonts to their system, we always want to
     // prefer the official one. Users can override this by explicitly
     // specifying a font-family for emoji.
-    if (comptime Discover != void) apple_emoji: {
-        const disco = try self.discover() orelse break :apple_emoji;
+    apple_emoji: {
+        const disco = try self.discover();
 
         // Fast path: we know the exact name of the font we want so we
         // can look it up directly, which is sometimes significantly faster than
         // full discovery (e.g. CoreText).
-        if (@hasDecl(Discover, "discoverExactFamily")) {
+        {
             if (try disco.discoverExactFamily(
                 "Apple Color Emoji",
             )) |face| {
@@ -361,39 +347,6 @@ fn collection(
                 .size_adjustment = .none,
             });
         }
-    }
-
-    // Emoji fallback. We don't include this on Mac since Mac is expected
-    // to always have the Apple Emoji available on the system.
-    if (comptime Discover == void) {
-        _ = try c.add(
-            self.alloc,
-            try .init(
-                self.font_lib,
-                font.embedded.emoji,
-                load_options.faceOptions(),
-            ),
-            .{
-                .style = .regular,
-                .fallback = true,
-                // No size adjustment for emojis.
-                .size_adjustment = .none,
-            },
-        );
-        _ = try c.add(
-            self.alloc,
-            try .init(
-                self.font_lib,
-                font.embedded.emoji_text,
-                load_options.faceOptions(),
-            ),
-            .{
-                .style = .regular,
-                .fallback = true,
-                // No size adjustment for emojis.
-                .size_adjustment = .none,
-            },
-        );
     }
 
     return c;
@@ -435,19 +388,16 @@ pub const Map = std.HashMapUnmanaged(
             return k.hashcode();
         }
 
-        pub fn eql(ctx: @This(), a: KeyType, b: KeyType) bool {
-            return ctx.hash(a) == ctx.hash(b);
+        pub fn eql(_: @This(), a: KeyType, b: KeyType) bool {
+            return a.eql(b);
         }
     },
     std.hash_map.default_max_load_percentage,
 );
 
 /// Initialize once and return the font discovery mechanism. This remains
-/// initialized throughout the lifetime of the application because some
-/// font discovery mechanisms (i.e. fontconfig) are unsafe to reinit.
-fn discover(self: *SharedGridSet) !?*Discover {
-    // If we're built without a font discovery mechanism, return null
-    if (comptime Discover == void) return null;
+/// initialized throughout the lifetime of the application.
+fn discover(self: *SharedGridSet) !*Discover {
 
     // If we initialized, use it
     if (self.font_discover) |*v| return v;
@@ -572,6 +522,9 @@ pub const Key = struct {
     /// font grid.
     font_size: DesiredSize = .{ .points = 12 },
 
+    synthetic: Config.FontSyntheticStyle = .{},
+    enabled_styles: [3]bool = @splat(true),
+
     const style_offsets_len = std.enums.directEnumArrayLen(Style, 0);
     const StyleOffsets = [style_offsets_len]usize;
 
@@ -695,6 +648,8 @@ pub const Key = struct {
             .codepoint_map = codepoint_map,
             .metric_modifiers = metric_modifiers,
             .font_size = font_size,
+            .synthetic = config.@"font-synthetic-style",
+            .enabled_styles = .{ config.@"font-style-bold" != .false, config.@"font-style-italic" != .false, config.@"font-style-bold-italic" != .false },
         };
     }
 
@@ -714,12 +669,37 @@ pub const Key = struct {
         return self.descriptors[start..end];
     }
 
+    pub fn eql(a: Key, b: Key) bool {
+        if (!std.meta.eql(a.font_size, b.font_size) or
+            !std.meta.eql(a.style_offsets, b.style_offsets) or
+            !std.meta.eql(a.synthetic, b.synthetic) or
+            !std.meta.eql(a.enabled_styles, b.enabled_styles) or
+            a.descriptors.len != b.descriptors.len or
+            a.codepoint_map.list.len != b.codepoint_map.list.len or
+            a.metric_modifiers.count() != b.metric_modifiers.count()) return false;
+        for (a.descriptors, b.descriptors) |ad, bd| if (!ad.eql(bd)) return false;
+        for (0..a.codepoint_map.list.len) |i| {
+            const ae = a.codepoint_map.list.get(i);
+            const be = b.codepoint_map.list.get(i);
+            if (!std.meta.eql(ae.range, be.range) or !ae.descriptor.eql(be.descriptor)) return false;
+        }
+        var it = a.metric_modifiers.iterator();
+        while (it.next()) |entry| {
+            const value = b.metric_modifiers.get(entry.key_ptr.*) orelse return false;
+            if (!std.meta.eql(entry.value_ptr.*, value)) return false;
+        }
+        return true;
+    }
+
     /// Hash the key with the given hasher.
     pub fn hash(self: Key, hasher: anytype) void {
         const autoHash = std.hash.autoHash;
         autoHash(hasher, @as(u32, @bitCast(self.font_size.points)));
         autoHash(hasher, self.font_size.xdpi);
         autoHash(hasher, self.font_size.ydpi);
+        autoHash(hasher, self.style_offsets);
+        autoHash(hasher, self.synthetic);
+        autoHash(hasher, self.enabled_styles);
         autoHash(hasher, self.descriptors.len);
         for (self.descriptors) |d| d.hash(hasher);
         self.codepoint_map.hash(hasher);
@@ -832,19 +812,19 @@ test SharedGridSet {
     try testing.expectEqual(@as(usize, 0), set.count());
 }
 
-test "bundled WenKai resolves all styles and preserves configured fonts" {
+test "bundled Sarasa resolves all styles and preserves configured fonts" {
     const testing = std.testing;
     const alloc = testing.allocator;
     var set = try SharedGridSet.init(alloc);
     defer set.deinit();
 
-    for ([_][]const u8{ "", "font-family = LXGW WenKai Mono\n", "font-family = Menlo\n", "font-synthetic-style = false\n" }, 0..) |data, scenario| {
+    for ([_][]const u8{ "", "font-family = Sarasa Term SC Nerd\nfont-style = Regular\n", "font-family = Monaco\n", "font-synthetic-style = false\n" }, 0..) |data, scenario| {
         var cfg = try Config.default(alloc);
         defer cfg.deinit();
         try cfg.loadData(alloc, data, "/tmp/cghostty-font-test.ghostty");
         try cfg.finalize();
         try testing.expectEqual(@as(f32, 16), cfg.@"font-size");
-        try testing.expectEqual(@as(u32, 144), cfg.@"window-width");
+        try testing.expectEqual(@as(u32, 111), cfg.@"window-width");
         try testing.expectEqual(@as(u32, 33), cfg.@"window-height");
         var derived = try DerivedConfig.init(alloc, &cfg);
         defer derived.deinit();
@@ -856,7 +836,7 @@ test "bundled WenKai resolves all styles and preserves configured fonts" {
                 const face = try grid.resolver.collection.getFace(index);
                 var name_buf: [256]u8 = undefined;
                 const name = try face.name(&name_buf);
-                const expected = if (scenario == 2 and cp == 'A') "Menlo" else "LXGW";
+                const expected = if (scenario == 2 and cp == 'A') "Monaco" else "Sarasa";
                 try testing.expect(std.mem.indexOf(u8, name, expected) != null);
             }
         }
@@ -864,4 +844,54 @@ test "bundled WenKai resolves all styles and preserves configured fonts" {
         try testing.expect((try grid.getIndex(alloc, 0xf121, .regular, .text)) != null);
         try testing.expect((try grid.getIndex(alloc, 0x1f600, .regular, .emoji)) != null);
     }
+}
+
+test "Key includes style policies and compares content rather than hashes" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    var cfg = try Config.default(alloc);
+    defer cfg.deinit();
+    var derived = try DerivedConfig.init(alloc, &cfg);
+    defer derived.deinit();
+    var original = try Key.init(alloc, &derived, .{ .points = 16 });
+    defer original.deinit();
+    var equal = try Key.init(alloc, &derived, .{ .points = 16 });
+    defer equal.deinit();
+    try testing.expect(original.eql(equal));
+    derived.@"font-synthetic-style".italic = false;
+    var synthetic = try Key.init(alloc, &derived, .{ .points = 16 });
+    defer synthetic.deinit();
+    try testing.expect(!original.eql(synthetic));
+    try testing.expect(original.hashcode() != synthetic.hashcode());
+    derived.@"font-style-bold" = .false;
+    var disabled = try Key.init(alloc, &derived, .{ .points = 16 });
+    defer disabled.deinit();
+    try testing.expect(!synthetic.eql(disabled));
+    try testing.expect(synthetic.hashcode() != disabled.hashcode());
+
+    // Both keys deliberately collide under this map's hash. Equality must
+    // still distinguish their content, including fractional variation axes.
+    const CollidingMap = std.HashMapUnmanaged(Key, u8, struct {
+        pub fn hash(_: @This(), _: Key) u64 {
+            return 0;
+        }
+        pub fn eql(_: @This(), a: Key, b: Key) bool {
+            return a.eql(b);
+        }
+    }, std.hash_map.default_max_load_percentage);
+    var map: CollidingMap = .{};
+    defer map.deinit(alloc);
+    const variations_a = [_]font.face.Variation{.{ .id = .init("wght"), .value = 400.1 }};
+    const variations_b = [_]font.face.Variation{.{ .id = .init("wght"), .value = 400.9 }};
+    original.descriptors = &.{.{ .family = "Menlo", .variations = &variations_a }};
+    equal.descriptors = &.{.{ .family = "Menlo", .variations = &variations_b }};
+    try map.put(alloc, original, 1);
+    try map.put(alloc, equal, 2);
+    try testing.expectEqual(@as(u32, 2), map.count());
+    try testing.expectEqual(@as(?u8, 1), map.get(original));
+    try testing.expectEqual(@as(?u8, 2), map.get(equal));
+    equal.descriptors = &.{.{ .family = "Menlo", .variations = &variations_a }};
+    try testing.expect(original.eql(equal));
+    equal.style_offsets[0] = 1;
+    try testing.expect(!original.eql(equal));
 }

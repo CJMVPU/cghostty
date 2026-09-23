@@ -13,7 +13,7 @@ extension Ghostty {
 
             static func read(_ url: URL) throws -> Self? {
                 do {
-                    let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
+                    let attrs = try FileManager.default.attributesOfItem(atPath: url.resolvingSymlinksInPath().path)
                     guard attrs[.type] as? FileAttributeType == .typeRegular else {
                         throw CocoaError(.fileReadUnsupportedScheme)
                     }
@@ -90,7 +90,7 @@ extension Ghostty {
         }
 
         private func applyCLI(_ data: Data, checked: ConfigHandle, cli: Bool, errors: [String]) -> ConfigHandle {
-            guard cli, let effective = ConfigHandle.load(data: data, source: source, cli: true) else {
+            guard cli, ConfigHandle.hasCLIOverrides, let effective = ConfigHandle.load(data: data, source: source, cli: true) else {
                 checked.report(errors)
                 return checked
             }
@@ -108,18 +108,20 @@ extension Ghostty {
         func restoreDefaults() throws -> URL? {
             guard let defaults = ConfigHandle.defaultTemplate else { throw CocoaError(.fileWriteUnknown) }
             try prepareDirectory()
-            let existed = try Fingerprint.read(source) != nil
-            let data = existed ? try Data(contentsOf: source) : Data()
+            // Resolve once so atomic writes and rollback preserve the symbolic link.
+            let target = source.resolvingSymlinksInPath()
+            let existed = try Fingerprint.read(target) != nil
+            let data = existed ? try Data(contentsOf: target) : Data()
             let backup = data.isEmpty ? nil : directory.appendingPathComponent("before-reset-\(UUID().uuidString).ghostty")
             if let backup { try data.write(to: backup, options: .atomic) }
-            try defaults.write(to: source, options: .atomic)
+            try defaults.write(to: target, options: .atomic)
             // Keep the file and successful snapshot consistent. If committing
             // recovery data fails, restore the original file; its backup remains.
             do {
                 try save(defaults, fingerprint: Fingerprint.read(source))
             } catch {
-                if existed { try data.write(to: source, options: .atomic) } else {
-                    try FileManager.default.removeItem(at: source)
+                if existed { try data.write(to: target, options: .atomic) } else {
+                    try FileManager.default.removeItem(at: target)
                 }
                 throw error
             }

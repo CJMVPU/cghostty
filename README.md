@@ -17,9 +17,9 @@
 
 | 项目 | 默认值 |
 | --- | --- |
-| 字体 | 内置 LXGW WenKai Mono |
+| 字体 | 内置 Sarasa Term SC Nerd（Unhinted） |
 | 字号 | 16 pt |
-| 新窗口 | 144 列 × 33 行 |
+| 新窗口 | 111 列 × 33 行 |
 | 平滑光标 | 开启 |
 
 - 内置 Nerd Font 符号，Emoji 优先使用系统 Apple Color Emoji。
@@ -76,7 +76,7 @@ cursor-effect = false
 
 - **生效时机**：退出并重新启动应用。
 - **运行期间**：新窗口、标签页和分屏沿用启动配置。
-- **默认字体**：`font-family` 未指定时使用内置 LXGW WenKai Mono。
+- **默认字体**：`font-family` 未指定时使用内置 Sarasa Term SC Nerd（Unhinted）。
 - **模板注释**：无需全部启用；示例值不等于默认值。
 
 ### 校验与恢复
@@ -89,6 +89,13 @@ cursor-effect = false
 | 选择 **Restore Default Settings…** | 确认后备份当前配置、恢复默认模板，重启生效 |
 
 成功快照只保存主文件；引用的配置和主题资源仍需有效。
+
+### 配置优先级
+
+- 普通单值：后写的有效值覆盖前值；`#` 注释中的默认值和示例不参与加载。
+- 覆盖顺序：内置默认值 → 主题 → 主配置 → 启动参数 → `config-file` 引用文件。
+- 字体列表、调色板、快捷键等按各自的追加／替换规则处理，详见配置注释。
+- 自定义主题目录：`~/Library/Application Support/com.cjmvpu.cghostty/themes/`。
 
 ### 命令行
 
@@ -141,5 +148,5 @@ nu macos/build.nu --configuration ReleaseLocal
 ## 许可
 
 - **应用**：[MIT](LICENSE)，保留 Ghostty 上游版权声明。
-- **默认字体**：[LXGW WenKai](https://github.com/lxgw/LxgwWenKai)，采用 [SIL OFL 1.1](https://github.com/lxgw/LxgwWenKai/blob/v1.522/OFL.txt)。完整许可随应用保存在 `Contents/Resources/cghostty/licenses/LXGW-WenKai-OFL.txt`。
+- **默认字体**：[Sarasa Term SC Nerd](https://github.com/laishulu/Sarasa-Term-SC-Nerd)，采用 SIL OFL 1.1；许可及版权说明随应用提供。
 - **其他依赖**：遵循各自许可，见 [pkg/README.md](pkg/README.md)。

@@ -2,6 +2,8 @@
 
 This project uses several fonts which fall under the SIL Open Font License (OFL-1.1), MIT License, and BSD 2-Clause License:
 
+- Sarasa Term SC Nerd, Unhinted Regular (OFL-1.1)
+  - [Version, source and checksum](sarasa-term-sc-nerd/README.md), [license](sarasa-term-sc-nerd/LICENSE.txt), [copyright notice](sarasa-term-sc-nerd/NOTICE.txt)
 - Code New Roman (OFL-1.1)
   - [© 2014 Sam Radian. All Rights Reserved.](https://github.com/chrissimpkins/codeface/blob/master/fonts/code-new-roman/license.txt)
 - Geist Mono (OFL-1.1)
@@ -16,8 +18,6 @@ This project uses several fonts which fall under the SIL Open Font License (OFL-
 - Kawkab Mono (OFL-1.1)
   - [Copyright (c) 2015, Abdullah Arif (abdullah.a@gmail.com). Copyright 2010, 2012, 2014 Adobe Systems Incorporated (http://www.adobe.com/), with Reserved Font Name 'Source'. All Rights Reserved. Source is a trademark of Adobe Systems Incorporated in the United States and/or other countries.
     ](https://github.com/aiaf/kawkab-mono/blob/master/OFL.txt)
-- Lilex (OFL-1.1)
-  - [Copyright 2019 The Lilex Project Authors (https://github.com/mishamyrt/Lilex)](https://github.com/mishamyrt/Lilex/blob/master/OFL.txt)
 - Monaspace Neon (OFL-1.1)
   - [Copyright (c) 2023, GitHub https://github.com/githubnext/monaspace
     with Reserved Font Name "Monaspace", including subfamilies: "Argon", "Neon", "Xenon", "Radon", and "Krypton"](https://github.com/githubnext/monaspace/blob/main/LICENSE)

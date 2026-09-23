@@ -414,13 +414,6 @@ pub fn add(
 
     // Fonts
     {
-        if (b.lazyDependency("lxgw_wenkai", .{})) |wenkai| {
-            step.root_module.addAnonymousImport(
-                "lxgw_wenkai_mono",
-                .{ .root_source_file = wenkai.path("LXGWWenKaiMono-Regular.ttf") },
-            );
-        }
-
         // JetBrains Mono
         if (b.lazyDependency("jetbrains_mono", .{})) |jb_mono| {
             step.root_module.addAnonymousImport(
@@ -428,24 +421,8 @@ pub fn add(
                 .{ .root_source_file = jb_mono.path("fonts/ttf/JetBrainsMono-Regular.ttf") },
             );
             step.root_module.addAnonymousImport(
-                "jetbrains_mono_bold",
-                .{ .root_source_file = jb_mono.path("fonts/ttf/JetBrainsMono-Bold.ttf") },
-            );
-            step.root_module.addAnonymousImport(
-                "jetbrains_mono_italic",
-                .{ .root_source_file = jb_mono.path("fonts/ttf/JetBrainsMono-Italic.ttf") },
-            );
-            step.root_module.addAnonymousImport(
-                "jetbrains_mono_bold_italic",
-                .{ .root_source_file = jb_mono.path("fonts/ttf/JetBrainsMono-BoldItalic.ttf") },
-            );
-            step.root_module.addAnonymousImport(
                 "jetbrains_mono_variable",
                 .{ .root_source_file = jb_mono.path("fonts/variable/JetBrainsMono[wght].ttf") },
-            );
-            step.root_module.addAnonymousImport(
-                "jetbrains_mono_variable_italic",
-                .{ .root_source_file = jb_mono.path("fonts/variable/JetBrainsMono-Italic[wght].ttf") },
             );
         }
 

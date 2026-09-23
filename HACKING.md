@@ -43,7 +43,7 @@ python3 scripts/check-scope.py --app macos/build/ReleaseLocal/cghostty.app
 
 原生核心输出为 `zig-out/lib/libghostty-internal.a`。Xcode 直接链接该静态库，通过 `include/module.modulemap` 导入 `GhosttyKit`；不再生成或消费 XCFramework。头文件直接来自 `include/`，无需再复制进包装产物。原生测试与应用使用同一个内部 C 模块。
 
-`zig build` 也可作为根入口，会调用同一个 `macos/build.nu`。日常应用开发直接使用 Nushell 脚本。核心安装步骤记录版本、优化模式、Zig／SDK、源码输入及归档摘要。`--skip-core` 会核对这些记录，缺少记录或任一项不匹配时拒绝复用；切换 Debug / ReleaseLocal 或修改核心后重新构建完整应用。仅修改 Swift 不影响核心复用。
+`zig build` 也可作为根入口，会调用同一个 `macos/build.nu`。日常应用开发直接使用 Nushell 脚本。核心安装步骤记录版本、优化模式、Zig／SDK、源码输入及归档摘要。`--skip-core` 会核对这些记录，缺少记录或任一项不匹配时拒绝复用；切换 Debug / ReleaseLocal 或修改核心后重新构建完整应用。仅修改 Swift 或 README／AGENTS 说明不影响核心复用；嵌入的 Markdown、字体、着色器等构建输入仍参与校验。
 
 Zig 改动使用 `zig fmt`；Swift 使用 `swiftlint lint --strict --fix`。完整核心测试为 `zig build test`，通常优先运行相关过滤测试。终端压缩、快照等子目录的测试约定继续适用。
 
@@ -72,7 +72,7 @@ Xcode scheme 和 Swift 模块仍为 `Ghostty`，C 桥接模块为 `GhosttyKit`�
 
 ## 手动运行验证
 
-使用应用的绝对路径启动，避免命中另外安装的 Ghostty。验证终端可执行命令、UTF-8 输出、分屏、标签页和配置重载。AppleScript 必须继续受 `macos-applescript` 设置保护。
+使用应用的绝对路径启动，避免命中另外安装的 Ghostty。验证终端可执行命令、UTF-8 输出、分屏、标签页，以及修改配置后重启应用生效。AppleScript 必须继续受 `macos-applescript` 设置保护。
 
 独立测试配置在 Debug 下可通过 `CGHOSTTY_CONFIG_PATH` 指定；ReleaseLocal 使用 `--config-default-files=false --config-file=/absolute/path/test.ghostty` 启动可执行文件。Release 不读取这个 Debug 专用环境变量，不要把个人 shell 的标题更新误判为隔离故障。
 

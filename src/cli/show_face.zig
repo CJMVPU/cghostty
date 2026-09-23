@@ -91,18 +91,6 @@ fn runArgs(
     stdout: *std.Io.Writer,
     stderr: *std.Io.Writer,
 ) !u8 {
-    // Its possible to build Ghostty without font discovery!
-    if (comptime font.Discover == void) {
-        try stderr.print(
-            \\Ghostty was built without a font discovery mechanism. This is a compile-time
-            \\option. Please review how Ghostty was built from source, contact the
-            \\maintainer to enable a font discovery mechanism, and try again.
-        ,
-            .{},
-        );
-        return 1;
-    }
-
     var opts: Options = .{};
     defer opts.deinit();
 

@@ -18,10 +18,9 @@ const Presentation = @import("main.zig").Presentation;
 const log = std.log.scoped(.deferred_face);
 
 /// CoreText
-ct: if (font.Discover == font.discovery.CoreText) ?CoreText else void =
-    if (font.Discover == font.discovery.CoreText) null else {},
+ct: ?CoreText = null,
 
-/// CoreText specific data. This is only present when building with CoreText.
+/// CoreText discovery data, shared by all supported font backends.
 pub const CoreText = struct {
     /// The initialized font
     font: *macos.text.Font,
@@ -37,7 +36,6 @@ pub const CoreText = struct {
     }
 };
 
-/// WebCanvas specific data. This is only present when building with canvas.
 pub fn deinit(self: *DeferredFace) void {
     switch (options.backend) {
         .coretext,
@@ -156,10 +154,11 @@ fn loadCoreTextFreetype(
     // the end for a zero so we set that up here.
     buf[path_slice.len] = 0;
 
-    // Face index 0 is not always correct. We don't ship this configuration
-    // in a release build. Users should use the pure CoreText builds.
-    //std.log.warn("path={s}", .{path_slice});
-    var face = try Face.initFile(lib, buf[0..path_slice.len :0], 0, opts);
+    const postscript = ct.font.copyPostScriptName();
+    defer postscript.release();
+    var name_buf: [256]u8 = undefined;
+    const ps_name = postscript.cstring(&name_buf, .utf8) orelse return error.FontNameCantDecode;
+    var face = try Face.initFile(lib, buf[0..path_slice.len :0], ps_name, opts);
     errdefer face.deinit();
     try face.setVariations(ct.variations, opts);
 
@@ -204,10 +203,6 @@ pub fn hasCodepoint(self: DeferredFace, cp: u32, p: ?Presentation) bool {
                 return ct.font.getGlyphsForCharacters(unichars[0..len], glyphs[0..len]);
             }
         },
-
-        // Canvas always has the codepoint because we have no way of
-        // really checking and we let the browser handle it.
-
     }
 
     // This is unreachable because discovery mechanisms terminate, and
@@ -245,4 +240,31 @@ test "coretext" {
     var face = try def.load(lib, .{ .size = .{ .points = 12 } });
     defer face.deinit();
     try testing.expect(face.glyphIndex(' ') != null);
+}
+
+test "CoreText-selected collection face matches FreeType style" {
+    if (options.backend != .coretext_freetype) return error.SkipZigTest;
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    var lib = try Library.init(alloc);
+    defer lib.deinit();
+    var disco = font.Discover.init(lib);
+    defer disco.deinit();
+    for (std.meta.tags(font.Style)) |style| {
+        var it = try disco.discover(alloc, .{
+            .family = "Menlo",
+            .bold = style == .bold or style == .bold_italic,
+            .italic = style == .italic or style == .bold_italic,
+        });
+        defer it.deinit();
+        var deferred = (try it.next()) orelse return error.FontNotFound;
+        defer deferred.deinit();
+        var face = try deferred.load(lib, .{ .size = .{ .points = 16 } });
+        defer face.deinit();
+        const expected = deferred.ct.?.font.copyPostScriptName();
+        defer expected.release();
+        var buf: [256]u8 = undefined;
+        const actual = @import("freetype").c.FT_Get_Postscript_Name(face.face.handle);
+        try testing.expectEqualStrings(expected.cstring(&buf, .utf8).?, std.mem.span(actual));
+    }
 }

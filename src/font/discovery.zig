@@ -57,6 +57,20 @@ pub const Descriptor = struct {
     /// will be preferred, but not guaranteed.
     variations: []const Variation = &.{},
 
+    pub fn eql(a: Descriptor, b: Descriptor) bool {
+        inline for (.{ "family", "style" }) |field| {
+            const av = @field(a, field);
+            const bv = @field(b, field);
+            if ((av == null) != (bv == null)) return false;
+            if (av) |value| if (!std.mem.eql(u8, value, bv.?)) return false;
+        }
+        if (a.codepoint != b.codepoint or a.size != b.size or
+            a.bold != b.bold or a.italic != b.italic or a.monospace != b.monospace or
+            a.variations.len != b.variations.len) return false;
+        for (a.variations, b.variations) |av, bv| if (!std.meta.eql(av, bv)) return false;
+        return true;
+    }
+
     /// Hash the descriptor with the given hasher.
     pub fn hash(self: Descriptor, hasher: anytype) void {
         const autoHash = std.hash.autoHash;
@@ -72,9 +86,7 @@ pub const Descriptor = struct {
         for (self.variations) |variation| {
             autoHash(hasher, variation.id);
 
-            // This is not correct, but we don't currently depend on the
-            // hash value being different based on decimal values of variations.
-            autoHash(hasher, @as(i64, @intFromFloat(variation.value)));
+            autoHash(hasher, @as(u64, @bitCast(variation.value)));
         }
     }
 

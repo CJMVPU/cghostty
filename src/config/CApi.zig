@@ -49,6 +49,14 @@ export fn ghostty_config_clone(self: *Config) ?*Config {
     return result;
 }
 
+/// Check using the same iterator as the CLI parser, without parsing twice on
+/// normal application startup. On allocation failure retain the full load path.
+export fn ghostty_config_has_cli_args() bool {
+    var it = @import("../cli/args.zig").argsIterator(global.alloc(), global.args()) catch return true;
+    defer it.deinit();
+    return it.next() != null;
+}
+
 /// Load the configuration from the CLI args.
 export fn ghostty_config_load_cli_args(self: *Config) void {
     self.loadCliArgs(global.alloc()) catch |err| {

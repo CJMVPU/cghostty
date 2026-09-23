@@ -122,14 +122,14 @@ final class GhosttyConfigSnapshotUITests: GhosttyCustomConfigCase {
         XCTAssertTrue(window.waitForExistence(timeout: 10))
         let terminal = app.groups["Terminal pane"].firstMatch
         XCTAssertTrue(terminal.waitForExistence(timeout: 10))
-        paste("stty size > '\(output.path)'; printf '\\nLXGW WenKai Mono 中文测试 ABC 0123456789\\n\\033[1m粗体 Bold\\033[0m \\033[3m斜体 Italic\\033[0m \\033[1;3m粗斜体\\033[0m\\n'", into: terminal)
+        paste("stty size > '\(output.path)'; printf '\\nSarasa Term SC Nerd 中文测试 ABC 0123456789\\n\\033[1m粗体 Bold\\033[0m \\033[3m斜体 Italic\\033[0m \\033[1;3m粗斜体\\033[0m\\n'", into: terminal)
         let reportsGrid = NSPredicate { _, _ in
             (try? String(contentsOf: output, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
         }
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: reportsGrid, object: nil)], timeout: 10), .completed)
         let attachment = XCTAttachment(screenshot: window.screenshot())
-        XCTAssertEqual(try String(contentsOf: output, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines), "33 144")
-        attachment.name = "LXGW WenKai Mono — default 16 pt, 144 × 33"
+        XCTAssertEqual(try String(contentsOf: output, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines), "33 111")
+        attachment.name = "Sarasa Term SC Nerd — default 16 pt, 111 × 33"
         attachment.lifetime = .keepAlways
         add(attachment)
         XCTAssertFalse(app.windows["Configuration Errors"].exists)

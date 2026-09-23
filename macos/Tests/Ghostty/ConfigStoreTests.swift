@@ -149,4 +149,41 @@ import Testing
             #expect(!config.errors.isEmpty)
         }
     }
+    @Test func symbolicLinkStartupReuseRetargetAndResetPreserveTargets() throws {
+        try withStore { store, source in
+            let root = source.deletingLastPathComponent()
+            let first = root.appendingPathComponent("first.conf")
+            let second = root.appendingPathComponent("second.conf")
+            try "title = First".write(to: first, atomically: true, encoding: .utf8)
+            try "title = Second".write(to: second, atomically: true, encoding: .utf8)
+            try FileManager.default.createSymbolicLink(at: source, withDestinationURL: first)
+            #expect(Ghostty.Config(handle: store.load(cli: false)).title == "First")
+            #expect(Ghostty.Config(handle: store.load(cli: false)).title == "First")
+            #expect(store.usedSavedInput)
+            try FileManager.default.removeItem(at: source)
+            try FileManager.default.createSymbolicLink(at: source, withDestinationURL: second)
+            #expect(Ghostty.Config(handle: store.load(cli: false)).title == "Second")
+            #expect(!store.usedSavedInput)
+            let resetBackup = try store.restoreDefaults()
+            let backup = try #require(resetBackup)
+            #expect(try String(contentsOf: backup, encoding: .utf8) == "title = Second")
+            #expect(try FileManager.default.destinationOfSymbolicLink(atPath: source.path) == second.path)
+            #expect(try String(contentsOf: first, encoding: .utf8) == "title = First")
+            #expect(Ghostty.Config(handle: store.load(cli: false)).title == nil)
+            #expect(try String(contentsOf: second, encoding: .utf8).contains("configuration guide"))
+        }
+    }
+
+    @Test func failedResetPreservesSymbolicLinkAndOriginalTarget() throws {
+        try withStore { store, source in
+            let target = source.deletingLastPathComponent().appendingPathComponent("target.conf")
+            try "title = Keep Me".write(to: target, atomically: true, encoding: .utf8)
+            try FileManager.default.createSymbolicLink(at: source, withDestinationURL: target)
+            try FileManager.default.createDirectory(at: store.directory.appendingPathComponent("last-success.json"), withIntermediateDirectories: true)
+            #expect(throws: (any Error).self) { try store.restoreDefaults() }
+            #expect(try FileManager.default.destinationOfSymbolicLink(atPath: source.path) == target.path)
+            #expect(try String(contentsOf: target, encoding: .utf8) == "title = Keep Me")
+        }
+    }
+
 }

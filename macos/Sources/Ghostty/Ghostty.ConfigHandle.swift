@@ -50,6 +50,10 @@ extension Ghostty {
             Ghostty.AllocatedString(ghostty_config_default_path()).string
         }
 
+        static var hasCLIOverrides: Bool {
+            !isRunningInXcode() && ghostty_config_has_cli_args()
+        }
+
         /// Startup snapshots contain file input only. CLI overrides are applied
         /// afterward and never written into the shared successful snapshot.
         static func load(data: Data, source: URL, cli: Bool = false) -> ConfigHandle? {

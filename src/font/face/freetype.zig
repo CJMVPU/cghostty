@@ -54,18 +54,27 @@ pub const Face = struct {
     /// The current size this font is set to.
     size: font.face.DesiredSize,
 
-    /// Initialize a new font face with the given source in-memory.
+    /// Load the exact CoreText-selected face from a font collection.
     pub fn initFile(
         lib: Library,
         path: [:0]const u8,
-        index: i32,
+        postscript_name: []const u8,
         opts: font.face.Options,
     ) !Face {
         lib.mutex.lockUncancelable(global.io());
         defer lib.mutex.unlock(global.io());
-        const face = try lib.lib.initFace(path, index);
-        errdefer face.deinit();
-        return try initFace(lib, face, opts);
+        var index: i32 = 0;
+        while (true) : (index += 1) {
+            const face = try lib.lib.initFace(path, index);
+            const count = face.handle.*.num_faces;
+            const ps_name = freetype.c.FT_Get_Postscript_Name(face.handle);
+            if (ps_name != null and std.mem.eql(u8, std.mem.span(ps_name), postscript_name)) {
+                errdefer face.deinit();
+                return try initFace(lib, face, opts);
+            }
+            face.deinit();
+            if (index + 1 >= count) return error.FontFaceNotFound;
+        }
     }
 
     /// Initialize a new font face with the given source in-memory.

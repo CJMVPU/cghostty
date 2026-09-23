@@ -7,7 +7,7 @@ const global = @import("../global.zig");
 /// Location of possible themes. The order of this enum matters because it
 /// defines the priority of theme search (from top to bottom).
 pub const Location = enum {
-    user, // XDG config dir
+    user, // Application Support config directory
     resources, // Ghostty resources dir
 
     /// Returns the directory for the given theme based on this location type.
@@ -23,35 +23,10 @@ pub const Location = enum {
         self: Location,
         arena_alloc: Allocator,
     ) error{ OutOfMemory, Unexpected }!?[]const u8 {
-        var environ_map = try global.environMap();
-        defer environ_map.deinit();
         return switch (self) {
-            .user => user: {
-                const subdir = std.fs.path.join(arena_alloc, &.{
-                    "cghostty", "themes",
-                }) catch return error.OutOfMemory;
-
-                break :user internal_os.xdg.config(
-                    global.io(),
-                    arena_alloc,
-                    &environ_map,
-                    .{ .subdir = subdir },
-                ) catch |err| {
-                    // We need to do some comptime tricks to get the right
-                    // error set since some platforms don't support some
-                    // error types.
-                    const Error = @TypeOf(err) || error{};
-
-                    switch (@as(Error, err)) {
-                        error.OutOfMemory => return error.OutOfMemory,
-                        error.BufferTooSmall => return error.OutOfMemory,
-
-                        // Any other error we treat as the XDG directory not
-                        // existing. Windows in particularly can return a LOT
-                        // of errors here.
-                        else => return null,
-                    }
-                };
+            .user => internal_os.macos.appSupportDir(arena_alloc, "themes") catch |err| switch (err) {
+                error.OutOfMemory => return error.OutOfMemory,
+                error.AppleAPIFailed => return null,
             },
 
             .resources => try std.fs.path.join(arena_alloc, &.{

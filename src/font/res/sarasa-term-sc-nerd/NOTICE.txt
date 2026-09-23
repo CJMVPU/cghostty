@@ -1,0 +1,12 @@
+Sarasa Term SC Nerd — Unhinted Regular
+Version 1.0.27;Nerds 3.3.0
+Source: https://github.com/laishulu/Sarasa-Term-SC-Nerd
+SHA-256: 555f6c00f5a229d18e0ee30e3c96e25e40db433848c86944437408156053a0c7
+
+Copyright notice preserved in the supplied font:
+Copyright (c) 2015-2025, Renzhi Li (aka. Belleve Invis, belleve@typeof.net).
+Portions Copyright (c) 2016 The Inter Project Authors.
+Portions Copyright (c) 2014-2021 Adobe Systems Incorporated (http://www.adobe.com/).
+Portions Copyright (c) 2012 Google Inc.
+
+The unmodified font is redistributed under the accompanying SIL Open Font License 1.1.

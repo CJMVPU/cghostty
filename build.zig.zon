@@ -62,11 +62,6 @@
         // Shader translation
 
         // Fonts
-        .lxgw_wenkai = .{
-            .url = "https://github.com/lxgw/LxgwWenKai/releases/download/v1.522/lxgw-wenkai-v1.522.tar.gz",
-            .hash = "N-V-__8AAPB7cwlDSANmRY1lYEf3qCfnBuDZMLw_nuU-aL4V",
-            .lazy = true,
-        },
         .jetbrains_mono = .{
             .url = "https://deps.files.ghostty.org/JetBrainsMono-2.304.tar.gz",
             .hash = "N-V-__8AAIC5lwAVPJJzxnCAahSvZTIlG-HhtOvnM1uh-66x",
