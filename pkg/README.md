@@ -26,7 +26,7 @@
 
 ## 维护状态与生成文件
 
-默认字体为内置 Sarasa Term SC Nerd 的 Unhinted Regular。字体文件、版本、哈希及许可位于 `src/font/res/sarasa-term-sc-nerd/`；粗体与斜体遵循运行时合成设置。Nerd Font 符号保留为用户自选字体的图标后备；JetBrains Mono 仅用于字体后端测试。
+默认字体为内置 LXGW WenKai Mono 1.522 Medium，使用 `build.zig.zon` 锁定的官方归档及内容哈希；OFL 许可随应用分发。Medium 文件 SHA-256 为 `7a674f448b15a1b3df781c3498973d77f71d270788f7f921080c1344e9d739e1`，与用户提供的文件完全一致。粗体与斜体遵循运行时合成设置。Nerd Font 符号保留为图标后备；JetBrains Mono 仅用于字体后端测试。
 
 版本一致性检查不判断上游维护活跃度，也不替代安全审计。
 

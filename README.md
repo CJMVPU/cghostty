@@ -17,9 +17,9 @@
 
 | 项目 | 默认值 |
 | --- | --- |
-| 字体 | 内置 Sarasa Term SC Nerd（Unhinted） |
+| 字体 | 内置 LXGW WenKai Mono Medium |
 | 字号 | 16 pt |
-| 新窗口 | 111 列 × 33 行 |
+| 新窗口 | 133 列 × 33 行 |
 | 平滑光标 | 开启 |
 
 - 内置 Nerd Font 符号，Emoji 优先使用系统 Apple Color Emoji。
@@ -76,7 +76,7 @@ cursor-effect = false
 
 - **生效时机**：退出并重新启动应用。
 - **运行期间**：新窗口、标签页和分屏沿用启动配置。
-- **默认字体**：`font-family` 未指定时使用内置 Sarasa Term SC Nerd（Unhinted）。
+- **默认字体**：`font-family` 未指定时使用内置 LXGW WenKai Mono Medium；粗体与斜体由渲染器合成。
 - **模板注释**：无需全部启用；示例值不等于默认值。
 
 ### 校验与恢复
@@ -148,5 +148,5 @@ nu macos/build.nu --configuration ReleaseLocal
 ## 许可
 
 - **应用**：[MIT](LICENSE)，保留 Ghostty 上游版权声明。
-- **默认字体**：[Sarasa Term SC Nerd](https://github.com/laishulu/Sarasa-Term-SC-Nerd)，采用 SIL OFL 1.1；许可及版权说明随应用提供。
+- **默认字体**：[LXGW WenKai Mono](https://github.com/lxgw/LxgwWenKai)，采用 SIL OFL 1.1；许可及版权说明随应用提供。
 - **其他依赖**：遵循各自许可，见 [pkg/README.md](pkg/README.md)。

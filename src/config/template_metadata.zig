@@ -20,7 +20,7 @@ pub const entries = [_]Entry{
     .{ .key = .@"shell-integration-features", .group = 1, .zh = "Shell 集成功能集合", .en = "Shell integration features" },
     .{ .key = .@"macos-hidden", .group = 1, .zh = "应用启动时隐藏策略", .en = "Application visibility on launch" },
     .{ .key = .@"macos-dock-drop-behavior", .group = 1, .zh = "文件拖到 Dock 图标后的行为", .en = "Action for files dropped onto the Dock icon" },
-    .{ .key = .@"font-family", .group = 2, .zh = "字体与后备字体", .en = "Font family", .example = "Menlo", .note = "可重复添加后备字体；先写空值可清除原列表。留空使用内置 Sarasa Term SC Nerd（Unhinted Regular），粗体和斜体遵循合成样式设置。 / Repeat for fallback fonts; an empty entry clears the list. Unset uses bundled Sarasa Term SC Nerd (Unhinted Regular); bold/italic follow synthetic style settings." },
+    .{ .key = .@"font-family", .group = 2, .zh = "字体与后备字体", .en = "Font family", .example = "Menlo", .note = "可重复添加后备字体；先写空值可清除原列表。留空使用内置 LXGW WenKai Mono（Medium），粗体和斜体遵循合成样式设置。 / Repeat for fallback fonts; an empty entry clears the list. Unset uses bundled LXGW WenKai Mono (Medium); bold/italic follow synthetic style settings." },
     .{ .key = .@"font-family-bold", .group = 2, .zh = "粗体字体", .en = "Font family bold", .example = "Menlo" },
     .{ .key = .@"font-family-italic", .group = 2, .zh = "斜体字体", .en = "Font family italic", .example = "Menlo" },
     .{ .key = .@"font-family-bold-italic", .group = 2, .zh = "粗斜体字体", .en = "Font family bold italic", .example = "Menlo" },

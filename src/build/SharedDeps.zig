@@ -414,6 +414,13 @@ pub fn add(
 
     // Fonts
     {
+        if (b.lazyDependency("lxgw_wenkai", .{})) |wenkai| {
+            step.root_module.addAnonymousImport(
+                "lxgw_wenkai_mono",
+                .{ .root_source_file = wenkai.path("LXGWWenKaiMono-Medium.ttf") },
+            );
+        }
+
         // JetBrains Mono
         if (b.lazyDependency("jetbrains_mono", .{})) |jb_mono| {
             step.root_module.addAnonymousImport(

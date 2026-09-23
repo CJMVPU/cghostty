@@ -149,7 +149,7 @@ pub fn ref(
     return .{ gop.key_ptr.*, gop.value_ptr.grid };
 }
 
-/// The bundled default face is Regular. Synthesize styles using the same
+/// The bundled default face is Medium. Synthesize styles using the same
 /// user-controlled policy as configured fonts, without storing duplicate TTFs.
 fn bundledFace(
     self: *SharedGridSet,
@@ -157,7 +157,7 @@ fn bundledFace(
     opts: font.face.Options,
     synthetic: Config.FontSyntheticStyle,
 ) !font.Face {
-    var face = try font.Face.init(self.font_lib, font.embedded.default_regular, opts);
+    var face = try font.Face.init(self.font_lib, font.embedded.default_face, opts);
     errdefer face.deinit();
     const enabled = switch (style) {
         .regular => false,
@@ -213,7 +213,7 @@ fn collection(
             const style = @field(Style, field.name);
             for (key.descriptorsForStyle(style)) |desc| {
                 if (std.ascii.eqlIgnoreCase(desc.family orelse "", font.embedded.default_family) and
-                    (desc.style == null or std.ascii.eqlIgnoreCase(desc.style.?, "Regular")))
+                    (desc.style == null or std.ascii.eqlIgnoreCase(desc.style.?, font.embedded.default_style)))
                 {
                     const requested: Style = if (desc.bold and desc.italic) .bold_italic else if (desc.bold) .bold else if (desc.italic) .italic else .regular;
                     var face = try self.bundledFace(requested, load_options.faceOptions(), config.@"font-synthetic-style");
@@ -812,19 +812,19 @@ test SharedGridSet {
     try testing.expectEqual(@as(usize, 0), set.count());
 }
 
-test "bundled Sarasa resolves all styles and preserves configured fonts" {
+test "bundled WenKai resolves all styles and preserves configured fonts" {
     const testing = std.testing;
     const alloc = testing.allocator;
     var set = try SharedGridSet.init(alloc);
     defer set.deinit();
 
-    for ([_][]const u8{ "", "font-family = Sarasa Term SC Nerd\nfont-style = Regular\n", "font-family = Monaco\n", "font-synthetic-style = false\n" }, 0..) |data, scenario| {
+    for ([_][]const u8{ "", "font-family = LXGW WenKai Mono\nfont-style = Medium\n", "font-family = Monaco\n", "font-synthetic-style = false\n" }, 0..) |data, scenario| {
         var cfg = try Config.default(alloc);
         defer cfg.deinit();
         try cfg.loadData(alloc, data, "/tmp/cghostty-font-test.ghostty");
         try cfg.finalize();
         try testing.expectEqual(@as(f32, 16), cfg.@"font-size");
-        try testing.expectEqual(@as(u32, 111), cfg.@"window-width");
+        try testing.expectEqual(@as(u32, 133), cfg.@"window-width");
         try testing.expectEqual(@as(u32, 33), cfg.@"window-height");
         var derived = try DerivedConfig.init(alloc, &cfg);
         defer derived.deinit();
@@ -836,7 +836,7 @@ test "bundled Sarasa resolves all styles and preserves configured fonts" {
                 const face = try grid.resolver.collection.getFace(index);
                 var name_buf: [256]u8 = undefined;
                 const name = try face.name(&name_buf);
-                const expected = if (scenario == 2 and cp == 'A') "Monaco" else "Sarasa";
+                const expected = if (scenario == 2 and cp == 'A') "Monaco" else "LXGW WenKai Mono";
                 try testing.expect(std.mem.indexOf(u8, name, expected) != null);
             }
         }
@@ -894,4 +894,48 @@ test "Key includes style policies and compares content rather than hashes" {
     try testing.expect(original.eql(equal));
     equal.style_offsets[0] = 1;
     try testing.expect(!original.eql(equal));
+}
+
+test "bundled style pixels remain distinct after collection sizing" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    var set = try SharedGridSet.init(alloc);
+    defer set.deinit();
+    for ([_][]const u8{ "", "font-family = LXGW WenKai Mono\nfont-style = Medium\n", "font-synthetic-style = false\n" }, 0..) |data, scenario| {
+        var cfg = try Config.default(alloc);
+        defer cfg.deinit();
+        try cfg.loadData(alloc, data, "/tmp/cghostty-style-test.ghostty");
+        try cfg.finalize();
+        var derived = try DerivedConfig.init(alloc, &cfg);
+        defer derived.deinit();
+        const key, const grid = try set.ref(&derived, .{ .points = 16 });
+        defer set.deref(key);
+        for ([_]f32{ 16, 24, 12 }) |points| {
+            // Collection.add normalizes the initial size too; exercise both
+            // first use and later resizes through the same collection.
+            if (points != 16) try grid.resolver.collection.setSize(.{ .points = points });
+            const primary = try grid.resolver.collection.getFace(.{ .idx = 0 });
+            const metrics = Metrics.calc(primary.getMetrics());
+            for ([_]u32{ 'M', '中' }) |cp| {
+                var pixels: [4]u64 = undefined;
+                for (std.meta.tags(Style), 0..) |style, i| {
+                    const index = (try grid.getIndex(alloc, cp, style, .text)).?;
+                    const face = try grid.resolver.collection.getFace(index);
+                    var atlas = try font.Atlas.init(alloc, 128, .grayscale);
+                    defer atlas.deinit(alloc);
+                    _ = try face.renderGlyph(alloc, &atlas, face.glyphIndex(cp).?, .{ .grid_metrics = metrics });
+                    pixels[i] = std.hash.Wyhash.hash(0, atlas.data);
+                }
+                for (pixels, 0..) |value, i| {
+                    for (pixels[i + 1 ..]) |other| {
+                        if (scenario < 2) {
+                            try testing.expect(value != other);
+                        } else {
+                            try testing.expectEqual(value, other);
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

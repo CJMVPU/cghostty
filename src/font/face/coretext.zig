@@ -174,7 +174,10 @@ pub const Face = struct {
     pub fn syntheticItalic(self: *const Face, opts: font.face.Options) !Face {
         const ct_font = try self.font.copyWithAttributes(0.0, &italic_skew, null);
         errdefer ct_font.release();
-        return try initFont(ct_font, opts);
+        var face = try initFont(ct_font, opts);
+        if (self.synthetic_bold != null)
+            face.synthetic_bold = syntheticBoldWidth(opts.size.points);
+        return face;
     }
 
     /// Return a new face that is the same as this but applies a synthetic
@@ -185,17 +188,14 @@ pub const Face = struct {
         errdefer ct_font.release();
         var face = try initFont(ct_font, opts);
 
-        // To determine our synthetic bold line width we get a multiplier
-        // from the font size in points. This is a heuristic that is based
-        // on the fact that a line width of 1 looks good to me at a certain
-        // point size. We want to scale that up roughly linearly with the
-        // font size.
-        const points_f64: f64 = @floatCast(opts.size.points);
-        const line_width = @max(points_f64 / 14.0, 1);
-        // log.debug("synthetic bold line width={}", .{line_width});
-        face.synthetic_bold = line_width;
+        face.synthetic_bold = syntheticBoldWidth(opts.size.points);
 
         return face;
+    }
+
+    fn syntheticBoldWidth(points: f32) f64 {
+        // Scale the stroke with point size, with a minimum visible width.
+        return @max(@as(f64, points) / 14.0, 1);
     }
 
     /// Returns the font name. If allocation is required, buf will be used,
@@ -215,7 +215,11 @@ pub const Face = struct {
     /// for clearing any glyph caches, font atlas data, etc.
     pub fn setSize(self: *Face, opts: font.face.Options) !void {
         // We just create a copy and replace ourself
-        const face = try initFontCopy(self.font, opts);
+        var face = try initFontCopy(self.font, opts);
+        // CoreText copies the italic transform, but the synthetic bold stroke
+        // belongs to our Face and must be restored at the new point size.
+        if (self.synthetic_bold != null)
+            face.synthetic_bold = syntheticBoldWidth(opts.size.points);
         self.deinit();
         self.* = face;
     }
@@ -248,7 +252,8 @@ pub const Face = struct {
         // Initialize a font based on these attributes.
         const ct_font = try self.font.copyWithAttributes(0, null, desc);
         errdefer ct_font.release();
-        const face = try initFont(ct_font, new_opts);
+        var face = try initFont(ct_font, new_opts);
+        face.synthetic_bold = self.synthetic_bold;
         self.deinit();
         self.* = face;
     }
@@ -1119,6 +1124,27 @@ test "variable set variation" {
             .{ .grid_metrics = font.Metrics.calc(face.getMetrics()) },
         );
     }
+}
+
+test "synthetic bold survives italic composition and variation changes" {
+    const testing = std.testing;
+    var lib = try font.Library.init(testing.allocator);
+    defer lib.deinit();
+    const opts: font.face.Options = .{ .size = .{ .points = 16 } };
+    var regular = try Face.init(lib, font.embedded.variable, opts);
+    defer regular.deinit();
+    var bold = try regular.syntheticBold(opts);
+    defer bold.deinit();
+    var combined = try bold.syntheticItalic(opts);
+    defer combined.deinit();
+    try testing.expectEqual(bold.synthetic_bold.?, combined.synthetic_bold.?);
+    try combined.setVariations(&.{
+        .{ .id = font.face.Variation.Id.init("wght"), .value = 500 },
+    }, opts);
+    try testing.expectEqual(bold.synthetic_bold.?, combined.synthetic_bold.?);
+    try combined.setSize(.{ .size = .{ .points = 32 } });
+    try testing.expectApproxEqAbs(bold.synthetic_bold.? * 2, combined.synthetic_bold.?, 0.001);
+    try testing.expectEqual(@as(?f64, null), regular.synthetic_bold);
 }
 
 test "svg font table" {

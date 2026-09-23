@@ -85,7 +85,7 @@ fn runArgs(alloc_gpa: Allocator, argsIter: anytype) !u8 {
     var families: std.ArrayList([]const u8) = .empty;
     var map: std.StringHashMap(std.ArrayListUnmanaged([]const u8)) = .init(alloc);
 
-    // Discover installed families alongside the built-in Regular face.
+    // Discover installed families alongside the built-in default face.
     var font_lib = try font.Library.init(alloc);
     defer font_lib.deinit();
     var disco = font.Discover.init(font_lib);
@@ -122,7 +122,7 @@ fn runArgs(alloc_gpa: Allocator, argsIter: anytype) !u8 {
     }
 
     if ((config.family == null or std.ascii.eqlIgnoreCase(config.family.?, font.embedded.default_family)) and
-        (config.style == null or std.ascii.eqlIgnoreCase(config.style.?, "Regular")) and
+        (config.style == null or std.ascii.eqlIgnoreCase(config.style.?, font.embedded.default_style)) and
         !config.bold and !config.italic)
     {
         const gop = try map.getOrPut(font.embedded.default_family);
@@ -130,7 +130,7 @@ fn runArgs(alloc_gpa: Allocator, argsIter: anytype) !u8 {
             try families.append(alloc, font.embedded.default_family);
             gop.value_ptr.* = .empty;
         }
-        try gop.value_ptr.append(alloc, "SarasaTermSCNerd-Regular (built-in)");
+        try gop.value_ptr.append(alloc, "LXGWWenKaiMono-Medium (built-in)");
     }
 
     // Sort our keys.

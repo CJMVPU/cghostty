@@ -2,8 +2,7 @@
 
 This project uses several fonts which fall under the SIL Open Font License (OFL-1.1), MIT License, and BSD 2-Clause License:
 
-- Sarasa Term SC Nerd, Unhinted Regular (OFL-1.1)
-  - [Version, source and checksum](sarasa-term-sc-nerd/README.md), [license](sarasa-term-sc-nerd/LICENSE.txt), [copyright notice](sarasa-term-sc-nerd/NOTICE.txt)
+- LXGW WenKai Mono 1.522 Medium (OFL-1.1), fetched from the pinned official archive in `build.zig.zon`. Its license ships with the app.
 - Code New Roman (OFL-1.1)
   - [© 2014 Sam Radian. All Rights Reserved.](https://github.com/chrissimpkins/codeface/blob/master/fonts/code-new-roman/license.txt)
 - Geist Mono (OFL-1.1)

@@ -6,8 +6,9 @@
 //! redistribution and include their license as necessary.
 
 /// Built-in terminal font, loaded directly without system installation.
-pub const default_family = "Sarasa Term SC Nerd";
-pub const default_regular = @embedFile("res/sarasa-term-sc-nerd/SarasaTermSCNerd-Regular.ttf");
+pub const default_family = "LXGW WenKai Mono";
+pub const default_style = "Medium";
+pub const default_face = @embedFile("lxgw_wenkai_mono");
 
 /// Variable fonts used by font backend tests.
 pub const variable = @embedFile("jetbrains_mono_variable");

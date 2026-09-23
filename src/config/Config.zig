@@ -60,7 +60,7 @@ const log = std.log.scoped(.config);
 const c = @import("posix_c");
 
 /// The font families to use.
-/// Unset uses bundled Sarasa Term SC Nerd (Unhinted Regular). Bold and
+/// Unset uses bundled LXGW WenKai Mono (Medium). Bold and
 /// italic variants follow `font-synthetic-style`.
 ///
 /// You can generate the list of valid values using the CLI:
@@ -2020,7 +2020,7 @@ keybind: Keybinds = .{},
 /// This setting is currently only supported on macOS.
 @"window-colorspace": WindowColorspace = .srgb,
 
-/// The initial window size in terminal grid cells: 111 columns by 33 rows.
+/// The initial window size in terminal grid cells: 133 columns by 33 rows.
 /// Both effective values must be positive. Setting either value to zero
 /// leaves the initial size to the native app. An omitted value keeps its
 /// built-in default, so either dimension can be overridden independently.
@@ -2040,7 +2040,7 @@ keybind: Keybinds = .{},
 ///
 /// Windows smaller than 10 wide by 4 high are not allowed.
 @"window-height": u32 = 33,
-@"window-width": u32 = 111,
+@"window-width": u32 = 133,
 
 /// The starting window position. This position is in pixels and is relative
 /// to the top-left corner of the primary monitor. Both values must be set to take
