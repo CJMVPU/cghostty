@@ -37,12 +37,6 @@ pub const Options = struct {
     @"terminal-rows": u16 = 80,
     @"terminal-cols": u16 = 120,
 
-    /// Enable opt-in continuation tracking on the stream.
-    @"continuation-enabled": bool = false,
-
-    /// Maximum continuation suffix retained when tracking is enabled.
-    @"continuation-max-bytes": usize = 1024 * 1024,
-
     /// Pre-generated data from ghostty-gen. If this is "-" then
     /// we will read stdin. If this is unset, then we will
     /// do nothing (benchmark is a noop). It'd be more unixy to
@@ -71,10 +65,6 @@ pub fn create(
     ptr.stream = .init(.{
         .allocator = alloc,
         .handler = .init(&ptr.terminal),
-        .continuation_max_bytes = if (opts.@"continuation-enabled")
-            opts.@"continuation-max-bytes"
-        else
-            null,
     });
 
     return ptr;
@@ -156,12 +146,4 @@ test TerminalStream {
 
     const bench = impl.benchmark();
     _ = try bench.run(.once);
-
-    const tracked: *TerminalStream = try .create(alloc, .{
-        .@"continuation-enabled" = true,
-    });
-    defer tracked.destroy(alloc);
-
-    const tracked_bench = tracked.benchmark();
-    _ = try tracked_bench.run(.once);
 }

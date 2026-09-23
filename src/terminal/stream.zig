@@ -16,7 +16,6 @@ const kitty = @import("kitty.zig");
 const modes = @import("modes.zig");
 const osc = @import("osc.zig");
 const sgr = @import("sgr.zig");
-const continuationpkg = @import("stream_continuation.zig");
 const UTF8Decoder = @import("UTF8Decoder.zig");
 const MouseShape = @import("mouse.zig").Shape;
 
@@ -480,7 +479,6 @@ pub fn Stream(comptime H: type) type {
         handler: Handler,
         parser: Parser,
         utf8decoder: UTF8Decoder,
-        continuation: ?continuationpkg.Tracker,
 
         pub const Options = struct {
             /// The handler initial value, must be set.
@@ -491,15 +489,6 @@ pub fn Stream(comptime H: type) type {
             /// that will be dropped in this case such as OSC 52 clipboard
             /// ops.
             allocator: ?Allocator = null,
-
-            /// Maximum size in bytes of the continuation suffix. If this is
-            /// null or zero then continuation tracking is disabled. This is
-            /// only applied when `allocator` is non-null; without an allocator
-            /// continuation tracking is disabled. Feeding this continuation
-            /// suffix into an equivalent stream at ground reconstructs the
-            /// unfinished state without repeating committed terminal effects.
-            /// Continuation tracking is only supported by TerminalStream.
-            continuation_max_bytes: ?usize = null,
         };
 
         /// Initialize a stream. Without an allocator, operations that require
@@ -516,81 +505,23 @@ pub fn Stream(comptime H: type) type {
             var parser: Parser = .init();
             if (options.allocator) |alloc| parser.osc_parser.alloc = alloc;
 
-            // Initialize the continuation tracker if one is requested.
-            var tracker: ?continuationpkg.Tracker = null;
-            if (options.allocator) |alloc| {
-                if (options.continuation_max_bytes) |max_bytes| {
-                    if (max_bytes > 0) tracker = .init(alloc, max_bytes);
-                }
-            }
-
             return .{
                 .handler = options.handler,
                 .parser = parser,
                 .utf8decoder = .{},
-                .continuation = tracker,
             };
         }
 
         pub fn deinit(self: *Self) void {
-            if (self.continuation) |*tracker| tracker.deinit();
             self.parser.deinit();
             self.handler.deinit();
         }
 
-        /// Write the current continuation suffix directly to a caller-owned
-        /// writer. The caller must pause and serialize access to this Stream.
-        pub fn writeContinuation(
-            self: *const Self,
-            writer: *std.Io.Writer,
-        ) (std.Io.Writer.Error || error{
-            ContinuationDisabled,
-            ContinuationUnavailable,
-        })!void {
-            const tracker = self.continuation orelse
-                return error.ContinuationDisabled;
-            if (tracker.broken)
-                return error.ContinuationUnavailable;
-            try tracker.write(writer);
-        }
-
-        /// True when no continuation suffix is needed to reproduce the
-        /// stream's current parsing state.
+        /// True when neither the VT parser nor the UTF-8 decoder has pending input.
         pub inline fn ground(self: *const Self) bool {
             // Parser ground alone is not sufficient because the UTF-8
             // decoder may have some state.
             return self.parser.state == .ground and self.utf8decoder.state == 0;
-        }
-
-        /// Update the continuation suffix after one complete feed call.
-        /// Must only be called when tracking is enabled.
-        fn trackContinuation(self: *Self, input: []const u8) void {
-            const tracker = &self.continuation.?;
-
-            // If we're in a ground state, we have no continuation suffix
-            // to track by definition.
-            if (self.ground()) {
-                tracker.reset();
-                return;
-            }
-
-            // Retain the part of this feed needed to replay the unfinished
-            // state. When the parser is grounded here, the feed must have
-            // ended inside a UTF-8 codepoint instead, because the ground
-            // check above covers both state machines.
-            tracker.append(
-                if (self.parser.state != .ground) .vt else .utf8,
-                input,
-            );
-        }
-
-        /// Process a string of characters.
-        pub inline fn nextSlice(self: *Self, input: []const u8) void {
-            self.nextSliceUntracked(input);
-
-            // Continuation tracking is opt-in and this branch predicts
-            // perfectly, so disabled streams pay nothing else here.
-            if (self.continuation != null) self.trackContinuation(input);
         }
 
         /// Process a string of characters, but only the shortest prefix
@@ -612,19 +543,6 @@ pub fn Stream(comptime H: type) type {
             self: *Self,
             input: []const u8,
         ) ?usize {
-            const consumed = self.nextSliceUntilGroundUntracked(input);
-            const consumed_len = consumed orelse input.len;
-            if (self.continuation != null and consumed_len > 0) {
-                self.trackContinuation(input[0..consumed_len]);
-            }
-
-            return consumed;
-        }
-
-        inline fn nextSliceUntilGroundUntracked(
-            self: *Self,
-            input: []const u8,
-        ) ?usize {
             if (self.ground()) return 0;
 
             // Process UTF-8 if we're within that state.
@@ -643,14 +561,15 @@ pub fn Stream(comptime H: type) type {
             return if (self.ground()) offset else null;
         }
 
-        inline fn nextSliceUntracked(self: *Self, input: []const u8) void {
+        /// Process a string of characters.
+        pub inline fn nextSlice(self: *Self, input: []const u8) void {
             // Byte-at-a-time parsing in debug mode only. Even without
             // SIMD support (build_options.simd == false, e.g. wasm), the
             // batched path below is much faster than per-byte dispatch
             // because it decodes UTF-8 in bulk (via scalar fallbacks) and
             // hands printable runs to the handler as print_slice actions.
             if (comptime debug) {
-                for (input) |c| self.nextUntracked(c);
+                for (input) |c| self.next(c);
                 return;
             }
 
@@ -1102,11 +1021,6 @@ pub fn Stream(comptime H: type) type {
         /// operation that can't use SIMD. Prefer nextSlice if you can and
         /// try to get multiple bytes at once.
         pub inline fn next(self: *Self, c: u8) void {
-            self.nextUntracked(c);
-            if (self.continuation != null) self.trackContinuation(&.{c});
-        }
-
-        inline fn nextUntracked(self: *Self, c: u8) void {
             // The scalar path can be responsible for decoding UTF-8.
             if (self.parser.state == .ground) {
                 self.nextUtf8(c);
@@ -4672,7 +4586,7 @@ test "stream: apc vector boundaries match scalar path" {
     };
 }
 
-const ContinuationTestHandler = struct {
+const BoundaryTestHandler = struct {
     committed: usize = 0,
     apc_active: bool = false,
     apc_buf: [256]u8 = undefined,
@@ -4718,7 +4632,7 @@ const ContinuationTestHandler = struct {
     }
 };
 
-const ContinuationNullHandler = struct {
+const BoundaryNullHandler = struct {
     pub fn deinit(_: *@This()) void {}
 
     pub fn vt(
@@ -4729,7 +4643,7 @@ const ContinuationNullHandler = struct {
 };
 
 test "stream: nextSliceUntilGround stops at the earliest boundary" {
-    const S = Stream(ContinuationTestHandler);
+    const S = Stream(BoundaryTestHandler);
     var stream: S = .init(.{ .handler = .{} });
     defer stream.deinit();
 
@@ -4752,7 +4666,7 @@ test "stream: nextSliceUntilGround stops at the earliest boundary" {
 }
 
 test "stream: nextSliceUntilGround consumes all input without a boundary" {
-    const S = Stream(ContinuationNullHandler);
+    const S = Stream(BoundaryNullHandler);
     var stream: S = .init(.{ .handler = .{} });
     defer stream.deinit();
 
@@ -4779,7 +4693,7 @@ test "stream: nextSliceUntilGround consumes all input without a boundary" {
 }
 
 test "stream: nextSliceUntilGround handles UTF-8 boundaries" {
-    const S = Stream(ContinuationTestHandler);
+    const S = Stream(BoundaryTestHandler);
 
     // A completed codepoint is committed synchronously, and the printable
     // suffix remains untouched.
@@ -4819,7 +4733,7 @@ test "stream: nextSliceUntilGround handles UTF-8 boundaries" {
 }
 
 test "stream: nextSliceUntilGround handles aborts and bulk strings" {
-    const S = Stream(ContinuationTestHandler);
+    const S = Stream(BoundaryTestHandler);
 
     var aborted: S = .init(.{ .handler = .{} });
     defer aborted.deinit();
@@ -4842,549 +4756,4 @@ test "stream: nextSliceUntilGround handles aborts and bulk strings" {
         apc.nextSliceUntilGround(&input),
     );
     try testing.expect(apc.ground());
-}
-
-test "stream: nextSliceUntilGround tracks only the consumed prefix" {
-    const S = Stream(ContinuationNullHandler);
-    var stream: S = .init(.{
-        .allocator = testing.allocator,
-        .handler = .{},
-        .continuation_max_bytes = 64,
-    });
-    defer stream.deinit();
-
-    stream.nextSlice("\x1b[31");
-    try testing.expectEqual(
-        @as(?usize, 1),
-        stream.nextSliceUntilGround("mX\x1b["),
-    );
-
-    var buf: [64]u8 = undefined;
-    var writer: std.Io.Writer = .fixed(&buf);
-    try stream.writeContinuation(&writer);
-    try testing.expectEqual(@as(usize, 0), writer.buffered().len);
-
-    stream.nextSlice("\x1b[");
-    try testing.expectEqual(
-        @as(?usize, null),
-        stream.nextSliceUntilGround("123"),
-    );
-    var pending_writer: std.Io.Writer = .fixed(&buf);
-    try stream.writeContinuation(&pending_writer);
-    try testing.expectEqualStrings("\x1b[123", pending_writer.buffered());
-}
-
-test "stream: continuation lifecycle" {
-    const S = Stream(ContinuationTestHandler);
-
-    var disabled: S = .init(.{ .handler = .{} });
-    defer disabled.deinit();
-    var disabled_buf: [1]u8 = undefined;
-    var disabled_writer: std.Io.Writer = .fixed(&disabled_buf);
-    try testing.expectError(
-        error.ContinuationDisabled,
-        disabled.writeContinuation(&disabled_writer),
-    );
-
-    var zero_capacity: S = .init(.{
-        .handler = .{},
-        .continuation_max_bytes = 0,
-    });
-    defer zero_capacity.deinit();
-    var zero_capacity_buf: [1]u8 = undefined;
-    var zero_capacity_writer: std.Io.Writer = .fixed(&zero_capacity_buf);
-    try testing.expectError(
-        error.ContinuationDisabled,
-        zero_capacity.writeContinuation(&zero_capacity_writer),
-    );
-    var no_allocator: S = .init(.{
-        .handler = .{},
-        .continuation_max_bytes = 64,
-    });
-    defer no_allocator.deinit();
-    var no_allocator_buf: [1]u8 = undefined;
-    var no_allocator_writer: std.Io.Writer = .fixed(&no_allocator_buf);
-    try testing.expectError(
-        error.ContinuationDisabled,
-        no_allocator.writeContinuation(&no_allocator_writer),
-    );
-
-    var tracked = S.init(.{
-        .allocator = testing.allocator,
-        .handler = .{},
-        .continuation_max_bytes = 64,
-    });
-    defer tracked.deinit();
-
-    tracked.nextSlice("complete input");
-    var empty_buf: [1]u8 = undefined;
-    var empty_writer: std.Io.Writer = .fixed(&empty_buf);
-    try tracked.writeContinuation(&empty_writer);
-    try testing.expectEqual(@as(usize, 0), empty_writer.end);
-
-    tracked.nextSlice("\x1b[");
-    var short_buf: [1]u8 = undefined;
-    var short_writer: std.Io.Writer = .fixed(&short_buf);
-    try testing.expectError(
-        error.WriteFailed,
-        tracked.writeContinuation(&short_writer),
-    );
-
-    var failing = testing.FailingAllocator.init(testing.allocator, .{
-        .fail_index = 0,
-    });
-    var failing_stream = Stream(ContinuationNullHandler).init(.{
-        .allocator = failing.allocator(),
-        .handler = .{},
-        .continuation_max_bytes = 64,
-    });
-    defer failing_stream.deinit();
-    failing_stream.nextSlice("\x1b[");
-    var unavailable_buf: [1]u8 = undefined;
-    var unavailable_writer: std.Io.Writer = .fixed(&unavailable_buf);
-    try testing.expectError(
-        error.ContinuationUnavailable,
-        failing_stream.writeContinuation(&unavailable_writer),
-    );
-}
-
-test "stream: continuation suffixes are replay safe" {
-    const Case = struct {
-        input: []const u8,
-        expected: []const u8,
-    };
-    const cases = [_]Case{
-        .{ .input = "text\x1b", .expected = "\x1b" },
-        .{ .input = "text\x1b[12;", .expected = "\x1b[12;" },
-        .{ .input = "text\x1b[1\x07;2", .expected = "\x1b[1;2" },
-        .{ .input = "text\x1b]2;hello", .expected = "\x1b]2;hello" },
-        .{ .input = "text\x1b_Gabc", .expected = "\x1b_Gabc" },
-        .{ .input = "text\x1bP+qabc", .expected = "\x1bP+qabc" },
-        .{ .input = "text\xE0\xA0\xF0", .expected = "\xF0" },
-        .{ .input = "text\x1b[12\x1b", .expected = "\x1b" },
-        .{
-            .input = "text\x1b[12\x9D2;title",
-            .expected = "\x1b[12\x9D2;title",
-        },
-    };
-
-    const S = Stream(ContinuationTestHandler);
-    for (cases) |case| {
-        var stream = S.init(.{
-            .allocator = testing.allocator,
-            .handler = .{},
-            .continuation_max_bytes = 1024,
-        });
-        defer stream.deinit();
-        stream.nextSlice(case.input);
-
-        var buf: [1024]u8 = undefined;
-        var writer: std.Io.Writer = .fixed(&buf);
-        try stream.writeContinuation(&writer);
-        try testing.expectEqualStrings(case.expected, writer.buffered());
-    }
-}
-
-test "stream: continuation reconstructs every unfinished VT state" {
-    const Case = struct {
-        input: []const u8,
-        state: Parser.State,
-    };
-    const cases = [_]Case{
-        .{ .input = "\x1b", .state = .escape },
-        .{ .input = "\x1b(", .state = .escape_intermediate },
-        .{ .input = "\x1b[", .state = .csi_entry },
-        .{ .input = "\x1b[1", .state = .csi_param },
-        .{ .input = "\x1b[1$", .state = .csi_intermediate },
-        .{ .input = "\x1b[:", .state = .csi_ignore },
-        .{ .input = "\x1bP", .state = .dcs_entry },
-        .{ .input = "\x1bP1", .state = .dcs_param },
-        .{ .input = "\x1bP1$", .state = .dcs_intermediate },
-        .{ .input = "\x1bP1q", .state = .dcs_passthrough },
-        .{ .input = "\x1bP:", .state = .dcs_ignore },
-        .{ .input = "\x1b]2;title", .state = .osc_string },
-        .{ .input = "\x1b_Gpayload", .state = .sos_pm_apc_string },
-    };
-    const S = Stream(ContinuationTestHandler);
-
-    for (cases) |case| {
-        var source = S.init(.{
-            .allocator = testing.allocator,
-            .handler = .{},
-            .continuation_max_bytes = 1024,
-        });
-        defer source.deinit();
-        source.nextSlice(case.input);
-        try testing.expectEqual(case.state, source.parser.state);
-
-        var buf: [1024]u8 = undefined;
-        var writer: std.Io.Writer = .fixed(&buf);
-        try source.writeContinuation(&writer);
-
-        var restored = S.init(.{
-            .allocator = testing.allocator,
-            .handler = .{},
-            .continuation_max_bytes = 1024,
-        });
-        defer restored.deinit();
-        restored.nextSlice(writer.buffered());
-        try testing.expectEqual(@as(usize, 0), restored.handler.committed);
-        try testing.expectEqual(source.parser.state, restored.parser.state);
-        try testing.expectEqual(source.utf8decoder.state, restored.utf8decoder.state);
-    }
-
-    // Parser ground is still unfinished while the UTF-8 decoder is waiting
-    // for the remaining bytes of a codepoint.
-    var utf8 = S.init(.{
-        .allocator = testing.allocator,
-        .handler = .{},
-        .continuation_max_bytes = 4,
-    });
-    defer utf8.deinit();
-    utf8.next(0xF0);
-    try testing.expectEqual(Parser.State.ground, utf8.parser.state);
-    try testing.expect(utf8.utf8decoder.state != 0);
-    var utf8_buf: [4]u8 = undefined;
-    var utf8_writer: std.Io.Writer = .fixed(&utf8_buf);
-    try utf8.writeContinuation(&utf8_writer);
-    try testing.expectEqualSlices(u8, &.{0xF0}, utf8_writer.buffered());
-}
-
-test "stream: continuation is chunking-independent and idempotent" {
-    const S = Stream(ContinuationTestHandler);
-    const input = "committed\x1b[1\x07;2";
-
-    var bulk = S.init(.{
-        .allocator = testing.allocator,
-        .handler = .{},
-        .continuation_max_bytes = 1024,
-    });
-    defer bulk.deinit();
-    bulk.nextSlice(input);
-
-    var scalar = S.init(.{
-        .allocator = testing.allocator,
-        .handler = .{},
-        .continuation_max_bytes = 1024,
-    });
-    defer scalar.deinit();
-    for (input) |c| scalar.next(c);
-
-    var bulk_buf: [1024]u8 = undefined;
-    var bulk_writer: std.Io.Writer = .fixed(&bulk_buf);
-    try bulk.writeContinuation(&bulk_writer);
-    var scalar_buf: [1024]u8 = undefined;
-    var scalar_writer: std.Io.Writer = .fixed(&scalar_buf);
-    try scalar.writeContinuation(&scalar_writer);
-    try testing.expectEqualStrings(
-        bulk_writer.buffered(),
-        scalar_writer.buffered(),
-    );
-
-    var restored = S.init(.{
-        .allocator = testing.allocator,
-        .handler = .{},
-        .continuation_max_bytes = 1024,
-    });
-    defer restored.deinit();
-    restored.nextSlice(bulk_writer.buffered());
-    try testing.expectEqual(@as(usize, 0), restored.handler.committed);
-
-    var restored_buf: [1024]u8 = undefined;
-    var restored_writer: std.Io.Writer = .fixed(&restored_buf);
-    try restored.writeContinuation(&restored_writer);
-    try testing.expectEqualStrings(
-        bulk_writer.buffered(),
-        restored_writer.buffered(),
-    );
-
-    bulk.handler.committed = 0;
-    restored.handler.committed = 0;
-    bulk.nextSlice("mZ");
-    restored.next('m');
-    restored.next('Z');
-    try testing.expectEqual(bulk.handler.committed, restored.handler.committed);
-}
-
-test "stream: continuation rebuilds APC handler input" {
-    const S = Stream(ContinuationTestHandler);
-    var source = S.init(.{
-        .allocator = testing.allocator,
-        .handler = .{},
-        .continuation_max_bytes = 1024,
-    });
-    defer source.deinit();
-    source.nextSlice("committed\x1b_Gabc");
-
-    var continuation: [1024]u8 = undefined;
-    var writer: std.Io.Writer = .fixed(&continuation);
-    try source.writeContinuation(&writer);
-
-    var restored = S.init(.{
-        .allocator = testing.allocator,
-        .handler = .{},
-        .continuation_max_bytes = 1024,
-    });
-    defer restored.deinit();
-    restored.nextSlice(writer.buffered());
-    try testing.expectEqual(@as(usize, 0), restored.handler.committed);
-    try testing.expect(restored.handler.apc_active);
-    try testing.expectEqualStrings(
-        source.handler.apc_buf[0..source.handler.apc_len],
-        restored.handler.apc_buf[0..restored.handler.apc_len],
-    );
-
-    source.handler.committed = 0;
-    restored.handler.committed = 0;
-    source.nextSlice("\x1b\\");
-    restored.nextSlice("\x1b\\");
-    try testing.expectEqual(source.handler.committed, restored.handler.committed);
-    try testing.expect(!source.handler.apc_active);
-    try testing.expect(!restored.handler.apc_active);
-}
-
-test "stream: continuation cap and recovery" {
-    const S = Stream(ContinuationTestHandler);
-
-    // The raw feed exceeds the cap, but only the unfinished three-byte
-    // CSI suffix is retained.
-    var seeded = S.init(.{
-        .allocator = testing.allocator,
-        .handler = .{},
-        .continuation_max_bytes = 4,
-    });
-    defer seeded.deinit();
-    seeded.nextSlice("committed text\x1b[1");
-    var seeded_buf: [4]u8 = undefined;
-    var seeded_writer: std.Io.Writer = .fixed(&seeded_buf);
-    try seeded.writeContinuation(&seeded_writer);
-    try testing.expectEqualStrings("\x1b[1", seeded_writer.buffered());
-
-    var exceeded = S.init(.{
-        .allocator = testing.allocator,
-        .handler = .{},
-        .continuation_max_bytes = 4,
-    });
-    defer exceeded.deinit();
-    exceeded.nextSlice("\x1b[123");
-    var unavailable_buf: [1]u8 = undefined;
-    var unavailable_writer: std.Io.Writer = .fixed(&unavailable_buf);
-    try testing.expectError(
-        error.ContinuationUnavailable,
-        exceeded.writeContinuation(&unavailable_writer),
-    );
-
-    // Completing the CSI reaches ground and recovers without rebuilding the
-    // Stream. A later unfinished sequence is tracked normally.
-    exceeded.nextSlice("mtext\x1b[");
-    var recovered_buf: [4]u8 = undefined;
-    var recovered_writer: std.Io.Writer = .fixed(&recovered_buf);
-    try exceeded.writeContinuation(&recovered_writer);
-    try testing.expectEqualStrings("\x1b[", recovered_writer.buffered());
-
-    // A fresh ESC seed also recovers broken tracking even when the stream
-    // never reaches ground: the ESC abandons the previous unfinished
-    // state and everything after it is retained.
-    exceeded.nextSlice("\x1b[123");
-    var reexceeded_buf: [1]u8 = undefined;
-    var reexceeded_writer: std.Io.Writer = .fixed(&reexceeded_buf);
-    try testing.expectError(
-        error.ContinuationUnavailable,
-        exceeded.writeContinuation(&reexceeded_writer),
-    );
-    exceeded.nextSlice("\x1b]0;");
-    var seed_buf: [4]u8 = undefined;
-    var seed_writer: std.Io.Writer = .fixed(&seed_buf);
-    try exceeded.writeContinuation(&seed_writer);
-    try testing.expectEqualStrings("\x1b]0;", seed_writer.buffered());
-}
-
-test "stream: continuation spans multiple bulk feeds" {
-    const S = Stream(ContinuationTestHandler);
-
-    // An unfinished APC grows across feeds that contain no new seed.
-    var apc = S.init(.{
-        .allocator = testing.allocator,
-        .handler = .{},
-        .continuation_max_bytes = 1024,
-    });
-    defer apc.deinit();
-    apc.nextSlice("text\x1b_Gab");
-    apc.nextSlice("cd");
-    apc.nextSlice("ef");
-    var apc_buf: [16]u8 = undefined;
-    var apc_writer: std.Io.Writer = .fixed(&apc_buf);
-    try apc.writeContinuation(&apc_writer);
-    try testing.expectEqualStrings("\x1b_Gabcdef", apc_writer.buffered());
-
-    // An incomplete UTF-8 sequence grows across feeds of its
-    // continuation bytes.
-    var utf8 = S.init(.{
-        .allocator = testing.allocator,
-        .handler = .{},
-        .continuation_max_bytes = 1024,
-    });
-    defer utf8.deinit();
-    utf8.nextSlice("text\xF0");
-    utf8.nextSlice("\x9F");
-    var utf8_buf: [4]u8 = undefined;
-    var utf8_writer: std.Io.Writer = .fixed(&utf8_buf);
-    try utf8.writeContinuation(&utf8_writer);
-    try testing.expectEqualSlices(u8, "\xF0\x9F", utf8_writer.buffered());
-
-    // A later feed with its own seed drops everything retained earlier.
-    utf8.nextSlice("\x98\x84 done \x1b[38;5");
-    var seed_buf: [8]u8 = undefined;
-    var seed_writer: std.Io.Writer = .fixed(&seed_buf);
-    try utf8.writeContinuation(&seed_writer);
-    try testing.expectEqualStrings("\x1b[38;5", seed_writer.buffered());
-}
-
-test "stream: continuation exact cap and large unfinished string" {
-    const S = Stream(ContinuationNullHandler);
-
-    var exact = S.init(.{
-        .allocator = testing.allocator,
-        .handler = .{},
-        .continuation_max_bytes = 5,
-    });
-    defer exact.deinit();
-    exact.nextSlice("\x1b[123");
-    var exact_buf: [5]u8 = undefined;
-    var exact_writer: std.Io.Writer = .fixed(&exact_buf);
-    try exact.writeContinuation(&exact_writer);
-    try testing.expectEqualStrings("\x1b[123", exact_writer.buffered());
-
-    const payload_len = 12 * 1024;
-    const input = try testing.allocator.alloc(u8, payload_len);
-    defer testing.allocator.free(input);
-    input[0..3].* = "\x1b_G".*;
-    @memset(input[3..], 'A');
-
-    var large = S.init(.{
-        .allocator = testing.allocator,
-        .handler = .{},
-        .continuation_max_bytes = payload_len,
-    });
-    defer large.deinit();
-    large.nextSlice(input);
-    const large_buf = try testing.allocator.alloc(u8, payload_len);
-    defer testing.allocator.free(large_buf);
-    var large_writer: std.Io.Writer = .fixed(large_buf);
-    try large.writeContinuation(&large_writer);
-    try testing.expectEqualSlices(u8, input, large_writer.buffered());
-}
-
-test "stream: continuation allocation failure recovers" {
-    var failing = testing.FailingAllocator.init(testing.allocator, .{});
-    const alloc = failing.allocator();
-    const S = Stream(ContinuationNullHandler);
-    var stream = S.init(.{
-        .allocator = alloc,
-        .handler = .{},
-        .continuation_max_bytes = 16 * 1024,
-    });
-    defer stream.deinit();
-
-    var input = try testing.allocator.alloc(u8, 12 * 1024);
-    defer testing.allocator.free(input);
-    input[0..2].* = "\x1b[".*;
-    @memset(input[2..], '1');
-
-    failing.fail_index = failing.alloc_index;
-    stream.nextSlice(input);
-    var unavailable_buf: [1]u8 = undefined;
-    var unavailable_writer: std.Io.Writer = .fixed(&unavailable_buf);
-    try testing.expectError(
-        error.ContinuationUnavailable,
-        stream.writeContinuation(&unavailable_writer),
-    );
-
-    failing.fail_index = std.math.maxInt(usize);
-    stream.next('m');
-    var recovered_buf: [1]u8 = undefined;
-    var recovered_writer: std.Io.Writer = .fixed(&recovered_buf);
-    try stream.writeContinuation(&recovered_writer);
-    try testing.expectEqual(@as(usize, 0), recovered_writer.end);
-}
-
-test "stream: continuation every-byte cuts preserve future behavior" {
-    const corpora = [_][]const u8{
-        "plain \xF0\x9F\x98\x84 utf8",
-        "bad \xE0\xA0\xF0\x9F\x98\x84 utf8",
-        "\x1b[1\x07;2mstyled\x1b[0m",
-        "\x1b]2;window title\x1b\\text",
-        "\x1bP$qm\x1b\\text",
-        "\x1b_Ga=q;payload\x1b\\text",
-        "\x1b_25a1;s\x1b\\text",
-        "\x1b]2;first\x1b\\\x1b_Gsecond",
-        "\x1b[12\x9D2;title\x1b\\text",
-        "\x1b[12\x18text\x1b[1\x1Atext",
-    };
-    const S = Stream(ContinuationTestHandler);
-
-    for (corpora) |corpus| for (0..corpus.len + 1) |cut| {
-        var source = S.init(.{
-            .allocator = testing.allocator,
-            .handler = .{},
-            .continuation_max_bytes = 64 * 1024,
-        });
-        defer source.deinit();
-        source.nextSlice(corpus[0..cut]);
-
-        var continuation: [64 * 1024]u8 = undefined;
-        var continuation_writer: std.Io.Writer = .fixed(&continuation);
-        try source.writeContinuation(&continuation_writer);
-
-        var restored = S.init(.{
-            .allocator = testing.allocator,
-            .handler = .{},
-            .continuation_max_bytes = 64 * 1024,
-        });
-        defer restored.deinit();
-        restored.nextSlice(continuation_writer.buffered());
-        try testing.expectEqual(@as(usize, 0), restored.handler.committed);
-        try testing.expectEqual(source.handler.apc_active, restored.handler.apc_active);
-        try testing.expectEqual(source.handler.dcs_active, restored.handler.dcs_active);
-        if (source.handler.apc_active) {
-            try testing.expectEqualStrings(
-                source.handler.apc_buf[0..source.handler.apc_len],
-                restored.handler.apc_buf[0..restored.handler.apc_len],
-            );
-        }
-
-        var reexport: [64 * 1024]u8 = undefined;
-        var reexport_writer: std.Io.Writer = .fixed(&reexport);
-        try restored.writeContinuation(&reexport_writer);
-        try testing.expectEqualStrings(
-            continuation_writer.buffered(),
-            reexport_writer.buffered(),
-        );
-
-        source.handler.committed = 0;
-        restored.handler.committed = 0;
-        source.nextSlice(corpus[cut..]);
-        var offset = cut;
-        var partition = cut +% corpus.len +% 1;
-        while (offset < corpus.len) {
-            partition = partition *% 1664525 +% 1013904223;
-            const len = @min(1 + partition % 7, corpus.len - offset);
-            restored.nextSlice(corpus[offset..][0..len]);
-            offset += len;
-        }
-        try testing.expectEqual(source.handler.committed, restored.handler.committed);
-        try testing.expectEqual(source.handler.apc_active, restored.handler.apc_active);
-        try testing.expectEqual(source.handler.dcs_active, restored.handler.dcs_active);
-
-        var source_final: [64]u8 = undefined;
-        var source_final_writer: std.Io.Writer = .fixed(&source_final);
-        try source.writeContinuation(&source_final_writer);
-        var restored_final: [64]u8 = undefined;
-        var restored_final_writer: std.Io.Writer = .fixed(&restored_final);
-        try restored.writeContinuation(&restored_final_writer);
-        try testing.expectEqualStrings(
-            source_final_writer.buffered(),
-            restored_final_writer.buffered(),
-        );
-    };
 }

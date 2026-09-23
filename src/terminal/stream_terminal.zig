@@ -5616,7 +5616,7 @@ test "kitty graphics via APC" {
     try testing.expectEqual(.rgb, img.format);
 }
 
-test "continuation reconstructs standard stream without duplicate effects" {
+test "every-byte input splits preserve terminal state without duplicate effects" {
     const S = struct {
         var bell_count: usize = 0;
         var title_count: usize = 0;
@@ -5667,6 +5667,8 @@ test "continuation reconstructs standard stream without duplicate effects" {
         "\x1b]9;body\x1b\\" ++
         "\x1b]52;c;aA==\x1b\\";
 
+    const input = committed ++ "\x1b[31m中文😄\x1b[0m\xE0\xA0X";
+
     var source_terminal: Terminal = try .init(
         testing.io,
         testing.allocator,
@@ -5683,87 +5685,68 @@ test "continuation reconstructs standard stream without duplicate effects" {
     var source = Stream.init(.{
         .allocator = testing.allocator,
         .handler = source_handler,
-        .continuation_max_bytes = 1024,
     });
     defer source.deinit();
 
-    // Terminal mutation and all callbacks have already committed. The
-    // unfinished CSI is the only input needed to recreate the stream state.
-    source.nextSlice(committed ++ "\x1b[31");
+    // Establish the terminal state and effects from a single complete feed.
+    source.nextSlice(input);
     try testing.expectEqual(@as(usize, 1), S.bell_count);
     try testing.expectEqual(@as(usize, 1), S.title_count);
     try testing.expectEqual(@as(usize, 1), S.write_count);
     try testing.expectEqual(@as(usize, 1), S.notification_count);
     try testing.expectEqual(@as(usize, 1), S.clipboard_count);
 
-    var continuation_buf: [1024]u8 = undefined;
-    var continuation_writer: std.Io.Writer = .fixed(&continuation_buf);
-    try source.writeContinuation(&continuation_writer);
-    try testing.expectEqualStrings("\x1b[31", continuation_writer.buffered());
-
-    var restored_terminal: Terminal = try .init(
-        testing.io,
-        testing.allocator,
-        .{ .cols = 80, .rows = 24 },
-    );
-    defer restored_terminal.deinit(testing.allocator);
-
-    // Stand in for restoring the already-committed terminal snapshot.
-    {
-        var snapshot_stream: Stream = .init(.{
-            .allocator = testing.allocator,
-            .handler = .init(&restored_terminal),
-        });
-        defer snapshot_stream.deinit();
-        snapshot_stream.nextSlice(committed);
-    }
-
-    const before = try restored_terminal.plainString(testing.allocator);
-    defer testing.allocator.free(before);
-    const before_x = restored_terminal.screens.active.cursor.x;
-    const before_y = restored_terminal.screens.active.cursor.y;
-    const before_style = restored_terminal.screens.active.cursor.style_id;
-    const before_title = restored_terminal.getTitle().?;
-
-    var restored_handler: Handler = .init(&restored_terminal);
-    restored_handler.effects.bell = &S.bell;
-    restored_handler.effects.title_changed = &S.titleChanged;
-    restored_handler.effects.write_pty = &S.writePty;
-    restored_handler.effects.desktop_notification = &S.desktopNotification;
-    restored_handler.effects.clipboard_write = &S.clipboardWrite;
-    var restored = Stream.init(.{
-        .allocator = testing.allocator,
-        .handler = restored_handler,
-        .continuation_max_bytes = 1024,
-    });
-    defer restored.deinit();
-
-    S.reset();
-    restored.nextSlice(continuation_writer.buffered());
-    try testing.expectEqual(@as(usize, 0), S.bell_count);
-    try testing.expectEqual(@as(usize, 0), S.title_count);
-    try testing.expectEqual(@as(usize, 0), S.write_count);
-    try testing.expectEqual(@as(usize, 0), S.notification_count);
-    try testing.expectEqual(@as(usize, 0), S.clipboard_count);
-    const after = try restored_terminal.plainString(testing.allocator);
-    defer testing.allocator.free(after);
-    try testing.expectEqualStrings(before, after);
-    try testing.expectEqual(before_x, restored_terminal.screens.active.cursor.x);
-    try testing.expectEqual(before_y, restored_terminal.screens.active.cursor.y);
-    try testing.expectEqual(before_style, restored_terminal.screens.active.cursor.style_id);
-    try testing.expectEqualStrings(before_title, restored_terminal.getTitle().?);
-
-    source.nextSlice("mB");
-    restored.nextSlice("mB");
     const source_text = try source_terminal.plainString(testing.allocator);
     defer testing.allocator.free(source_text);
-    const restored_text = try restored_terminal.plainString(testing.allocator);
-    defer testing.allocator.free(restored_text);
-    try testing.expectEqualStrings(source_text, restored_text);
-    try testing.expectEqual(
-        source_terminal.screens.active.cursor.style_id,
-        restored_terminal.screens.active.cursor.style_id,
-    );
+    try testing.expectEqualStrings("A\n 中文😄�X", source_text);
+
+    // Exercise every possible read boundary, including partial UTF-8, CSI,
+    // OSC, and string terminators. The final case uses single-byte feeds.
+    // Each effect must occur exactly once.
+    for (0..input.len + 2) |cut| {
+        var restored_terminal: Terminal = try .init(
+            testing.io,
+            testing.allocator,
+            .{ .cols = 80, .rows = 24 },
+        );
+        defer restored_terminal.deinit(testing.allocator);
+
+        var restored_handler: Handler = .init(&restored_terminal);
+        restored_handler.effects.bell = &S.bell;
+        restored_handler.effects.title_changed = &S.titleChanged;
+        restored_handler.effects.write_pty = &S.writePty;
+        restored_handler.effects.desktop_notification = &S.desktopNotification;
+        restored_handler.effects.clipboard_write = &S.clipboardWrite;
+        var restored = Stream.init(.{
+            .allocator = testing.allocator,
+            .handler = restored_handler,
+        });
+        defer restored.deinit();
+
+        S.reset();
+        if (cut <= input.len) {
+            restored.nextSlice(input[0..cut]);
+            restored.nextSlice(input[cut..]);
+        } else {
+            for (input) |byte| restored.next(byte);
+        }
+        try testing.expect(restored.ground());
+        try testing.expectEqual(@as(usize, 1), S.bell_count);
+        try testing.expectEqual(@as(usize, 1), S.title_count);
+        try testing.expectEqual(@as(usize, 1), S.write_count);
+        try testing.expectEqual(@as(usize, 1), S.notification_count);
+        try testing.expectEqual(@as(usize, 1), S.clipboard_count);
+        try testing.expectEqual(source_terminal.screens.active.cursor.x, restored_terminal.screens.active.cursor.x);
+        try testing.expectEqual(source_terminal.screens.active.cursor.y, restored_terminal.screens.active.cursor.y);
+        try testing.expectEqualStrings("title", restored_terminal.getTitle().?);
+        const restored_text = try restored_terminal.plainString(testing.allocator);
+        defer testing.allocator.free(restored_text);
+        try testing.expectEqualStrings(source_text, restored_text);
+        try testing.expectEqual(
+            source_terminal.screens.active.cursor.style_id,
+            restored_terminal.screens.active.cursor.style_id,
+        );
+    }
 }
 
 test "kitty dnd: query response" {

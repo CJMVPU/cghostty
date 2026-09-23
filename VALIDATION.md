@@ -1,6 +1,6 @@
 # 验证记录
 
-当前改动与本机验证见 [2026-09-23 核心收敛与内嵌字体](docs/validation/2026-09-23-core-cleanup.md)。
+最新改动见 [2026-09-23 续传跟踪移除](docs/validation/2026-09-23-stream-cleanup.md)，此前完整优化验证见 [核心收敛与内嵌字体](docs/validation/2026-09-23-core-cleanup.md)。
 
 历史记录保留当时的实现和验证边界，不代表当前功能或资源布局：
 
