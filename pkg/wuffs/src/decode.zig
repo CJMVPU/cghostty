@@ -1,0 +1,127 @@
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+const c = @import("wuffs_c");
+const Error = @import("error.zig").Error;
+const check = @import("error.zig").check;
+const ImageData = @import("main.zig").ImageData;
+const mul = std.math.mul;
+
+/// Decode through the selected Wuffs codec with a caller-specific pixel budget.
+pub fn decode(comptime codec: []const u8, alloc: Allocator, data: []const u8, max_bytes: usize) Error!ImageData {
+    const prefix = "wuffs_" ++ codec ++ "__decoder";
+    const log = std.log.scoped(.wuffs);
+    // Work around some weirdness in WUFFS/Zig, there are some structs that
+    // are defined as "extern" by the Zig compiler which means that Zig won't
+    // allocate them on the stack at compile time. WUFFS has functions for
+    // dynamically allocating these structs but they use the C malloc/free. This
+    // gets around that by using the Zig allocator to allocate enough memory for
+    // the struct and then casts it to the appropriate pointer.
+
+    const decoder_buf = try alloc.alloc(u8, @field(c, "sizeof__" ++ prefix)());
+    defer alloc.free(decoder_buf);
+
+    const decoder: ?*@field(c, prefix) = @ptrCast(decoder_buf);
+    {
+        const status = @field(c, prefix ++ "__initialize")(
+            decoder,
+            @field(c, "sizeof__" ++ prefix)(),
+            c.WUFFS_VERSION,
+            0,
+        );
+        try check(log, &status);
+    }
+
+    var source_buffer: c.wuffs_base__io_buffer = .{
+        .data = .{ .ptr = @ptrCast(@constCast(data.ptr)), .len = data.len },
+        .meta = .{
+            .wi = data.len,
+            .ri = 0,
+            .pos = 0,
+            .closed = true,
+        },
+    };
+
+    var image_config: c.wuffs_base__image_config = undefined;
+    {
+        const status = @field(c, prefix ++ "__decode_image_config")(
+            decoder,
+            &image_config,
+            &source_buffer,
+        );
+        try check(log, &status);
+    }
+
+    const width = c.wuffs_base__pixel_config__width(&image_config.pixcfg);
+    const height = c.wuffs_base__pixel_config__height(&image_config.pixcfg);
+
+    c.wuffs_base__pixel_config__set(
+        &image_config.pixcfg,
+        c.WUFFS_BASE__PIXEL_FORMAT__RGBA_NONPREMUL,
+        c.WUFFS_BASE__PIXEL_SUBSAMPLING__NONE,
+        width,
+        height,
+    );
+
+    const size: usize = try mul(
+        usize,
+        try mul(usize, width, height),
+        @sizeOf(c.wuffs_base__color_u32_argb_premul),
+    );
+
+    if (size > max_bytes) {
+        log.warn("image size {d} is larger than the maximum allowed ({d})", .{ size, max_bytes });
+        return error.Overflow;
+    }
+
+    const destination = try alloc.alloc(
+        u8,
+        size,
+    );
+    errdefer alloc.free(destination);
+
+    // temporary buffer for intermediate processing of image
+    const work_buffer = try alloc.alloc(
+        u8,
+
+        // The type of this is a u64 on all systems but our allocator
+        // uses a usize which is a u32 on 32-bit systems.
+        std.math.cast(
+            usize,
+            @field(c, prefix ++ "__workbuf_len")(decoder).max_incl,
+        ) orelse return error.OutOfMemory,
+    );
+    defer alloc.free(work_buffer);
+
+    const work_slice = c.wuffs_base__make_slice_u8(
+        work_buffer.ptr,
+        work_buffer.len,
+    );
+
+    var pixel_buffer: c.wuffs_base__pixel_buffer = undefined;
+    {
+        const status = c.wuffs_base__pixel_buffer__set_from_slice(
+            &pixel_buffer,
+            &image_config.pixcfg,
+            c.wuffs_base__make_slice_u8(destination.ptr, destination.len),
+        );
+        try check(log, &status);
+    }
+
+    {
+        const status = @field(c, prefix ++ "__decode_frame")(
+            decoder,
+            &pixel_buffer,
+            &source_buffer,
+            c.WUFFS_BASE__PIXEL_BLEND__SRC,
+            work_slice,
+            null,
+        );
+        try check(log, &status);
+    }
+
+    return .{
+        .width = width,
+        .height = height,
+        .data = destination,
+    };
+}

@@ -585,7 +585,9 @@ pub fn init(alloc: Allocator, options: renderer.Options) !Self {
     result.updateFontGridUniforms();
     result.updateScreenSizeUniforms();
     result.updateBgImageBuffer();
-    try result.prepBackgroundImage();
+    if (result.config.bg_image) |path| {
+        if (try result.loadBackgroundImage(path)) |image| result.bg_image = image;
+    }
 
     result.trace = Trace.init(alloc);
 
@@ -1566,93 +1568,79 @@ pub fn frameCompleted(
     self.swap_chain.?.releaseFrame();
 }
 
-/// Call this any time the background image path changes.
-///
-/// Caller must hold the draw mutex.
-fn prepBackgroundImage(self: *Self) !void {
-    // Then we try to load the background image if we have a path.
-    if (self.config.bg_image) |p| load_background: {
-        const path = switch (p) {
-            .required, .optional => |slice| slice,
-        };
+/// Read and decode on the renderer's serial update thread, outside draw_mutex.
+/// No GPU state is touched until the prepared image is committed under the lock.
+fn loadBackgroundImage(self: *Self, p: configpkg.Path) !?imagepkg.Image {
+    const path = switch (p) {
+        .required, .optional => |slice| slice,
+    };
 
-        // Open the file
-        var file = std.Io.Dir.openFileAbsolute(
-            global.io(),
-            path,
-            .{},
-        ) catch |err| {
+    // Open the file
+    var file = std.Io.Dir.openFileAbsolute(
+        global.io(),
+        path,
+        .{},
+    ) catch |err| {
+        log.warn(
+            "error opening background image file \"{s}\": {}",
+            .{ path, err },
+        );
+        return null;
+    };
+    defer file.close(global.io());
+
+    // Read it
+    const contents = compat_file.readToEndAlloc(
+        file,
+        self.alloc,
+        64 * 1024 * 1024, // Encoded background file budget.
+    ) catch |err| {
+        log.warn(
+            "error reading background image file \"{s}\": {}",
+            .{ path, err },
+        );
+        return null;
+    };
+    defer self.alloc.free(contents);
+
+    // Figure out what type it probably is.
+    const file_type = switch (FileType.detect(contents)) {
+        .unknown => FileType.guessFromExtension(
+            std.fs.path.extension(path),
+        ),
+        else => |t| t,
+    };
+
+    // Decode it if we know how.
+    const image_data = switch (file_type) {
+        .png => try wuffs.png.decodeLimited(self.alloc, contents, 256 * 1024 * 1024),
+        .jpeg => try wuffs.jpeg.decodeLimited(self.alloc, contents, 256 * 1024 * 1024),
+        .unknown => {
             log.warn(
-                "error opening background image file \"{s}\": {}",
-                .{ path, err },
+                "Cannot determine file type for background image file \"{s}\"!",
+                .{path},
             );
-            break :load_background;
-        };
-        defer file.close(global.io());
-
-        // Read it
-        const contents = compat_file.readToEndAlloc(
-            file,
-            self.alloc,
-            std.math.maxInt(u32), // Max size of 4 GiB, for now.
-        ) catch |err| {
+            return null;
+        },
+        else => |f| {
             log.warn(
-                "error reading background image file \"{s}\": {}",
-                .{ path, err },
+                "Unsupported file type {} for background image file \"{s}\"!",
+                .{ f, path },
             );
-            break :load_background;
-        };
-        defer self.alloc.free(contents);
+            return null;
+        },
+    };
 
-        // Figure out what type it probably is.
-        const file_type = switch (FileType.detect(contents)) {
-            .unknown => FileType.guessFromExtension(
-                std.fs.path.extension(path),
-            ),
-            else => |t| t,
-        };
+    const image: imagepkg.Image = .{
+        .pending = .{
+            .width = image_data.width,
+            .height = image_data.height,
+            .pixel_format = .rgba,
+            .data = image_data.data.ptr,
+        },
+    };
 
-        // Decode it if we know how.
-        const image_data = switch (file_type) {
-            .png => try wuffs.png.decode(self.alloc, contents),
-            .jpeg => try wuffs.jpeg.decode(self.alloc, contents),
-            .unknown => {
-                log.warn(
-                    "Cannot determine file type for background image file \"{s}\"!",
-                    .{path},
-                );
-                break :load_background;
-            },
-            else => |f| {
-                log.warn(
-                    "Unsupported file type {} for background image file \"{s}\"!",
-                    .{ f, path },
-                );
-                break :load_background;
-            },
-        };
-
-        const image: imagepkg.Image = .{
-            .pending = .{
-                .width = image_data.width,
-                .height = image_data.height,
-                .pixel_format = .rgba,
-                .data = image_data.data.ptr,
-            },
-        };
-
-        // If we have an existing background image, replace it.
-        // Otherwise, set this as our background image directly.
-        if (self.bg_image) |*img| {
-            img.markForReplace(self.alloc, image);
-        } else {
-            self.bg_image = image;
-        }
-    } else {
-        // If we don't have a background image path, mark our
-        // background image for unload if we currently have one.
-        if (self.bg_image) |*img| img.markForUnload();
-    }
+    return image;
 }
 
 fn uploadBackgroundImage(self: *Self) !void {
@@ -1669,6 +1657,21 @@ fn uploadBackgroundImage(self: *Self) !void {
 
 /// Update the configuration.
 pub fn changeConfig(self: *Self, config: *DerivedConfig) !void {
+    // Config updates are serialized by renderer.Thread. Drawing may continue
+    // with the old config/image while the replacement is being decoded.
+    const bg_image_changed = if (self.config.bg_image) |old|
+        if (config.bg_image) |new| !old.equal(new) else true
+    else
+        config.bg_image != null;
+    var prepared: ?imagepkg.Image = if (bg_image_changed) image: {
+        const path = config.bg_image orelse break :image null;
+        break :image self.loadBackgroundImage(path) catch |err| {
+            log.warn("background image preparation failed: {}", .{err});
+            break :image null;
+        };
+    } else null;
+    defer if (prepared) |image| image.deinit(self.alloc);
+
     self.draw_mutex.lockUncancelable(global.io());
     defer self.draw_mutex.unlock(global.io());
 
@@ -1704,23 +1707,18 @@ pub fn changeConfig(self: *Self, config: *DerivedConfig) !void {
         self.config.bg_image_repeat != config.bg_image_repeat or
         self.config.bg_image_opacity != config.bg_image_opacity;
 
-    const bg_image_changed =
-        if (self.config.bg_image) |old|
-            if (config.bg_image) |new|
-                !old.equal(new)
-            else
-                true
-        else
-            config.bg_image != null;
-
     const old_blending = self.config.blending;
     self.cursor_motion.reset();
 
     self.config.deinit();
     self.config = config.*;
 
-    // If our background image path changed, prepare the new bg image.
-    if (bg_image_changed) try self.prepBackgroundImage();
+    if (prepared) |image| {
+        if (self.bg_image) |*old| old.markForReplace(self.alloc, image) else self.bg_image = image;
+        prepared = null;
+    } else if (bg_image_changed and config.bg_image == null) {
+        if (self.bg_image) |*image| image.markForUnload();
+    }
 
     // If our background image config changed, update the vertex buffer.
     if (bg_image_config_changed) self.updateBgImageBuffer();

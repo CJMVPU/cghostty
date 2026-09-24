@@ -13,9 +13,15 @@ spec.loader.exec_module(cache)
 result_spec = importlib.util.spec_from_file_location('test_results', ROOT / 'scripts/test-results.py')
 results = importlib.util.module_from_spec(result_spec)
 result_spec.loader.exec_module(results)
+toolchain_spec = importlib.util.spec_from_file_location('toolchain', ROOT / 'scripts/check-toolchain.py')
+toolchain = importlib.util.module_from_spec(toolchain_spec)
+toolchain_spec.loader.exec_module(toolchain)
 
 
 def run(mode, arguments):
+    clean = mode == 'native' and '--action' in arguments and arguments[arguments.index('--action') + 1:][:1] == ['clean']
+    if not clean:
+        toolchain.check()
     if mode == 'native':
         command = ['nu', str(ROOT / 'macos/build.nu'), *arguments]
     else:
@@ -25,8 +31,7 @@ def run(mode, arguments):
         command.extend(['-Demit-macos-app=false', *arguments])
     with cache.build_lock(ROOT):
         # Cleaning Xcode output should not trigger a separate Zig cache trim.
-        if not (mode == 'native' and '--action' in arguments and
-                arguments[arguments.index('--action') + 1:][:1] == ['clean']):
+        if not clean:
             cache.maintain_locked(ROOT, trim=True)
         env = os.environ.copy()
         env['CGHOSTTY_BUILD_LOCK_ROOT'] = str(ROOT)

@@ -97,16 +97,10 @@ pub fn threadEnter(
     errdefer self.subprocess.stop();
 
     // Watcher to detect subprocess exit
-    var process: ?xev.Process = if (self.subprocess.process) |v| switch (v) {
-        .fork_exec => |cmd| try xev.Process.init(
-            cmd.pid orelse return error.ProcessNoPid,
-        ),
-
-        // If we're executing via Flatpak then we can't do
-        // traditional process watching (its implemented
-        // as a special case in os/flatpak.zig) since the
-        // command is on the host.
-    } else return error.ProcessNotStarted;
+    var process: ?xev.Process = if (self.subprocess.process) |cmd|
+        try xev.Process.init(cmd.pid orelse return error.ProcessNoPid)
+    else
+        return error.ProcessNotStarted;
     errdefer if (process) |*p| p.deinit();
 
     // Track our process start time for abnormal exits
@@ -271,11 +265,6 @@ fn termiosTimer(
     r: xev.Timer.RunError!void,
 ) xev.CallbackAction {
     // log.debug("termios timer fired", .{});
-
-    // This should never happen because we guard starting our
-    // timer on windows but we want this assertion to fire if
-    // we ever do start the timer on windows.
-    // TODO: support on windows
 
     _ = r catch |err| switch (err) {
         // This is sent when our timer is canceled. That's fine.
@@ -535,16 +524,10 @@ const Subprocess = struct {
     grid_size: renderer.GridSize,
     screen_size: renderer.ScreenSize,
     pty: ?Pty = null,
-    process: ?Process = null,
+    process: ?Command = null,
 
     rt_pre_exec_info: Command.RtPreExecInfo,
     rt_post_fork_info: Command.RtPostForkInfo,
-
-    /// Union that represents the running process type.
-    const Process = union(enum) {
-        /// Standard POSIX fork/exec
-        fork_exec: Command,
-    };
 
     const ArgsFormatter = struct {
         args: []const [:0]const u8,
@@ -926,12 +909,10 @@ const Subprocess = struct {
                 else => return err,
             }
         };
-        errdefer killCommand(&cmd) catch |err| {
-            log.warn("error killing command during cleanup err={}", .{err});
-        };
+        errdefer killCommand(&cmd);
         log.info("started subcommand path={s} pid={?}", .{ self.args[0], cmd.pid });
 
-        self.process = .{ .fork_exec = cmd };
+        self.process = cmd;
         return .{
             .read = pty.master,
             .write = pty.master,
@@ -952,21 +933,12 @@ const Subprocess = struct {
         self.process = null;
     }
 
-    /// Stop the subprocess. This is safe to call anytime. This will wait
-    /// for the subprocess to register that it has been signalled, but not
-    /// for it to terminate, so it will not block.
-    /// This does not close the pty.
+    /// Transfer process cleanup to an independent reaper. Does not close the PTY
+    /// or wait for the child; safe to call repeatedly during surface teardown.
     pub fn stop(self: *Subprocess) void {
-        switch (self.process orelse return) {
-            .fork_exec => |*cmd| {
-                // Note: this will also wait for the command to exit, so
-                // DO NOT call cmd.wait
-                killCommand(cmd) catch |err|
-                    log.err("error sending SIGHUP to command, may hang: {}", .{err});
-            },
-        }
-
+        const command = self.process orelse return;
         self.process = null;
+        if (command.pid) |pid| @import("ChildReaper.zig").start(pid);
     }
 
     /// Resize the pty subprocess. This is safe to call anytime.
@@ -992,92 +964,10 @@ const Subprocess = struct {
         }
     }
 
-    /// Kill the underlying subprocess. This sends a SIGHUP to the child
-    /// process. This also waits for the command to exit and will return the
-    /// exit code.
-    fn killCommand(command: *Command) !void {
-        if (command.pid) |pid| {
-            try killPid(pid);
-        }
+    fn killCommand(command: *Command) void {
+        if (command.pid) |pid| @import("ChildReaper.zig").start(pid);
     }
 
-    fn killPid(pid: c.pid_t) !void {
-        const pgid = getpgid(pid) orelse return;
-
-        // It is possible to send a killpg between the time that
-        // our child process calls setsid but before or simultaneous
-        // to calling execve. In this case, the direct child dies
-        // but grandchildren survive. To work around this, we loop
-        // and repeatedly kill the process group until all
-        // descendents are well and truly dead. We will not rest
-        // until the entire family tree is obliterated.
-        while (true) {
-            switch (posix.errno(c.killpg(pgid, c.SIGHUP))) {
-                .SUCCESS => log.debug("process group killed pgid={}", .{pgid}),
-                else => |err| killpg: {
-                    if (err == .PERM) {
-                        log.debug("killpg failed with EPERM, expected on Darwin and ignoring", .{});
-                        break :killpg;
-                    }
-
-                    log.warn("error killing process group pgid={} err={}", .{ pgid, err });
-                    return error.KillFailed;
-                },
-            }
-
-            // See Command.zig wait for why we specify WNOHANG.
-            // The gist is that it lets us detect when children
-            // are still alive without blocking so that we can
-            // kill them again.
-            const res_pid = while (true) {
-                const rc = posix.system.waitpid(pid, null, std.c.W.NOHANG);
-                if (posix.errno(rc) == .INTR) continue;
-                break rc;
-            };
-            log.debug("waitpid result={}", .{res_pid});
-            if (res_pid != 0) break;
-            try std.Io.sleep(global.io(), .fromMilliseconds(10), .awake);
-        }
-    }
-
-    fn getpgid(pid: c.pid_t) ?c.pid_t {
-        // Get our process group ID. Before the child pid calls setsid
-        // the pgid will be ours because we forked it. Its possible that
-        // we may be calling this before setsid if we are killing a surface
-        // VERY quickly after starting it.
-        const my_pgid = c.getpgid(0);
-
-        // We loop while pgid == my_pgid. The expectation if we have a valid
-        // pid is that setsid will eventually be called because it is the
-        // FIRST thing the child process does and as far as I can tell,
-        // setsid cannot fail. I'm sure that's not true, but I'd rather
-        // have a bug reported than defensively program against it now.
-        while (true) {
-            const pgid = c.getpgid(pid);
-            if (pgid == my_pgid) {
-                log.warn("pgid is our own, retrying", .{});
-                std.Io.sleep(global.io(), .fromMilliseconds(10), .awake) catch {};
-                continue;
-            }
-
-            // Don't know why it would be zero but its not a valid pid
-            if (pgid == 0) return null;
-
-            // If the pid doesn't exist then... we're done!
-            if (pgid == c.ESRCH) return null;
-
-            // If we have an error we're done.
-            if (pgid < 0) {
-                log.warn("error getting pgid for kill", .{});
-                return null;
-            }
-
-            return pgid;
-        }
-    }
-
-    /// Kill the underlying process started via Flatpak host command.
-    /// This sends a signal via the Flatpak API.
     /// Get information about the process(es) running within the subprocess.
     /// Returns `null` if there was an error getting the information or the
     /// information is not available on a particular platform.

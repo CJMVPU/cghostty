@@ -53,6 +53,8 @@ Zig 改动使用 `zig fmt`；Swift 使用 `swiftlint lint --strict --fix`。完�
 
 日常核心构建与测试使用 `python3 scripts/build.py core/test`，原生应用继续使用 `nu macos/build.nu`。两者与手动缓存清理共用仓库根目录的 `.cghostty-build.lock`，锁覆盖清理及整个构建过程；同时启动会排队，进程退出后由系统释放锁，锁文件本身不删除。
 
+统一入口先核对固定 Zig 版本，以及实际库目录中的 `std/std.zig` 和 `compiler/build_runner.zig`，避免残缺工具链在编译中途才失败。可单独运行 `python3 scripts/check-toolchain.py`；修复方式为 `bash scripts/install-zig.sh`，再把输出的目录加入 `PATH`。原生 `clean` 不要求 Zig。
+
 开始构建前检查 `.zig-cache`；超过 8 GiB 且没有 Zig/Xcode 构建活动时清空编译缓存，下次核心构建会重新编译。依赖下载、应用、测试结果和发行包均保留。8 GiB 是构建前清理阈值，不是运行中的硬配额。直接运行原始 `zig build test` 不参与项目锁或自动维护；请优先使用统一入口。进程检查仍保守防护未通过入口启动的构建，但不能为不使用锁的外部命令提供原子互斥保证。
 
 ```sh

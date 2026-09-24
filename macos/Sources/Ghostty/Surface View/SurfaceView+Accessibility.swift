@@ -24,7 +24,7 @@ extension Ghostty.SurfaceView {
     }
 
     override func accessibilityValue() -> Any? {
-        return cachedScreenContents.get()
+        return cachedScreenContents.get().text
     }
 
     /// Returns the range of text that is currently selected in the terminal.
@@ -50,30 +50,28 @@ extension Ghostty.SurfaceView {
     /// This helps assistive technologies understand the size of the content.
     override func accessibilityNumberOfCharacters() -> Int {
         let content = cachedScreenContents.get()
-        return content.count
+        return content.utf16Length
     }
 
     /// Returns the visible character range for the terminal.
     /// For terminals, we typically show all content as visible.
     override func accessibilityVisibleCharacterRange() -> NSRange {
         let content = cachedScreenContents.get()
-        return NSRange(location: 0, length: content.count)
+        return NSRange(location: 0, length: content.utf16Length)
     }
 
     /// Returns the line number for a given character index.
     /// This helps assistive technologies navigate by line.
     override func accessibilityLine(for index: Int) -> Int {
         let content = cachedScreenContents.get()
-        let substring = String(content.prefix(index))
-        return substring.components(separatedBy: .newlines).count - 1
+        return content.line(for: index)
     }
 
     /// Returns a substring for the given range.
     /// This allows assistive technologies to read specific portions of the content.
     override func accessibilityString(for range: NSRange) -> String? {
         let content = cachedScreenContents.get()
-        guard let swiftRange = Range(range, in: content) else { return nil }
-        return String(content[swiftRange])
+        return content.substring(in: range)
     }
 
     /// Returns an attributed string for the given range.
@@ -99,60 +97,90 @@ extension Ghostty.SurfaceView {
 
 }
 
-/// Caches a value for some period of time, evicting it automatically when that time expires.
-/// We use this to cache our surface content. This probably should be extracted some day
-/// to a more generic helper.
+/// One immutable text/index snapshot, using Cocoa's UTF-16 coordinate system.
+/// Line offsets are built once per refresh instead of scanning the scrollback
+/// for every accessibilityLine request.
+struct AccessibilityText {
+    let text: String
+    let utf16Length: Int
+    private let cocoaText: NSString
+    private let lineStarts: [Int]
+
+    init(_ text: String) {
+        self.text = text
+        cocoaText = text as NSString
+        var starts = [0]
+        var offset = 0
+        var previousWasCR = false
+        for unit in text.utf16 {
+            offset += 1
+            if unit == 0x0A && previousWasCR {
+                starts[starts.count - 1] = offset
+            } else if unit == 0x0A || unit == 0x0D || unit == 0x85 || unit == 0x2028 || unit == 0x2029 {
+                starts.append(offset)
+            }
+            previousWasCR = unit == 0x0D
+        }
+        utf16Length = offset
+        lineStarts = starts
+    }
+
+    func line(for index: Int) -> Int {
+        guard index >= 0 && index <= utf16Length else { return NSNotFound }
+        var low = 0
+        var high = lineStarts.count
+        while low < high {
+            let middle = low + (high - low) / 2
+            if lineStarts[middle] <= index {
+                low = middle + 1
+            } else {
+                high = middle
+            }
+        }
+        return low - 1
+    }
+
+    func substring(in range: NSRange) -> String? {
+        guard range.location >= 0, range.length >= 0,
+              range.location <= utf16Length,
+              range.length <= utf16Length - range.location else { return nil }
+        let end = range.location + range.length
+        // Swift String slicing may expand a range inside a grapheme cluster.
+        // Cocoa offsets must stay exact, without splitting a surrogate pair.
+        for boundary in [range.location, end] where boundary < utf16Length {
+            if UTF16.isTrailSurrogate(cocoaText.character(at: boundary)) { return nil }
+        }
+        return cocoaText.substring(with: range)
+    }
+}
+
+/// Main-thread surface readers expire lazily. No task or timer is needed when
+/// accessibility and App Intents are not asking for text.
+@MainActor
 class CachedValue<T> {
-    private let lock = NSLock()
     private var value: T?
     private let fetch: () -> T
     private let duration: Duration
-    private var expiryTask: Task<Void, Never>?
+    private let now: () -> ContinuousClock.Instant
+    private var expires: ContinuousClock.Instant?
 
-    init(duration: Duration, fetch: @escaping () -> T) {
+    init(
+        duration: Duration,
+        now: @escaping () -> ContinuousClock.Instant = { .now },
+        fetch: @escaping () -> T
+    ) {
         self.duration = duration
+        self.now = now
         self.fetch = fetch
     }
 
-    isolated deinit {
-        lock.lock()
-        expiryTask?.cancel()
-        lock.unlock()
-    }
-
     func get() -> T {
-        lock.lock()
-        defer { lock.unlock() }
-
-        if let value {
-            return value
-        }
-
-        // We don't have a value (or it expired). Fetch and store.
+        let instant = now()
+        if let value, let expires, instant < expires { return value }
         let result = fetch()
-        let now = ContinuousClock.now
-        let expires = now + duration
-        self.value = result
-
-        // Schedule a task to clear the value
-        expiryTask = Task { [weak self] in
-            do {
-                try await Task.sleep(until: expires)
-                self?.expire()
-            } catch {
-                // Task was cancelled, do nothing
-            }
-        }
-
+        value = result
+        expires = now() + duration
         return result
-    }
-
-    private func expire() {
-        lock.lock()
-        defer { lock.unlock() }
-
-        value = nil
-        expiryTask = nil
     }
 }
 

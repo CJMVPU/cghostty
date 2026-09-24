@@ -308,7 +308,7 @@ extension Ghostty {
         private(set) var titleFromTerminal: String?
 
         // The cached contents of the screen.
-        private(set) var cachedScreenContents: CachedValue<String>
+        private(set) var cachedScreenContents: CachedValue<AccessibilityText>
         private(set) var cachedVisibleContents: CachedValue<String>
 
         // We need to support being a first responder so that we can get input events
@@ -324,8 +324,8 @@ extension Ghostty {
             // We need to initialize this so it does something but we want to set
             // it back up later so we can reference `self`. This is a hack we should
             // fix at some point.
-            self.cachedScreenContents = .init(duration: .milliseconds(500)) { "" }
-            self.cachedVisibleContents = self.cachedScreenContents
+            self.cachedScreenContents = .init(duration: .milliseconds(500)) { AccessibilityText("") }
+            self.cachedVisibleContents = .init(duration: .milliseconds(500)) { "" }
 
             // Initialize with some default frame size. The important thing is that this
             // is non-zero so that our layer bounds are non-zero so that our renderer
@@ -334,9 +334,7 @@ extension Ghostty {
 
             // Our cache of screen data
             cachedScreenContents = .init(duration: .milliseconds(500)) { [weak self] in
-                guard let self else { return "" }
-                guard let surface = self.surfaceModel else { return "" }
-                return surface.readContents(viewport: false)
+                AccessibilityText(self?.surfaceModel?.readContents(viewport: false) ?? "")
             }
             cachedVisibleContents = .init(duration: .milliseconds(500)) { [weak self] in
                 guard let self else { return "" }

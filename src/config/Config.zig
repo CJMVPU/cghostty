@@ -494,6 +494,8 @@ foreground: Color = .{ .r = 0xFF, .g = 0xFF, .b = 0xFF },
 ///
 /// This should be a path to a PNG or JPEG file, other image formats are
 /// not yet supported.
+/// Files are limited to 64 MiB; decoded RGBA pixels are limited to 256 MiB
+/// per terminal. Reduce the image dimensions if either limit is exceeded.
 ///
 /// The background image is currently per-terminal, not per-window. If
 /// you are a heavy split user, the background image will be repeated across

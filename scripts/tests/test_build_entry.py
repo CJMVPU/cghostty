@@ -13,6 +13,11 @@ spec.loader.exec_module(build)
 
 
 class BuildEntryTests(unittest.TestCase):
+    def setUp(self):
+        preflight = patch.object(build.toolchain, 'check')
+        self.preflight = preflight.start()
+        self.addCleanup(preflight.stop)
+
     def test_modes_forward_arguments_and_preserve_failure_exit(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -34,3 +39,12 @@ class BuildEntryTests(unittest.TestCase):
             with patch.object(build, 'ROOT', Path(directory)), patch.object(build.subprocess, 'run'):
                 build.run('native', ['--action', 'clean'])
             trim.assert_not_called()
+            self.preflight.assert_not_called()
+
+    def test_invalid_toolchain_stops_before_cache_or_build_changes(self):
+        self.preflight.side_effect = ValueError('Incomplete Zig installation')
+        with patch.object(build.cache, 'maintain_locked') as trim, patch.object(build.subprocess, 'run') as run:
+            with self.assertRaisesRegex(ValueError, 'Incomplete Zig'):
+                build.run('core', [])
+            trim.assert_not_called()
+            run.assert_not_called()

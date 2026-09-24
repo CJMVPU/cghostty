@@ -45,12 +45,6 @@ pub const ProcessInfo = enum {
     }
 };
 
-// A pty implementation that does nothing.
-//
-// TODO: This should be removed. This is only temporary until we have
-// a termio that doesn't use a pty. This isn't used in any user-facing
-// artifacts, this is just a stopgap to get compilation to work on iOS.
-
 /// Posix PTY creation and management. This is just a thin layer on top
 /// of Posix syscalls. The caller is responsible for detail-oriented handling
 /// of the returned file handles.

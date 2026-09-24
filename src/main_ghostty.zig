@@ -190,6 +190,7 @@ test {
     _ = @import("surface_mouse.zig");
     _ = @import("surface/SearchSession.zig");
     _ = @import("surface/RenderSession.zig");
+    _ = @import("surface/Clipboard.zig");
 
     // Libraries
     _ = @import("tripwire.zig");

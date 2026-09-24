@@ -1,130 +1,14 @@
 const std = @import("std");
-const Allocator = std.mem.Allocator;
-const c = @import("wuffs_c");
-const Error = @import("error.zig").Error;
-const check = @import("error.zig").check;
+const common = @import("decode.zig");
 const ImageData = @import("main.zig").ImageData;
-const maximum_image_size = @import("main.zig").maximum_image_size;
-const mul = std.math.mul;
+const Error = @import("error.zig").Error;
 
-const log = std.log.scoped(.wuffs_png);
+pub fn decode(alloc: std.mem.Allocator, data: []const u8) Error!ImageData {
+    return decodeLimited(alloc, data, @import("main.zig").maximum_image_size);
+}
 
-/// Decode a PNG image.
-pub fn decode(alloc: Allocator, data: []const u8) Error!ImageData {
-    // Work around some weirdness in WUFFS/Zig, there are some structs that
-    // are defined as "extern" by the Zig compiler which means that Zig won't
-    // allocate them on the stack at compile time. WUFFS has functions for
-    // dynamically allocating these structs but they use the C malloc/free. This
-    // gets around that by using the Zig allocator to allocate enough memory for
-    // the struct and then casts it to the appropriate pointer.
-
-    const decoder_buf = try alloc.alloc(u8, c.sizeof__wuffs_png__decoder());
-    defer alloc.free(decoder_buf);
-
-    const decoder: ?*c.wuffs_png__decoder = @ptrCast(decoder_buf);
-    {
-        const status = c.wuffs_png__decoder__initialize(
-            decoder,
-            c.sizeof__wuffs_png__decoder(),
-            c.WUFFS_VERSION,
-            0,
-        );
-        try check(log, &status);
-    }
-
-    var source_buffer: c.wuffs_base__io_buffer = .{
-        .data = .{ .ptr = @ptrCast(@constCast(data.ptr)), .len = data.len },
-        .meta = .{
-            .wi = data.len,
-            .ri = 0,
-            .pos = 0,
-            .closed = true,
-        },
-    };
-
-    var image_config: c.wuffs_base__image_config = undefined;
-    {
-        const status = c.wuffs_png__decoder__decode_image_config(
-            decoder,
-            &image_config,
-            &source_buffer,
-        );
-        try check(log, &status);
-    }
-
-    const width = c.wuffs_base__pixel_config__width(&image_config.pixcfg);
-    const height = c.wuffs_base__pixel_config__height(&image_config.pixcfg);
-
-    c.wuffs_base__pixel_config__set(
-        &image_config.pixcfg,
-        c.WUFFS_BASE__PIXEL_FORMAT__RGBA_NONPREMUL,
-        c.WUFFS_BASE__PIXEL_SUBSAMPLING__NONE,
-        width,
-        height,
-    );
-
-    const size: usize = try mul(
-        usize,
-        try mul(usize, width, height),
-        @sizeOf(c.wuffs_base__color_u32_argb_premul),
-    );
-
-    if (size > maximum_image_size) {
-        log.warn("image size {d} is larger than the maximum allowed ({d})", .{ size, maximum_image_size });
-        return error.Overflow;
-    }
-
-    const destination = try alloc.alloc(
-        u8,
-        size,
-    );
-    errdefer alloc.free(destination);
-
-    // temporary buffer for intermediate processing of image
-    const work_buffer = try alloc.alloc(
-        u8,
-
-        // The type of this is a u64 on all systems but our allocator
-        // uses a usize which is a u32 on 32-bit systems.
-        std.math.cast(
-            usize,
-            c.wuffs_png__decoder__workbuf_len(decoder).max_incl,
-        ) orelse return error.OutOfMemory,
-    );
-    defer alloc.free(work_buffer);
-
-    const work_slice = c.wuffs_base__make_slice_u8(
-        work_buffer.ptr,
-        work_buffer.len,
-    );
-
-    var pixel_buffer: c.wuffs_base__pixel_buffer = undefined;
-    {
-        const status = c.wuffs_base__pixel_buffer__set_from_slice(
-            &pixel_buffer,
-            &image_config.pixcfg,
-            c.wuffs_base__make_slice_u8(destination.ptr, destination.len),
-        );
-        try check(log, &status);
-    }
-
-    {
-        const status = c.wuffs_png__decoder__decode_frame(
-            decoder,
-            &pixel_buffer,
-            &source_buffer,
-            c.WUFFS_BASE__PIXEL_BLEND__SRC,
-            work_slice,
-            null,
-        );
-        try check(log, &status);
-    }
-
-    return .{
-        .width = width,
-        .height = height,
-        .data = destination,
-    };
+pub fn decodeLimited(alloc: std.mem.Allocator, data: []const u8, max_bytes: usize) Error!ImageData {
+    return common.decode("png", alloc, data, max_bytes);
 }
 
 test "png_decode_000000" {
@@ -148,4 +32,23 @@ test "png_decode_FFFFFF" {
 test "png: too big" {
     const data = decode(std.testing.allocator, @embedFile("too_big.png"));
     try std.testing.expectError(error.Overflow, data);
+}
+
+test "png respects caller pixel budget" {
+    try std.testing.expectError(error.Overflow, decodeLimited(std.testing.allocator, @embedFile("1x1#000000.png"), 3));
+}
+
+fn decodeFixture(alloc: std.mem.Allocator) !void {
+    const image = try decodeLimited(alloc, @embedFile("1x1#000000.png"), 4);
+    defer alloc.free(image.data);
+    try std.testing.expectEqualSlices(u8, &.{ 0, 0, 0, 255 }, image.data);
+}
+
+test "png frees intermediate allocations on failure" {
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, decodeFixture, .{});
+}
+
+test "png rejects truncated input" {
+    const data = @embedFile("1x1#000000.png");
+    try std.testing.expectError(error.WuffsError, decode(std.testing.allocator, data[0 .. data.len / 2]));
 }
