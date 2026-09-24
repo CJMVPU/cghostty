@@ -2,8 +2,8 @@ import SwiftUI
 
 func sortedTerminalPaletteOptions(_ options: [CommandOption]) -> [CommandOption] {
     options.sorted { lhs, rhs in
-        let lhsTitle = lhs.title.replacingOccurrences(of: ":", with: "\t")
-        let rhsTitle = rhs.title.replacingOccurrences(of: ":", with: "\t")
+        let lhsTitle = lhs.orderingTitle
+        let rhsTitle = rhs.orderingTitle
         let comparison = lhsTitle.localizedCaseInsensitiveCompare(rhsTitle)
         if comparison != .orderedSame {
             return comparison == .orderedAscending
@@ -77,9 +77,10 @@ struct TerminalCommandPaletteView: View {
     private var terminalOptions: [CommandOption] {
         guard let app = surfaceView.windowRegistry.owner(of: surfaceView)?.ghostty else { return [] }
         return app.config.commandPaletteEntries
-            .map { c in
+            .enumerated().map { index, c in
                 let symbols = app.config.keyboardShortcut(for: c.action)?.keyList
                 return CommandOption(
+                    id: .command(c.action, index),
                     title: c.title,
                     description: c.description,
                     symbols: symbols
@@ -115,6 +116,7 @@ struct TerminalCommandPaletteView: View {
                 }
 
                 return CommandOption(
+                    id: .surface(surface.id),
                     title: "Focus: \(displayTitle)",
                     subtitle: subtitle,
                     leadingIcon: "rectangle.on.rectangle",

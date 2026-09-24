@@ -158,20 +158,13 @@ extension Ghostty {
             let item = NSDraggingItem(pasteboardWriter: pasteboardItem)
 
             // Create a scaled preview image from the surface snapshot
-            if let snapshot = surfaceView.asImage {
-                let imageSize = NSSize(
-                    width: snapshot.size.width * Self.previewScale,
-                    height: snapshot.size.height * Self.previewScale
-                )
+            let imageSize = NSSize(width: surfaceView.bounds.width * Self.previewScale,
+                                   height: surfaceView.bounds.height * Self.previewScale)
+            let pixelSize = max(imageSize.width, imageSize.height) * (window?.backingScaleFactor ?? 1)
+            if let bitmap = surfaceView.snapshotBitmap(maxDimension: pixelSize) {
+                bitmap.size = imageSize
                 let scaledImage = NSImage(size: imageSize)
-                scaledImage.lockFocus()
-                snapshot.draw(
-                    in: NSRect(origin: .zero, size: imageSize),
-                    from: NSRect(origin: .zero, size: snapshot.size),
-                    operation: .copy,
-                    fraction: 1.0
-                )
-                scaledImage.unlockFocus()
+                scaledImage.addRepresentation(bitmap)
 
                 // Position the drag image so the mouse is at the center of the image.
                 // I personally like the top middle or top left corner best but

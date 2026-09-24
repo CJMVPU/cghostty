@@ -60,6 +60,7 @@ const Shaders = shaderpkg.Shaders;
 /// Allocator that can be used
 alloc: std.mem.Allocator,
 presented_revision: Revision = .init(0),
+link_cache: link.Cache = .{},
 
 /// This mutex must be held whenever any state used in `drawFrame` is
 /// being modified, and also when it's being accessed in `drawFrame`.
@@ -600,6 +601,7 @@ pub fn init(alloc: Allocator, options: renderer.Options) !Self {
 
 pub fn deinit(self: *Self) void {
     self.trace.deinit();
+    self.link_cache.deinit(self.alloc);
     // This only deinitializes and frees CPU-side state
     // and does not free GPU resources like the swap chain and
     // shaders. Those are freed with `releaseGpuResources`.
@@ -974,6 +976,7 @@ pub fn updateFrame(
     // Data we extract out of the critical area.
     const Critical = struct {
         links: terminal.RenderState.CellSet,
+        link_key: terminal.accessibility.Tracker.Key,
         mouse: renderer.State.Mouse,
         preedit: ?renderer.State.Preedit,
         scrollbar: terminal.Scrollbar,
@@ -1119,6 +1122,7 @@ pub fn updateFrame(
 
         break :critical .{
             .links = links,
+            .link_key = terminal.accessibility.Tracker.Key.read(state.terminal),
             .mouse = state.mouse,
             .preedit = preedit,
             .scrollbar = scrollbar,
@@ -1132,10 +1136,13 @@ pub fn updateFrame(
 
     // Outside the critical area we can update our links to contain
     // our regex results.
-    self.config.links.renderCellMap(
+    self.link_cache.render(
+        self.alloc,
         arena_alloc,
+        &self.config.links,
         &critical.links,
         &self.terminal_state,
+        critical.link_key,
         critical.mouse.point,
         critical.mouse.mods,
     ) catch |err| {
@@ -1662,6 +1669,7 @@ fn uploadBackgroundImage(self: *Self) !void {
 
 /// Update the configuration.
 pub fn changeConfig(self: *Self, config: *DerivedConfig) !void {
+    self.link_cache.invalidate();
     // Config updates are serialized by renderer.Thread. Drawing may continue
     // with the old config/image while the replacement is being decoded.
     const bg_image_changed = if (self.config.bg_image) |old|

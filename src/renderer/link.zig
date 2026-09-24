@@ -146,6 +146,96 @@ pub const Set = struct {
     }
 };
 
+/// One viewport's regex results. Mouse movement only selects cached ranges;
+/// text/layout/config changes rebuild them. Owns no terminal page pointers.
+pub const Cache = struct {
+    key: ?Key = null,
+    map: terminal.RenderState.StringMap = .empty,
+    ranges: std.ArrayList(Range) = .empty,
+    rebuilds: usize = 0,
+
+    const Key = struct {
+        content: terminal.accessibility.Tracker.Key,
+        mods: inputpkg.Mods,
+        mouse_present: bool,
+    };
+    const Range = struct { start: usize, end: usize, hover: bool };
+
+    pub fn deinit(self: *Cache, alloc: Allocator) void {
+        self.map.deinit(alloc);
+        self.ranges.deinit(alloc);
+        self.* = .{};
+    }
+
+    pub fn invalidate(self: *Cache) void {
+        self.key = null;
+    }
+
+    pub fn render(
+        self: *Cache,
+        alloc: Allocator,
+        result_alloc: Allocator,
+        set: *const Set,
+        result: *terminal.RenderState.CellSet,
+        state: *const terminal.RenderState,
+        content: terminal.accessibility.Tracker.Key,
+        mouse: ?point.Coordinate,
+        mods: inputpkg.Mods,
+    ) !void {
+        for (set.links) |*entry| {
+            if (entry.active(mouse, mods)) break;
+        } else return;
+        const key: Key = .{ .content = content, .mods = mods, .mouse_present = mouse != null };
+        if (self.key == null or !std.meta.eql(self.key.?, key)) {
+            // Release oversized buffers after a resize instead of keeping a
+            // previous giant viewport alive for the surface's whole lifetime.
+            if (self.key) |old| {
+                if (old.content.cols != content.cols or old.content.rows != content.rows) self.deinit(alloc);
+            }
+            self.key = null; // Errors must never publish a partially built cache.
+            self.map.clearRetainingCapacity();
+            self.ranges.clearRetainingCapacity();
+            var text: std.Io.Writer.Allocating = .init(alloc);
+            defer text.deinit();
+            try state.string(&text.writer, .{ .alloc = alloc, .map = &self.map });
+            const str = text.writer.buffered();
+            for (set.links) |*entry| {
+                if (!entry.active(mouse, mods)) continue;
+                var matcher = try entry.regex.matcher();
+                defer matcher.deinit();
+                var offset: usize = 0;
+                while (offset < str.len) {
+                    const match = matcher.search(str[offset..], 0) catch |err| switch (err) {
+                        error.NoMatch, error.MatchLimitExceeded => break,
+                        else => return err,
+                    };
+                    try self.ranges.append(alloc, .{
+                        .start = offset + match.start,
+                        .end = offset + match.end,
+                        .hover = switch (entry.highlight) {
+                            .hover, .hover_mods => true,
+                            else => false,
+                        },
+                    });
+                    offset += match.end;
+                }
+            }
+            self.key = key;
+            self.rebuilds += 1;
+        }
+        for (self.ranges.items) |range| {
+            const cells = self.map.items[range.start..range.end];
+            if (range.hover) {
+                const vp = mouse orelse continue;
+                for (cells) |cell| {
+                    if (cell.eql(vp)) break;
+                } else continue;
+            }
+            for (cells) |cell| try result.put(result_alloc, cell, {});
+        }
+    }
+};
+
 test "renderCellMap" {
     const testing = std.testing;
     const alloc = testing.allocator;
@@ -415,4 +505,39 @@ test "renderCellMap mods no match" {
     try testing.expect(!result.contains(.{ .x = 3, .y = 0 }));
     try testing.expect(!result.contains(.{ .x = 1, .y = 1 }));
     try testing.expect(!result.contains(.{ .x = 1, .y = 2 }));
+}
+
+test "link cache matches uncached results across hover, edits, scroll, resize and config" {
+    const t = std.testing;
+    var term = try Terminal.init(t.io, t.allocator, .{ .cols = 20, .rows = 2, .max_scrollback_bytes = 1024 * 1024 });
+    defer term.deinit(t.allocator);
+    try term.printString("one two\nthree four\nfive six");
+    var set = try Set.fromConfig(t.allocator, &.{.{ .regex = "[a-z]+", .action = .{ .open = {} }, .highlight = .{ .hover = {} } }});
+    defer set.deinit(t.allocator);
+    var cache: Cache = .{};
+    defer cache.deinit(t.allocator);
+    var state: terminal.RenderState = .empty;
+    defer state.deinit(t.allocator);
+    for (0..6) |step| {
+        switch (step) {
+            2 => try term.printString(" changed"),
+            3 => term.screens.active.pages.scroll(.top),
+            4 => try term.resize(t.allocator, .{ .cols = 12, .rows = 3 }),
+            5 => cache.invalidate(),
+            else => {},
+        }
+        try state.update(t.allocator, &term);
+        const before = cache.rebuilds;
+        for ([_]point.Coordinate{ .{ .x = 0, .y = 0 }, .{ .x = 7, .y = 0 }, .{ .x = 1, .y = 1 } }) |mouse| {
+            var expected: terminal.RenderState.CellSet = .empty;
+            defer expected.deinit(t.allocator);
+            var actual: terminal.RenderState.CellSet = .empty;
+            defer actual.deinit(t.allocator);
+            try set.renderCellMap(t.allocator, &expected, &state, mouse, .{});
+            try cache.render(t.allocator, t.allocator, &set, &actual, &state, terminal.accessibility.Tracker.Key.read(&term), mouse, .{});
+            try t.expectEqual(expected.count(), actual.count());
+            for (expected.keys()) |cell| try t.expect(actual.contains(cell));
+        }
+        if (step == 1) try t.expectEqual(before, cache.rebuilds);
+    }
 }

@@ -1531,24 +1531,26 @@ pub const CAPI = struct {
         revision: u64,
     };
 
-    export fn ghostty_surface_read_accessibility(surface: *Surface, result: *Accessibility) bool {
+    // -1: failure; 0: unchanged (no output allocation); 1: owned snapshot.
+    export fn ghostty_surface_read_accessibility(surface: *Surface, previous: u64, result: *Accessibility) c_int {
         const core = &surface.core_surface;
         core.render.state.lockDemand(global.io());
         defer core.render.state.unlockDemand(global.io());
+        const revision = core.accessibility_tracker.current(&core.io.termio.terminal);
+        if (previous != 0 and previous == revision) return 0;
         const snapshot = terminal.accessibility.capture(global.alloc(), core.io.termio.terminal.screens.active) catch |err| {
             log.warn("error capturing accessibility text err={}", .{err});
-            return false;
+            return -1;
         };
-        core.accessibility_revision +%= 1;
         result.* = .{
             .text = snapshot.text.ptr,
             .text_len = snapshot.text.len,
             .visible = snapshot.visible,
             .selected = snapshot.selected.ptr,
             .selected_len = snapshot.selected.len,
-            .revision = core.accessibility_revision,
+            .revision = revision,
         };
-        return true;
+        return 1;
     }
 
     export fn ghostty_surface_free_accessibility(snapshot: *Accessibility) void {

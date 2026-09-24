@@ -251,7 +251,7 @@ struct SplitTreeTests {
         }
     }
 
-    // MARK: - Collection Conformance
+    // MARK: - Sequence Conformance
 
     @Test func treeIteratesLeavesInOrder() throws {
         let view1 = MockView()
@@ -261,13 +261,11 @@ struct SplitTreeTests {
         tree = try tree.inserting(view: view2, at: view1, direction: .right)
         tree = try tree.inserting(view: view3, at: view2, direction: .right)
 
-        #expect(tree.startIndex == 0)
-        #expect(tree.endIndex == 3)
-        #expect(tree.index(after: 0) == 1)
-
-        #expect(tree[0] === view1)
-        #expect(tree[1] === view2)
-        #expect(tree[2] === view3)
+        let snapshot = Array(tree)
+        #expect(snapshot.count == 3)
+        #expect(snapshot[0] === view1)
+        #expect(snapshot[1] === view2)
+        #expect(snapshot[2] === view3)
 
         var ids: [UUID] = []
         for view in tree {
@@ -276,11 +274,10 @@ struct SplitTreeTests {
         #expect(ids == [view1.id, view2.id, view3.id])
     }
 
-    @Test func emptyTreeCollectionProperties() {
+    @Test func emptyTreeSequenceProperties() {
         let tree = SplitTree<MockView>()
 
-        #expect(tree.startIndex == 0)
-        #expect(tree.endIndex == 0)
+        #expect(Array(tree).isEmpty)
 
         var count = 0
         for _ in tree {
@@ -664,5 +661,53 @@ struct SplitTreeTests {
         nodeIds.insert(s.left.structuralIdentity)
         nodeIds.insert(s.right.structuralIdentity)
         #expect(nodeIds.count == 2)
+    }
+}
+
+@MainActor struct SplitTreeTraversalTests {
+    @Test func iteratorKeepsOrderAcrossUnbalancedTreeAndIndependentCopies() throws {
+        let views = (0..<128).map { _ in MockView() }
+        var node = SplitTree<MockView>.Node.leaf(view: views.last!)
+        for view in views.dropLast().reversed() {
+            node = .split(.init(direction: .horizontal, ratio: 0.5, left: .leaf(view: view), right: node))
+        }
+        let tree = SplitTree<MockView>(root: node, zoomed: nil)
+        var iterator = tree.makeIterator()
+        #expect(iterator.next() === views[0])
+        var copy = iterator
+        #expect(iterator.next() === views[1])
+        #expect(copy.next() === views[1])
+        #expect(Array(tree).map(\.id) == views.map(\.id))
+        #expect(node.leaves().map(\.id) == views.map(\.id))
+        #expect(tree.first === views.first)
+        // Traversal creates its stack lazily instead of materializing all leaves
+        // just to look up the first matching surface.
+        #expect(tree.first(where: { $0 === views[0] }) === views[0])
+    }
+}
+
+@MainActor struct SplitTreeTraversalMeasurementTests {
+    @Test func firstMatchAvoidsMaterializingUnbalancedTree() {
+        let views = (0..<128).map { _ in MockView() }
+        var root = SplitTree<MockView>.Node.leaf(view: views.last!)
+        for view in views.dropLast().reversed() {
+            root = .split(.init(direction: .horizontal, ratio: 0.5, left: .leaf(view: view), right: root))
+        }
+        func legacyLeaves(_ node: SplitTree<MockView>.Node) -> [MockView] {
+            switch node {
+            case .leaf(let view): return [view]
+            case .split(let split): return legacyLeaves(split.left) + legacyLeaves(split.right)
+            }
+        }
+        let tree = SplitTree<MockView>(root: root, zoomed: nil)
+        #expect(legacyLeaves(root).map(\.id) == Array(tree).map(\.id))
+        let clock = ContinuousClock()
+        let baseline = clock.measure {
+            for _ in 0..<1000 { #expect(legacyLeaves(root).first(where: { $0 === views[0] }) === views[0]) }
+        }
+        let direct = clock.measure {
+            for _ in 0..<1000 { #expect(tree.first(where: { $0 === views[0] }) === views[0]) }
+        }
+        print("Split traversal benchmark 1000 first lookups, 128 leaves: baseline=\(baseline), iterator=\(direct)")
     }
 }

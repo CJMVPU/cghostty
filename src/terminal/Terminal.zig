@@ -42,6 +42,9 @@ const log = std.log.scoped(.terminal);
 /// Default tabstop interval
 const TABSTOP_INTERVAL = 8;
 
+/// Conservative text mutation epoch; never cleared by the renderer.
+accessibility_revision: u64 = 0,
+
 /// The set of screens behind this terminal (e.g. primary vs alternate).
 screens: ScreenSet,
 
@@ -450,6 +453,7 @@ pub fn gpa(self: *Terminal) Allocator {
 /// scrolling to use the no-scrollback path. The alternate screen is
 /// intentionally unaffected because it never retains scrollback.
 pub fn setScrollbackMaxBytes(self: *Terminal, max: ?usize) void {
+    self.accessibility_revision +%= 1;
     const primary = self.screens.get(.primary).?;
     primary.pages.setMaxBytes(max);
     primary.no_scrollback = max == 0;
@@ -462,12 +466,14 @@ pub fn setScrollbackMaxBytes(self: *Terminal, max: ?usize) void {
 /// Null removes the line limit. The alternate screen is intentionally
 /// unaffected because it never retains scrollback.
 pub fn setScrollbackMaxLines(self: *Terminal, max: ?usize) void {
+    self.accessibility_revision +%= 1;
     const primary = self.screens.get(.primary).?;
     primary.pages.setMaxLines(max);
 }
 
 /// Print UTF-8 encoded string to the terminal.
 pub fn printString(self: *Terminal, str: []const u8) !void {
+    self.accessibility_revision +%= 1;
     const view = try std.unicode.Utf8View.init(str);
     var it = view.iterator();
     while (it.nextCodepoint()) |cp| {
@@ -484,6 +490,7 @@ pub fn printString(self: *Terminal, str: []const u8) !void {
 
 /// Print the previous printed character a repeated amount of times.
 pub fn printRepeat(self: *Terminal, count_req: usize) !void {
+    self.accessibility_revision +%= 1;
     const c = self.previous_char orelse return;
     var remaining = @max(count_req, 1);
 
@@ -523,6 +530,7 @@ pub fn printRepeat(self: *Terminal, count_req: usize) !void {
 /// slower per-codepoint path. They're less common and this is optimized
 /// for the aforementioned cases.
 pub fn printSlice(self: *Terminal, cps: []const u32) !void {
+    self.accessibility_revision +%= 1;
     // Check if we can do the fast path up front. If we can't
     // we need to go back to scalar `print`.
     const fast = fast: {
@@ -1185,6 +1193,7 @@ inline fn printSliceCheckExpected(style_id: style.Id) u64 {
 }
 
 pub fn print(self: *Terminal, c: u21) !void {
+    self.accessibility_revision +%= 1;
     // log.debug("print={x} y={} x={}", .{ c, self.screens.active.cursor.y, self.screens.active.cursor.x });
 
     // If we're not on the main display, do nothing for now
@@ -2301,6 +2310,7 @@ pub fn tabReset(self: *Terminal) void {
 ///
 /// This unsets the pending wrap state without wrapping.
 pub fn index(self: *Terminal) !void {
+    self.accessibility_revision +%= 1;
     const screen: *Screen = self.screens.active;
 
     // Unset pending wrap state
@@ -2492,6 +2502,7 @@ fn kittyScrollMarginsBegin(
 ///   * If the cursor is not on the top-most line of the scrolling region:
 ///     move the cursor one line up
 pub fn reverseIndex(self: *Terminal) void {
+    self.accessibility_revision +%= 1;
     if (self.screens.active.cursor.y != self.scrolling_region.top or
         self.screens.active.cursor.x < self.scrolling_region.left or
         self.screens.active.cursor.x > self.scrolling_region.right)
@@ -2595,6 +2606,7 @@ pub fn setLeftAndRightMargin(self: *Terminal, left_req: usize, right_req: usize)
 
 /// Scroll the text down by one row.
 pub fn scrollDown(self: *Terminal, count: usize) void {
+    self.accessibility_revision +%= 1;
     // Preserve our x/y to restore.
     const old_x = self.screens.active.cursor.x;
     const old_y = self.screens.active.cursor.y;
@@ -2635,6 +2647,7 @@ pub fn scrollDown(self: *Terminal, count: usize) void {
 ///
 /// Does not change the (absolute) cursor position.
 pub fn scrollUp(self: *Terminal, count: usize) !void {
+    self.accessibility_revision +%= 1;
     // Preserve our x/y to restore.
     const old_x = self.screens.active.cursor.x;
     const old_y = self.screens.active.cursor.y;
@@ -2916,6 +2929,7 @@ fn invalidateFullWidthRowRange(
 ///
 /// Moves the cursor to the left margin.
 pub fn insertLines(self: *Terminal, count: usize) void {
+    self.accessibility_revision +%= 1;
     // Rare, but happens
     if (count == 0) return;
 
@@ -3090,6 +3104,7 @@ pub fn insertLines(self: *Terminal, count: usize) void {
 ///
 /// Moves the cursor to the left margin.
 pub fn deleteLines(self: *Terminal, count: usize) void {
+    self.accessibility_revision +%= 1;
     // Rare, but happens
     if (count == 0) return;
 
@@ -3249,6 +3264,7 @@ pub fn deleteLines(self: *Terminal, count: usize) void {
 ///
 /// The inserted cells are colored according to the current SGR state.
 pub fn insertBlanks(self: *Terminal, count: usize) void {
+    self.accessibility_revision +%= 1;
     // Unset pending wrap state without wrapping. Note: this purposely
     // happens BEFORE the scroll region check below, because that's what
     // xterm does.
@@ -3350,6 +3366,7 @@ pub fn insertBlanks(self: *Terminal, count: usize) void {
 ///
 /// Does not change the cursor position.
 pub fn deleteChars(self: *Terminal, count_req: usize) void {
+    self.accessibility_revision +%= 1;
     if (count_req == 0) return;
 
     // If our cursor is outside the margins then do nothing. We DO reset
@@ -3400,6 +3417,7 @@ pub fn deleteChars(self: *Terminal, count_req: usize) void {
 }
 
 pub fn eraseChars(self: *Terminal, count_req: usize) void {
+    self.accessibility_revision +%= 1;
     const count = end: {
         const remaining = self.cols - self.screens.active.cursor.x;
         var end = @min(remaining, @max(count_req, 1));
@@ -3456,6 +3474,7 @@ pub fn eraseLine(
     mode: csi.EraseLine,
     protected_req: bool,
 ) void {
+    self.accessibility_revision +%= 1;
     // Get our start/end positions depending on mode.
     const start, const end = switch (mode) {
         .right => right: {
@@ -3541,6 +3560,7 @@ pub fn eraseDisplay(
     mode: csi.EraseDisplay,
     protected_req: bool,
 ) void {
+    self.accessibility_revision +%= 1;
     // We respect protected attributes if explicitly requested (probably
     // a DECSEL sequence) or if our last protected mode was ISO even if its
     // not currently set.
@@ -3671,6 +3691,7 @@ pub fn eraseDisplay(
 ///
 /// Sets the cursor to the top left corner.
 pub fn decaln(self: *Terminal) !void {
+    self.accessibility_revision +%= 1;
     // Clear our stylistic attributes. This is the only thing that can
     // fail so we do it first so we can undo it.
     const old_style = self.screens.active.cursor.style;
@@ -3976,6 +3997,7 @@ pub fn resize(
     alloc: Allocator,
     opts: Resize,
 ) ResizeError!void {
+    self.accessibility_revision +%= 1;
     const tw = resize_tw;
 
     // Screen and scrolling-region invariants require non-zero dimensions.
@@ -4672,6 +4694,7 @@ test "Terminal: setTitle accepts its current value" {
 /// currently a spec for this, but it is something I think might
 /// be useful in the future.
 pub fn switchScreen(self: *Terminal, key: ScreenSet.Key) !?*Screen {
+    self.accessibility_revision +%= 1;
     // If we're already on the requested screen we do nothing.
     if (self.screens.active_key == key) return null;
     const old = self.screens.active;
@@ -4742,6 +4765,7 @@ pub fn switchScreenMode(
     mode: SwitchScreenMode,
     enabled: bool,
 ) !void {
+    self.accessibility_revision +%= 1;
     // The behavior in this function is completely based on reading
     // the xterm source, specifically "charproc.c" for
     // `srm_ALTBUF`, `srm_OPT_ALTBUF`, and `srm_OPT_ALTBUF_CURSOR`.
@@ -4848,6 +4872,7 @@ pub fn plainStringUnwrapped(self: *Terminal, alloc: Allocator) ![]const u8 {
 /// this will reuse the existing memory. In the latter case, memory may
 /// be wasted (since its unused) but it isn't leaked.
 pub fn fullReset(self: *Terminal) void {
+    self.accessibility_revision +%= 1;
     // Ensure we're back on primary screen
     self.screens.switchTo(.primary);
     self.screens.remove(

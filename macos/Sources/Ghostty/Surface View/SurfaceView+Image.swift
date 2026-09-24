@@ -8,16 +8,6 @@ extension Ghostty.SurfaceView {
         return thumbnailCache.value(for: key) { thumbnailPNG() }
     }
 
-    /// A snapshot image of the current surface view.
-    var asImage: NSImage? {
-        guard let bitmapRep = bitmapImageRepForCachingDisplay(in: bounds) else {
-            return nil
-        }
-        cacheDisplay(in: bounds, to: bitmapRep)
-        let image = NSImage(size: bounds.size)
-        image.addRepresentation(bitmapRep)
-        return image
-    }
 }
 
 /// Each surface retains at most one bounded PNG. A completed core frame,

@@ -170,7 +170,7 @@ struct AccessibilityText {
 @MainActor
 class CachedValue<T> {
     private var value: T?
-    private let fetch: () -> T
+    private let fetch: (T?) -> T
     private let duration: Duration
     private let now: () -> ContinuousClock.Instant
     private var expires: ContinuousClock.Instant?
@@ -182,13 +182,19 @@ class CachedValue<T> {
     ) {
         self.duration = duration
         self.now = now
-        self.fetch = fetch
+        self.fetch = { _ in fetch() }
+    }
+
+    init(duration: Duration, refresh: @escaping (T?) -> T) {
+        self.duration = duration
+        self.now = { .now }
+        self.fetch = refresh
     }
 
     func get() -> T {
         let instant = now()
         if let value, let expires, instant < expires { return value }
-        let result = fetch()
+        let result = fetch(value)
         value = result
         expires = now() + duration
         return result

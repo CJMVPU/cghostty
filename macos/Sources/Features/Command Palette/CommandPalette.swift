@@ -2,7 +2,13 @@ import SwiftUI
 
 struct CommandOption: Identifiable, Hashable {
     /// Unique identifier for this option.
-    let id = UUID()
+    enum ID: Hashable {
+        case command(String, Int)
+        case surface(UUID)
+        case ephemeral(UUID)
+    }
+    let id: ID
+    let orderingTitle: String
     /// The primary text displayed for this command.
     let title: String
     /// Secondary text displayed below the title.
@@ -25,6 +31,7 @@ struct CommandOption: Identifiable, Hashable {
     let action: () -> Void
 
     init(
+        id: ID = .ephemeral(UUID()),
         title: String,
         subtitle: String? = nil,
         description: String? = nil,
@@ -36,6 +43,8 @@ struct CommandOption: Identifiable, Hashable {
         sortKey: ObjectIdentifier? = nil,
         action: @escaping () -> Void
     ) {
+        self.id = id
+        self.orderingTitle = title.replacingOccurrences(of: ":", with: "\t")
         self.title = title
         self.subtitle = subtitle
         self.description = description
@@ -61,35 +70,21 @@ struct CommandPaletteView: View {
     @Binding var isPresented: Bool
     var backgroundColor: Color = Color(nsColor: .windowBackgroundColor)
     var options: [CommandOption]
+    @State private var searchCache = CommandPaletteSearch()
     @State private var rawQuery = ""
     @State private var selectedIndex: UInt?
-    @State private var hoveredOptionID: UUID?
+    @State private var hoveredOptionID: CommandOption.ID?
 
     var query: String {
         rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    // The options that we should show, taking into account any filtering from
-    // the query. Matched options are ranked in the following order:
-    // leadingColor > title > subtitle > description.
-    var filteredOptions: [CommandOption] {
-        if query.isEmpty {
-            return options
-        } else {
-            return options.filteredAndSorted(query: query)
-        }
-    }
-
-    var selectedOption: CommandOption? {
-        guard let selectedIndex else { return nil }
-        return if selectedIndex < filteredOptions.count {
-            filteredOptions[Int(selectedIndex)]
-        } else {
-            filteredOptions.last
-        }
-    }
-
     var body: some View {
+        let matches = searchCache.matches(options: options, query: query)
+        let filteredOptions = matches.map(\.option)
+        let selectedOption = selectedIndex.flatMap { index in
+            filteredOptions.isEmpty ? nil : filteredOptions[min(Int(index), filteredOptions.count - 1)]
+        }
         let scheme: ColorScheme = if NSColor(backgroundColor).isLightColor {
             .light
         } else {
@@ -143,8 +138,7 @@ struct CommandPaletteView: View {
             Divider()
 
             CommandTable(
-                options: filteredOptions,
-                query: query,
+                matches: matches,
                 selectedIndex: $selectedIndex,
                 hoveredOptionID: $hoveredOptionID) { option in
                     isPresented = false
@@ -250,13 +244,13 @@ private struct CommandPaletteQuery: View {
 }
 
 private struct CommandTable: View {
-    var options: [CommandOption]
-    var query: String
+    var matches: [CommandOptionMatch]
     @Binding var selectedIndex: UInt?
-    @Binding var hoveredOptionID: UUID?
+    @Binding var hoveredOptionID: CommandOption.ID?
     var action: (CommandOption) -> Void
 
     var body: some View {
+        let options = matches.map(\.option)
         if options.isEmpty {
             Text("No matches")
                 .foregroundStyle(.secondary)
@@ -265,10 +259,10 @@ private struct CommandTable: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 4) {
-                        ForEach(Array(options.enumerated()), id: \.1.id) { index, option in
+                        ForEach(Array(matches.enumerated()), id: \.1.option.id) { index, match in
+                            let option = match.option
                             CommandRow(
-                                option: option,
-                                query: query,
+                                match: match,
                                 isSelected: {
                                     if let selected = selectedIndex {
                                         return selected == index ||
@@ -300,15 +294,14 @@ private struct CommandTable: View {
 
 /// A single row in the command palette.
 private struct CommandRow: View {
-    let option: CommandOption
-    var query: String
+    let match: CommandOptionMatch
+    var option: CommandOption { match.option }
     var isSelected: Bool
-    @Binding var hoveredID: UUID?
+    @Binding var hoveredID: CommandOption.ID?
     var action: () -> Void
 
     private var highlightedTitle: Text {
-        guard !query.isEmpty,
-              let indices = option.title.matchedIndices(for: query) else {
+        guard let indices = match.titleIndices else {
             return Text(option.title)
                 .fontWeight(option.emphasis ? .medium : .regular)
         }
@@ -329,9 +322,8 @@ private struct CommandRow: View {
     }
 
     private func highlightedSubtitle(_ subtitle: String) -> Text {
-        guard !query.isEmpty,
-              option.title.matchedIndices(for: query) == nil,
-              let indices = subtitle.matchedIndices(for: query) else {
+        guard match.titleIndices == nil,
+              let indices = match.subtitleIndices else {
             return Text(subtitle)
         }
 
@@ -465,38 +457,41 @@ extension Collection where Element == CommandOption {
     /// maintaining original order: a closer leading color match always wins,
     /// then a title match beats a subtitle match beats a description match.
     func filteredAndSorted(query: String) -> [Element] {
-        compactMap { CommandOptionMatch(option: $0, query: query) }
-            .sorted {
-                ($0.colorScore, $0.textScore) > ($1.colorScore, $1.textScore)
-            }
-            .map(\.option)
+        paletteMatches(query: query).map(\.option)
+    }
+
+    func paletteMatches(query: String) -> [CommandOptionMatch] {
+        let matches = compactMap { CommandOptionMatch(option: $0, query: query) }
+        guard !query.isEmpty else { return matches }
+        return matches.sorted {
+            ($0.colorScore, $0.textScore) > ($1.colorScore, $1.textScore)
+        }
     }
 }
 
 /// A scored match of a command option against a palette query.
 struct CommandOptionMatch {
-    let option: CommandOption
+    var option: CommandOption
     /// How closely the option's leading color matches a color name in the
     /// query, from 0 (no match) to 1 (exact).
     let colorScore: Double
     /// Which text field matched, ranked: title (3), subtitle (2),
     /// description (1), none (0).
     let textScore: Int
+    let titleIndices: [String.Index]?
+    let subtitleIndices: [String.Index]?
 
     /// Returns nil if the option doesn't match the query at all.
     init?(option: CommandOption, query: String) {
         let colorScore = Self.colorMatchScore(for: option.leadingColor, query: query)
-        let textScore: Int = if option.title.matchedIndices(for: query) != nil {
-            3
-        } else if option.subtitle?.matchedIndices(for: query) != nil {
-            2
-        } else if option.description?.matchedIndices(for: query) != nil {
-            1
-        } else {
-            0
-        }
+        titleIndices = option.title.matchedIndices(for: query)
+        let subtitleMatch = titleIndices == nil ? option.subtitle?.matchedIndices(for: query) : nil
+        let descriptionMatch = titleIndices == nil && subtitleMatch == nil
+            ? option.description?.matchedIndices(for: query) : nil
+        subtitleIndices = option.subtitle == nil ? descriptionMatch : subtitleMatch
+        let textScore = titleIndices != nil ? 3 : subtitleMatch != nil ? 2 : descriptionMatch != nil ? 1 : 0
 
-        guard colorScore > 0 || textScore > 0 else { return nil }
+        guard query.isEmpty || colorScore > 0 || textScore > 0 else { return nil }
         self.option = option
         self.colorScore = colorScore
         self.textScore = textScore
@@ -526,5 +521,56 @@ struct CommandOptionMatch {
         }
 
         return bestScore
+    }
+}
+
+/// Cache matching work independently of row selection/hover. Replace each
+/// option on read so a new callback or display metadata is never kept stale.
+final class CommandPaletteSearch {
+    private struct Key: Equatable {
+        let id: CommandOption.ID
+        let title: String
+        let subtitle: String?
+        let description: String?
+        let color: Color?
+
+        static func == (lhs: Key, rhs: Key) -> Bool {
+            // String equality accepts canonically equivalent spellings, but
+            // cached String.Index values require the same encoded characters.
+            lhs.id == rhs.id && sameBytes(lhs.title, rhs.title) &&
+                sameBytes(lhs.subtitle, rhs.subtitle) && sameBytes(lhs.description, rhs.description) && lhs.color == rhs.color
+        }
+
+        private static func sameBytes(_ lhs: String?, _ rhs: String?) -> Bool {
+            switch (lhs, rhs) {
+            case (nil, nil): return true
+            case let (lhs?, rhs?): return lhs.utf8.elementsEqual(rhs.utf8)
+            default: return false
+            }
+        }
+    }
+    private var keys: [Key] = []
+    private var query: String?
+    private var entries: [(index: Int, match: CommandOptionMatch)] = []
+    private(set) var rebuilds = 0
+
+    func matches(options: [CommandOption], query: String) -> [CommandOptionMatch] {
+        let keys = options.map { Key(id: $0.id, title: $0.title, subtitle: $0.subtitle,
+                                    description: $0.description, color: $0.leadingColor) }
+        if self.query != query || self.keys != keys {
+            entries = options.enumerated().compactMap { index, option in
+                CommandOptionMatch(option: option, query: query).map { (index, $0) }
+            }
+            if !query.isEmpty {
+                entries.sort { ($0.match.colorScore, $0.match.textScore) > ($1.match.colorScore, $1.match.textScore) }
+            }
+            self.keys = keys
+            self.query = query
+            rebuilds += 1
+        }
+        for index in entries.indices {
+            entries[index].match.option = options[entries[index].index]
+        }
+        return entries.map(\.match)
     }
 }

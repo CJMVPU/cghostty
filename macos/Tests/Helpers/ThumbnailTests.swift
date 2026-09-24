@@ -35,6 +35,46 @@ import Testing
         #expect(pixel[3] == 255)
     }
 
+    @Test func dragBitmapUsesDestinationPixelsWithoutPNGEncoding() throws {
+        let view = TestView(frame: NSRect(x: 0, y: 0, width: 4000, height: 2000))
+        let bitmap = try #require(view.snapshotBitmap(maxDimension: 1600))
+        #expect(bitmap.pixelsWide == 1600)
+        #expect(bitmap.pixelsHigh == 800)
+        #expect(view.snapshotBitmap(maxDimension: .nan) == nil)
+        #expect(view.snapshotBitmap(maxDimension: 0) == nil)
+    }
+
+    @Test func directDragPreviewMeasurement() throws {
+        let view = TestView(frame: NSRect(x: 0, y: 0, width: 1600, height: 800))
+        let full = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        // Match the old image's backing scale, not just its logical size.
+        let targetPixels = CGFloat(full.pixelsWide) * 0.2
+        let small = try #require(view.snapshotBitmap(maxDimension: targetPixels))
+        let fullBytes = full.bytesPerRow * full.pixelsHigh
+        let smallBytes = small.bytesPerRow * small.pixelsHigh
+        #expect(smallBytes < fullBytes)
+        let clock = ContinuousClock()
+        let baseline = try clock.measure {
+            for _ in 0..<20 {
+                try autoreleasepool {
+                    let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+                    view.cacheDisplay(in: view.bounds, to: bitmap)
+                    let image = NSImage(size: view.bounds.size)
+                    image.addRepresentation(bitmap)
+                    let scaled = NSImage(size: NSSize(width: 320, height: 160))
+                    scaled.lockFocus()
+                    image.draw(in: NSRect(x: 0, y: 0, width: 320, height: 160),
+                               from: view.bounds, operation: .copy, fraction: 1)
+                    scaled.unlockFocus()
+                }
+            }
+        }
+        let direct = clock.measure {
+            for _ in 0..<20 { autoreleasepool { #expect(view.snapshotBitmap(maxDimension: targetPixels) != nil) } }
+        }
+        print("Drag preview benchmark 20 reads: baseline=\(baseline), direct=\(direct), full_bitmap_bytes=\(fullBytes), destination_bytes=\(smallBytes)")
+    }
+
     @Test func emptyViewDoesNotAllocateImage() {
         #expect(TestView(frame: .zero).thumbnailPNG() == nil)
     }

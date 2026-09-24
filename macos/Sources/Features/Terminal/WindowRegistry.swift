@@ -94,7 +94,8 @@ final class WindowRegistry {
         to newTree: SplitTree<Ghostty.SurfaceView>
     ) {
         precondition(owner.ghostty.windowRegistry === self)
-        for surface in oldTree where !newTree.contains(surface) {
+        let newMembers = Set(newTree.map(ObjectIdentifier.init))
+        for surface in oldTree where !newMembers.contains(ObjectIdentifier(surface)) {
             // A destination may register before the source finishes detaching.
             if owners.object(forKey: surface) === owner {
                 owners.removeObject(forKey: surface)

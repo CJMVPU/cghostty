@@ -71,6 +71,9 @@ refresh_active: bool = false,
 /// started (a needle is given).
 search: ?TerminalSearch = null,
 
+/// Actual query initializations, useful for diagnosing superseded work.
+query_restarts: usize = 0,
+
 /// The last-notified values used to diff search state into events.
 notify_state: NotifyState = .{},
 
@@ -254,16 +257,26 @@ fn feedLocked(self: *Thread, s: *TerminalSearch) void {
 
 /// Drain the mailbox.
 fn drainMailbox(self: *Thread) !void {
+    var pending: ?Message.WriteReq = null;
+    defer if (pending) |v| v.deinit();
     while (self.mailbox.pop(global.io())) |message| {
-        log.debug("mailbox message={}", .{message});
         switch (message) {
             .change_needle => |v| {
-                defer v.deinit();
-                try self.changeNeedle(v.slice());
+                if (pending) |old| old.deinit();
+                pending = v;
             },
-            .select => |v| try self.select(v),
+            .select => |v| {
+                // Navigation belongs to the query preceding it, not a later one.
+                if (pending) |needle| {
+                    try self.changeNeedle(needle.slice());
+                    needle.deinit();
+                    pending = null;
+                }
+                try self.select(v);
+            },
         }
     }
+    if (pending) |needle| try self.changeNeedle(needle.slice());
 }
 
 fn select(self: *Thread, sel: ScreenSearch.Select) !void {
@@ -319,6 +332,7 @@ fn changeNeedle(self: *Thread, needle: []const u8) !void {
 
     // Setup our search state.
     self.search = try .init(self.alloc, needle);
+    self.query_restarts += 1;
     self.notify_state = .{};
 
     // We need to grab the terminal lock and do an initial feed.
@@ -677,4 +691,32 @@ test {
             .y = 0,
         } }, t.screens.active.pages.pointFromPin(.screen, sel.end).?);
     }
+}
+
+test "search mailbox coalesces queries but navigation remains an ordering barrier" {
+    const alloc = testing.allocator;
+    var mutex: std.Io.Mutex = .init;
+    var term = try Terminal.init(testing.io, alloc, .{ .cols = 30, .rows = 3 });
+    defer term.deinit(alloc);
+    try term.printString("alpha alphabet alphabetic");
+    var thread = try Thread.init(alloc, .{ .mutex = &mutex, .terminal = &term });
+    defer thread.deinit();
+    for ([_][]const u8{ "a", "al", "alpha" }) |needle| {
+        _ = thread.mailbox.push(testing.io, .{ .change_needle = try .init(alloc, needle) }, .forever);
+    }
+    try thread.drainMailbox();
+    try testing.expectEqualStrings("alpha", thread.search.?.needle());
+    try testing.expectEqual(@as(usize, 1), thread.query_restarts);
+    _ = thread.mailbox.push(testing.io, .{ .change_needle = try .init(alloc, @as([]const u8, "alphabet")) }, .forever);
+    _ = thread.mailbox.push(testing.io, .{ .select = .next }, .forever);
+    _ = thread.mailbox.push(testing.io, .{ .change_needle = try .init(alloc, @as([]const u8, "alphabetic")) }, .forever);
+    try thread.drainMailbox();
+    try testing.expectEqualStrings("alphabetic", thread.search.?.needle());
+    try testing.expectEqual(@as(usize, 3), thread.query_restarts);
+    // An empty final query releases the previous search and all superseded bytes.
+    for ([_][]const u8{ "long query" ** 50, "" }) |needle| {
+        _ = thread.mailbox.push(testing.io, .{ .change_needle = try .init(alloc, needle) }, .forever);
+    }
+    try thread.drainMailbox();
+    try testing.expect(thread.search == null);
 }

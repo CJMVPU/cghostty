@@ -32,6 +32,9 @@ pub const Options = struct {
     @"terminal-rows": u16 = 80,
     @"terminal-cols": u16 = 120,
 
+    /// Override the terminal default when measuring large retained histories.
+    @"scrollback-bytes": ?usize = null,
+
     /// The data to read as a filepath. If this is "-" then
     /// we will read stdin. If this is unset, then we will
     /// do nothing (benchmark is a noop). It'd be more unixy to
@@ -69,6 +72,10 @@ pub const Mode = enum {
     /// common case of a shell prompt or TUI updating a small portion
     /// of the screen between frames.
     @"render-partial",
+    accessibility,
+    @"accessibility-reuse",
+    links,
+    @"links-cached",
 };
 
 pub fn create(
@@ -78,12 +85,14 @@ pub fn create(
     const ptr = try alloc.create(ScreenClone);
     errdefer alloc.destroy(ptr);
 
+    var terminal_options: Terminal.Options = .{
+        .rows = opts.@"terminal-rows",
+        .cols = opts.@"terminal-cols",
+    };
+    if (opts.@"scrollback-bytes") |limit| terminal_options.max_scrollback_bytes = limit;
     ptr.* = .{
         .opts = opts,
-        .terminal = try .init(global.io(), alloc, .{
-            .rows = opts.@"terminal-rows",
-            .cols = opts.@"terminal-cols",
-        }),
+        .terminal = try .init(global.io(), alloc, terminal_options),
     };
 
     return ptr;
@@ -103,6 +112,8 @@ pub fn benchmark(self: *ScreenClone) Benchmark {
             .@"render-locked" => stepRenderLocked,
             .@"render-clean" => stepRenderClean,
             .@"render-partial" => stepRenderPartial,
+            .accessibility, .@"accessibility-reuse" => stepAccessibility,
+            .links, .@"links-cached" => stepLinks,
         },
         .setupFn = setup,
         .teardownFn = teardown,
@@ -301,4 +312,61 @@ fn stepRenderPartial(ptr: *anyopaque) Benchmark.Error!void {
         };
         std.mem.doNotOptimizeAway(&state);
     }
+}
+
+// Use the same pre-generated --data file for both variants. Parsing and
+// viewport preparation finish before these timers start.
+fn stepAccessibility(ptr: *anyopaque) Benchmark.Error!void {
+    const self: *ScreenClone = @ptrCast(@alignCast(ptr));
+    const ax = terminalpkg.accessibility;
+    const alloc = self.terminal.screens.active.alloc;
+    var tracker: ax.Tracker = .{};
+    var revision: u64 = 0;
+    var snapshot: ?ax.Snapshot = null;
+    defer if (snapshot) |s| s.deinit(alloc);
+    var captures: usize = 0;
+    const start: std.Io.Timestamp = .now(global.io(), .awake);
+    for (0..100 * @as(usize, self.opts.loops)) |_| {
+        const current = tracker.current(&self.terminal);
+        if (self.opts.mode == .accessibility or current != revision) {
+            if (snapshot) |s| s.deinit(alloc);
+            snapshot = null;
+            snapshot = ax.capture(alloc, self.terminal.screens.active) catch return error.BenchmarkFailed;
+            revision = current;
+            captures += 1;
+        }
+        std.mem.doNotOptimizeAway(snapshot);
+    }
+    const elapsed = start.durationTo(.now(global.io(), .awake)).nanoseconds;
+    std.debug.print("mode={s} elapsed_ns={d} captures={d} bytes={d}\n", .{ @tagName(self.opts.mode), elapsed, captures, snapshot.?.text.len });
+}
+
+fn stepLinks(ptr: *anyopaque) Benchmark.Error!void {
+    const self: *ScreenClone = @ptrCast(@alignCast(ptr));
+    const link = @import("../renderer/link.zig");
+    const alloc = self.terminal.screens.active.alloc;
+    var set = link.Set.fromConfig(alloc, &.{.{ .regex = "https?://[^\\s]+", .action = .{ .open = {} }, .highlight = .{ .hover = {} } }}) catch return error.BenchmarkFailed;
+    defer set.deinit(alloc);
+    var state: terminalpkg.RenderState = .empty;
+    defer state.deinit(alloc);
+    state.update(alloc, &self.terminal) catch return error.BenchmarkFailed;
+    var cache: link.Cache = .{};
+    defer cache.deinit(alloc);
+    var result: terminalpkg.RenderState.CellSet = .empty;
+    defer result.deinit(alloc);
+    const key = terminalpkg.accessibility.Tracker.Key.read(&self.terminal);
+    var cells: usize = 0;
+    const start: std.Io.Timestamp = .now(global.io(), .awake);
+    for (0..2000 * @as(usize, self.opts.loops)) |i| {
+        result.clearRetainingCapacity();
+        const mouse: terminalpkg.point.Coordinate = .{ .x = @intCast(i % self.terminal.cols), .y = 0 };
+        if (self.opts.mode == .links) {
+            set.renderCellMap(alloc, &result, &state, mouse, .{}) catch return error.BenchmarkFailed;
+        } else {
+            cache.render(alloc, alloc, &set, &result, &state, key, mouse, .{}) catch return error.BenchmarkFailed;
+        }
+        cells += result.count();
+    }
+    const elapsed = start.durationTo(.now(global.io(), .awake)).nanoseconds;
+    std.debug.print("mode={s} elapsed_ns={d} rebuilds={d} highlighted_cells={d}\n", .{ @tagName(self.opts.mode), elapsed, cache.rebuilds, cells });
 }

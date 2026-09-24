@@ -79,6 +79,9 @@ kitty_images: kitty.graphics.ImageStorage = .{},
 /// Semantic prompt (OSC133) state.
 semantic_prompt: SemanticPrompt = .disabled,
 
+/// Conservative text mutation epoch; never cleared by the renderer.
+accessibility_revision: u64 = 0,
+
 /// Dirty flags for the renderer.
 dirty: Dirty = .{},
 
@@ -394,6 +397,7 @@ pub fn assertIntegrity(self: *const Screen) void {
 /// - Disables protection mode
 ///
 pub fn reset(self: *Screen) void {
+    self.accessibility_revision +%= 1;
     // Reset our pages
     self.pages.reset();
 
@@ -612,6 +616,7 @@ pub fn increaseCapacity(
     node: *PageList.List.Node,
     adjustment: ?PageList.IncreaseCapacity,
 ) PageList.IncreaseCapacityError!*PageList.List.Node {
+    self.accessibility_revision +%= 1;
     // If the page being modified isn't our cursor page then
     // this is a quick operation because we have no additional
     // accounting. We have to do this check here BEFORE calling
@@ -707,6 +712,7 @@ pub fn clonePartialRowGrowCapacity(
     x_start: usize,
     x_end: usize,
 ) *PageList.List.Node {
+    self.accessibility_revision +%= 1;
     assert(src_page != node.page());
 
     var current = node;
@@ -912,6 +918,7 @@ pub fn cursorReload(self: *Screen) void {
 /// Scroll the active area and keep the cursor at the bottom of the screen.
 /// This is a very specialized function but it keeps it fast.
 pub fn cursorDownScroll(self: *Screen) !void {
+    self.accessibility_revision +%= 1;
     assert(self.cursor.y == self.pages.rows - 1);
     defer self.assertIntegrity();
 
@@ -1048,6 +1055,7 @@ pub fn cursorDownScroll(self: *Screen) !void {
 /// This scrolls the active area at and above the cursor.
 /// The lines below the cursor are not scrolled.
 pub fn cursorScrollAbove(self: *Screen) !void {
+    self.accessibility_revision +%= 1;
     // We unconditionally mark the cursor row as dirty here because
     // the cursor always changes page rows inside this function, and
     // when that happens it can mean the text in the old row needs to
@@ -1253,6 +1261,7 @@ fn cursorScrollAboveRotate(
 /// is optimized for the common case where the full region is within
 /// a single page.
 pub fn cursorScrollRegionUp(self: *Screen, limit: usize) !void {
+    self.accessibility_revision +%= 1;
     assert(limit >= 1);
     assert(self.cursor.y >= limit);
     defer self.assertIntegrity();
@@ -1412,6 +1421,7 @@ pub fn cursorCopy(self: *Screen, other: Cursor, opts: struct {
     /// clear our current hyperlink.
     hyperlink: bool = true,
 }) !void {
+    self.accessibility_revision +%= 1;
     assert(other.x < self.pages.cols);
     assert(other.y < self.pages.rows);
 
@@ -1574,6 +1584,7 @@ pub inline fn cursorMarkDirty(self: *Screen) void {
 /// line. Not an extremely urgent issue since it's an edge case of an edge
 /// case, but not ideal.
 pub fn cursorResetWrap(self: *Screen) void {
+    self.accessibility_revision +%= 1;
     // Reset the cursor's pending wrap state
     self.cursor.pending_wrap = false;
 
@@ -1637,6 +1648,7 @@ pub inline fn scroll(self: *Screen, behavior: Scroll) void {
 /// See PageList.scrollClear. In addition to that, we reset the cursor
 /// to be on top.
 pub inline fn scrollClear(self: *Screen) !void {
+    self.accessibility_revision +%= 1;
     defer self.assertIntegrity();
 
     try self.pages.scrollClear();
@@ -1662,6 +1674,7 @@ pub inline fn eraseHistory(
     self: *Screen,
     bl: ?point.Point,
 ) void {
+    self.accessibility_revision +%= 1;
     defer self.assertIntegrity();
     self.pages.eraseHistory(bl);
     self.cursorReload();
@@ -1671,6 +1684,7 @@ pub inline fn eraseActive(
     self: *Screen,
     y: size.CellCountInt,
 ) void {
+    self.accessibility_revision +%= 1;
     defer self.assertIntegrity();
     self.pages.eraseActive(y);
     self.cursorReload();
@@ -1688,6 +1702,7 @@ pub fn clearRows(
     bl: ?point.Point,
     protected: bool,
 ) void {
+    self.accessibility_revision +%= 1;
     defer self.assertIntegrity();
 
     var it = self.pages.pageIterator(.right_down, tl, bl);
@@ -1722,6 +1737,7 @@ pub fn clearCells(
     row: *Row,
     cells: []Cell,
 ) void {
+    self.accessibility_revision +%= 1;
     if (cells.len == 0) return;
 
     // This whole operation does unsafe things, so we just want to assert
@@ -1828,6 +1844,7 @@ pub fn clearUnprotectedCells(
     row: *Row,
     cells: []Cell,
 ) void {
+    self.accessibility_revision +%= 1;
     var x0: usize = 0;
     var x1: usize = 0;
 
@@ -1884,6 +1901,7 @@ pub fn splitCellBoundary(
     self: *Screen,
     x: size.CellCountInt,
 ) void {
+    self.accessibility_revision +%= 1;
     const page = self.cursor.page_pin.node.page();
 
     page.pauseIntegrityChecks(true);
@@ -2022,6 +2040,7 @@ pub inline fn resize(
     self: *Screen,
     opts: Resize,
 ) Allocator.Error!void {
+    self.accessibility_revision +%= 1;
     const tw = resize_tw;
     defer self.assertIntegrity();
 
@@ -2605,6 +2624,7 @@ pub fn appendGrapheme(
     cell: *Cell,
     cp: u21,
 ) PageList.IncreaseCapacityError!void {
+    self.accessibility_revision +%= 1;
     defer self.cursor.page_pin.node.page().assertIntegrity();
     self.cursor.page_pin.node.page().appendGrapheme(
         self.cursor.page_row,
@@ -3698,6 +3718,7 @@ pub fn dumpStringAllocUnwrapped(
 /// have to reimplement it here because we want a way to print to the screen
 /// to test it but don't want all the features of Terminal.
 pub fn testWriteString(self: *Screen, text: []const u8) !void {
+    self.accessibility_revision +%= 1;
     const view = try std.unicode.Utf8View.init(text);
     var iter = view.iterator();
     while (iter.nextCodepoint()) |c| {

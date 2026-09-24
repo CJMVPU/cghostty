@@ -25,6 +25,11 @@ extension NSView {
 extension NSView {
     /// Render a bounded thumbnail once, ready for App Intents to reuse.
     func thumbnailPNG(maxDimension: CGFloat = 256) -> Data? {
+        snapshotBitmap(maxDimension: maxDimension)?.representation(using: .png, properties: [:])
+    }
+
+    /// Allocate the destination size directly, without a full-resolution intermediate.
+    func snapshotBitmap(maxDimension: CGFloat) -> NSBitmapImageRep? {
         guard bounds.width.isFinite, bounds.height.isFinite,
               bounds.width > 0, bounds.height > 0,
               maxDimension.isFinite, maxDimension >= 1 else { return nil }
@@ -38,7 +43,7 @@ extension NSView {
         )?.retagging(with: .sRGB) else { return nil }
         bitmap.size = bounds.size
         cacheDisplay(in: bounds, to: bitmap)
-        return bitmap.representation(using: .png, properties: [:])
+        return bitmap
     }
 }
 

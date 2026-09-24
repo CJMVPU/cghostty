@@ -5,6 +5,9 @@ struct SplitTree<ViewType: NSView & Identifiable> {
     /// The root of the tree. This can be nil to indicate the tree is empty.
     let root: Node?
 
+    var first: ViewType? { root?.leftmostLeaf() }
+    var count: Int { reduce(0) { count, _ in count + 1 } }
+
     /// The node that is currently zoomed. A zoomed split is expected to take up the full
     /// size of the view area where the splits are shown.
     let zoomed: Node?
@@ -1070,55 +1073,38 @@ extension SplitTree.Node: Equatable {
 
 // MARK: SplitTree Sequences
 
-extension SplitTree.Node {
-    /// Returns all leaf views in this subtree
-    func leaves() -> [ViewType] {
-        switch self {
-        case .leaf(let view):
-            return [view]
+extension SplitTree {
+    /// Depth-first, left-to-right traversal. Only the pending path is retained.
+    struct Iterator: IteratorProtocol {
+        private var pending: [Node]
 
-        case .split(let split):
-            return split.left.leaves() + split.right.leaves()
+        init(_ root: Node?) { pending = root.map { [$0] } ?? [] }
+
+        mutating func next() -> ViewType? {
+            while let node = pending.popLast() {
+                switch node {
+                case .leaf(let view): return view
+                case .split(let split):
+                    pending.append(split.right)
+                    pending.append(split.left)
+                }
+            }
+            return nil
         }
     }
 }
 
+extension SplitTree.Node {
+    /// Materialize once when a caller explicitly needs random access.
+    func leaves() -> [ViewType] { Array(self) }
+}
+
 extension SplitTree: Sequence {
-    func makeIterator() -> [ViewType].Iterator {
-        return root?.leaves().makeIterator() ?? [].makeIterator()
-    }
+    func makeIterator() -> Iterator { Iterator(root) }
 }
 
 extension SplitTree.Node: Sequence {
-    func makeIterator() -> [ViewType].Iterator {
-        return leaves().makeIterator()
-    }
-}
-
-// MARK: SplitTree Collection
-
-extension SplitTree: Collection {
-    typealias Index = Int
-    typealias Element = ViewType
-
-    var startIndex: Int {
-        return 0
-    }
-
-    var endIndex: Int {
-        return root?.leaves().count ?? 0
-    }
-
-    subscript(position: Int) -> ViewType {
-        precondition(position >= 0 && position < endIndex, "Index out of bounds")
-        let leaves = root?.leaves() ?? []
-        return leaves[position]
-    }
-
-    func index(after i: Int) -> Int {
-        precondition(i < endIndex, "Cannot increment index beyond endIndex")
-        return i + 1
-    }
+    func makeIterator() -> SplitTree<ViewType>.Iterator { .init(self) }
 }
 
 // MARK: Structural Identity

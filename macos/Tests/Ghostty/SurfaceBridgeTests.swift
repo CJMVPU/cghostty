@@ -66,6 +66,9 @@ import Testing
         #expect(surface!.perform(.selectAll))
         let snapshot = try #require(surface!.readAccessibility())
         let value = AccessibilityText(snapshot)
+        let reused = try #require(surface!.readAccessibility())
+        #expect(reused.revision == snapshot.revision)
+        #expect(reused.text == snapshot.text)
         #expect(value.text == surface!.readContents(viewport: false))
         // A login banner may precede the input. Select-all must still address
         // the exact captured UTF-16 string, including that prefix and emoji.

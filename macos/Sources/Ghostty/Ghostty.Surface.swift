@@ -201,19 +201,25 @@ extension Ghostty {
             let revision: UInt64
         }
 
+        @MainActor private var accessibilitySnapshot: AccessibilitySnapshot?
+
         @MainActor func readAccessibility() -> AccessibilitySnapshot? {
             var value = ghostty_accessibility_s()
-            guard ghostty_surface_read_accessibility(surface, &value) else { return nil }
+            let result = ghostty_surface_read_accessibility(surface, accessibilitySnapshot?.revision ?? 0, &value)
+            if result == 0 { return accessibilitySnapshot }
+            guard result == 1 else { return nil }
             defer { ghostty_surface_free_accessibility(&value) }
             let bytes = UnsafeRawBufferPointer(start: value.text, count: Int(value.text_len))
             guard let text = String(bytes: bytes, encoding: .utf8) else { return nil }
-            return AccessibilitySnapshot(
+            let snapshot = AccessibilitySnapshot(
                 text: text,
                 visibleRange: NSRange(location: Int(value.visible.location), length: Int(value.visible.length)),
                 selectedRanges: UnsafeBufferPointer(start: value.selected, count: Int(value.selected_len)).map {
                     NSRange(location: Int($0.location), length: Int($0.length))
                 },
                 revision: value.revision)
+            accessibilitySnapshot = snapshot
+            return snapshot
         }
 
         @MainActor var renderRevision: UInt64 { ghostty_surface_render_revision(surface) }

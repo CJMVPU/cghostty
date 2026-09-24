@@ -334,9 +334,11 @@ extension Ghostty {
             super.init(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
 
             // Our cache of screen data
-            cachedScreenContents = .init(duration: .milliseconds(500)) { [weak self] in
-                AccessibilityText(self?.surfaceModel?.readAccessibility())
-            }
+            cachedScreenContents = .init(duration: .milliseconds(500), refresh: { [weak self] previous in
+                let snapshot = self?.surfaceModel?.readAccessibility()
+                if let previous, let snapshot, previous.revision == snapshot.revision { return previous }
+                return AccessibilityText(snapshot)
+            })
             cachedVisibleContents = .init(duration: .milliseconds(500)) { [weak self] in
                 guard let self else { return "" }
                 guard let surface = self.surfaceModel else { return "" }

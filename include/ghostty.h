@@ -1219,7 +1219,8 @@ GHOSTTY_API bool ghostty_surface_read_text(ghostty_surface_t,
                                               ghostty_selection_s,
                                               ghostty_text_s*);
 GHOSTTY_API void ghostty_surface_free_text(ghostty_surface_t, ghostty_text_s*);
-GHOSTTY_API bool ghostty_surface_read_accessibility(ghostty_surface_t, ghostty_accessibility_s*);
+// Returns -1 on failure, 0 if previous_revision is current, 1 with owned output.
+GHOSTTY_API int ghostty_surface_read_accessibility(ghostty_surface_t, uint64_t previous_revision, ghostty_accessibility_s*);
 GHOSTTY_API void ghostty_surface_free_accessibility(ghostty_accessibility_s*);
 GHOSTTY_API uint64_t ghostty_surface_render_revision(ghostty_surface_t);
 

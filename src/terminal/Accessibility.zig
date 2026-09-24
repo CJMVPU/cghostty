@@ -18,6 +18,70 @@ pub const Snapshot = struct {
     }
 };
 
+/// Constant-size identity for a text/range snapshot. Mutation epochs are
+/// independent of renderer dirty bits; endpoints also detect direct viewport
+/// scrolling and tracked selection movement without scanning any history.
+pub const Tracker = struct {
+    key: ?Key = null,
+    revision: u64 = 0,
+
+    pub fn current(self: *Tracker, term: *const @import("Terminal.zig")) u64 {
+        const key = Key.read(term);
+        if (self.key == null or !std.meta.eql(self.key.?, key)) {
+            self.key = key;
+            self.revision +%= 1;
+            if (self.revision == 0) self.revision = 1;
+        }
+        return self.revision;
+    }
+
+    const Pin = @import("PageList.zig").Pin;
+    const Position = struct {
+        node: usize,
+        serial: u64,
+        x: usize,
+        y: usize,
+        fn read(pin: Pin) Position {
+            return .{ .node = @intFromPtr(pin.node), .serial = pin.node.serial, .x = pin.x, .y = pin.y };
+        }
+    };
+    pub const Key = struct {
+        terminal_epoch: u64,
+        screen_epoch: u64,
+        screen_generation: usize,
+        active_key: @import("ScreenSet.zig").Key,
+        page_serial: u64,
+        cols: usize,
+        rows: usize,
+        top: Position,
+        bottom: Position,
+        viewport: Position,
+        selection_start: ?Position,
+        selection_end: ?Position,
+        rectangle: bool,
+
+        pub fn read(term: *const @import("Terminal.zig")) Key {
+            const screen = term.screens.active;
+            const pages = &screen.pages;
+            return .{
+                .terminal_epoch = term.accessibility_revision,
+                .screen_epoch = screen.accessibility_revision,
+                .screen_generation = term.screens.generations.get(term.screens.active_key).?,
+                .active_key = term.screens.active_key,
+                .page_serial = pages.page_serial,
+                .cols = pages.cols,
+                .rows = pages.rows,
+                .top = .read(pages.getTopLeft(.screen)),
+                .bottom = .read(pages.getBottomRight(.screen).?),
+                .viewport = .read(pages.getTopLeft(.viewport)),
+                .selection_start = if (screen.selection) |sel| .read(sel.start()) else null,
+                .selection_end = if (screen.selection) |sel| .read(sel.end()) else null,
+                .rectangle = if (screen.selection) |sel| sel.rectangle else false,
+            };
+        }
+    };
+};
+
 const Marks = struct {
     length: usize = 0,
     visible: ?Range = null,
@@ -246,4 +310,44 @@ test "accessibility visible range follows scrollback and empty screens" {
     defer snapshot.deinit(t.allocator);
     try t.expectEqualStrings("old\n😀Z\nend", snapshot.text);
     try t.expectEqual(Range{ .location = 0, .length = 7 }, snapshot.visible);
+}
+
+test "accessibility tracker survives renderer dirty resets and detects all snapshot inputs" {
+    const t = std.testing;
+    var term = try @import("Terminal.zig").init(t.io, t.allocator, .{ .cols = 10, .rows = 2, .max_scrollback_bytes = 1024 * 1024 });
+    defer term.deinit(t.allocator);
+    var tracker: Tracker = .{};
+    var revision = tracker.current(&term);
+    try t.expectEqual(revision, tracker.current(&term));
+    var stream = term.vtStream();
+    defer stream.deinit();
+    // Overwrite, erase, soft-wrap, scroll, alternate screen and reset all change
+    // the snapshot even if a renderer has already consumed the dirty flags.
+    for ([_][]const u8{ "中文🙂", "\rX", "\x1b[2K", "012345678901", "\r\nnext\r\nlast", "\x1b[?1049h", "ALT", "\x1b[?1049l", "\x1bc" }) |input| {
+        stream.nextSlice(input);
+        var render: @import("render.zig").RenderState = .empty;
+        defer render.deinit(t.allocator);
+        try render.update(t.allocator, &term);
+        const next = tracker.current(&term);
+        try t.expect(next > revision);
+        try t.expectEqual(next, tracker.current(&term));
+        revision = next;
+    }
+    try term.printString("old\nvisible\nlast");
+    revision = tracker.current(&term);
+    term.screens.active.pages.scroll(.top);
+    try t.expect(tracker.current(&term) > revision);
+    revision = tracker.current(&term);
+    const pin = term.screens.active.pages.getTopLeft(.screen);
+    try term.screens.active.select(@import("Selection.zig").init(pin, pin, false));
+    try t.expect(tracker.current(&term) > revision);
+    revision = tracker.current(&term);
+    term.screens.active.clearSelection();
+    try t.expect(tracker.current(&term) > revision);
+    revision = tracker.current(&term);
+    try term.resize(t.allocator, .{ .cols = 8, .rows = 3 });
+    try t.expect(tracker.current(&term) > revision);
+    revision = tracker.current(&term);
+    term.setScrollbackMaxLines(0);
+    try t.expect(tracker.current(&term) > revision);
 }
