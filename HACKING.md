@@ -211,6 +211,11 @@ Metal GPU 执行时间、帧间隔、复制字节、尾部段数和动画定时�
 Metal 4 每个在途帧独占可复用的命令缓冲区、分配器、参数表与 residency set，GPU 完成后才允许重用。
 开启 `MTL_DEBUG_LAYER=1` 运行应用可检查 Metal API；交互验收需覆盖单步、快速输入、连续导航、斜向移动、中文宽字符、选区、失焦和缩放。
 CI 使用 GitHub `xcode-27` arm64 预览镜像，并在运行测试前验证系统为 macOS 27+。
+`scripts/metal-capabilities.swift` 单独报告运行时设备的 Metal 4 能力与编译器创建结果。
+两项真实 GPU 帧/图片测试在没有支持 Metal 4 的设备时明确跳过；设备声明支持而初始化失败时仍失败。
+其余原生测试照常执行。CI 摘要列出失败断言和跳过项；跳过 GPU 测试不代表渲染验证通过，
+发布前应在具备 Metal 4 的 Apple Silicon Mac 上完成原生回归。
+
 CI 在构建前检查 Zig 格式、严格 SwiftLint、版本记录和工作流语法。`.github/actionlint.yaml` 补充校验器尚未内置的 `xcode-27` 官方预览标签，不改变 runner 的选择方式。日志与指定的 `.xcresult` 结果包以 `cghostty-ci-diagnostics` 产物保存 14 天，失败时也尝试上传；打包 ZIP 和校验文件仍使用独立的 `cghostty-macos-arm64` 产物。Action 均锁定提交 SHA，缓存键包含 SDK 构建号和工具链记录。
 
 工具安装后，`scripts/record-build-environment.py` 记录 macOS、架构、Xcode、SDK、Swift、Metal、Zig、Nushell、SwiftLint、actionlint 和 Python 的实际版本。报告写入 `macos/build/ci-logs/environment.md`，同时显示在 Actions 运行摘要中，并随诊断产物上传。工具安装失败时也尝试记录，缺失或失败的命令标记为 `Unavailable`；报告本身不替代构建检查。Homebrew 工具随安装时可用版本变化，环境记录用于定位差异，不代表整个构建环境已完全固定。仅记录选定的公开 runner 元数据，不导出完整环境变量。

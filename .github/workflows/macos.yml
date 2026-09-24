@@ -37,6 +37,8 @@ jobs:
           mkdir -p macos/build/ci-logs
           python3 scripts/record-build-environment.py > macos/build/ci-logs/environment.md
           cat macos/build/ci-logs/environment.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Record runtime Metal capability
+        run: xcrun swift scripts/metal-capabilities.swift | tee macos/build/ci-logs/metal-capabilities.json
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # Downloaded source dependencies only. Compilation generations are
@@ -80,6 +82,14 @@ jobs:
           if [[ -d macos/build/TestResults.xcresult ]]; then
             xcrun xcresulttool get test-results summary --path macos/build/TestResults.xcresult --format json \
               | tee macos/build/ci-logs/native-summary.json
+            xcrun xcresulttool get test-results tests --path macos/build/TestResults.xcresult --format json \
+              > macos/build/ci-logs/native-tests.json
+            python3 scripts/summarize-native-tests.py macos/build/ci-logs/native-summary.json \
+              macos/build/ci-logs/native-tests.json --gpu macos/build/ci-logs/metal-capabilities.json \
+              | tee macos/build/ci-logs/native-summary.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Native test result bundle was not produced; inspect native-tests.log in cghostty-ci-diagnostics." \
+              >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Build release
         shell: bash

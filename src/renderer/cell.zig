@@ -50,6 +50,9 @@ pub const Contents = struct {
     /// Prefer accessing with `Contents.bgCell(row, col).*` instead
     /// of directly indexing in order to avoid integer size bugs.
     bg_cells: []shaderpkg.CellBg = &.{},
+    /// Each row is published by reset/clear before rebuildRow writes it.
+    bg_versions: []u64 = &.{},
+    bg_revision: u64 = 0,
 
     /// The lists which hold all of the foreground cells. When sized with
     /// Contents.resize the individual ArrayLists are given enough room that
@@ -76,6 +79,7 @@ pub const Contents = struct {
 
     pub fn deinit(self: *Contents, alloc: Allocator) void {
         alloc.free(self.bg_cells);
+        alloc.free(self.bg_versions);
         for (self.fg_rows) |*row| row.deinit(alloc);
         alloc.free(self.fg_rows);
     }
@@ -112,6 +116,8 @@ pub const Contents = struct {
             row.* = try .initCapacity(alloc, fg_row_capacity);
         }
 
+        const bg_versions = try alloc.alloc(u64, row_count);
+        errdefer alloc.free(bg_versions);
         const bg_cells = try alloc.realloc(
             self.bg_cells,
             row_count * @as(usize, size.columns),
@@ -122,6 +128,8 @@ pub const Contents = struct {
         for (self.fg_rows) |*row| row.deinit(alloc);
         alloc.free(self.fg_rows);
         self.size = size;
+        alloc.free(self.bg_versions);
+        self.bg_versions = bg_versions;
         self.bg_cells = bg_cells;
         self.fg_rows = fg_rows;
         self.reset();
@@ -129,6 +137,8 @@ pub const Contents = struct {
 
     /// Reset the cell contents to an empty state without resizing.
     pub fn reset(self: *Contents) void {
+        self.bg_revision += 1;
+        @memset(self.bg_versions, self.bg_revision);
         @memset(self.bg_cells, .{ 0, 0, 0, 0 });
         for (self.fg_rows) |*row| row.clearRetainingCapacity();
     }
@@ -207,6 +217,8 @@ pub const Contents = struct {
     /// Clear all of the cell contents for a given row.
     pub fn clear(self: *Contents, y: terminal.size.CellCountInt) void {
         assert(y < self.size.rows);
+        self.bg_revision += 1;
+        self.bg_versions[y] = self.bg_revision;
 
         @memset(self.bg_cells[@as(usize, y) * self.size.columns ..][0..self.size.columns], .{ 0, 0, 0, 0 });
 

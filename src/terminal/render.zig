@@ -943,6 +943,105 @@ pub const RenderState = struct {
         if (any_dirty and self.dirty == .false) self.dirty = .partial;
     }
 
+    pub const HighlightGroup = struct {
+        tag: u8,
+        highlights: []const highlight.Flattened,
+    };
+
+    pub const HighlightWork = struct {
+        chunk_lookups: usize = 0,
+        row_visits: usize = 0,
+        changed_rows: usize = 0,
+    };
+
+    /// Replace all highlights outside the terminal lock. Scratch owns the index
+    /// and proposed ranges; published ranges stay in each row's own arena.
+    /// Page addresses and serials are copied identities, never dereferenced.
+    pub fn replaceHighlightsFlattened(
+        self: *RenderState,
+        alloc: Allocator,
+        scratch: Allocator,
+        groups: []const HighlightGroup,
+    ) Allocator.Error!HighlightWork {
+        // The normal non-search frame must not allocate an index or scratch.
+        const any = for (groups) |group| {
+            if (group.highlights.len > 0) break true;
+        } else false;
+        if (!any) {
+            var work: HighlightWork = .{};
+            const data = self.row_data.slice();
+            for (data.items(.highlights), data.items(.dirty)) |*current, *dirty| {
+                if (current.items.len == 0) continue;
+                current.clearRetainingCapacity();
+                dirty.* = true;
+                work.changed_rows += 1;
+            }
+            if (work.changed_rows > 0 and self.dirty == .false) self.dirty = .partial;
+            return work;
+        }
+        const Key = struct { node: usize, serial: u64 };
+        const Rows = struct { start: usize, end: usize };
+        var pages: std.AutoHashMapUnmanaged(Key, Rows) = .empty;
+        defer pages.deinit(scratch);
+        const data = self.row_data.slice();
+        const pins = data.items(.pin);
+        const serials = data.items(.serial);
+        const desired = try scratch.alloc(std.ArrayList(Highlight), pins.len);
+        defer scratch.free(desired);
+        @memset(desired, .empty);
+        defer for (desired) |*list| list.deinit(scratch);
+        for (pins, serials, 0..) |pin, serial, row| {
+            const entry = try pages.getOrPut(scratch, .{ .node = @intFromPtr(pin.node), .serial = serial });
+            if (!entry.found_existing) entry.value_ptr.* = .{ .start = row, .end = row + 1 } else {
+                // Viewport rows from a page form a contiguous, ordered span.
+                assert(entry.value_ptr.end == row);
+                entry.value_ptr.end = row + 1;
+            }
+        }
+        var work: HighlightWork = .{};
+        for (groups) |group| for (group.highlights) |hl| {
+            const chunks = hl.chunks.slice();
+            for (chunks.items(.node), chunks.items(.serial), chunks.items(.start), chunks.items(.end), 0..) |node, serial, start, end, chunk| {
+                work.chunk_lookups += 1;
+                const rows = pages.get(.{ .node = @intFromPtr(node), .serial = serial }) orelse continue;
+                // Lower bound avoids scanning rows before the chunk's start.
+                var lo = rows.start;
+                var hi = rows.end;
+                while (lo < hi) {
+                    const mid = lo + (hi - lo) / 2;
+                    if (pins[mid].y < start) lo = mid + 1 else hi = mid;
+                }
+                while (lo < rows.end and pins[lo].y < end) : (lo += 1) {
+                    work.row_visits += 1;
+                    try desired[lo].append(scratch, .{
+                        .tag = group.tag,
+                        .range = .{
+                            if (chunk == 0 and pins[lo].y == start) hl.top_x else 0,
+                            if (chunk == chunks.len - 1 and pins[lo].y == end - 1) hl.bot_x else self.cols - 1,
+                        },
+                    });
+                }
+            }
+        };
+        for (data.items(.arena), data.items(.highlights), data.items(.dirty), desired) |*row_arena, *current, *dirty, next| {
+            const equal = equal: {
+                if (current.items.len != next.items.len) break :equal false;
+                for (current.items, next.items) |a, b| if (!std.meta.eql(a, b)) break :equal false;
+                break :equal true;
+            };
+            if (equal) continue;
+            var arena = row_arena.promote(alloc);
+            defer row_arena.* = arena.state;
+            try current.ensureTotalCapacity(arena.allocator(), next.items.len);
+            current.items.len = next.items.len;
+            @memcpy(current.items, next.items);
+            dirty.* = true;
+            if (self.dirty == .false) self.dirty = .partial;
+            work.changed_rows += 1;
+        }
+        return work;
+    }
+
     pub const StringMap = std.ArrayListUnmanaged(point.Coordinate);
 
     /// Convert the current render state contents to a UTF-8 encoded
@@ -2385,4 +2484,87 @@ test "dirty row resets highlights" {
         const row_highlights = row_data.items(.highlights);
         try testing.expectEqual(0, row_highlights[0].items.len);
     }
+}
+
+test "indexed flattened highlights preserve priority serials and unchanged rows" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    var term = try Terminal.init(testing.io, alloc, .{ .cols = 240, .rows = 80 });
+    defer term.deinit(alloc);
+    // Initial viewport storage may fit in one large page. Scroll until the
+    // actual viewport straddles a page boundary, rather than assuming a size.
+    for (0..1000) |_| {
+        const pages = &term.screens.active.pages;
+        if (pages.getTopLeft(.viewport).node != pages.getBottomRight(.viewport).?.node) break;
+        try term.printString("row\r\n");
+    }
+    var state: RenderState = .empty;
+    defer state.deinit(alloc);
+    var reference: RenderState = .empty;
+    defer reference.deinit(alloc);
+    try state.update(alloc, &term);
+    try reference.update(alloc, &term);
+    const pins = state.row_data.items(.pin);
+    const serials = state.row_data.items(.serial);
+    var highlights: [160]highlight.Flattened = undefined;
+    var initialized: usize = 0;
+    defer for (highlights[0..initialized]) |*hl| hl.deinit(alloc);
+    for (&highlights, 0..) |*hl, i| {
+        const row = i % pins.len;
+        hl.* = .{ .chunks = .empty, .top_x = 2, .bot_x = 4 };
+        initialized += 1;
+        try hl.chunks.append(alloc, .{ .node = pins[row].node, .serial = serials[row], .start = pins[row].y, .end = pins[row].y + 1 });
+    }
+    // Also span multiple pages, preserving the first/last column semantics.
+    var spanning: highlight.Flattened = .{ .chunks = .empty, .top_x = 5, .bot_x = 9 };
+    defer spanning.deinit(alloc);
+    var first: usize = 0;
+    while (first < pins.len) {
+        var end = first + 1;
+        while (end < pins.len and pins[end].node == pins[first].node) : (end += 1) {}
+        try spanning.chunks.append(alloc, .{ .node = pins[first].node, .serial = serials[first], .start = pins[first].y, .end = pins[end - 1].y + 1 });
+        first = end;
+    }
+    try testing.expect(spanning.chunks.len > 1);
+    // Include one stale generation that must never match a reused address.
+    highlights[159].chunks.items(.serial)[0] ^= 1;
+    const groups = [_]RenderState.HighlightGroup{
+        .{ .tag = 1, .highlights = highlights[0..1] },
+        .{ .tag = 2, .highlights = &highlights },
+        .{ .tag = 3, .highlights = &.{spanning} },
+    };
+    for (groups) |group| try reference.updateHighlightsFlattened(alloc, group.tag, group.highlights);
+    const work = try state.replaceHighlightsFlattened(alloc, alloc, &groups);
+    try testing.expectEqual(240, work.row_visits);
+    for (state.row_data.items(.highlights), reference.row_data.items(.highlights)) |actual, expected| {
+        try testing.expectEqual(expected.items.len, actual.items.len);
+        for (actual.items, expected.items) |a, b| try testing.expect(std.meta.eql(a, b));
+    }
+    @memset(state.row_data.items(.dirty), false);
+    state.dirty = .false;
+    const unchanged = try state.replaceHighlightsFlattened(alloc, alloc, &groups);
+    try testing.expectEqual(0, unchanged.changed_rows);
+    try testing.expectEqual(.false, state.dirty);
+    for (state.row_data.items(.dirty)) |dirty| try testing.expect(!dirty);
+    const cleared = try state.replaceHighlightsFlattened(alloc, alloc, &.{});
+    try testing.expectEqual(80, cleared.changed_rows);
+    for (state.row_data.items(.highlights)) |hl| try testing.expectEqual(0, hl.items.len);
+    std.debug.print("\nWORK_METRIC highlight_reference_checks={d} chunk_lookups={d} row_visits={d} unchanged_dirty_rows={d}\n", .{ 80 * (161 + spanning.chunks.len), work.chunk_lookups, work.row_visits, unchanged.changed_rows });
+}
+
+test "indexed flattened highlights unwind allocation failures" {
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, struct {
+        fn check(alloc: Allocator) !void {
+            var term = try Terminal.init(std.testing.io, std.testing.allocator, .{ .cols = 10, .rows = 3 });
+            defer term.deinit(std.testing.allocator);
+            var state: RenderState = .empty;
+            defer state.deinit(alloc);
+            try state.update(alloc, &term);
+            var hl: highlight.Flattened = .{ .chunks = .empty, .top_x = 2, .bot_x = 4 };
+            defer hl.deinit(alloc);
+            const pin = state.row_data.items(.pin)[0];
+            try hl.chunks.append(alloc, .{ .node = pin.node, .serial = state.row_data.items(.serial)[0], .start = pin.y, .end = pin.y + 3 });
+            _ = try state.replaceHighlightsFlattened(alloc, alloc, &.{.{ .tag = 1, .highlights = &.{hl} }});
+        }
+    }.check, .{});
 }

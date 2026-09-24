@@ -18,6 +18,16 @@ class SurfaceScrollView: NSView {
     private let surfaceView: Ghostty.SurfaceView
     private var observers: [NSObjectProtocol] = []
     private var appearanceObservation: Task<Void, Never>?
+    private var pointerObservation: Task<Void, Never>?
+    private var appliedAppearance: Appearance?
+    private var appliedCellSize: CGSize?
+    private var scrollerTrackingArea: NSTrackingArea?
+    private(set) var appearanceUpdates = 0
+
+    private struct Appearance: Equatable {
+        let showScroller: Bool
+        let lightBackground: Bool
+    }
     private var isLiveScrolling = false
 
     /// The last row position sent via scroll_to_row action. Used to avoid
@@ -119,13 +129,24 @@ class SurfaceScrollView: NSView {
         })
 
         let appearance = Observations { [weak surfaceView] in
-            (surfaceView?.derivedConfig, surfaceView?.pointerStyle)
+            (surfaceView?.derivedConfig.scrollbar, surfaceView?.derivedConfig.backgroundColor, surfaceView?.cellSize)
         }
         appearanceObservation = Task { [weak self] in
-            for await (_, pointer) in appearance {
+            for await (_, _, cellSize) in appearance {
                 guard !Task.isCancelled else { break }
                 guard let self else { break }
-                handleConfigChange()
+                let appearanceChanged = synchronizeAppearance()
+                let metricsChanged = appliedCellSize != cellSize
+                appliedCellSize = cellSize
+                if metricsChanged { synchronizeScrollView() }
+                if appearanceChanged || metricsChanged { synchronizeCoreSurface() }
+            }
+        }
+        let pointers = Observations { [weak surfaceView] in surfaceView?.pointerStyle }
+        pointerObservation = Task { [weak self] in
+            for await pointer in pointers {
+                guard !Task.isCancelled else { break }
+                guard let self else { break }
                 scrollView.documentCursor = pointer?.cursor
             }
         }
@@ -141,6 +162,8 @@ class SurfaceScrollView: NSView {
         if surfaceView.scrollContainer === self { surfaceView.scrollContainer = nil }
         appearanceObservation?.cancel()
         appearanceObservation = nil
+        pointerObservation?.cancel()
+        pointerObservation = nil
         observers.forEach { NotificationCenter.default.removeObserver($0) }
         observers.removeAll()
     }
@@ -181,13 +204,18 @@ class SurfaceScrollView: NSView {
 
     // MARK: Scrolling
 
-    private func synchronizeAppearance() {
-        let scrollbarConfig = surfaceView.derivedConfig.scrollbar
-        scrollView.hasVerticalScroller = scrollbarConfig != .never
-        let hasLightBackground = NSColor(surfaceView.derivedConfig.backgroundColor).isLightColor
-        // Make sure the scroller’s appearance matches the surface's background color.
-        scrollView.appearance = NSAppearance(named: hasLightBackground ? .aqua : .darkAqua)
+    @discardableResult
+    private func synchronizeAppearance() -> Bool {
+        let next = Appearance(
+            showScroller: surfaceView.derivedConfig.scrollbar != .never,
+            lightBackground: NSColor(surfaceView.derivedConfig.backgroundColor).isLightColor)
+        guard appliedAppearance != next else { return false }
+        appliedAppearance = next
+        appearanceUpdates += 1
+        scrollView.hasVerticalScroller = next.showScroller
+        scrollView.appearance = NSAppearance(named: next.lightBackground ? .aqua : .darkAqua)
         updateTrackingAreas()
+        return true
     }
 
     /// Positions the surface view to fill the currently visible rectangle.
@@ -246,12 +274,6 @@ class SurfaceScrollView: NSView {
     /// Handles scrollbar style changes
     private func handleScrollerStyleChange() {
         scrollView.scrollerStyle = .overlay
-        synchronizeCoreSurface()
-    }
-
-    /// Handles config changes
-    private func handleConfigChange() {
-        synchronizeAppearance()
         synchronizeCoreSurface()
     }
 
@@ -326,20 +348,15 @@ class SurfaceScrollView: NSView {
     }
 
     override func updateTrackingAreas() {
-        // To update our tracking area we just recreate it all.
-        trackingAreas.forEach { removeTrackingArea($0) }
-
         super.updateTrackingAreas()
-
-        // Our tracking area is the scroller frame
-        guard let scroller = scrollView.verticalScroller else { return }
-        addTrackingArea(NSTrackingArea(
-            rect: convert(scroller.bounds, from: scroller),
-            options: [
-                .mouseMoved,
-                .activeInKeyWindow,
-            ],
-            owner: self,
-            userInfo: nil))
+        let rect = scrollView.hasVerticalScroller
+            ? scrollView.verticalScroller.map { convert($0.bounds, from: $0) } : nil
+        guard rect != scrollerTrackingArea?.rect else { return }
+        if let scrollerTrackingArea { removeTrackingArea(scrollerTrackingArea) }
+        scrollerTrackingArea = nil
+        guard let rect else { return }
+        let area = NSTrackingArea(rect: rect, options: [.mouseMoved, .activeInKeyWindow], owner: self, userInfo: nil)
+        addTrackingArea(area)
+        scrollerTrackingArea = area
     }
 }

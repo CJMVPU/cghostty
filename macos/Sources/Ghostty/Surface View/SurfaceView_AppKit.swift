@@ -485,18 +485,35 @@ extension Ghostty {
             contentSize = size
         }
 
-        private func setSurfaceSize(width: UInt32, height: UInt32) {
-            guard let surface = self.surfaceModel else { return }
+        private weak var lastSizedSurface: Ghostty.Surface?
+        private var lastPixelSize: CGSize?
+        private var pendingSurfaceSize: Ghostty.Surface.Size?
+        private var sizePublicationScheduled = false
+        private(set) var sizeRequests = 0
 
-            // Update our core surface
-            surface.setSize(width: width, height: height)
-
-            // Update our cached size metrics
+        private func setSurfaceSize(width: UInt32, height: UInt32, force: Bool = false) {
+            guard let surface = surfaceModel else { return }
+            let pixels = CGSize(width: Int(width), height: Int(height))
+            if force || lastSizedSurface !== surface || lastPixelSize != pixels {
+                surface.setSize(width: width, height: height)
+                sizeRequests += 1
+                lastSizedSurface = surface
+                lastPixelSize = pixels
+            }
+            // Read even with identical pixels: font/config changes can change
+            // grid metrics without changing the view's dimensions.
             let size = surface.size
-            DispatchQueue.main.async {
-                // Publish geometry on the next main-loop turn, outside the
-                // SwiftUI layout update that requested the native resize.
-                self.surfaceSize = size
+            guard size != (pendingSurfaceSize ?? surfaceSize) else { return }
+            pendingSurfaceSize = size
+            guard !sizePublicationScheduled else { return }
+            sizePublicationScheduled = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.sizePublicationScheduled = false
+                let value = self.pendingSurfaceSize
+                self.pendingSurfaceSize = nil
+                guard self.surfaceModel != nil, self.surfaceModel === self.lastSizedSurface else { return }
+                self.surfaceSize = value
             }
         }
 
@@ -879,7 +896,7 @@ extension Ghostty {
 
             // When our scale factor changes, so does our fb size so we send that too
             let scaledSize = self.convertToBacking(contentSize)
-            setSurfaceSize(width: UInt32(scaledSize.width), height: UInt32(scaledSize.height))
+            setSurfaceSize(width: UInt32(scaledSize.width), height: UInt32(scaledSize.height), force: true)
         }
 
         override func mouseDown(with event: NSEvent) {

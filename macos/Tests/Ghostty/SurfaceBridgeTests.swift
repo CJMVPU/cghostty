@@ -1,10 +1,49 @@
 import AppKit
 import AppIntents
 import GhosttyKit
+import Metal
 import Testing
 @testable import Ghostty
 
+@Suite(.serialized)
 @MainActor struct SurfaceBridgeTests {
+    // Apple Silicon uses the system GPU. Unsupported hardware is an explicit
+    // skip; a capable device with a broken compiler must still fail.
+    nonisolated private static func metal4Available() throws -> Bool {
+        guard let device = MTLCreateSystemDefaultDevice() else { return false }
+        print("GPU frame tests: device=\(device.name), Metal4=\(device.supportsFamily(.metal4))")
+        guard device.supportsFamily(.metal4) else { return false }
+        _ = try device.makeCompiler(descriptor: MTL4CompilerDescriptor())
+        return true
+    }
+
+    private func show(_ view: Ghostty.SurfaceView) throws -> NSWindow {
+        let surface = try #require(view.surfaceModel)
+        let window = NSWindow(contentRect: view.bounds, styleMask: .borderless, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = view
+        window.orderFront(nil)
+        // These tests bypass SurfaceScrollView, so publish the viewport size
+        // explicitly. Focus and cursor blinking are not prerequisites to draw.
+        view.sizeDidChange(view.bounds.size)
+        surface.setVisible(true)
+        return window
+    }
+
+    private func waitForFrame(after revision: UInt64, in view: Ghostty.SurfaceView) async throws {
+        let surface = try #require(view.surfaceModel)
+        let deadline = ContinuousClock.now + .seconds(5)
+        while surface.renderRevision <= revision {
+            try #require(ContinuousClock.now < deadline,
+                         """
+                         No completed terminal frame: revision=\(surface.renderRevision), expected>\(revision),
+                         healthy=\(view.healthy), bounds=\(view.bounds), core=\(surface.size),
+                         windowVisible=\(view.window?.isVisible ?? false), focused=\(view.focused)
+                         """)
+            try await Task.sleep(for: .milliseconds(10))
+        }
+    }
+
     private func makeView(command: String = "/bin/cat") -> Ghostty.SurfaceView {
         let app = Ghostty.App(configPath: "/dev/null")
         var config = Ghostty.SurfaceConfiguration()
@@ -16,10 +55,7 @@ import Testing
     private func waitForText(_ text: String, in surface: Ghostty.Surface) async throws {
         let deadline = ContinuousClock.now + .seconds(5)
         while !surface.readContents(viewport: false).contains(text) {
-            guard ContinuousClock.now < deadline else {
-                Issue.record("Terminal output did not contain \(text)")
-                return
-            }
+            try #require(ContinuousClock.now < deadline, "Terminal output did not contain \(text)")
             try await Task.sleep(for: .milliseconds(10))
         }
     }
@@ -85,33 +121,27 @@ import Testing
         #expect(value.substring(in: value.selectedRanges[0]) == value.text)
     }
 
-    @Test func completedFramesAdvanceThumbnailRevisionAndMetadataSkipsImages() async throws {
+    @Test(.enabled(if: try Self.metal4Available(), "Requires a Metal 4 GPU"))
+    func completedFramesAdvanceThumbnailRevisionAndMetadataSkipsImages() async throws {
         let view = makeView()
         let surface = try #require(view.surfaceModel)
-        let window = NSWindow(contentRect: view.bounds, styleMask: .borderless, backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false
-        window.contentView = view
-        window.orderFront(nil)
-        surface.setVisible(true)
+        let window = try show(view)
         defer { window.close() }
-        func waitForFrame(after revision: UInt64) async throws {
-            let deadline = ContinuousClock.now + .seconds(5)
-            while surface.renderRevision <= revision {
-                try #require(ContinuousClock.now < deadline, "No completed terminal frame")
-                try await Task.sleep(for: .milliseconds(10))
-            }
-        }
-        try await waitForFrame(after: 0)
+        let initialRevision = surface.renderRevision
+        #expect(surface.sendKeyEvent(.init(keyCode: 0, action: .press, text: "first frame")))
+        try await waitForText("first frame", in: surface)
+        try await waitForFrame(after: initialRevision, in: view)
         let revision = surface.renderRevision
         #expect(TerminalEntity(view).displayRepresentation.image == nil)
         #expect(TerminalEntity(view, includeThumbnail: true).displayRepresentation.image != nil)
         #expect(surface.sendKeyEvent(.init(keyCode: 0, action: .press, text: "new frame")))
         try await waitForText("new frame", in: surface)
-        try await waitForFrame(after: revision)
+        try await waitForFrame(after: revision, in: view)
         #expect(surface.renderRevision > revision)
     }
 
-    @Test func kittyPlacementsAndSynchronizedFramesReachNativeRenderer() async throws {
+    @Test(.enabled(if: try Self.metal4Available(), "Requires a Metal 4 GPU"))
+    func kittyPlacementsAndSynchronizedFramesReachNativeRenderer() async throws {
         // Two placements exercise nonzero offsets in the shared instance buffer.
         let output = "\u{1b}[H\u{1b}_Ga=T,f=32,s=1,v=1,i=1,q=2,c=4,r=2;/wAA/w==\u{1b}\\" +
             "\u{1b}[1;8H\u{1b}_Ga=p,i=1,p=2,q=2,c=4,r=2\u{1b}\\" +
@@ -119,21 +149,13 @@ import Testing
         let encoded = Data(output.utf8).base64EncodedString()
         let view = makeView(command: "/bin/sh -c 'printf %s \(encoded) | /usr/bin/base64 -D; exec /bin/cat'")
         let surface = try #require(view.surfaceModel)
-        let window = NSWindow(contentRect: view.bounds, styleMask: .borderless, backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false
-        window.contentView = view
-        window.orderFront(nil)
-        surface.setVisible(true)
+        let window = try show(view)
         defer { window.close() }
         try await waitForText("next-frame", in: surface)
         let revision = surface.renderRevision
         #expect(surface.sendKeyEvent(.init(keyCode: 0, action: .press, text: "draw-check")))
         try await waitForText("draw-check", in: surface)
-        let deadline = ContinuousClock.now + .seconds(5)
-        while surface.renderRevision <= revision {
-            try #require(ContinuousClock.now < deadline, "Image frame did not complete")
-            await Task.yield()
-        }
+        try await waitForFrame(after: revision, in: view)
         #expect(view.healthy)
         let png = try #require(view.thumbnailPNG())
         let bitmap = try #require(NSBitmapImageRep(data: png))

@@ -126,6 +126,73 @@ import Testing
         #expect(view.derivedConfig.windowTitleFontFamily == "Session Font")
     }
 
+    @Test func pointerChangesLeaveScrollAppearanceAndSizeUntouched() async throws {
+        let app = Ghostty.App(configPath: "/dev/null")
+        let view = view(app)
+        let wrapper = SurfaceScrollView(contentSize: NSSize(width: 600, height: 400), surfaceView: view)
+        defer { wrapper.dismantle() }
+        wrapper.frame.size = NSSize(width: 600, height: 400)
+        wrapper.layout()
+        let scroll = try #require(wrapper.subviews.first as? NSScrollView)
+        let appearanceUpdates = wrapper.appearanceUpdates
+        let sizeRequests = view.sizeRequests
+        for style: CursorStyle in [.link, .crosshair, .horizontalText, .default] {
+            view.setCursorShape(style)
+            let deadline = ContinuousClock.now + .seconds(2)
+            while scroll.documentCursor != style.cursor {
+                try #require(ContinuousClock.now < deadline, "Pointer observation did not update the cursor")
+                await Task.yield()
+            }
+        }
+        #expect(wrapper.appearanceUpdates == appearanceUpdates)
+        #expect(view.sizeRequests == sizeRequests)
+        // Font callbacks must refresh metrics even without a layout or pixel
+        // size change, and without reapplying the scrollbar appearance.
+        let core = try #require(view.surfaceModel)
+        #expect(core.changeFontSize(by: 2))
+        let deadline = ContinuousClock.now + .seconds(2)
+        while view.surfaceSize != core.size {
+            try #require(ContinuousClock.now < deadline, "Font metrics did not publish without a resize")
+            await Task.yield()
+        }
+        #expect(wrapper.appearanceUpdates == appearanceUpdates)
+        #expect(view.sizeRequests == sizeRequests)
+        wrapper.updateTrackingAreas()
+        let areas = wrapper.trackingAreas
+        wrapper.updateTrackingAreas()
+        #expect(wrapper.trackingAreas == areas)
+    }
+
+    @Test func repeatedPixelSizesCoalesceAndFontMetricsStillPublish() async throws {
+        let app = Ghostty.App(configPath: "/dev/null")
+        let view = view(app)
+        let core = try #require(view.surfaceModel)
+        let size = CGSize(width: 600, height: 400)
+        view.sizeDidChange(size)
+        let requests = view.sizeRequests
+        for _ in 0..<100 { view.sizeDidChange(size) }
+        #expect(view.sizeRequests == requests)
+        view.sizeDidChange(CGSize(width: 610, height: 410))
+        view.sizeDidChange(CGSize(width: 620, height: 420))
+        await drainMainQueue()
+        #expect(view.surfaceSize == core.size)
+        let previous = core.size
+        #expect(core.perform(action: "increase_font_size:2"))
+        view.sizeDidChange(CGSize(width: 620, height: 420))
+        await drainMainQueue()
+        #expect(view.sizeRequests == requests + 2)
+        #expect(view.surfaceSize == core.size)
+        #expect(core.size != previous)
+        view.viewDidChangeBackingProperties()
+        #expect(view.sizeRequests == requests + 3)
+        // A queued publication cannot restore presentation state after release.
+        view.sizeDidChange(CGSize(width: 630, height: 430))
+        view.lifecycle.release()
+        let released = view.surfaceSize
+        await drainMainQueue()
+        #expect(view.surfaceSize == released)
+    }
+
     private func drainMainQueue() async {
         await withCheckedContinuation { continuation in
             DispatchQueue.main.async { continuation.resume() }

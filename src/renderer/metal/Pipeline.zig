@@ -138,7 +138,14 @@ pub fn init(comptime VertexAttributes: ?type, opts: Options) !Self {
     var err: ?*anyopaque = null;
     const compiler_desc = @import("Frame.zig").object("MTL4CompilerDescriptor");
     defer compiler_desc.release();
-    const compiler_ptr = opts.device.msgSend(?*anyopaque, "newCompilerWithDescriptor:error:", .{ compiler_desc, &err }) orelse return error.MetalFailed;
+    const compiler_ptr = opts.device.msgSend(?*anyopaque, "newCompilerWithDescriptor:error:", .{ compiler_desc, &err });
+    // Do not discard NSError when creation returns nil: unsupported CI GPUs
+    // otherwise surface only as repeated generic MetalFailed frame timeouts.
+    try checkError(err);
+    if (compiler_ptr == null) {
+        log.err("Metal 4 compiler creation returned nil without an NSError", .{});
+        return error.MetalFailed;
+    }
     const compiler = objc.Object.fromId(compiler_ptr);
     defer compiler.release();
     const pipeline_state = compiler.msgSend(
@@ -204,6 +211,6 @@ fn checkError(err_: ?*anyopaque) !void {
         @ptrCast(nserr.getProperty(?*anyopaque, "localizedDescription").?),
     );
 
-    log.err("metal error={s}", .{str.cstringPtr(.ascii).?});
+    log.err("metal error={s}", .{str.cstringPtr(.utf8) orelse "unavailable error description"});
     return error.MetalFailed;
 }

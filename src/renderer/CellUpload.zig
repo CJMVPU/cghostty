@@ -1,5 +1,5 @@
-//! Per-swap-chain-slot content revision. Commit only after BOTH cell uploads
-//! succeed; another slot being current does not make this slot current.
+//! Per-swap-chain-slot foreground revision. Commit only after upload succeeds;
+//! another slot being current does not make this slot current.
 const Self = @This();
 revision: ?u64 = null,
 foreground_count: usize = 0,

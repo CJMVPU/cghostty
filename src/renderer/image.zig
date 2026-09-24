@@ -32,6 +32,15 @@ pub const State = struct {
     /// on frame builds and are generally more expensive to handle.
     kitty_virtual: bool,
 
+    upload_dirty: bool = true,
+    placement_revision: u64 = 1,
+    last_geometry: ?Geometry = null,
+
+    const Geometry = struct {
+        content: terminal.accessibility.Tracker.Key,
+        cell: CellSize,
+    };
+
     pub const empty: State = .{
         .images = .empty,
         .kitty_placements = .empty,
@@ -60,8 +69,12 @@ pub const State = struct {
                 std.mem.swap(Image, &old.image, &entry.value_ptr.image);
             }
         }
+        const revision = self.placement_revision;
         self.deinit(alloc);
         self.* = snapshot.*;
+        self.placement_revision = revision +% 1;
+        self.upload_dirty = true;
+        self.last_geometry = null;
         snapshot.* = .empty;
     }
 
@@ -108,6 +121,7 @@ pub const State = struct {
         alloc: Allocator,
         api: *Metal,
     ) bool {
+        if (!self.upload_dirty) return true;
         var success: bool = true;
         var image_it = self.images.iterator();
         while (image_it.next()) |kv| {
@@ -129,6 +143,7 @@ pub const State = struct {
             }
         }
 
+        self.upload_dirty = !success;
         return success;
     }
 
@@ -194,7 +209,13 @@ pub const State = struct {
     /// Called after a swap-chain frame becomes available, before encoding.
     /// Each placement keeps its own offset and draw order; no CPU writes touch
     /// an in-flight frame's buffer.
-    pub fn prepareDraw(self: *const State, buffer: *Metal.Buffer(Metal.shaders.Image)) !void {
+    pub fn prepareDraw(self: *const State, buffer: anytype, uploaded: *?u64) !usize {
+        if (uploaded.* == self.placement_revision) return 0;
+        uploaded.* = null;
+        if (self.kitty_placements.items.len == 0) {
+            uploaded.* = self.placement_revision;
+            return 0;
+        }
         const data = try buffer.writable(self.kitty_placements.items.len);
         for (self.kitty_placements.items, data) |p, *dst| dst.* = .{
             .grid_pos = .{ @floatFromInt(p.x), @floatFromInt(p.y) },
@@ -202,6 +223,8 @@ pub const State = struct {
             .source_rect = .{ @floatFromInt(p.source_x), @floatFromInt(p.source_y), @floatFromInt(p.source_width), @floatFromInt(p.source_height) },
             .dest_size = .{ @floatFromInt(p.width), @floatFromInt(p.height) },
         };
+        uploaded.* = self.placement_revision;
+        return data.len * @sizeOf(Metal.shaders.Image);
     }
 
     /// Returns true if the Kitty graphics state requires an update based
@@ -211,17 +234,19 @@ pub const State = struct {
     pub fn kittyRequiresUpdate(
         self: *const State,
         t: *const terminal.Terminal,
+        cell_size: CellSize,
     ) bool {
-        // If the terminal kitty image state is dirty, we must update.
         if (t.screens.active.kitty_images.dirty) return true;
-
-        // If we have any virtual references, we must also rebuild our
-        // kitty state on every frame because any cell change can move
-        // an image. If the virtual placements were removed, this will
-        // be set to false on the next update.
-        if (self.kitty_virtual) return true;
-
-        return false;
+        if (!self.kitty_virtual and self.kitty_placements.items.len == 0 and t.screens.active.kitty_images.placements.count() == 0) return false;
+        const old = self.last_geometry orelse return true;
+        const key = terminal.accessibility.Tracker.Key.read(t);
+        if (!std.meta.eql(old.cell, cell_size)) return true;
+        if (self.kitty_virtual) return !std.meta.eql(old.content, key);
+        // Ordinary placements depend on viewport geometry, not cell contents.
+        return old.content.active_key != key.active_key or
+            old.content.screen_generation != key.screen_generation or
+            old.content.cols != key.cols or old.content.rows != key.rows or
+            !std.meta.eql(old.content.viewport, key.viewport);
     }
 
     /// Update the Kitty graphics state from the terminal.
@@ -233,8 +258,12 @@ pub const State = struct {
         t: *const terminal.Terminal,
         cell_size: CellSize,
     ) void {
+        self.upload_dirty = true;
+        self.placement_revision +%= 1;
+        self.last_geometry = .{ .content = .read(t), .cell = cell_size };
         const storage = &t.screens.active.kitty_images;
-        defer storage.dirty = false;
+        var failed = false;
+        defer storage.dirty = failed;
 
         // We always clear our previous placements no matter what because
         // we rebuild them from scratch.
@@ -324,7 +353,7 @@ pub const State = struct {
                         // the root's placeholder cells, which we only
                         // know after the placeholder scan below. The
                         // placeholders also move with cell changes so we
-                        // must rebuild every frame, like virtuals.
+                        // must rebuild when their content changes.
                         .virtual => {
                             self.kitty_virtual = true;
                             pending_relative.append(alloc, .{
@@ -334,6 +363,7 @@ pub const State = struct {
                                 .horizontal_offset = chain.horizontal_offset,
                                 .vertical_offset = chain.vertical_offset,
                             }) catch |err| {
+                                failed = true;
                                 log.warn("error deferring relative placement err={}", .{err});
                             };
                             continue;
@@ -363,6 +393,7 @@ pub const State = struct {
                 p,
                 origin,
             ) catch |err| {
+                failed = true;
                 // For errors we log and continue. We try to place
                 // other placements even if one fails.
                 log.warn("error preparing kitty placement err={}", .{err});
@@ -390,6 +421,7 @@ pub const State = struct {
                     &virtual_p,
                     cell_size,
                 ) catch |err| {
+                    failed = true;
                     // For errors we log and continue. We try to place
                     // other placements even if one fails.
                     log.warn("error preparing kitty placement err={}", .{err});
@@ -416,6 +448,7 @@ pub const State = struct {
                         alloc,
                         target.key,
                     ) catch |err| {
+                        failed = true;
                         log.warn("error tracking virtual origin err={}", .{err});
                         break :fold;
                     };
@@ -455,6 +488,7 @@ pub const State = struct {
                     std.math.cast(i32, x) orelse continue,
                     std.math.cast(i32, y) orelse continue,
                 ) catch |err| {
+                    failed = true;
                     log.warn("error preparing kitty placement err={}", .{err});
                 };
             }
@@ -1450,6 +1484,18 @@ test "kitty renderer positions relative placements from virtual parent placehold
 
     state.kittyUpdate(alloc, &t, .{ .width = 10, .height = 10 });
     try testing.expect(state.kitty_virtual);
+    try testing.expect(!state.kittyRequiresUpdate(&t, .{ .width = 10, .height = 10 }));
+    // An allocation failure while preparing relative virtual placements must
+    // remain retryable even though the content/geometry key did not change.
+    var failing = testing.FailingAllocator.init(alloc, .{ .fail_index = 0 });
+    state.kittyUpdate(failing.allocator(), &t, .{ .width = 10, .height = 10 });
+    try testing.expect(state.kittyRequiresUpdate(&t, .{ .width = 10, .height = 10 }));
+    state.kittyUpdate(alloc, &t, .{ .width = 10, .height = 10 });
+    try testing.expect(!state.kittyRequiresUpdate(&t, .{ .width = 10, .height = 10 }));
+
+    try testing.expect(state.kittyRequiresUpdate(&t, .{ .width = 11, .height = 10 }));
+    try t.printString("x");
+    try testing.expect(state.kittyRequiresUpdate(&t, .{ .width = 10, .height = 10 }));
 
     // Two placeholder runs (z=-1) plus the child (z=5), sorted by z.
     try testing.expectEqual(@as(usize, 3), state.kitty_placements.items.len);
@@ -1563,4 +1609,50 @@ test "kitty renderer shared captures unwind every allocation failure" {
             try std.testing.expectEqualStrings("next", cache.images.get(.{ .kitty = 1 }).?.image.pending.dataSlice());
         }
     }.check, .{});
+}
+
+test "kitty placement uploads are per frame and invalidate on snapshot adoption" {
+    const t = std.testing;
+    const Buffer = struct {
+        data: [1]Metal.shaders.Image = undefined,
+        fail: bool = false,
+        pub fn writable(self: *@This(), count: usize) ![]Metal.shaders.Image {
+            if (self.fail) return error.MetalFailed;
+            return self.data[0..count];
+        }
+    };
+    var state: State = .empty;
+    defer state.deinit(t.allocator);
+    try state.kitty_placements.append(t.allocator, .{
+        .image_id = .{ .kitty = 1 },
+        .x = 2,
+        .y = 3,
+        .z = 0,
+        .width = 10,
+        .height = 20,
+        .cell_offset_x = 0,
+        .cell_offset_y = 0,
+        .source_x = 0,
+        .source_y = 0,
+        .source_width = 10,
+        .source_height = 20,
+    });
+    var revisions: [3]?u64 = @splat(null);
+    var buffers: [3]Buffer = @splat(.{});
+    for (&buffers, &revisions) |*buffer, *revision| try t.expectEqual(@sizeOf(Metal.shaders.Image), try state.prepareDraw(buffer, revision));
+    for (0..30) |i| try t.expectEqual(0, try state.prepareDraw(&buffers[i % 3], &revisions[i % 3]));
+    var snapshot: State = .empty;
+    defer snapshot.deinit(t.allocator);
+    try snapshot.kitty_placements.appendSlice(t.allocator, state.kitty_placements.items);
+    snapshot.kitty_placements.items[0].x = 4;
+    state.adopt(t.allocator, &snapshot);
+    buffers[0].fail = true;
+    try t.expectError(error.MetalFailed, state.prepareDraw(&buffers[0], &revisions[0]));
+    try t.expectEqual(null, revisions[0]);
+    buffers[0].fail = false;
+    for (&buffers, &revisions) |*buffer, *revision| {
+        try t.expectEqual(@sizeOf(Metal.shaders.Image), try state.prepareDraw(buffer, revision));
+        try t.expectEqual(@as(f32, 4), buffer.data[0].grid_pos[0]);
+    }
+    std.debug.print("\nWORK_METRIC unchanged_image_frames=30 placement_bytes=0\n", .{});
 }

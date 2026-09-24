@@ -267,10 +267,12 @@ const SwapChain = struct {
 /// This is used to implement double/triple buffering.
 const FrameState = struct {
     cell_upload: CellUpload = .{},
+    background_upload: @import("RowUpload.zig") = .{},
     uniforms: UniformBuffer,
     cells: CellTextBuffer,
     cells_bg: CellBgBuffer,
     image_instances: Buffer(shaderpkg.Image),
+    image_revision: ?u64 = null,
 
     grayscale: Texture,
     grayscale_modified: usize = 0,
@@ -360,6 +362,7 @@ const FrameState = struct {
     }
 
     pub fn deinit(self: *FrameState) void {
+        self.background_upload.deinit();
         self.commands.deinit();
         self.target.deinit();
         self.uniforms.deinit();
@@ -1095,14 +1098,9 @@ pub fn updateFrame(
             break :next now_ms + delay;
         };
 
-        // If we have Kitty graphics data, we enter a SLOW SLOW SLOW path.
-        // We only do this if the Kitty image state is dirty meaning only if
-        // it changes.
-        //
-        // If we have any virtual references, we must also rebuild our
-        // kitty state on every frame because any cell change can move
-        // an image.
-        if (self.images.kittyRequiresUpdate(state.terminal)) {
+        // Rebuild only when image state or relevant viewport/content geometry
+        // changes. Cursor animation alone leaves virtual placements intact.
+        if (self.images.kittyRequiresUpdate(state.terminal, .{ .width = self.grid_metrics.cell_width, .height = self.grid_metrics.cell_height })) {
             // We need to grab the draw mutex since this updates
             // our image state that drawFrame uses.
             self.draw_mutex.lockUncancelable(global.io());
@@ -1165,50 +1163,20 @@ pub fn updateFrame(
         log.warn("error searching for regex links err={}", .{err});
     };
 
-    // Clear our highlight state and update.
-    if (self.search_matches_dirty or self.terminal_state.dirty != .false) {
-        self.search_matches_dirty = false;
-
-        // Clear the prior highlights
-        const row_data = self.terminal_state.row_data.slice();
-        var any_dirty: bool = false;
-        for (
-            row_data.items(.highlights),
-            row_data.items(.dirty),
-        ) |*highlights, *dirty| {
-            if (highlights.items.len > 0) {
-                highlights.clearRetainingCapacity();
-                dirty.* = true;
-                any_dirty = true;
-            }
-        }
-        if (any_dirty and self.terminal_state.dirty == .false) {
-            self.terminal_state.dirty = .partial;
-        }
-
-        // NOTE: The order below matters. Highlights added earlier
-        // will take priority.
-
-        if (self.search_selected_match) |m| {
-            self.terminal_state.updateHighlightsFlattened(
-                self.alloc,
-                @intFromEnum(HighlightTag.search_match_selected),
-                &.{m.match},
-            ) catch |err| {
-                // Not a critical error, we just won't show highlights.
-                log.warn("error updating search selected highlight err={}", .{err});
-            };
-        }
-
-        if (self.search_matches) |m| {
-            self.terminal_state.updateHighlightsFlattened(
-                self.alloc,
-                @intFromEnum(HighlightTag.search_match),
-                m.matches,
-            ) catch |err| {
-                // Not a critical error, we just won't show highlights.
+    // Preserve highlight priority and only dirty rows whose ranges changed.
+    highlights_failed: {
+        if (self.search_matches_dirty or self.terminal_state.dirty != .false) {
+            const selected: []const terminal.highlight.Flattened = if (self.search_selected_match) |m| &.{m.match} else &.{};
+            _ = self.terminal_state.replaceHighlightsFlattened(self.alloc, arena_alloc, &.{
+                .{ .tag = @intFromEnum(HighlightTag.search_match_selected), .highlights = selected },
+                .{ .tag = @intFromEnum(HighlightTag.search_match), .highlights = if (self.search_matches) |m| m.matches else &.{} },
+            }) catch |err| {
+                self.search_matches_dirty = true;
                 log.warn("error updating search highlights err={}", .{err});
+                // Retry next update, including allocation failures partway through.
+                break :highlights_failed;
             };
+            self.search_matches_dirty = false;
         }
     }
 
@@ -1415,7 +1383,7 @@ fn drawFrameLocked(
 
     // Upload images to the GPU as necessary.
     _ = self.images.upload(self.alloc, &self.api);
-    try self.images.prepareDraw(&frame.image_instances);
+    _ = try self.images.prepareDraw(&frame.image_instances, &frame.image_revision);
 
     // Upload the background image to the GPU as necessary.
     try self.uploadBackgroundImage();
@@ -1424,11 +1392,18 @@ fn drawFrameLocked(
 
     // Setup our frame data
     try frame.uniforms.sync(&.{self.uniforms});
+    copied_bytes += try frame.background_upload.sync(
+        self.alloc,
+        &frame.cells_bg,
+        self.cells.bg_cells,
+        self.cells.size.columns,
+        self.cells.bg_versions,
+        self.cells.bg_revision,
+    );
     if (frame.cell_upload.needed(self.cells_revision)) {
-        try frame.cells_bg.sync(self.cells.bg_cells);
         const count = try frame.cells.syncFromArrayLists(self.cells.fg_rows);
         frame.cell_upload.commit(self.cells_revision, count);
-        copied_bytes = self.cells.bg_cells.len * @sizeOf(shaderpkg.CellBg) + count * @sizeOf(shaderpkg.CellText);
+        copied_bytes += count * @sizeOf(shaderpkg.CellText);
     }
     const fg_count = frame.cell_upload.foreground_count;
 
