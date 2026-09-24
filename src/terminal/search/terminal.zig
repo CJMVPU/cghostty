@@ -7,6 +7,7 @@ const ScreenSet = @import("../ScreenSet.zig");
 const Terminal = @import("../Terminal.zig");
 
 const ScreenSearch = @import("screen.zig").ScreenSearch;
+const Snapshot = @import("Snapshot.zig");
 const ViewportSearch = @import("viewport.zig").ViewportSearch;
 
 const log = std.log.scoped(.search_terminal);
@@ -50,7 +51,7 @@ pub const TerminalSearch = struct {
     /// Cached viewport matches. The viewport search's sliding window
     /// drains on read, so results are collected once per viewport
     /// change and cached here.
-    viewport_matches: std.ArrayList(FlattenedHighlight),
+    viewport_matches: Snapshot,
 
     /// Overall status of the search. See `status`.
     pub const Status = enum {
@@ -108,7 +109,6 @@ pub const TerminalSearch = struct {
     /// terminal's page storage, so only search-owned memory is freed.
     pub fn deinit(self: *TerminalSearch, t_: ?*Terminal) void {
         self.clearViewportMatches();
-        self.viewport_matches.deinit(self.alloc);
         self.viewport.deinit();
         var it = self.screens.iterator();
         while (it.next()) |entry| {
@@ -372,7 +372,7 @@ pub const TerminalSearch = struct {
     pub fn viewportMatches(
         self: *TerminalSearch,
     ) Allocator.Error![]const FlattenedHighlight {
-        if (!self.stale_viewport_matches) return self.viewport_matches.items;
+        if (!self.stale_viewport_matches) return self.viewport_matches.matches;
 
         // We always mark the cache fresh, even if collection fails
         // below: a failed collection isn't retried until the next feed
@@ -387,18 +387,22 @@ pub const TerminalSearch = struct {
             // re-collection) on the next feed.
             self.viewport.reset();
         }
-        while (self.viewport.next()) |hl| {
-            var hl_cloned = try hl.clone(self.alloc);
-            errdefer hl_cloned.deinit(self.alloc);
-            try self.viewport_matches.append(self.alloc, hl_cloned);
-        }
+        var builder = Snapshot.Builder.init(self.alloc);
+        defer builder.deinit();
+        while (self.viewport.next()) |hl| try builder.append(hl);
+        self.viewport_matches = try builder.finish();
+        return self.viewport_matches.matches;
+    }
 
-        return self.viewport_matches.items;
+    /// Borrowed until the next feed/collection. Retain before crossing threads.
+    pub fn viewportSnapshot(self: *TerminalSearch) !Snapshot {
+        _ = try self.viewportMatches();
+        return self.viewport_matches;
     }
 
     fn clearViewportMatches(self: *TerminalSearch) void {
-        for (self.viewport_matches.items) |*hl| hl.deinit(self.alloc);
-        self.viewport_matches.clearRetainingCapacity();
+        self.viewport_matches.deinit();
+        self.viewport_matches = .empty;
     }
 
     /// Select the next or previous search result on the active screen,

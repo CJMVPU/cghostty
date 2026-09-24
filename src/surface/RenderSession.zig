@@ -173,9 +173,11 @@ test "RenderSession unstarted worker releases queued configuration and search sn
         _ = session.thread.mailbox.push(t.io, .{ .font_grid = .{ .grid = second_grid, .set = &grids, .old_key = first_key, .new_key = second_key } }, .forever);
         _ = session.thread.mailbox.push(t.io, .{ .font_grid = .{ .grid = current_grid, .set = &grids, .old_key = second_key, .new_key = current_key } }, .forever);
         _ = session.thread.mailbox.push(t.io, try rendererpkg.Message.initChangeConfig(t.allocator, &config), .forever);
-        var viewport = std.heap.ArenaAllocator.init(t.allocator);
-        _ = try viewport.allocator().alloc(u8, 128);
-        _ = session.thread.mailbox.push(t.io, .{ .search_viewport_matches = .{ .arena = viewport, .matches = &.{} } }, .forever);
+        var builder = @import("../terminal/main.zig").search.Snapshot.Builder.init(t.allocator);
+        defer builder.deinit();
+        try builder.append(.empty);
+        const viewport = try builder.finish();
+        _ = session.thread.mailbox.push(t.io, .{ .search_viewport_matches = viewport }, .forever);
         var selected = std.heap.ArenaAllocator.init(t.allocator);
         _ = try selected.allocator().alloc(u8, 128);
         _ = session.thread.mailbox.push(t.io, .{ .search_selected_match = .{ .arena = selected, .match = .empty } }, .forever);

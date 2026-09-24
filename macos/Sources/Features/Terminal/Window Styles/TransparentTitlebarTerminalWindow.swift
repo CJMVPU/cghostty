@@ -12,8 +12,13 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
     private weak var observedTabGroup: NSWindowTabGroup?
     private var tabGroupWindowsObservation: NSKeyValueObservation?
     private var tabBarVisibleObservation: NSKeyValueObservation?
+    private var appearanceScheduled = false
+    private var observationScheduled = false
+    private weak var observedTitlebar: NSView?
+    private var titlebarFrameObserver: NSObjectProtocol?
 
     isolated deinit {
+        if let titlebarFrameObserver { NotificationCenter.default.removeObserver(titlebarFrameObserver) }
         tabGroupWindowsObservation?.invalidate()
         tabBarVisibleObservation?.invalidate()
     }
@@ -31,16 +36,27 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
     override func becomeMain() {
         super.becomeMain()
 
-        guard let lastSurfaceConfig else { return }
-        syncAppearance(lastSurfaceConfig)
+        scheduleAppearance()
+    }
 
-        // This is a nasty edge case. If we're going from 2 to 1 tab and the tab bar
-        // automatically disappears, then we need to resync our appearance because
-        // at some point macOS replaces the tab views.
-        if tabGroup?.windows.count ?? 0 == 2 {
-            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(50)) { [weak self] in
-                self?.syncAppearance(self?.lastSurfaceConfig ?? lastSurfaceConfig)
-            }
+    override func addTitlebarAccessoryViewController(_ childViewController: NSTitlebarAccessoryViewController) {
+        super.addTitlebarAccessoryViewController(childViewController)
+        scheduleAppearance()
+    }
+
+    override func removeTitlebarAccessoryViewController(at index: Int) {
+        super.removeTitlebarAccessoryViewController(at: index)
+        scheduleAppearance()
+    }
+
+    private func scheduleAppearance() {
+        guard !appearanceScheduled else { return }
+        appearanceScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.appearanceScheduled = false
+            guard let config = self.lastSurfaceConfig else { return }
+            self.syncAppearance(config)
         }
     }
 
@@ -80,9 +96,26 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
                 : preferredBackgroundColor?.cgColor
         }
 
+        observeTitlebarGeometry()
+
         // In all cases, we have to hide the background view since this has multiple subviews
         // that force a background color.
         titlebarBackgroundView?.isHidden = true
+    }
+
+    private func observeTitlebarGeometry() {
+        let view = titlebarContainer
+        guard observedTitlebar !== view else { return }
+        if let titlebarFrameObserver { NotificationCenter.default.removeObserver(titlebarFrameObserver) }
+        titlebarFrameObserver = nil
+        observedTitlebar = view
+        guard let view else { return }
+        view.postsFrameChangedNotifications = true
+        titlebarFrameObserver = NotificationCenter.default.addObserver(
+            forName: NSView.frameDidChangeNotification, object: view, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.scheduleAppearance() }
+        }
     }
 
     // MARK: View Finders
@@ -97,8 +130,11 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
         // This can run from one of the observation callbacks below. Replacing
         // an observation before its callback returns leaves the window retained
         // by AppKit, so always rebind on the next main-queue turn.
+        guard !observationScheduled else { return }
+        observationScheduled = true
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
+            self.observationScheduled = false
 
             // Recheck because the tab group and observation state may have changed
             // while this work was waiting on the main queue.
@@ -143,8 +179,7 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
 
             // AppKit tab-group mutations deliver KVO on the main thread.
             MainActor.assumeIsolated {
-                guard let self, let lastSurfaceConfig = self.lastSurfaceConfig else { return }
-                self.syncAppearance(lastSurfaceConfig)
+                self?.scheduleAppearance()
             }
         }
     }
@@ -163,8 +198,7 @@ class TransparentTitlebarTerminalWindow: TerminalWindow {
         ) { [weak self] _, _ in
             // AppKit tab-group mutations deliver KVO on the main thread.
             MainActor.assumeIsolated {
-                guard let self, let lastSurfaceConfig = self.lastSurfaceConfig else { return }
-                self.syncAppearance(lastSurfaceConfig)
+                self?.scheduleAppearance()
             }
         }
     }

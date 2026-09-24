@@ -50,6 +50,46 @@ modified: std.atomic.Value(usize) = .{ .raw = 0 },
 /// a resize operation.
 resized: std.atomic.Value(usize) = .{ .raw = 0 },
 
+/// Bounded history shared by independent frame slots and font-grid users.
+/// Read/write only while holding the font grid lock. Falling behind falls
+/// back to a full upload; a consumer never clears another consumer's history.
+changes: [256]Change = undefined,
+const Change = struct { version: usize, region: Region };
+
+fn record(self: *Atlas, region: Region) void {
+    const version = self.modified.load(.monotonic) + 1;
+    self.changes[version % self.changes.len] = .{ .version = version, .region = region };
+    self.modified.store(version, .monotonic);
+}
+
+fn fullRegion(self: *const Atlas) Region {
+    return .{ .x = 0, .y = 0, .width = self.size, .height = self.size };
+}
+
+/// Bounding rectangle since a consumer's last successful upload. Caller holds
+/// the grid lock. First use, reset and an expired history require a full copy.
+pub fn changedRegion(self: *const Atlas, since: usize) ?Region {
+    const current = self.modified.load(.monotonic);
+    if (since == current) return null;
+    if (since == 0 or since > current or current - since > self.changes.len) return self.fullRegion();
+    var region: ?Region = null;
+    for (since + 1..current + 1) |version| {
+        const change = self.changes[version % self.changes.len];
+        if (change.version != version) return self.fullRegion();
+        if (region) |old| {
+            const x = @min(old.x, change.region.x);
+            const y = @min(old.y, change.region.y);
+            region = .{
+                .x = x,
+                .y = y,
+                .width = @max(old.x + old.width, change.region.x + change.region.width) - x,
+                .height = @max(old.y + old.height, change.region.y + change.region.height) - y,
+            };
+        } else region = change.region;
+    }
+    return region;
+}
+
 pub const Format = enum(u8) {
     /// 1 byte per pixel grayscale.
     grayscale = 0,
@@ -271,7 +311,7 @@ pub fn set(self: *Atlas, reg: Region, data: []const u8) void {
         );
     }
 
-    _ = self.modified.fetchAdd(1, .monotonic);
+    self.record(reg);
 }
 
 /// Like `set` but allows specifying a width for the source data and an
@@ -302,7 +342,7 @@ pub fn setFromLarger(
         );
     }
 
-    _ = self.modified.fetchAdd(1, .monotonic);
+    self.record(reg);
 }
 
 pub const grow_tw = tripwire.module(enum {
@@ -359,13 +399,13 @@ pub fn grow(self: *Atlas, alloc: Allocator, size_new: u32) Allocator.Error!void 
     });
 
     // We are both modified and resized
-    _ = self.modified.fetchAdd(1, .monotonic);
+    self.record(self.fullRegion());
     _ = self.resized.fetchAdd(1, .monotonic);
 }
 
 // Empty the atlas. This doesn't reclaim any previously allocated memory.
 pub fn clear(self: *Atlas) void {
-    _ = self.modified.fetchAdd(1, .monotonic);
+    self.record(self.fullRegion());
     @memset(self.data, 0);
     self.nodes.clearRetainingCapacity();
 

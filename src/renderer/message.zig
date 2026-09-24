@@ -64,10 +64,7 @@ pub const Message = union(enum) {
     /// The macOS display ID has changed for the window.
     macos_display_id: u32,
 
-    pub const SearchMatches = struct {
-        arena: ArenaAllocator,
-        matches: []const terminal.highlight.Flattened,
-    };
+    pub const SearchMatches = terminal.search.Snapshot;
 
     pub const SearchMatch = struct {
         arena: ArenaAllocator,
@@ -103,8 +100,7 @@ pub const Message = union(enum) {
             },
 
             .search_viewport_matches => |v| {
-                var arena = v.arena;
-                arena.deinit();
+                v.deinit();
             },
             .search_selected_match => |v| if (v) |match| {
                 var arena = match.arena;

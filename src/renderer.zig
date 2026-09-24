@@ -46,6 +46,7 @@ pub const Health = enum(c_int) {
 test {
     // Explicit test roots: referring to Renderer alone does not analyze its
     // lazily imported helpers when a focused test filter is used.
+    _ = @import("renderer/AtlasUpload.zig");
     _ = @import("renderer/link.zig");
     _ = @import("renderer/row.zig");
     _ = @import("renderer/cell.zig");

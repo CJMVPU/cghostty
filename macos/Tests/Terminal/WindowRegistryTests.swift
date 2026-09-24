@@ -66,6 +66,35 @@ import Testing
         }
     }
 
+    @Test(arguments: ["transparent", "tabs"])
+    func titlebarAppearanceSurvivesTabRemoval(style: String) async throws {
+        let config = try TemporaryConfig("macos-titlebar-style = \(style)\nbackground = #123456")
+        let app = Ghostty.App(configPath: config.temporaryFile.path)
+        let first = terminal(app)
+        let second = terminal(app)
+        let one = try #require(first.window as? TransparentTitlebarTerminalWindow)
+        let two = try #require(second.window as? TransparentTitlebarTerminalWindow)
+        defer { one.close(); two.close() }
+        one.addTabbedWindow(two, ordered: .above)
+        one.makeKeyAndOrderFront(nil)
+        one.titlebarFont = .monospacedSystemFont(ofSize: 14, weight: .regular)
+        for index in 0..<20 { first.titleOverride = "Build \(index)" }
+        two.close()
+        one.becomeMain()
+        for _ in 0..<20 {
+            await withCheckedContinuation { continuation in
+                DispatchQueue.main.async { continuation.resume() }
+            }
+            if let titlebar = one.titlebarContainer?.firstDescendant(withClassName: "NSTitlebarView"),
+               titlebar.layer?.backgroundColor == one.preferredBackgroundColor?.cgColor,
+               one.tabGroup?.windows.contains(two) != true { break }
+        }
+        #expect(one.title == "Build 19")
+        #expect(one.tabGroup?.windows.contains(two) != true)
+        let titlebar = try #require(one.titlebarContainer?.firstDescendant(withClassName: "NSTitlebarView"))
+        #expect(titlebar.layer?.backgroundColor == one.preferredBackgroundColor?.cgColor)
+    }
+
     @Test func opacityToggleStaysLocalAndUserConfigWaitsForRestart() throws {
         let config = try TemporaryConfig("background-opacity = 0.5")
         let first = Ghostty.App(configPath: config.temporaryFile.path)

@@ -153,6 +153,10 @@ pub const Cache = struct {
     map: terminal.RenderState.StringMap = .empty,
     ranges: std.ArrayList(Range) = .empty,
     rebuilds: usize = 0,
+    text: ?std.Io.Writer.Allocating = null,
+    matchers: std.ArrayList(pcre2.Matcher) = .empty,
+    const max_cached_matchers = 16;
+    const max_text_capacity = 256 * 1024;
 
     const Key = struct {
         content: terminal.accessibility.Tracker.Key,
@@ -162,13 +166,27 @@ pub const Cache = struct {
     const Range = struct { start: usize, end: usize, hover: bool };
 
     pub fn deinit(self: *Cache, alloc: Allocator) void {
+        self.invalidate(alloc);
+        if (self.text) |*text| text.deinit();
         self.map.deinit(alloc);
         self.ranges.deinit(alloc);
         self.* = .{};
     }
 
-    pub fn invalidate(self: *Cache) void {
+    pub fn invalidate(self: *Cache, alloc: Allocator) void {
         self.key = null;
+        for (self.matchers.items) |*matcher| matcher.deinit();
+        self.matchers.deinit(alloc);
+        self.matchers = .empty;
+    }
+
+    fn prepareMatchers(self: *Cache, alloc: Allocator, set: *const Set) !void {
+        const count = @min(set.links.len, max_cached_matchers);
+        try self.matchers.ensureTotalCapacity(alloc, count);
+        while (self.matchers.items.len < count) {
+            const index = self.matchers.items.len;
+            self.matchers.appendAssumeCapacity(try set.links[index].regex.matcher());
+        }
     }
 
     pub fn render(
@@ -195,14 +213,21 @@ pub const Cache = struct {
             self.key = null; // Errors must never publish a partially built cache.
             self.map.clearRetainingCapacity();
             self.ranges.clearRetainingCapacity();
-            var text: std.Io.Writer.Allocating = .init(alloc);
-            defer text.deinit();
+            if (self.text == null) self.text = .init(alloc);
+            const text = &self.text.?;
+            text.clearRetainingCapacity();
+            defer if (text.writer.buffer.len > max_text_capacity) {
+                text.deinit();
+                self.text = null;
+            };
             try state.string(&text.writer, .{ .alloc = alloc, .map = &self.map });
             const str = text.writer.buffered();
-            for (set.links) |*entry| {
+            try self.prepareMatchers(alloc, set);
+            for (set.links, 0..) |*entry, index| {
                 if (!entry.active(mouse, mods)) continue;
-                var matcher = try entry.regex.matcher();
-                defer matcher.deinit();
+                var temporary: ?pcre2.Matcher = if (index >= self.matchers.items.len) try entry.regex.matcher() else null;
+                defer if (temporary) |*matcher| matcher.deinit();
+                const matcher = if (temporary) |*m| m else &self.matchers.items[index];
                 var offset: usize = 0;
                 while (offset < str.len) {
                     const match = matcher.search(str[offset..], 0) catch |err| switch (err) {
@@ -523,7 +548,7 @@ test "link cache matches uncached results across hover, edits, scroll, resize an
             2 => try term.printString(" changed"),
             3 => term.screens.active.pages.scroll(.top),
             4 => try term.resize(t.allocator, .{ .cols = 12, .rows = 3 }),
-            5 => cache.invalidate(),
+            5 => cache.invalidate(t.allocator),
             else => {},
         }
         try state.update(t.allocator, &term);
@@ -540,4 +565,46 @@ test "link cache matches uncached results across hover, edits, scroll, resize an
         }
         if (step == 1) try t.expectEqual(before, cache.rebuilds);
     }
+}
+
+test "link cache reuses workspace across edits and releases old patterns on config change" {
+    const t = std.testing;
+    var term = try Terminal.init(t.io, t.allocator, .{ .cols = 80, .rows = 4 });
+    defer term.deinit(t.allocator);
+    var state: terminal.RenderState = .empty;
+    defer state.deinit(t.allocator);
+    var set = try Set.fromConfig(t.allocator, &.{.{ .regex = "[a-z]+", .action = .{ .open = {} }, .highlight = .always }});
+    defer set.deinit(t.allocator);
+    var counter = t.FailingAllocator.init(t.allocator, .{});
+    const alloc = counter.allocator();
+    var cache: Cache = .{};
+    defer cache.deinit(alloc);
+    var cells: terminal.RenderState.CellSet = .empty;
+    defer cells.deinit(alloc);
+    var retained_allocations: usize = 0;
+    var scratch_address: usize = 0;
+    var text_address: usize = 0;
+    for (0..101) |i| {
+        term.carriageReturn();
+        try term.printString(if (i % 2 == 0) "hello world" else "other words");
+        try state.update(t.allocator, &term);
+        cells.clearRetainingCapacity();
+        try cache.render(alloc, alloc, &set, &cells, &state, terminal.accessibility.Tracker.Key.read(&term), null, .{});
+        if (i == 0) {
+            retained_allocations = counter.allocations;
+            scratch_address = @intFromPtr(cache.matchers.items[0].data);
+            text_address = @intFromPtr(cache.text.?.writer.buffer.ptr);
+        } else {
+            try t.expectEqual(retained_allocations, counter.allocations);
+            try t.expectEqual(scratch_address, @intFromPtr(cache.matchers.items[0].data));
+            try t.expectEqual(text_address, @intFromPtr(cache.text.?.writer.buffer.ptr));
+        }
+    }
+    std.debug.print("\nRESOURCE_METRIC link_rebuilds=101 warmed_additional_allocations={d}\n", .{counter.allocations - retained_allocations});
+    cache.invalidate(alloc);
+    set.deinit(t.allocator);
+    set = try Set.fromConfig(t.allocator, &.{.{ .regex = "[0-9]+", .action = .{ .open = {} }, .highlight = .always }});
+    cells.clearRetainingCapacity();
+    try cache.render(alloc, alloc, &set, &cells, &state, terminal.accessibility.Tracker.Key.read(&term), null, .{});
+    try t.expectEqual(@as(u32, 0), cells.count());
 }

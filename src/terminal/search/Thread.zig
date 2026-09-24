@@ -312,7 +312,7 @@ fn changeNeedle(self: *Thread, needle: []const u8) !void {
                 self.opts.event_userdata,
             );
             cb(
-                .{ .viewport_matches = &.{} },
+                .{ .viewport_matches = .empty },
                 self.opts.event_userdata,
             );
         }
@@ -368,12 +368,12 @@ fn notify(
     // viewport search is very fast and doesn't require ticked progress
     // or feeds.
     if (s.stale_viewport_matches) viewport: {
-        const matches = s.viewportMatches() catch |err| {
+        const matches = s.viewportSnapshot() catch |err| {
             log.warn("error collecting viewport matches err={}", .{err});
             break :viewport;
         };
 
-        log.debug("notifying viewport matches len={}", .{matches.len});
+        log.debug("notifying viewport matches len={}", .{matches.matches.len});
         cb(.{ .viewport_matches = matches }, ud);
     }
 
@@ -547,9 +547,9 @@ pub const Event = union(enum) {
     /// Selected match changed.
     selected_match: ?SelectedMatch,
 
-    /// Matches in the viewport have changed. The memory is owned by the
-    /// search thread and is only valid during the callback.
-    viewport_matches: []const FlattenedHighlight,
+    /// Matches in the viewport have changed. Borrowed during the callback;
+    /// a consumer may retain the immutable snapshot before crossing threads.
+    viewport_matches: @import("Snapshot.zig"),
 
     pub const SelectedMatch = struct {
         idx: usize,
@@ -603,9 +603,9 @@ const TestUserData = struct {
 
                 ud.viewport = testing.allocator.alloc(
                     FlattenedHighlight,
-                    v.len,
+                    v.matches.len,
                 ) catch unreachable;
-                for (ud.viewport, v) |*dst, src| {
+                for (ud.viewport, v.matches) |*dst, src| {
                     dst.* = src.clone(testing.allocator) catch unreachable;
                 }
             },

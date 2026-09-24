@@ -125,6 +125,9 @@ font_grid: *font.SharedGrid,
 font_shaper: font.Shaper,
 font_shaper_cache: font.ShaperCache,
 
+/// Scratch used only by updateFrame, never retained by a published frame.
+frame_scratch: ?ArenaAllocator = null,
+
 /// The images that we may render.
 images: ImageState = .empty,
 
@@ -599,6 +602,7 @@ pub fn init(alloc: Allocator, options: renderer.Options) !Self {
 
 pub fn deinit(self: *Self) void {
     self.trace.deinit();
+    if (self.frame_scratch) |*arena| arena.deinit();
     self.link_cache.deinit(self.alloc);
     // This only deinitializes and frees CPU-side state
     // and does not free GPU resources like the swap chain and
@@ -612,7 +616,7 @@ pub fn deinit(self: *Self) void {
 
     self.terminal_state.deinit(self.alloc);
     if (self.search_selected_match) |*m| m.arena.deinit();
-    if (self.search_matches) |*m| m.arena.deinit();
+    if (self.search_matches) |*m| m.deinit();
 
     if (self.display_link) |display_link| {
         display_link.stop() catch {};
@@ -628,10 +632,6 @@ pub fn deinit(self: *Self) void {
     self.api.deinit();
 
     self.* = undefined;
-}
-
-fn initShaders(self: *Self) !void {
-    self.shaders = try self.api.initShaders(self.alloc);
 }
 
 /// Callback called by renderer.Thread when it exits. Called on the
@@ -966,9 +966,10 @@ pub fn updateFrame(
     }
     self.terminal_state_frame_count += 1;
 
-    // Create an arena for all our temporary allocations while rebuilding
-    var arena = ArenaAllocator.init(self.alloc);
-    defer arena.deinit();
+    // Reuse bounded scratch for rebuilding; no published state borrows it.
+    if (self.frame_scratch == null) self.frame_scratch = .init(self.alloc);
+    const arena = &self.frame_scratch.?;
+    defer _ = arena.reset(.{ .retain_with_limit = 256 * 1024 });
     const arena_alloc = arena.allocator();
 
     // Data we extract out of the critical area.
@@ -1377,9 +1378,10 @@ fn drawFrameLocked(
 
     // If we need to reinitialize our shaders, do so.
     if (self.reinitialize_shaders) {
-        self.reinitialize_shaders = false;
+        const replacement = try self.api.initShaders(self.alloc);
         self.shaders.deinit(self.alloc);
-        try self.initShaders();
+        self.shaders = replacement;
+        self.reinitialize_shaders = false;
     }
 
     // Our shaders should not be defunct at this point.
@@ -1443,16 +1445,14 @@ fn drawFrameLocked(
         if (modified <= frame.grayscale_modified) break :texture;
         self.font_grid.lock.lockSharedUncancelable(global.io());
         defer self.font_grid.lock.unlockShared(global.io());
-        frame.grayscale_modified = self.font_grid.atlas_grayscale.modified.load(.monotonic);
-        try self.syncAtlasTexture(&self.font_grid.atlas_grayscale, &frame.grayscale);
+        _ = try @import("AtlasUpload.zig").sync(self.api, &self.font_grid.atlas_grayscale, &frame.grayscale, &frame.grayscale_modified);
     }
     texture: {
         const modified = self.font_grid.atlas_color.modified.load(.monotonic);
         if (modified <= frame.color_modified) break :texture;
         self.font_grid.lock.lockSharedUncancelable(global.io());
         defer self.font_grid.lock.unlockShared(global.io());
-        frame.color_modified = self.font_grid.atlas_color.modified.load(.monotonic);
-        try self.syncAtlasTexture(&self.font_grid.atlas_color, &frame.color);
+        _ = try @import("AtlasUpload.zig").sync(self.api, &self.font_grid.atlas_color, &frame.color, &frame.color_modified);
     }
 
     // Get a frame context from the graphics API.
@@ -1685,7 +1685,7 @@ fn uploadBackgroundImage(self: *Self) !void {
 
 /// Update the configuration.
 pub fn changeConfig(self: *Self, config: *DerivedConfig) !void {
-    self.link_cache.invalidate();
+    self.link_cache.invalidate(self.alloc);
     // Config updates are serialized by renderer.Thread. Drawing may continue
     // with the old config/image while the replacement is being decoded.
     const bg_image_changed = if (self.config.bg_image) |old|
@@ -2987,23 +2987,4 @@ fn addPreeditCell(
     if (cp.wide and coord.x < self.cells.size.columns - 1) {
         try self.addUnderline(@intCast(coord.x + 1), @intCast(coord.y), .single, screen_fg, 255);
     }
-}
-
-/// Sync the atlas data to the given texture. This copies the bytes
-/// associated with the atlas to the given texture. If the atlas no
-/// longer fits into the texture, the texture will be resized.
-fn syncAtlasTexture(
-    self: *const Self,
-    atlas: *const font.Atlas,
-    texture: *Texture,
-) !void {
-    if (atlas.size > texture.width) {
-        // Free our old texture
-        texture.*.deinit();
-
-        // Reallocate
-        texture.* = try self.api.initAtlasTexture(atlas);
-    }
-
-    try texture.replaceRegion(0, 0, atlas.size, atlas.size, atlas.data);
 }

@@ -97,6 +97,23 @@ pub fn replaceRegion(
     height: usize,
     data: []const u8,
 ) error{}!void {
+    return self.replaceRegionStrided(x, y, width, height, data, self.bpp * width);
+}
+
+/// The source can be a subrectangle of a larger image. Its row stride must
+/// remain that of the source image, not the width of the destination region.
+pub fn replaceRegionStrided(
+    self: Self,
+    x: usize,
+    y: usize,
+    width: usize,
+    height: usize,
+    data: []const u8,
+    bytes_per_row: usize,
+) error{}!void {
+    assert(x + width <= self.width and y + height <= self.height);
+    assert(bytes_per_row >= width * self.bpp);
+    assert(height == 0 or data.len >= (height - 1) * bytes_per_row + width * self.bpp);
     self.texture.msgSend(
         void,
         objc.sel("replaceRegion:mipmapLevel:withBytes:bytesPerRow:"),
@@ -111,7 +128,7 @@ pub fn replaceRegion(
             },
             @as(c_ulong, 0),
             @as(*const anyopaque, data.ptr),
-            @as(c_ulong, self.bpp * width),
+            @as(c_ulong, bytes_per_row),
         },
     );
 }

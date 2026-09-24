@@ -362,7 +362,7 @@ fn drainMailbox(self: *Thread) !void {
             .search_viewport_matches => |v| {
                 // Note we don't free the new value because we expect our
                 // allocators to match.
-                if (self.renderer.search_matches) |*m| m.arena.deinit();
+                if (self.renderer.search_matches) |*m| m.deinit();
                 self.renderer.search_matches = v;
                 self.renderer.search_matches_dirty = true;
             },

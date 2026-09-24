@@ -94,14 +94,6 @@ fn send(self: *Self, message: Worker.Message) void {
 }
 
 // The renderer owns these arenas after enqueue, even if its wakeup fails.
-fn cloneMatches(alloc: Allocator, borrowed: []const terminal.highlight.Flattened) !renderer.Message.SearchMatches {
-    var arena: ArenaAllocator = .init(alloc);
-    errdefer arena.deinit();
-    const owned = try arena.allocator().dupe(terminal.highlight.Flattened, borrowed);
-    for (owned) |*match| match.* = try match.clone(arena.allocator());
-    return .{ .arena = arena, .matches = owned };
-}
-
 fn cloneMatch(alloc: Allocator, borrowed: terminal.highlight.Flattened) !renderer.Message.SearchMatch {
     var arena: ArenaAllocator = .init(alloc);
     errdefer arena.deinit();
@@ -148,8 +140,12 @@ test "SearchSession snapshots own highlight chunks and unwind partial copies" {
             defer source.deinit(std.testing.allocator);
             var node: terminal.PageList.List.Node = undefined;
             try source.chunks.append(std.testing.allocator, .{ .node = &node, .serial = 7, .start = 0, .end = 2 });
-            var viewport = try cloneMatches(alloc, &.{ source, source });
-            defer viewport.arena.deinit();
+            var builder = terminal.search.Snapshot.Builder.init(alloc);
+            defer builder.deinit();
+            try builder.append(source);
+            try builder.append(source);
+            const viewport = try builder.finish();
+            defer viewport.deinit();
             var selected = try cloneMatch(alloc, source);
             defer selected.arena.deinit();
             source.chunks.items(.serial)[0] = 9;
@@ -168,7 +164,7 @@ fn forward(
 
     switch (event) {
         .viewport_matches => |matches_unowned| {
-            const payload = try cloneMatches(self.alloc, matches_unowned);
+            const payload = matches_unowned.retain();
 
             _ = self.output.renderer_mailbox.push(
                 global.io(),
@@ -227,10 +223,7 @@ fn forward(
             );
             _ = self.output.renderer_mailbox.push(
                 global.io(),
-                .{ .search_viewport_matches = .{
-                    .arena = .init(self.alloc),
-                    .matches = &.{},
-                } },
+                .{ .search_viewport_matches = .empty },
                 .forever,
             );
             try self.output.renderer_wakeup.notify();

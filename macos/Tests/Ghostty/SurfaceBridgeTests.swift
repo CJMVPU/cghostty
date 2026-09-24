@@ -280,7 +280,6 @@ import Testing
                                              key: .init(unicode: 97), mods: GHOSTTY_MODS_CTRL)
         deliver(GHOSTTY_ACTION_KEY_SEQUENCE, .init(key_sequence: .init(active: true, trigger: trigger)))
         await drainQueue()
-        await drainQueue()
         #expect(!view.healthy)
         #expect(other.healthy)
         #expect(view.keyTables == ["navigation"])
@@ -291,7 +290,6 @@ import Testing
         deliver(GHOSTTY_ACTION_KEY_TABLE,
                 .init(key_table: .init(tag: GHOSTTY_KEY_TABLE_DEACTIVATE, value: .init())))
         deliver(GHOSTTY_ACTION_KEY_SEQUENCE, .init(key_sequence: .init(active: false, trigger: trigger)))
-        await drainQueue()
         await drainQueue()
         #expect(view.keyTables.isEmpty)
         #expect(view.keySequence.isEmpty)

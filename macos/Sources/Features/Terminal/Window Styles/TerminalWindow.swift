@@ -390,7 +390,9 @@ class TerminalWindow: NSWindow {
     }
 
     // Cancellables for the frame change of the text fields in the titlebar.
-    private var titlebarTextFieldFrameObservers: [NSObjectProtocol] = []
+    private let titlebarTextFieldObservers = TitlebarTextFieldObservers()
+    private var titleAppearanceScheduled = false
+    private var pendingTitleFont: NSFont?
 
     // Return a styled representation of our title property.
     var attributedTitle: NSAttributedString? {
@@ -429,46 +431,23 @@ class TerminalWindow: NSWindow {
 
     /// Update titlebarTextField's size and font
     func syncWindowTitleAppearance(font: NSFont? = nil) {
-        titlebarTextFields.forEach { field in
-            if let font {
-                field.font = font
+        if let font { pendingTitleFont = font }
+        guard !titleAppearanceScheduled else { return }
+        titleAppearanceScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.titleAppearanceScheduled = false
+            let font = self.pendingTitleFont
+            self.pendingTitleFont = nil
+            // Resolve once per pass: AppKit replaces these views on fullscreen
+            // and tab transitions, so do not cache the view-tree lookup itself.
+            let fields = self.titlebarTextFields
+            if let font { fields.forEach { $0.font = font } }
+            let observed = self.titlebarFont == nil ? [] : fields
+            self.titlebarTextFieldObservers.update(observed) { [weak self] field in
+                self?.setWindowTitleFrameSize(field)
             }
-        }
-
-        titlebarTextFieldFrameObservers.forEach { NotificationCenter.default.removeObserver($0) }
-        titlebarTextFieldFrameObservers.removeAll()
-
-        // When using a custom font, expand the frame to
-        // show the text properly.
-        //
-        // AppKit will relayout the frame when the font changes, that's
-        // why we need this hack in the first place.
-        guard titlebarFont != nil else {
-            return
-        }
-
-        titlebarTextFields.forEach { field in
-            setWindowTitleFrameSize(field)
-        }
-
-        // We need to observe changes to make the frame correct in some cases:
-        //
-        // 1. Entering fullscreen mode.
-        //    > Updating the frame when it's hidden doesn't seem to work.
-        // 2. Exiting fullscreen mode.
-        // 3. Resizing the window.
-        // 3. Maybe more...
-
-        titlebarTextFields.forEach { field in
-            field.postsFrameChangedNotifications = true
-            titlebarTextFieldFrameObservers.append(NotificationCenter.default.addObserver(
-                forName: NSView.frameDidChangeNotification, object: field, queue: .main
-            ) { [weak self, weak field] _ in
-                MainActor.assumeIsolated {
-                    guard let field else { return }
-                    self?.setWindowTitleFrameSize(field)
-                }
-            })
+            observed.forEach { self.setWindowTitleFrameSize($0) }
         }
     }
 
@@ -595,7 +574,6 @@ class TerminalWindow: NSWindow {
     }
 
     isolated deinit {
-        titlebarTextFieldFrameObservers.forEach { NotificationCenter.default.removeObserver($0) }
         if let observer = tabMenuObserver {
             NotificationCenter.default.removeObserver(observer)
         }
