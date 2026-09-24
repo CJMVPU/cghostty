@@ -18,6 +18,14 @@ mutex: *std.Io.Mutex,
 /// The terminal data.
 terminal: *terminalpkg.Terminal,
 
+/// Owned CPU snapshot of the latest synchronized-output boundary.
+render_hold: @import("RenderHold.zig") = .{},
+
+/// Shared by normal rendering and synchronized frame capture so both use
+/// the same scroll-on-output boundary. Protected by mutex.
+last_bottom_node: ?usize = null,
+last_bottom_y: terminalpkg.size.CellCountInt = 0,
+
 /// Dead key state. This will render the current dead key preedit text
 /// over the cursor. This currently only ever renders a single codepoint.
 /// Preedit can in theory be multiple codepoints long but that is left as
@@ -45,6 +53,15 @@ handoff_gen: std.atomic.Value(u32) = .init(0),
 /// demanding critical section (the renderer's frame snapshot) is
 /// microseconds, so one millisecond is generous.
 const handoff_timeout_ns = 1 * std.time.ns_per_ms;
+
+pub fn scrollOnOutput(self: *State, enabled: bool) void {
+    if (!enabled) return;
+    const br = self.terminal.screens.active.pages.getBottomRight(.screen) orelse return;
+    if (self.last_bottom_node == @intFromPtr(br.node) and self.last_bottom_y == br.y) return;
+    self.last_bottom_node = @intFromPtr(br.node);
+    self.last_bottom_y = br.y;
+    self.terminal.scrollViewport(.bottom);
+}
 
 /// Acquire `mutex` while signaling demand for it. Use this instead of
 /// locking the mutex directly on threads that must not be starved by
@@ -192,6 +209,26 @@ pub const Preedit = struct {
 };
 
 const test_hangul_ga: u21 = 0xAC00; // U+AC00 HANGUL SYLLABLE GA
+
+test "synchronized and live frames share scroll-on-output tracking" {
+    const t = std.testing;
+    var term = try terminalpkg.Terminal.init(t.io, t.allocator, .{ .cols = 10, .rows = 2 });
+    defer term.deinit(t.allocator);
+    var mutex: std.Io.Mutex = .init;
+    var state: State = .{ .mutex = &mutex, .terminal = &term };
+    try term.printString("one\r\ntwo\r\nthree");
+    state.scrollOnOutput(true);
+    term.scrollViewport(.top);
+    const top = term.screens.active.pages.getTopLeft(.viewport);
+    // A second consumer with no new output must not undo manual scrolling.
+    state.scrollOnOutput(true);
+    try t.expect(top.eql(term.screens.active.pages.getTopLeft(.viewport)));
+    try term.printString("\r\nfour");
+    state.scrollOnOutput(false);
+    try t.expect(top.eql(term.screens.active.pages.getTopLeft(.viewport)));
+    state.scrollOnOutput(true);
+    try t.expect(!top.eql(term.screens.active.pages.getTopLeft(.viewport)));
+}
 
 test "preedit range covers exact cell width" {
     const testing = std.testing;

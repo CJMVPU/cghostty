@@ -334,7 +334,7 @@ fn syncResetCallback(
     r: xev.Timer.RunError!void,
 ) xev.CallbackAction {
     _ = r catch |err| switch (err) {
-        error.Canceled => {},
+        error.Canceled => return .disarm,
         else => {
             log.warn("error during sync reset callback err={}", .{err});
             return .disarm;

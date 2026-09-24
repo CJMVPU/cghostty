@@ -120,7 +120,7 @@ fn stepTable(ptr: *anyopaque) Benchmark.Error!void {
     var r = &f_reader.interface;
 
     var d: UTF8Decoder = .{};
-    var state: uucode.grapheme.BreakState = .default;
+    var state: uucode.grapheme.BreakState = .{};
     var cp1: u21 = 0;
     var buf: [4096]u8 align(std.atomic.cache_line) = undefined;
     while (true) {

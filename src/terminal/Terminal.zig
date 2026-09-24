@@ -681,7 +681,7 @@ fn printSliceFast(
 
         // A simple single-codepoint previous cell: print() would run
         // exactly this break check from the default state.
-        var state: uucode.grapheme.BreakState = .default;
+        var state: uucode.grapheme.BreakState = .{};
         if (!unicode.graphemeBreak(
             prev.content.codepoint.data,
             @intCast(cp0),
@@ -887,7 +887,7 @@ fn printSliceFill(
             }
             if (cp > 0xFF and allow_unicode and printSliceEligible(cp, width)) {
                 if (!grapheme_cluster) continue;
-                var state: uucode.grapheme.BreakState = .default;
+                var state: uucode.grapheme.BreakState = .{};
                 if (unicode.graphemeBreak(@intCast(cps[idx - 1]), @intCast(cp), &state)) continue;
             }
             break :run idx;
@@ -1261,7 +1261,7 @@ pub fn print(self: *Terminal, c: u21) !void {
 
         var previous_codepoint: u21 = prev.cell.content.codepoint.data;
         const grapheme_break = brk: {
-            var state: uucode.grapheme.BreakState = .default;
+            var state: uucode.grapheme.BreakState = .{};
             if (prev.cell.hasGrapheme()) {
                 const cps = self.screens.active.cursor.page_pin.node.page().lookupGrapheme(prev.cell).?;
                 for (cps) |cp2| {

@@ -49,6 +49,22 @@ pub const State = struct {
         self.kitty_placements.deinit(alloc);
     }
 
+    /// Adopt an IO-thread CPU snapshot on the renderer thread. Reuse an
+    /// existing texture when the image generation matches; never move GPU
+    /// objects back to the IO thread. `snapshot` is empty on return.
+    pub fn adopt(self: *State, alloc: Allocator, snapshot: *State) void {
+        var it = snapshot.images.iterator();
+        while (it.next()) |entry| {
+            const old = self.images.getPtr(entry.key_ptr.*) orelse continue;
+            if (old.generation == entry.value_ptr.generation and !old.image.isUnloading()) {
+                std.mem.swap(Image, &old.image, &entry.value_ptr.image);
+            }
+        }
+        self.deinit(alloc);
+        self.* = snapshot.*;
+        snapshot.* = .empty;
+    }
+
     /// Upload any images to the GPU that need to be uploaded,
     /// and remove any images that are no longer needed on the GPU.
     ///
@@ -1127,6 +1143,32 @@ test "kitty renderer ignores pending payloads and removes replaced placements" {
     try testing.expectEqual(tracked, t.screens.active.pages.countTrackedPins());
     try testing.expectEqual(@as(usize, 0), state.kitty_placements.items.len);
     try testing.expect(state.images.get(.{ .kitty = 1 }).?.image.isUnloading());
+}
+
+test "kitty renderer adopts snapshots retaining identical generations" {
+    const t = std.testing;
+    const alloc = t.allocator;
+    var live: State = .empty;
+    defer live.deinit(alloc);
+    var snapshot: State = .empty;
+    defer snapshot.deinit(alloc);
+    const data: Image.Pending = .{
+        .width = 1,
+        .height = 1,
+        .pixel_format = .rgba,
+        .data = @constCast("rgba".ptr),
+    };
+    try live.prepImage(alloc, .{ .kitty = 1 }, 7, data);
+    const original = live.images.get(.{ .kitty = 1 }).?.image.pending.data;
+    try snapshot.prepImage(alloc, .{ .kitty = 1 }, 7, data);
+    live.adopt(alloc, &snapshot);
+    try t.expectEqual(original, live.images.get(.{ .kitty = 1 }).?.image.pending.data);
+    try t.expectEqual(0, snapshot.images.count());
+    try snapshot.prepImage(alloc, .{ .kitty = 1 }, 8, data);
+    const replacement = snapshot.images.get(.{ .kitty = 1 }).?.image.pending.data;
+    live.adopt(alloc, &snapshot);
+    try t.expectEqual(replacement, live.images.get(.{ .kitty = 1 }).?.image.pending.data);
+    try t.expectEqual(8, live.images.get(.{ .kitty = 1 }).?.generation);
 }
 
 test "kitty renderer uses the intersected source rectangle" {

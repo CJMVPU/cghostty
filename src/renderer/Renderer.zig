@@ -90,12 +90,6 @@ visible: bool,
 scrollbar: terminal.Scrollbar,
 scrollbar_dirty: bool,
 
-/// Tracks the last bottom-right pin of the screen to detect new output.
-/// When the final line changes (node or y differs), new content was added.
-/// Used for scroll-to-bottom on output feature.
-last_bottom_node: ?usize,
-last_bottom_y: terminal.size.CellCountInt,
-
 /// The most recent viewport matches so that we can render search
 /// matches in the visible frame. This is provided asynchronously
 /// from the search thread so we have the dirty flag to also note
@@ -537,8 +531,6 @@ pub fn init(alloc: Allocator, options: renderer.Options) !Self {
         .visible = true,
         .scrollbar = .zero,
         .scrollbar_dirty = false,
-        .last_bottom_node = null,
-        .last_bottom_y = 0,
         .search_matches = null,
         .search_selected_match = null,
         .search_matches_dirty = false,
@@ -997,31 +989,49 @@ pub fn updateFrame(
         state.lockDemand(global.io());
         defer state.unlockDemand(global.io());
 
-        // If we're in a synchronized output state, we pause all rendering.
-        if (state.terminal.modes.get(.synchronized_output)) {
-            log.debug("synchronized output started, skipping render", .{});
-            return;
+        // A hold captures the completed frame at the input boundary, even
+        // when reset/set occur within a single PTY read. Take ownership under
+        // the terminal lock; only this thread touches the resulting GPU state.
+        const held = state.terminal.modes.get(.synchronized_output);
+        if (state.render_hold.take(self.alloc, held)) |captured| {
+            var frame = captured;
+            defer frame.deinit(self.alloc);
+            const preedit: ?renderer.State.Preedit = if (state.preedit) |p| try p.clone(arena_alloc) else null;
+            self.terminal_state.deinit(self.alloc);
+            self.terminal_state = frame.render;
+            frame.render = .empty;
+            {
+                self.draw_mutex.lockUncancelable(global.io());
+                defer self.draw_mutex.unlock(global.io());
+                self.images.adopt(self.alloc, &frame.images);
+            }
+            self.kitty_animation_next_ms = null;
+            state.terminal.flags.search_viewport_dirty = true;
+            const links: terminal.RenderState.CellSet = osc8: {
+                const vp = state.mouse.point orelse break :osc8 .empty;
+                const captured_mouse = frame.mouse orelse break :osc8 .empty;
+                if (!vp.eql(captured_mouse) or
+                    !state.mouse.mods.equal(inputpkg.ctrlOrSuper(.{}))) break :osc8 .empty;
+                // The original terminal pages may have been pruned since
+                // capture. Only use the owned cell coordinates here.
+                break :osc8 frame.osc8.clone(arena_alloc) catch .empty;
+            };
+            break :critical .{
+                .links = links,
+                .link_key = frame.link_key,
+                .mouse = state.mouse,
+                .preedit = preedit,
+                .scrollbar = frame.scrollbar,
+            };
         }
+        if (held) return;
 
         // If scroll-to-bottom on output is enabled, check if the final line
         // changed by comparing the bottom-right pin. If the node pointer or
         // y offset changed, new content was added to the screen.
         // Update this BEFORE we update our render state so we can
         // draw the new scrolled data immediately.
-        if (self.config.scroll_to_bottom_on_output) scroll: {
-            const br = state.terminal.screens.active.pages.getBottomRight(.screen) orelse break :scroll;
-
-            // If the pin hasn't changed, then don't scroll.
-            if (self.last_bottom_node == @intFromPtr(br.node) and
-                self.last_bottom_y == br.y) break :scroll;
-
-            // Update tracked pin state for next frame
-            self.last_bottom_node = @intFromPtr(br.node);
-            self.last_bottom_y = br.y;
-
-            // Scroll
-            state.terminal.scrollViewport(.bottom);
-        }
+        state.scrollOnOutput(self.config.scroll_to_bottom_on_output);
 
         // Begin the update of our terminal state. Work that
         // doesn't require terminal access (e.g. style

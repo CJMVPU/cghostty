@@ -63,4 +63,5 @@ test {
     _ = size;
     _ = Thread;
     _ = State;
+    _ = @import("renderer/RenderHold.zig");
 }

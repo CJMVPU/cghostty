@@ -53,6 +53,7 @@ pub const StreamHandler = struct {
     /// Maximum total decoded bytes per Kitty clipboard protocol
     /// (OSC 5522) write transaction; exceeding it aborts with EFBIG.
     clipboard_write_limit: usize,
+    scroll_to_bottom_on_output: bool,
 
     //---------------------------------------------------------------
     // Internal state
@@ -118,6 +119,7 @@ pub const StreamHandler = struct {
         self.osc_color_report_format = config.osc_color_report_format;
         self.clipboard_write = config.clipboard_write;
         self.clipboard_write_limit = config.clipboard_write_limit;
+        self.scroll_to_bottom_on_output = config.scroll_to_bottom_on_output;
         self.enquiry_response = config.enquiry_response;
         self.terminal.setDefaultCursorStyle(config.cursor_style);
         self.terminal.setDefaultCursorBlink(config.cursor_blink);
@@ -281,8 +283,12 @@ pub const StreamHandler = struct {
                 // For restore mode we have to restore but if we set it, we
                 // always have to call setMode because setting some modes have
                 // side effects and we want to make sure we process those.
-                const v = self.terminal.modes.restore(value.mode);
-                try self.setMode(value.mode, v);
+                if (value.mode == .synchronized_output) {
+                    self.restoreSynchronizedOutput();
+                } else {
+                    const v = self.terminal.modes.restore(value.mode);
+                    try self.setMode(value.mode, v);
+                }
             },
             .request_mode => try self.requestMode(value.mode),
             .request_mode_unknown => try self.requestModeUnknown(value.mode, value.ansi),
@@ -581,6 +587,27 @@ pub const StreamHandler = struct {
         } });
     }
 
+    fn restoreSynchronizedOutput(self: *StreamHandler) void {
+        const previous = self.terminal.modes.get(.synchronized_output);
+        const saved = self.terminal.modes.restore(.synchronized_output);
+        self.terminal.modes.set(.synchronized_output, previous);
+        self.setSynchronizedOutput(saved);
+    }
+
+    fn setSynchronizedOutput(self: *StreamHandler, enabled: bool) void {
+        // Called with the terminal lock held. Repeated sets are inside
+        // incomplete frames: don't capture them or extend the watchdog.
+        if (self.terminal.modes.get(.synchronized_output) == enabled) return;
+        if (enabled) {
+            self.renderer_state.scrollOnOutput(self.scroll_to_bottom_on_output);
+            self.renderer_state.render_hold.capture(self.alloc, self.terminal, self.size.cell, if (self.renderer_state.mouse.mods.equal(@import("../input.zig").ctrlOrSuper(.{}))) self.renderer_state.mouse.point else null) catch |err| {
+                log.warn("error capturing synchronized frame err={}", .{err});
+            };
+        } else self.renderer_state.render_hold.deinit(self.alloc);
+        self.terminal.modes.set(.synchronized_output, enabled);
+        if (enabled) self.messageWriter(.{ .start_synchronized_output = {} });
+    }
+
     pub fn setMode(self: *StreamHandler, mode: terminal.Mode, enabled: bool) !void {
         // Note: this function doesn't need to grab the render state or
         // terminal locks because it is only called from process() which
@@ -618,6 +645,11 @@ pub const StreamHandler = struct {
         if (mode == .cursor_blinking and
             self.terminal.cursor.default_blink != null)
         {
+            return;
+        }
+
+        if (mode == .synchronized_output) {
+            self.setSynchronizedOutput(enabled);
             return;
         }
 
@@ -690,11 +722,7 @@ pub const StreamHandler = struct {
                 if (enabled) .@"132_cols" else .@"80_cols",
             ),
 
-            // We need to start a timer to prevent the emulator being hung
-            // forever.
-            .synchronized_output => {
-                if (enabled) self.messageWriter(.{ .start_synchronized_output = {} });
-            },
+            .synchronized_output => unreachable,
 
             .linefeed => {
                 self.messageWriter(.{ .linefeed_mode = enabled });
@@ -1885,6 +1913,81 @@ test "kitty clipboard read: targets-only never consumes a one-time grant" {
     // ...so the follow-up data read is still granted, exactly once.
     try testing.expect(handler.kittyClipboardReadGranted("otp", 1));
     try testing.expect(!handler.kittyClipboardReadGranted("otp", 1));
+}
+
+test "GUI synchronized output captures completed frames within one write" {
+    const t = std.testing;
+    var term = try terminal.Terminal.init(t.io, t.allocator, .{ .cols = 10, .rows = 3 });
+    defer term.deinit(t.allocator);
+    var mutex: std.Io.Mutex = .init;
+    mutex.lockUncancelable(global.io());
+    defer mutex.unlock(global.io());
+    var shared: renderer.State = .{ .mutex = &mutex, .terminal = &term };
+    defer shared.render_hold.deinit(t.allocator);
+    var mailbox = try termio.Mailbox.initSPSC(t.allocator);
+    defer mailbox.deinit(t.allocator);
+    var size: renderer.Size = .{
+        .screen = .{ .width = 100, .height = 60 },
+        .cell = .{ .width = 10, .height = 20 },
+        .padding = .{},
+    };
+    // Only initialize fields used by the sequences below. Going through
+    // the actual GUI Stream verifies that TerminalStream isn't accidentally
+    // tested in place of the application's PTY handler.
+    var handler: StreamHandler = undefined;
+    handler.alloc = t.allocator;
+    handler.terminal = &term;
+    handler.renderer_state = &shared;
+    handler.termio_mailbox = &mailbox;
+    handler.termio_messaged = false;
+    handler.size = &size;
+    handler.scroll_to_bottom_on_output = false;
+    // The core test runtime has no native application. Route the actions
+    // exercised here to the real GUI handler without compiling unrelated
+    // window/clipboard callbacks that require that application runtime.
+    const TestHandler = struct {
+        gui: *StreamHandler,
+        pub fn vt(self: *@This(), comptime action: StreamHandler.Stream.Action.Tag, value: StreamHandler.Stream.Action.Value(action)) void {
+            switch (action) {
+                .print, .print_slice, .cursor_pos, .save_mode => self.gui.vt(action, value),
+                .set_mode => self.gui.setSynchronizedOutput(true),
+                .reset_mode => self.gui.setSynchronizedOutput(false),
+                .restore_mode => self.gui.restoreSynchronizedOutput(),
+                else => {},
+            }
+        }
+        pub fn deinit(_: *@This()) void {}
+    };
+    var stream: terminal.Stream(TestHandler) = .init(.{ .allocator = t.allocator, .handler = .{ .gui = &handler } });
+    defer stream.deinit();
+
+    stream.nextSlice("AB\x1b[?2026h\x1b[HXY");
+    try t.expect(term.modes.get(.synchronized_output));
+    shared.render_hold.pending.?.render.endUpdate();
+    try t.expectEqual('A', shared.render_hold.pending.?.render.row_data.items(.cells)[0].get(0).raw.codepoint());
+    // A repeated set must not capture the half-written XY frame or restart
+    // the watchdog. A mode-only renderer cannot observe the release below.
+    stream.nextSlice("\x1b[?2026hZ\x1b[?2026l\x1b[?2026h\x1b[H123");
+    try t.expect(term.modes.get(.synchronized_output));
+    var frame = shared.render_hold.take(t.allocator, true).?;
+    defer frame.deinit(t.allocator);
+    frame.render.endUpdate();
+    for ("XYZ", 0..) |cp, i| try t.expectEqual(cp, frame.render.row_data.items(.cells)[0].get(i).raw.codepoint());
+    var starts: usize = 0;
+    while (mailbox.spsc.queue.pop(global.io())) |msg| {
+        defer msg.deinit();
+        try t.expect(msg == .start_synchronized_output);
+        starts += 1;
+    }
+    try t.expectEqual(2, starts);
+
+    stream.nextSlice("\x1b[?2026l\x1b[?2026s\x1b[?2026h\x1b[?2026r");
+    try t.expect(!term.modes.get(.synchronized_output));
+    try t.expect(shared.render_hold.pending == null);
+    stream.nextSlice("\x1b[?2026h\x1b[?2026s\x1b[?2026l\x1b[?2026r");
+    try t.expect(term.modes.get(.synchronized_output));
+    try t.expect(shared.render_hold.pending != null);
+    while (mailbox.spsc.queue.pop(global.io())) |msg| msg.deinit();
 }
 
 test "kitty clipboard write: oversized text replies EFBIG" {

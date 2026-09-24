@@ -177,6 +177,7 @@ pub const DerivedConfig = struct {
     osc_color_report_format: configpkg.Config.OSCColorReportFormat,
     clipboard_write: configpkg.ClipboardAccess,
     clipboard_write_limit: usize,
+    scroll_to_bottom_on_output: bool,
     enquiry_response: []const u8,
     conditional_state: configpkg.ConditionalState,
 
@@ -213,6 +214,7 @@ pub const DerivedConfig = struct {
             .background = config.background,
             .osc_color_report_format = config.@"osc-color-report-format",
             .clipboard_write = config.@"clipboard-write",
+            .scroll_to_bottom_on_output = config.@"scroll-to-bottom".output,
             .clipboard_write_limit = config.@"clipboard-write-limit-bytes".value,
             .enquiry_response = try alloc.dupe(u8, config.@"enquiry-response"),
             .conditional_state = config._conditional_state,
@@ -302,6 +304,7 @@ pub fn init(self: *Termio, alloc: Allocator, opts: termio.Options) !void {
         .terminal = &self.terminal,
         .osc_color_report_format = opts.config.osc_color_report_format,
         .clipboard_write = opts.config.clipboard_write,
+        .scroll_to_bottom_on_output = opts.config.scroll_to_bottom_on_output,
         .clipboard_write_limit = opts.config.clipboard_write_limit,
         .enquiry_response = opts.config.enquiry_response,
     };
@@ -332,6 +335,7 @@ pub fn init(self: *Termio, alloc: Allocator, opts: termio.Options) !void {
 
 pub fn deinit(self: *Termio) void {
     self.backend.deinit();
+    self.renderer_state.render_hold.deinit(self.alloc);
     self.terminal.deinit(self.alloc);
     self.config.deinit();
     self.mailbox.deinit(self.alloc);

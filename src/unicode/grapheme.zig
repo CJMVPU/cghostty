@@ -107,7 +107,7 @@ pub fn graphemeWidth(comptime T: type, cps: []const T) GraphemeWidth {
     var len: usize = 1;
     var width = table.get(@as(u21, @intCast(cps[0]))).width;
     var prev: u21 = @intCast(cps[0]);
-    var state: uucode.grapheme.BreakState = .default;
+    var state: uucode.grapheme.BreakState = .{};
 
     while (len < cps.len) : (len += 1) {
         // Treat invalid u32 input as a boundary so a valid prefix cluster can
@@ -168,20 +168,12 @@ const Precompute = struct {
     const data = precompute: {
         var result: [std.math.maxInt(u13) + 1]Value = undefined;
 
-        const max_state_int = blk: {
-            var max: usize = 0;
-            for (@typeInfo(uucode.grapheme.BreakState).@"enum".fields) |field| {
-                if (field.value > max) max = field.value;
-            }
-            break :blk max;
-        };
-
-        @setEvalBranchQuota(10_000);
+        @setEvalBranchQuota(20_000);
         const info = @typeInfo(uucode.types.GraphemeBreakNoControl).@"enum";
-        for (0..max_state_int + 1) |state_int| {
+        for (0..uucode.grapheme.BreakState.table_len) |state_int| {
             for (info.fields) |field1| {
                 for (info.fields) |field2| {
-                    var state: uucode.grapheme.BreakState = @enumFromInt(state_int);
+                    var state: uucode.grapheme.BreakState = .fromTableIndex(state_int);
 
                     const key: Key = .{
                         .gb1 = @field(uucode.types.GraphemeBreakNoControl, field1.name),
@@ -215,8 +207,8 @@ pub fn main() !void {
     const min = 0;
     const max = uucode.config.max_code_point + 1;
 
-    var state: uucode.grapheme.BreakState = .default;
-    var uu_state: uucode.grapheme.BreakState = .default;
+    var state: uucode.grapheme.BreakState = .{};
+    var uu_state: uucode.grapheme.BreakState = .{};
     for (min..max) |cp1| {
         if (cp1 % 1000 == 0) std.log.warn("progress cp1={}", .{cp1});
 
@@ -252,19 +244,32 @@ test "grapheme break: emoji modifier" {
 
     // Emoji and modifier
     {
-        var state: uucode.grapheme.BreakState = .default;
+        var state: uucode.grapheme.BreakState = .{};
         try testing.expect(!graphemeBreak(0x261D, 0x1F3FF, &state));
     }
 
     // Non-emoji and emoji modifier
     {
-        var state: uucode.grapheme.BreakState = .default;
+        var state: uucode.grapheme.BreakState = .{};
         try testing.expect(graphemeBreak(0x22, 0x1F3FF, &state));
     }
 }
 
+test "grapheme break: Unicode 18 Indic linkers do not require a leading consonant" {
+    const testing = std.testing;
+    // GB9c now joins a linker (including GCB=Other linkers) to a
+    // consonant without requiring a consonant before that linker.
+    for ([_]u21{ 0x094D, 0x1CF5, 0x1CF6, 0x11A3A }) |linker| {
+        var state: uucode.grapheme.BreakState = .{};
+        var expected: uucode.grapheme.BreakState = .{};
+        try testing.expect(!uucode.grapheme.isBreak(linker, 0x0915, &expected));
+        try testing.expect(!graphemeBreak(linker, 0x0915, &state));
+        try testing.expectEqual(expected, state);
+    }
+}
+
 test "long emoji zwj sequences" {
-    var state: uucode.grapheme.BreakState = .default;
+    var state: uucode.grapheme.BreakState = .{};
     // 👩‍👩‍👧‍👦 (family: woman, woman, girl, boy)
     var it = uucode.utf8.Iterator.init("\u{1F469}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}_");
     var cp1 = it.next() orelse unreachable;
@@ -338,7 +343,7 @@ test "grapheme width: spacing marks can widen narrow clusters" {
         const props = table.get(cp);
         if (props.width != 1 or props.width_zero_in_grapheme) continue;
 
-        var state: uucode.grapheme.BreakState = .default;
+        var state: uucode.grapheme.BreakState = .{};
         if (!graphemeBreak('a', cp, &state)) {
             mark = cp;
             break;
