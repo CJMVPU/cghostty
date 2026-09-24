@@ -6,6 +6,8 @@ pub const Screen = @import("search/screen.zig").ScreenSearch;
 pub const Terminal = @import("search/terminal.zig").TerminalSearch;
 pub const Viewport = @import("search/viewport.zig").ViewportSearch;
 
+pub const ChangeSignal = @import("search/ChangeSignal.zig");
+
 pub const Thread = @import("search/Thread.zig");
 
 test {

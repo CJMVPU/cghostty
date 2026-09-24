@@ -31,6 +31,7 @@ extension Ghostty {
         /// Weak topology lookup, separate from loaded-window retention.
         @ObservationIgnored let windowRegistry = WindowRegistry()
         @ObservationIgnored let undoManager = ExpiringUndoManager()
+        @ObservationIgnored nonisolated let wakeupGate = AppWakeupGate()
 
         /// Preferred config file than the default ones
         @ObservationIgnored private var configPath: String?

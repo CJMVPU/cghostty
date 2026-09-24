@@ -148,6 +148,8 @@ pub fn destroy(self: *App) void {
 /// tick.
 pub fn tick(self: *App, rt_app: *apprt.App) !void {
     // Drain our mailbox
+    // A failed action consumed its message, but later messages still need a tick.
+    errdefer rt_app.wakeup();
     try self.drainMailbox(rt_app);
 }
 
@@ -284,6 +286,8 @@ fn drainMailbox(self: *App, rt_app: *apprt.App) !void {
             .quit => {
                 log.info("quit message received, short circuiting mailbox drain", .{});
                 try self.performAction(rt_app, .quit);
+                // Native wakeups are coalesced; resume after this ordering barrier.
+                rt_app.wakeup();
                 return;
             },
         }

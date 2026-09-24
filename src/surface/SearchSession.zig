@@ -26,6 +26,7 @@ pub const Output = struct {
 pub const Options = struct {
     mutex: *std.Io.Mutex,
     terminal: *terminal.Terminal,
+    changes: ?*terminal.search.ChangeSignal = null,
     output: Output,
 };
 
@@ -37,6 +38,7 @@ pub fn create(alloc: Allocator, opts: Options, query: []const u8) !*Self {
     errdefer needle.deinit();
     const self = try init(alloc, opts, callback);
     errdefer self.destroy();
+    if (opts.changes) |changes| changes.attach(&self.state.wakeup);
     self.thread = try std.Thread.spawn(.{}, Worker.threadMain, .{&self.state});
     self.thread.?.setName(global.io(), "search") catch {};
     self.send(.{ .change_needle = needle });
@@ -52,6 +54,7 @@ fn init(alloc: Allocator, opts: Options, event_cb: ?Worker.EventCallback) !*Self
         .state = try Worker.init(alloc, .{
             .mutex = opts.mutex,
             .terminal = opts.terminal,
+            .changes = opts.changes,
             .event_cb = event_cb,
             .event_userdata = self,
         }),
@@ -60,6 +63,7 @@ fn init(alloc: Allocator, opts: Options, event_cb: ?Worker.EventCallback) !*Self
 }
 
 pub fn destroy(self: *Self) void {
+    if (self.state.opts.changes) |changes| changes.detach();
     if (self.thread) |thread| {
         self.state.stop.notify() catch |err| log.err(
             "error notifying search thread to stop, may stall err={}",

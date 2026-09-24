@@ -226,7 +226,6 @@ class BaseTerminalController: NSWindowController,
         guard ghostty.isReady else { preconditionFailure("app must be loaded") }
         self.surfaceTree = tree ?? .init(view: Ghostty.SurfaceView(ghostty, baseConfig: base))
         ghostty.windowRegistry.register(self)
-        ghostty.windowRegistry.update(self, from: .init(), to: surfaceTree)
 
         // Setup our bell state for the window
         observeBellState()

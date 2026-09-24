@@ -4,6 +4,23 @@ import Testing
 
 @MainActor
 struct AppConcurrencyTests {
+    @Test func wakeupGateCoalescesConcurrentProducersAndAllowsReentrantWork() async {
+        let gate = AppWakeupGate()
+        let scheduled = await withTaskGroup(of: Bool.self, returning: Int.self) { group in
+            for _ in 0..<1_000 { group.addTask { gate.request() } }
+            var count = 0
+            for await accepted in group where accepted { count += 1 }
+            return count
+        }
+        #expect(scheduled == 1)
+        gate.beginTick()
+        // A producer during draining must be able to schedule another tick.
+        #expect(gate.request())
+        #expect(!gate.request())
+        gate.beginTick()
+        #expect(gate.request())
+    }
+
     @Test func queuedWakeupDoesNotRetainApp() async {
         var app: Ghostty.App? = Ghostty.App(configPath: "/dev/null")
         weak let releasedApp = app

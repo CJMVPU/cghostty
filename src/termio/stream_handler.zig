@@ -111,6 +111,7 @@ pub const StreamHandler = struct {
     /// isn't guaranteed to happen immediately but it will happen as soon as
     /// practical.
     pub inline fn queueRender(self: *StreamHandler) !void {
+        self.renderer_state.search_changes.notify();
         try self.renderer_wakeup.notify();
     }
 
@@ -603,7 +604,7 @@ pub const StreamHandler = struct {
             self.renderer_state.render_hold.capture(self.alloc, self.terminal, self.size.cell, if (self.renderer_state.mouse.mods.equal(@import("../input.zig").ctrlOrSuper(.{}))) self.renderer_state.mouse.point else null) catch |err| {
                 log.warn("error capturing synchronized frame err={}", .{err});
             };
-        } else self.renderer_state.render_hold.deinit(self.alloc);
+        } else self.renderer_state.render_hold.discard(self.alloc);
         self.terminal.modes.set(.synchronized_output, enabled);
         if (enabled) self.messageWriter(.{ .start_synchronized_output = {} });
     }

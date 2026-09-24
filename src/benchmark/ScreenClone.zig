@@ -76,6 +76,8 @@ pub const Mode = enum {
     @"accessibility-reuse",
     links,
     @"links-cached",
+    @"hold-fresh",
+    @"hold-reuse",
 };
 
 pub fn create(
@@ -114,6 +116,7 @@ pub fn benchmark(self: *ScreenClone) Benchmark {
             .@"render-partial" => stepRenderPartial,
             .accessibility, .@"accessibility-reuse" => stepAccessibility,
             .links, .@"links-cached" => stepLinks,
+            .@"hold-fresh", .@"hold-reuse" => stepHold,
         },
         .setupFn = setup,
         .teardownFn = teardown,
@@ -369,4 +372,36 @@ fn stepLinks(ptr: *anyopaque) Benchmark.Error!void {
     }
     const elapsed = start.durationTo(.now(global.io(), .awake)).nanoseconds;
     std.debug.print("mode={s} elapsed_ns={d} rebuilds={d} highlighted_cells={d}\n", .{ @tagName(self.opts.mode), elapsed, cache.rebuilds, cells });
+}
+
+// Fresh storage reproduces the previous capture allocation policy. Both
+// variants capture full viewports; reuse never skips content or dirty rows.
+fn stepHold(ptr: *anyopaque) Benchmark.Error!void {
+    const self: *ScreenClone = @ptrCast(@alignCast(ptr));
+    const Hold = @import("../renderer/RenderHold.zig");
+    const alloc = self.terminal.screens.active.alloc;
+    var hold: Hold = .{};
+    defer hold.deinit(alloc);
+    self.terminal.width_px = @as(u32, self.terminal.cols) * 10;
+    self.terminal.height_px = @as(u32, self.terminal.rows) * 20;
+    // Verify the workload outside the timed loop, including visible image data.
+    hold.capture(alloc, &self.terminal, .{ .width = 10, .height = 20 }, null) catch return error.BenchmarkFailed;
+    const images = hold.pending.?.images.images.count();
+    var pixel_bytes: usize = 0;
+    var it = hold.pending.?.images.images.iterator();
+    while (it.next()) |entry| pixel_bytes += entry.value_ptr.image.pending.len();
+    hold.discard(alloc);
+    var checksum: usize = 0;
+    const start: std.Io.Timestamp = .now(global.io(), .awake);
+    for (0..2_000 * @as(usize, self.opts.loops)) |_| {
+        if (self.opts.mode == .@"hold-fresh") hold.deinit(alloc);
+        hold.capture(alloc, &self.terminal, .{ .width = 10, .height = 20 }, null) catch return error.BenchmarkFailed;
+        var frame = hold.take(alloc, true).?;
+        frame.render.endUpdate();
+        checksum +%= frame.render.row_data.items(.cells)[0].get(0).raw.codepoint();
+        if (self.opts.mode == .@"hold-reuse") hold.recycleRender(alloc, &frame.render);
+        frame.deinit(alloc);
+    }
+    const elapsed = start.durationTo(.now(global.io(), .awake)).nanoseconds;
+    std.debug.print("mode={s} elapsed_ns={d} checksum={d} captures={d} images={d} pixel_bytes={d}\n", .{ @tagName(self.opts.mode), elapsed, checksum, 2_000 * @as(usize, self.opts.loops), images, pixel_bytes });
 }

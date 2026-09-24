@@ -28,18 +28,9 @@ const TerminalSearch = @import("terminal.zig").TerminalSearch;
 
 const log = std.log.scoped(.search_thread);
 
-// TODO: Some stuff that could be improved:
-// - pause the refresh timer when the terminal isn't focused
-// - we probably want to know our progress through the search
-//   for viewport matches so we can show n/total UI.
-// - notifications should be coalesced to avoid spamming a massive
-//   amount of events if the terminal is changing rapidly.
-
-/// The interval at which we refresh the terminal state to check if
-/// there are any changes that require us to re-search. This should be
-/// balanced to be fast enough to be responsive but not so fast that
-/// we hold the terminal lock too often.
-const REFRESH_INTERVAL = 24; // 40 FPS
+/// One-shot deadline for batching output bursts. An unchanged terminal has
+/// no armed timer. Queries and navigation still run immediately.
+const REFRESH_INTERVAL = 24;
 
 /// Allocator used for some state
 alloc: std.mem.Allocator,
@@ -65,7 +56,8 @@ stop_c: xev.Completion = .{},
 /// CPU intensive so we stop doing this under certain conditions.
 refresh: xev.Timer,
 refresh_c: xev.Completion = .{},
-refresh_active: bool = false,
+refresh_pending: bool = false,
+last_key: ?@import("../accessibility.zig").Tracker.Key = null,
 
 /// Search state. Starts as null and is populated when a search is
 /// started (a needle is given).
@@ -170,9 +162,6 @@ fn threadMain_(self: *Thread) !void {
     // Send an initial wakeup so we drain our mailbox immediately.
     try self.wakeup.notify();
 
-    // Start the refresh timer
-    self.startRefreshTimer();
-
     // Run
     log.debug("starting search thread", .{});
     defer {
@@ -249,7 +238,9 @@ fn feedLocked(self: *Thread, s: *TerminalSearch) void {
     // what exactly this is for. But, if this is set, we know the renderer
     // found the viewport/active area dirty, so the active area must be
     // re-scanned.
-    const active_dirty = t.flags.search_viewport_dirty;
+    const key = @import("../accessibility.zig").Tracker.Key.read(t);
+    const active_dirty = t.flags.search_viewport_dirty or self.last_key == null or !std.meta.eql(self.last_key.?, key);
+    self.last_key = key;
     t.flags.search_viewport_dirty = false;
 
     s.feed(t, active_dirty);
@@ -332,6 +323,7 @@ fn changeNeedle(self: *Thread, needle: []const u8) !void {
 
     // Setup our search state.
     self.search = try .init(self.alloc, needle);
+    self.last_key = null;
     self.query_restarts += 1;
     self.notify_state = .{};
 
@@ -428,14 +420,10 @@ fn notify(
 }
 
 fn startRefreshTimer(self: *Thread) void {
-    // Set our active state so it knows we're running. We set this before
-    // even checking the active state in case we have a pending shutdown.
-    self.refresh_active = true;
+    if (self.refresh_pending) return;
+    self.refresh_pending = true;
 
-    // If our timer is already active, then we don't have to do anything.
-    if (self.refresh_c.state() == .active) return;
-
-    // Start the timer which loops
+    // Arm once; only a subsequent change can schedule another refresh.
     self.refresh.run(
         &self.loop,
         &self.refresh_c,
@@ -444,11 +432,6 @@ fn startRefreshTimer(self: *Thread) void {
         self,
         refreshCallback,
     );
-}
-
-fn stopRefreshTimer(self: *Thread) void {
-    // This will stop the refresh on the next iteration.
-    self.refresh_active = false;
 }
 
 fn wakeupCallback(
@@ -469,6 +452,9 @@ fn wakeupCallback(
     self.drainMailbox() catch |err|
         log.warn("error draining mailbox err={}", .{err});
 
+    if (self.opts.changes) |changes| {
+        if (changes.pending()) self.startRefreshTimer();
+    }
     return .rearm;
 }
 
@@ -496,22 +482,14 @@ fn refreshCallback(
         return .disarm;
     };
 
-    // Run our feed if we have a search active.
+    self.refresh_pending = false;
+    const changes = self.opts.changes orelse return .disarm;
+    if (!changes.consume()) return .disarm;
     if (self.search) |*s| {
         self.opts.mutex.lockUncancelable(global.io());
         defer self.opts.mutex.unlock(global.io());
         self.feedLocked(s);
     }
-
-    // Only continue if we're still active
-    if (self.refresh_active) self.refresh.run(
-        &self.loop,
-        &self.refresh_c,
-        REFRESH_INTERVAL,
-        Thread,
-        self,
-        refreshCallback,
-    );
 
     return .disarm;
 }
@@ -522,6 +500,9 @@ pub const Options = struct {
 
     /// The terminal data to search.
     terminal: *Terminal,
+
+    /// GUI mutations drive refresh; null supports explicit, one-time searches.
+    changes: ?*@import("ChangeSignal.zig") = null,
 
     /// The callback for events from the search thread along with optional
     /// userdata. This can be null if you don't want to receive events,
@@ -719,4 +700,41 @@ test "search mailbox coalesces queries but navigation remains an ordering barrie
     }
     try thread.drainMailbox();
     try testing.expect(thread.search == null);
+}
+
+test "search change refresh is one shot and observes output without renderer dirty bits" {
+    const alloc = testing.allocator;
+    var mutex: std.Io.Mutex = .init;
+    var term = try Terminal.init(testing.io, alloc, .{ .cols = 30, .rows = 3 });
+    defer term.deinit(alloc);
+    var changes: @import("ChangeSignal.zig") = .{};
+    var thread = try Thread.init(alloc, .{ .mutex = &mutex, .terminal = &term, .changes = &changes });
+    defer thread.deinit();
+    changes.attach(&thread.wakeup);
+    defer changes.detach();
+    try term.printString("word");
+    try thread.changeNeedle("word");
+    var steps: usize = 0;
+    while (!thread.search.?.isComplete()) : (steps += 1) {
+        try testing.expect(steps < 100);
+        if (thread.search.?.tick() == .blocked) thread.feedLocked(&thread.search.?);
+    }
+    try testing.expectEqual(1, thread.search.?.activeScreenSearch().?.matchesLen());
+    _ = changes.consume();
+    try term.printString(" word");
+    term.flags.search_viewport_dirty = false;
+    changes.setVisible(false);
+    changes.notify();
+    _ = refreshCallback(&thread, &thread.loop, &thread.refresh_c, {});
+    try testing.expectEqual(1, thread.search.?.activeScreenSearch().?.matchesLen());
+    changes.setVisible(true);
+    _ = refreshCallback(&thread, &thread.loop, &thread.refresh_c, {});
+    steps = 0;
+    while (!thread.search.?.isComplete()) : (steps += 1) {
+        try testing.expect(steps < 100);
+        if (thread.search.?.tick() == .blocked) thread.feedLocked(&thread.search.?);
+    }
+    try testing.expectEqual(2, thread.search.?.activeScreenSearch().?.matchesLen());
+    try testing.expect(!thread.refresh_pending);
+    try testing.expect(!changes.pending());
 }

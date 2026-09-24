@@ -21,6 +21,9 @@ terminal: *terminalpkg.Terminal,
 /// Owned CPU snapshot of the latest synchronized-output boundary.
 render_hold: @import("RenderHold.zig") = .{},
 
+/// Independently synchronized; callers need not hold the terminal mutex.
+search_changes: terminalpkg.search.ChangeSignal = .{},
+
 /// Shared by normal rendering and synchronized frame capture so both use
 /// the same scroll-on-output boundary. Protected by mutex.
 last_bottom_node: ?usize = null,
@@ -61,6 +64,7 @@ pub fn scrollOnOutput(self: *State, enabled: bool) void {
     self.last_bottom_node = @intFromPtr(br.node);
     self.last_bottom_y = br.y;
     self.terminal.scrollViewport(.bottom);
+    self.search_changes.notify();
 }
 
 /// Acquire `mutex` while signaling demand for it. Use this instead of

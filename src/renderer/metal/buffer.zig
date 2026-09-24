@@ -1,185 +1,72 @@
 const std = @import("std");
-const Allocator = std.mem.Allocator;
 const objc = @import("objc");
-const macos = @import("macos");
-
 const mtl = @import("api.zig");
-const Metal = @import("../Metal.zig");
 
-const log = std.log.scoped(.metal);
-
-/// Options for initializing a buffer.
 pub const Options = struct {
-    /// MTLDevice
     device: objc.Object,
     resource_options: mtl.MTLResourceOptions,
 };
 
-/// Metal data storage for a certain set of equal types. This is usually
-/// used for vertex buffers, etc. This helpful wrapper makes it easy to
-/// prealloc, shrink, grow, sync, buffers with Metal.
+/// CPU-written, shared-memory buffers for the native Apple Silicon renderer.
 pub fn Buffer(comptime T: type) type {
     return struct {
         const Self = @This();
-
-        /// The options this buffer was initialized with.
         opts: Options,
-
-        /// The underlying MTLBuffer object.
         buffer: objc.Object,
-
-        /// The allocated length of the buffer.
-        /// Note that this is the number
-        /// of `T`s not the size in bytes.
+        /// Capacity in elements, not bytes.
         len: usize,
 
-        /// Initialize a buffer with the given length pre-allocated.
-        pub fn init(opts: Options, len: usize) !Self {
-            const buffer = opts.device.msgSend(
-                objc.Object,
-                objc.sel("newBufferWithLength:options:"),
-                .{
-                    @as(c_ulong, @intCast(len * @sizeOf(T))),
-                    opts.resource_options,
-                },
-            );
-
-            return .{ .buffer = buffer, .opts = opts, .len = len };
+        pub fn init(opts: Options, requested: usize) !Self {
+            std.debug.assert(opts.resource_options.storage_mode == .shared);
+            const len = @max(requested, 1);
+            const bytes = try std.math.mul(usize, len, @sizeOf(T));
+            const value = opts.device.msgSend(?*anyopaque, objc.sel("newBufferWithLength:options:"), .{
+                @as(c_ulong, @intCast(bytes)), opts.resource_options,
+            }) orelse return error.MetalFailed;
+            return .{ .buffer = objc.Object.fromId(value), .opts = opts, .len = len };
         }
 
-        /// Init the buffer filled with the given data.
         pub fn initFill(opts: Options, data: []const T) !Self {
-            const buffer = opts.device.msgSend(
-                objc.Object,
-                objc.sel("newBufferWithBytes:length:options:"),
-                .{
-                    @as(*const anyopaque, @ptrCast(data.ptr)),
-                    @as(c_ulong, @intCast(data.len * @sizeOf(T))),
-                    opts.resource_options,
-                },
-            );
-
-            return .{ .buffer = buffer, .opts = opts, .len = data.len };
+            var result = try init(opts, data.len);
+            errdefer result.deinit();
+            try result.sync(data);
+            return result;
         }
 
         pub fn deinit(self: *const Self) void {
-            self.buffer.msgSend(void, objc.sel("release"), .{});
+            self.buffer.release();
         }
 
-        /// Sync new contents to the buffer. The data is expected to be the
-        /// complete contents of the buffer. If the amount of data is larger
-        /// than the buffer length, the buffer will be reallocated.
-        ///
-        /// If the amount of data is smaller than the buffer length, the
-        /// remaining data in the buffer is left untouched.
+        /// Publish a replacement only after allocation succeeds. Existing data
+        /// and ownership remain valid if Metal cannot allocate the larger buffer.
+        pub fn ensureCapacity(self: *Self, count: usize) !void {
+            if (count <= self.len) return;
+            const capacity = std.math.mul(usize, count, 2) catch count;
+            const replacement = try init(self.opts, capacity);
+            self.deinit();
+            self.* = replacement;
+        }
+
+        pub fn writable(self: *Self, count: usize) ![]T {
+            try self.ensureCapacity(count);
+            const ptr = self.buffer.msgSend(?[*]T, objc.sel("contents"), .{}) orelse return error.MetalFailed;
+            return ptr[0..count];
+        }
+
         pub fn sync(self: *Self, data: []const T) !void {
-            // If we need more bytes than our buffer has, we need to reallocate.
-            const req_bytes = data.len * @sizeOf(T);
-            const avail_bytes = self.buffer.getProperty(c_ulong, "length");
-            if (req_bytes > avail_bytes) {
-                // Deallocate previous buffer
-                self.buffer.msgSend(void, objc.sel("release"), .{});
-
-                // Allocate a new buffer with enough to hold double what we require.
-                self.len = data.len * 2;
-                self.buffer = self.opts.device.msgSend(
-                    objc.Object,
-                    objc.sel("newBufferWithLength:options:"),
-                    .{
-                        @as(c_ulong, @intCast(self.len * @sizeOf(T))),
-                        self.opts.resource_options,
-                    },
-                );
-            }
-
-            // We can fit within the buffer so we can just replace bytes.
-            const dst = dst: {
-                const ptr = self.buffer.msgSend(?[*]u8, objc.sel("contents"), .{}) orelse {
-                    log.warn("buffer contents ptr is null", .{});
-                    return error.MetalFailed;
-                };
-
-                break :dst ptr[0..req_bytes];
-            };
-
-            const src = src: {
-                const ptr = @as([*]const u8, @ptrCast(data.ptr));
-                break :src ptr[0..req_bytes];
-            };
-
-            @memcpy(dst, src);
-
-            // If we're using the managed resource storage mode, then
-            // we need to signal Metal to synchronize the buffer data.
-            //
-            // Ref: https://developer.apple.com/documentation/metal/synchronizing-a-managed-resource-in-macos?language=objc
-            if (self.opts.resource_options.storage_mode == .managed) {
-                self.buffer.msgSend(
-                    void,
-                    "didModifyRange:",
-                    .{macos.foundation.Range.init(0, req_bytes)},
-                );
-            }
+            @memcpy(try self.writable(data.len), data);
         }
 
-        /// Like Buffer.sync but takes data from an array of ArrayLists,
-        /// rather than a single array. Returns the number of items synced.
         pub fn syncFromArrayLists(self: *Self, lists: []const std.ArrayListUnmanaged(T)) !usize {
-            var total_len: usize = 0;
+            var total: usize = 0;
+            for (lists) |list| total = try std.math.add(usize, total, list.items.len);
+            const dst = try self.writable(total);
+            var offset: usize = 0;
             for (lists) |list| {
-                total_len += list.items.len;
+                @memcpy(dst[offset..][0..list.items.len], list.items);
+                offset += list.items.len;
             }
-
-            // If we need more bytes than our buffer has, we need to reallocate.
-            const req_bytes = total_len * @sizeOf(T);
-            const avail_bytes = self.buffer.getProperty(c_ulong, "length");
-            if (req_bytes > avail_bytes) {
-                // Deallocate previous buffer
-                self.buffer.msgSend(void, objc.sel("release"), .{});
-
-                // Allocate a new buffer with enough to hold double what we require.
-                self.len = total_len * 2;
-                self.buffer = self.opts.device.msgSend(
-                    objc.Object,
-                    objc.sel("newBufferWithLength:options:"),
-                    .{
-                        @as(c_ulong, @intCast(self.len * @sizeOf(T))),
-                        self.opts.resource_options,
-                    },
-                );
-            }
-
-            // We can fit within the buffer so we can just replace bytes.
-            const dst = dst: {
-                const ptr = self.buffer.msgSend(?[*]u8, objc.sel("contents"), .{}) orelse {
-                    log.warn("buffer contents ptr is null", .{});
-                    return error.MetalFailed;
-                };
-
-                break :dst ptr[0..req_bytes];
-            };
-
-            var i: usize = 0;
-
-            for (lists) |list| {
-                const ptr = @as([*]const u8, @ptrCast(list.items.ptr));
-                @memcpy(dst[i..][0 .. list.items.len * @sizeOf(T)], ptr);
-                i += list.items.len * @sizeOf(T);
-            }
-
-            // If we're using the managed resource storage mode, then
-            // we need to signal Metal to synchronize the buffer data.
-            //
-            // Ref: https://developer.apple.com/documentation/metal/synchronizing-a-managed-resource-in-macos?language=objc
-            if (self.opts.resource_options.storage_mode == .managed) {
-                self.buffer.msgSend(
-                    void,
-                    "didModifyRange:",
-                    .{macos.foundation.Range.init(0, req_bytes)},
-                );
-            }
-
-            return total_len;
+            return total;
         }
     };
 }

@@ -2153,6 +2153,7 @@ pub fn setFontSize(self: *Surface, size: font.face.DesiredSize) !void {
 /// isn't guaranteed to happen immediately but it will happen as soon as
 /// practical.
 fn queueRender(self: *Surface) !void {
+    self.render.state.search_changes.notify();
     try self.render.thread.wakeup.notify();
 }
 
@@ -2950,6 +2951,7 @@ pub fn occlusionCallback(self: *Surface, visible: bool) !void {
     // Avoid duplicate renderer and visibility reports.
     if (self.visible == visible) return;
     self.visible = visible;
+    self.render.state.search_changes.setVisible(visible);
 
     // Update the terminal state for synchronous queries, then notify the IO
     // thread so it can emit a mode 2033 report when enabled.
@@ -4552,6 +4554,7 @@ pub fn performBindingAction(self: *Surface, action: input.Binding.Action) !bool 
                 self.search = try SearchSession.create(self.alloc, .{
                     .mutex = self.render.state.mutex,
                     .terminal = self.render.state.terminal,
+                    .changes = &self.render.state.search_changes,
                     .output = .{
                         .renderer_mailbox = self.render.thread.mailbox,
                         .renderer_wakeup = &self.render.thread.wakeup,

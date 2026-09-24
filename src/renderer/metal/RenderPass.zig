@@ -37,6 +37,8 @@ pub const Step = struct {
     uniforms: ?objc.Object = null,
     /// MTLBuffer
     buffers: []const ?objc.Object = &.{},
+    /// Byte offsets, defaulting to zero for omitted entries.
+    buffer_offsets: []const usize = &.{},
     textures: []const ?Texture = &.{},
     /// Set of samplers to use for this step. The index maps to an index
     /// of a fragment texture in the Metal 4 argument table.
@@ -134,9 +136,9 @@ pub fn step(self: *const Self, s: Step) void {
     const table = self.commands.arguments;
     self.commands.retainResource(s.pipeline.state, false);
     for (s.buffers, 0..) |buffer, i| if (buffer) |buf| {
-        self.bindBuffer(buf, if (i == 0) 0 else i + 1);
+        self.bindBuffer(buf, if (i == 0) 0 else i + 1, if (i < s.buffer_offsets.len) s.buffer_offsets[i] else 0);
     };
-    if (s.uniforms) |buf| self.bindBuffer(buf, 1);
+    if (s.uniforms) |buf| self.bindBuffer(buf, 1, 0);
     for (s.textures, 0..) |texture, i| if (texture) |tex| {
         self.commands.retainResource(tex.texture, true);
         const resource = tex.texture.getProperty(ResourceID, "gpuResourceID");
@@ -169,8 +171,8 @@ pub fn complete(self: *const Self) void {
 }
 
 const ResourceID = extern struct { value: u64 };
-fn bindBuffer(self: *const Self, buffer: objc.Object, index: usize) void {
+fn bindBuffer(self: *const Self, buffer: objc.Object, index: usize, offset: usize) void {
     self.commands.retainResource(buffer, true);
-    const address = buffer.getProperty(u64, "gpuAddress");
+    const address = buffer.getProperty(u64, "gpuAddress") + offset;
     self.commands.arguments.msgSend(void, "setAddress:atIndex:", .{ address, @as(c_ulong, index) });
 }

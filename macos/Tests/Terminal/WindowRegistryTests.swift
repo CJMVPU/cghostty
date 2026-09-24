@@ -10,6 +10,21 @@ import Testing
         return TerminalController(app, withBaseConfig: config)
     }
 
+    @Test func uuidIndexDoesNotExposeClosedOrForeignSurfaces() throws {
+        let app = Ghostty.App(configPath: "/dev/null")
+        let other = Ghostty.App(configPath: "/dev/null")
+        let controller = terminal(app)
+        let window = try #require(controller.window)
+        defer { window.close() }
+        let surface = try #require(controller.surfaceTree.first)
+        #expect(app.windowRegistry.surface(id: surface.id) === surface)
+        #expect(other.windowRegistry.surface(id: surface.id) == nil)
+        window.close()
+        // The controller and surface remain alive here, as they can under undo.
+        #expect(app.windowRegistry.surface(id: surface.id) == nil)
+        #expect(app.windowRegistry.owner(of: surface) == nil)
+    }
+
     @Test func tabLabelsFollowGroupOrderWithoutFrameNotifications() async throws {
         let app = Ghostty.App(configPath: "/dev/null")
         let first = terminal(app)

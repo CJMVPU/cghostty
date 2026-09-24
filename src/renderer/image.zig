@@ -65,6 +65,38 @@ pub const State = struct {
         snapshot.* = .empty;
     }
 
+    /// Clone a CPU-only capture, sharing immutable pixels by generation.
+    /// Keep only visible images in the capture cache so it cannot accumulate
+    /// scrollback images. No GPU resource is ever shared back to the IO thread.
+    pub fn cloneCapture(self: *State, alloc: Allocator) !State {
+        var result: State = .empty;
+        errdefer result.deinit(alloc);
+        try result.kitty_placements.appendSlice(alloc, self.kitty_placements.items);
+        result.kitty_bg_end = self.kitty_bg_end;
+        result.kitty_text_end = self.kitty_text_end;
+        result.kitty_virtual = self.kitty_virtual;
+        for (self.kitty_placements.items) |placement| {
+            if (result.images.contains(placement.image_id)) continue;
+            const entry = self.images.getPtr(placement.image_id) orelse continue;
+            if (entry.image.isUnloading()) continue;
+            const pending = entry.image.getPendingPointer() orelse unreachable;
+            const shared = try pending.share(alloc);
+            result.images.put(alloc, placement.image_id, .{
+                .generation = entry.generation,
+                .image = .{ .pending = shared },
+            }) catch |err| {
+                shared.deinit(alloc);
+                return err;
+            };
+        }
+        var it = self.images.iterator();
+        while (it.next()) |entry| if (!result.images.contains(entry.key_ptr.*)) {
+            entry.value_ptr.image.deinit(alloc);
+            self.images.removeByPtr(entry.key_ptr);
+        };
+        return result;
+    }
+
     /// Upload any images to the GPU that need to be uploaded,
     /// and remove any images that are no longer needed on the GPU.
     ///
@@ -112,7 +144,7 @@ pub const State = struct {
     /// graphics API errors during drawing are also ignored.
     pub fn draw(
         self: *State,
-        api: *Metal,
+        buffer: Metal.Buffer(Metal.shaders.Image),
         pipeline: Metal.Pipeline,
         pass: *Metal.RenderPass,
         placement_type: DrawPlacements,
@@ -123,7 +155,12 @@ pub const State = struct {
             .kitty_above_text => self.kitty_placements.items[self.kitty_text_end..],
         };
 
-        for (placements) |p| {
+        const first: usize = switch (placement_type) {
+            .kitty_below_bg => 0,
+            .kitty_below_text => self.kitty_bg_end,
+            .kitty_above_text => self.kitty_text_end,
+        };
+        for (placements, first..) |p, index| {
             // Look up the image
             const image = self.images.get(p.image_id) orelse {
                 log.warn("image not found for placement image_id={}", .{p.image_id});
@@ -141,42 +178,10 @@ pub const State = struct {
                 },
             };
 
-            // Create our vertex buffer, which is always exactly one item.
-            // future(mitchellh): we can group rendering multiple instances of a single image
-            var buf = Metal.Buffer(Metal.shaders.Image).initFill(
-                api.imageBufferOptions(),
-                &.{.{
-                    .grid_pos = .{
-                        @as(f32, @floatFromInt(p.x)),
-                        @as(f32, @floatFromInt(p.y)),
-                    },
-
-                    .cell_offset = .{
-                        @as(f32, @floatFromInt(p.cell_offset_x)),
-                        @as(f32, @floatFromInt(p.cell_offset_y)),
-                    },
-
-                    .source_rect = .{
-                        @as(f32, @floatFromInt(p.source_x)),
-                        @as(f32, @floatFromInt(p.source_y)),
-                        @as(f32, @floatFromInt(p.source_width)),
-                        @as(f32, @floatFromInt(p.source_height)),
-                    },
-
-                    .dest_size = .{
-                        @as(f32, @floatFromInt(p.width)),
-                        @as(f32, @floatFromInt(p.height)),
-                    },
-                }},
-            ) catch |err| {
-                log.warn("error creating image vertex buffer err={}", .{err});
-                continue;
-            };
-            defer buf.deinit();
-
             pass.step(.{
                 .pipeline = pipeline,
-                .buffers = &.{buf.buffer},
+                .buffers = &.{buffer.buffer},
+                .buffer_offsets = &.{index * @sizeOf(Metal.shaders.Image)},
                 .textures = &.{texture},
                 .draw = .{
                     .type = .triangle_strip,
@@ -184,6 +189,19 @@ pub const State = struct {
                 },
             });
         }
+    }
+
+    /// Called after a swap-chain frame becomes available, before encoding.
+    /// Each placement keeps its own offset and draw order; no CPU writes touch
+    /// an in-flight frame's buffer.
+    pub fn prepareDraw(self: *const State, buffer: *Metal.Buffer(Metal.shaders.Image)) !void {
+        const data = try buffer.writable(self.kitty_placements.items.len);
+        for (self.kitty_placements.items, data) |p, *dst| dst.* = .{
+            .grid_pos = .{ @floatFromInt(p.x), @floatFromInt(p.y) },
+            .cell_offset = .{ @floatFromInt(p.cell_offset_x), @floatFromInt(p.cell_offset_y) },
+            .source_rect = .{ @floatFromInt(p.source_x), @floatFromInt(p.source_y), @floatFromInt(p.source_width), @floatFromInt(p.source_height) },
+            .dest_size = .{ @floatFromInt(p.width), @floatFromInt(p.height) },
+        };
     }
 
     /// Returns true if the Kitty graphics state requires an update based
@@ -829,6 +847,33 @@ pub const Image = union(enum) {
 
         /// Data is always expected to be (width * height * bpp).
         data: [*]u8,
+        owner: ?*SharedPixels = null,
+
+        const SharedPixels = struct {
+            references: std.atomic.Value(usize),
+            bytes: []u8,
+        };
+
+        fn share(self: *Pending, alloc: Allocator) !Pending {
+            assert(self.pixel_format == .rgba);
+            if (self.owner) |owner| {
+                _ = owner.references.fetchAdd(1, .monotonic);
+            } else {
+                const owner = try alloc.create(SharedPixels);
+                owner.* = .{ .references = .init(2), .bytes = self.dataSlice() };
+                self.owner = owner;
+            }
+            return self.*;
+        }
+
+        fn deinit(self: Pending, alloc: Allocator) void {
+            if (self.owner) |owner| {
+                if (owner.references.fetchSub(1, .acq_rel) == 1) {
+                    alloc.free(owner.bytes);
+                    alloc.destroy(owner);
+                }
+            } else alloc.free(self.dataSlice());
+        }
 
         pub fn dataSlice(self: Pending) []u8 {
             return self.data[0..self.len()];
@@ -884,7 +929,8 @@ pub const Image = union(enum) {
                 .rgba => unreachable,
                 .bgra => wuffs.swizzle.bgraToRgba(alloc, data),
             };
-            alloc.free(data);
+            self.deinit(alloc);
+            self.owner = null;
             self.data = rgba.ptr;
             self.pixel_format = .rgba;
         }
@@ -925,10 +971,10 @@ pub const Image = union(enum) {
         switch (self) {
             .pending,
             .unload_pending,
-            => |p| alloc.free(p.dataSlice()),
+            => |p| p.deinit(alloc),
 
             .replace, .unload_replace => |r| {
-                alloc.free(r.pending.dataSlice());
+                r.pending.deinit(alloc);
                 r.texture.deinit();
             },
 
@@ -960,7 +1006,7 @@ pub const Image = union(enum) {
 
         // If we have pending data right now, free it.
         if (self.getPending()) |p| {
-            alloc.free(p.dataSlice());
+            p.deinit(alloc);
         }
         // If we have an existing texture, use it in the replace.
         if (self.getTexture()) |t| {
@@ -1474,4 +1520,47 @@ test "kitty renderer uploads the current animation frame" {
         &.{ 0, 0, 255, 255 },
         entry.image.pending.dataSlice(),
     );
+}
+
+test "kitty renderer shared captures unwind every allocation failure" {
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, struct {
+        fn check(alloc: Allocator) !void {
+            var cache: State = .empty;
+            defer cache.deinit(alloc);
+            try cache.prepImage(alloc, .{ .kitty = 1 }, 1, .{
+                .width = 1,
+                .height = 1,
+                .pixel_format = .rgba,
+                .data = @constCast("rgba".ptr),
+            });
+            try cache.kitty_placements.append(alloc, .{
+                .image_id = .{ .kitty = 1 },
+                .x = 0,
+                .y = 0,
+                .z = 0,
+                .width = 1,
+                .height = 1,
+                .cell_offset_x = 0,
+                .cell_offset_y = 0,
+                .source_x = 0,
+                .source_y = 0,
+                .source_width = 1,
+                .source_height = 1,
+            });
+            var first = try cache.cloneCapture(alloc);
+            defer first.deinit(alloc);
+            var second = try cache.cloneCapture(alloc);
+            defer second.deinit(alloc);
+            try std.testing.expectEqual(first.images.get(.{ .kitty = 1 }).?.image.pending.data, second.images.get(.{ .kitty = 1 }).?.image.pending.data);
+            // Replacing the cached generation must leave both existing owners intact.
+            try cache.prepImage(alloc, .{ .kitty = 1 }, 2, .{
+                .width = 1,
+                .height = 1,
+                .pixel_format = .rgba,
+                .data = @constCast("next".ptr),
+            });
+            try std.testing.expectEqualStrings("rgba", first.images.get(.{ .kitty = 1 }).?.image.pending.dataSlice());
+            try std.testing.expectEqualStrings("next", cache.images.get(.{ .kitty = 1 }).?.image.pending.dataSlice());
+        }
+    }.check, .{});
 }

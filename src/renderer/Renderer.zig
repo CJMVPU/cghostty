@@ -267,6 +267,7 @@ const FrameState = struct {
     uniforms: UniformBuffer,
     cells: CellTextBuffer,
     cells_bg: CellBgBuffer,
+    image_instances: Buffer(shaderpkg.Image),
 
     grayscale: Texture,
     grayscale_modified: usize = 0,
@@ -318,6 +319,9 @@ const FrameState = struct {
         );
         errdefer bg_image_buffer.deinit();
 
+        var image_instances = try Buffer(shaderpkg.Image).init(api.imageBufferOptions(), 1);
+        errdefer image_instances.deinit();
+
         // Initialize our textures for our font atlas.
         //
         // As with the buffers above, we start these off as small
@@ -343,6 +347,7 @@ const FrameState = struct {
             .uniforms = uniforms,
             .cells = cells,
             .cells_bg = cells_bg,
+            .image_instances = image_instances,
             .bg_image_buffer = bg_image_buffer,
             .grayscale = grayscale,
             .color = color,
@@ -357,6 +362,7 @@ const FrameState = struct {
         self.uniforms.deinit();
         self.cells.deinit();
         self.cells_bg.deinit();
+        self.image_instances.deinit();
         self.grayscale.deinit();
         self.color.deinit();
         self.bg_image_buffer.deinit();
@@ -997,9 +1003,8 @@ pub fn updateFrame(
             var frame = captured;
             defer frame.deinit(self.alloc);
             const preedit: ?renderer.State.Preedit = if (state.preedit) |p| try p.clone(arena_alloc) else null;
-            self.terminal_state.deinit(self.alloc);
-            self.terminal_state = frame.render;
-            frame.render = .empty;
+            std.mem.swap(terminal.RenderState, &self.terminal_state, &frame.render);
+            state.render_hold.recycleRender(self.alloc, &frame.render);
             {
                 self.draw_mutex.lockUncancelable(global.io());
                 defer self.draw_mutex.unlock(global.io());
@@ -1408,6 +1413,7 @@ fn drawFrameLocked(
 
     // Upload images to the GPU as necessary.
     _ = self.images.upload(self.alloc, &self.api);
+    try self.images.prepareDraw(&frame.image_instances);
 
     // Upload the background image to the GPU as necessary.
     try self.uploadBackgroundImage();
@@ -1496,7 +1502,7 @@ fn drawFrameLocked(
         // Then we draw any kitty images that need
         // to be behind text AND cell backgrounds.
         self.images.draw(
-            &self.api,
+            frame.image_instances,
             self.shaders.pipelines.image,
             &pass,
             .kitty_below_bg,
@@ -1512,7 +1518,7 @@ fn drawFrameLocked(
 
         // Kitty images between cell backgrounds and text.
         self.images.draw(
-            &self.api,
+            frame.image_instances,
             self.shaders.pipelines.image,
             &pass,
             .kitty_below_text,
@@ -1553,7 +1559,7 @@ fn drawFrameLocked(
 
         // Kitty images in front of text.
         self.images.draw(
-            &self.api,
+            frame.image_instances,
             self.shaders.pipelines.image,
             &pass,
             .kitty_above_text,

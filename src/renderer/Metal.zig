@@ -42,13 +42,6 @@ queue: objc.Object,
 /// Alpha blending mode
 blending: configpkg.Config.AlphaBlending,
 
-/// The default storage mode to use for resources created with our device.
-///
-/// This is based on whether the device is a discrete GPU or not, since
-/// discrete GPUs do not have unified memory and therefore do not support
-/// the "shared" storage mode, instead we have to use the "managed" mode.
-default_storage_mode: mtl.MTLResourceOptions.StorageMode,
-
 /// The maximum 2D texture width and height supported by the device.
 max_texture_size: u32,
 
@@ -65,11 +58,12 @@ pub fn init(alloc: Allocator, opts: rendererpkg.Options) !Metal {
     errdefer queue.release();
 
     // Grab metadata about the device.
-    const default_storage_mode: mtl.MTLResourceOptions.StorageMode = if (device.getProperty(bool, "hasUnifiedMemory")) .shared else .managed;
+    // This product only supports Apple Silicon unified-memory devices.
+    std.debug.assert(device.getProperty(bool, "hasUnifiedMemory"));
     const max_texture_size = queryMaxTextureSize(device);
     log.debug(
-        "device properties default_storage_mode={} max_texture_size={}",
-        .{ default_storage_mode, max_texture_size },
+        "device properties max_texture_size={}",
+        .{max_texture_size},
     );
 
     const ViewInfo = struct {
@@ -120,7 +114,6 @@ pub fn init(alloc: Allocator, opts: rendererpkg.Options) !Metal {
         .device = device,
         .queue = queue,
         .blending = opts.config.blending,
-        .default_storage_mode = default_storage_mode,
         .max_texture_size = max_texture_size,
     };
 }
@@ -217,7 +210,7 @@ pub fn initTarget(self: *const Metal, width: usize, height: usize) !Target {
             .bgra8unorm_srgb
         else
             .bgra8unorm,
-        .storage_mode = self.default_storage_mode,
+        .storage_mode = .shared,
         .width = width,
         .height = height,
     });
@@ -239,7 +232,7 @@ pub inline fn bufferOptions(self: Metal) bufferpkg.Options {
         .resource_options = .{
             // Indicate that the CPU writes to this resource but never reads it.
             .cpu_cache_mode = .write_combined,
-            .storage_mode = self.default_storage_mode,
+            .storage_mode = .shared,
         },
     };
 }
@@ -284,7 +277,7 @@ pub inline fn imageTextureOptions(
         .resource_options = .{
             // Indicate that the CPU writes to this resource but never reads it.
             .cpu_cache_mode = .write_combined,
-            .storage_mode = self.default_storage_mode,
+            .storage_mode = .shared,
         },
         .usage = .{
             // We only need to read from this texture from a shader.
@@ -311,7 +304,7 @@ pub fn initAtlasTexture(
             .resource_options = .{
                 // Indicate that the CPU writes to this resource but never reads it.
                 .cpu_cache_mode = .write_combined,
-                .storage_mode = self.default_storage_mode,
+                .storage_mode = .shared,
             },
             .usage = .{
                 // We only need to read from this texture from a shader.

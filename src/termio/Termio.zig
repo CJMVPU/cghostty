@@ -535,6 +535,7 @@ pub fn resize(
 
     // Mail the renderer so that it can update the GPU and re-render
     _ = self.renderer_mailbox.push(global.io(), .{ .resize = size }, .{ .forever = {} });
+    self.renderer_state.search_changes.notify();
     self.renderer_wakeup.notify() catch {};
 }
 
@@ -573,11 +574,13 @@ pub fn resetSynchronizedOutput(self: *Termio) void {
     self.renderer_state.mutex.lockUncancelable(global.io());
     defer self.renderer_state.mutex.unlock(global.io());
     self.terminal.modes.set(.synchronized_output, false);
+    self.renderer_state.search_changes.notify();
     self.renderer_wakeup.notify() catch {};
 }
 
 /// Clear the screen.
 pub fn clearScreen(self: *Termio, td: *ThreadData, history: bool) !void {
+    defer self.renderer_state.search_changes.notify();
     {
         self.renderer_state.mutex.lockUncancelable(global.io());
         defer self.renderer_state.mutex.unlock(global.io());
@@ -640,6 +643,7 @@ pub fn scrollViewport(
     self.renderer_state.mutex.lockUncancelable(global.io());
     defer self.renderer_state.mutex.unlock(global.io());
     self.terminal.scrollViewport(scroll);
+    self.renderer_state.search_changes.notify();
 }
 
 /// Jump the viewport to the prompt.
@@ -650,6 +654,7 @@ pub fn jumpToPrompt(self: *Termio, delta: isize) !void {
         self.terminal.screens.active.scroll(.{ .delta_prompt = delta });
     }
 
+    self.renderer_state.search_changes.notify();
     try self.renderer_wakeup.notify();
 }
 

@@ -6,6 +6,8 @@ import AppKit
 final class WindowRegistry {
     private let owners = NSMapTable<Ghostty.SurfaceView, BaseTerminalController>.weakToWeakObjects()
 
+    private let surfaces = NSMapTable<NSUUID, Ghostty.SurfaceView>.strongToWeakObjects()
+
     private let controllers = NSHashTable<BaseTerminalController>.weakObjects()
     private(set) weak var lastMain: TerminalController?
     private(set) var lastCascadePoint = NSPoint.zero
@@ -32,10 +34,13 @@ final class WindowRegistry {
 
     func register(_ controller: BaseTerminalController) {
         precondition(controller.ghostty.windowRegistry === self)
+        guard !controllers.contains(controller) else { return }
         controllers.add(controller)
+        update(controller, from: .init(), to: controller.surfaceTree)
     }
 
     func unregister(_ controller: BaseTerminalController) {
+        update(controller, from: controller.surfaceTree, to: .init())
         controllers.remove(controller)
         if lastMain === controller { lastMain = nil }
         if !controllers.allObjects.contains(where: { $0 is TerminalController }) { lastCascadePoint = .zero }
@@ -73,18 +78,15 @@ final class WindowRegistry {
     }
 
     func surface(id: UUID) -> Ghostty.SurfaceView? {
-        for controller in registeredControllers {
-            if let surface = controller.surfaceTree.first(where: { $0.id == id }),
-               owner(of: surface) === controller { return surface }
-        }
-        return nil
+        guard let surface = surfaces.object(forKey: id as NSUUID),
+              owner(of: surface) != nil else { return nil }
+        return surface
     }
 
     func owner(of surface: Ghostty.SurfaceView) -> BaseTerminalController? {
         guard surface.windowRegistry === self,
               let owner = owners.object(forKey: surface),
-              controllers.contains(owner),
-              owner.surfaceTree.contains(surface) else { return nil }
+              controllers.contains(owner) else { return nil }
         return owner
     }
 
@@ -99,11 +101,15 @@ final class WindowRegistry {
             // A destination may register before the source finishes detaching.
             if owners.object(forKey: surface) === owner {
                 owners.removeObject(forKey: surface)
+                if surfaces.object(forKey: surface.id as NSUUID) === surface {
+                    surfaces.removeObject(forKey: surface.id as NSUUID)
+                }
             }
         }
         for surface in newTree {
             precondition(surface.windowRegistry === self)
             owners.setObject(owner, forKey: surface)
+            surfaces.setObject(surface, forKey: surface.id as NSUUID)
         }
     }
 }

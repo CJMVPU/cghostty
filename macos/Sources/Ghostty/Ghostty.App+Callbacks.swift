@@ -202,13 +202,14 @@ extension Ghostty.App {
         guard let userdata else { return }
         let state = Unmanaged<Ghostty.App>.fromOpaque(userdata).takeUnretainedValue()
 
-        // Wakeup can be called from any thread so we schedule the app tick
-        // from the main thread. There is probably some improvements we can make
-        // to coalesce multiple ticks but I don't think it matters from a performance
-        // standpoint since we don't do this much.
-        // Core teardown can wake the main thread while App is deinitializing.
-        // A queued tick must neither resurrect its owner nor outlive it.
-        DispatchQueue.main.async { [weak state] in state?.appTick() }
+        guard state.wakeupGate.request() else { return }
+        // Clear before draining: a producer racing with the drain can queue
+        // the next tick. Keep the owner weak during teardown.
+        DispatchQueue.main.async { [weak state] in
+            guard let state else { return }
+            state.wakeupGate.beginTick()
+            state.appTick()
+        }
     }
 
     /// Returns the GhosttyState from the given userdata value.

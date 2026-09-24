@@ -111,6 +111,70 @@ import Testing
         #expect(surface.renderRevision > revision)
     }
 
+    @Test func kittyPlacementsAndSynchronizedFramesReachNativeRenderer() async throws {
+        // Two placements exercise nonzero offsets in the shared instance buffer.
+        let output = "\u{1b}[H\u{1b}_Ga=T,f=32,s=1,v=1,i=1,q=2,c=4,r=2;/wAA/w==\u{1b}\\" +
+            "\u{1b}[1;8H\u{1b}_Ga=p,i=1,p=2,q=2,c=4,r=2\u{1b}\\" +
+            "\u{1b}[4;1Hready-images\u{1b}[?2026h\u{1b}[5;1Hnext-frame\u{1b}[?2026l"
+        let encoded = Data(output.utf8).base64EncodedString()
+        let view = makeView(command: "/bin/sh -c 'printf %s \(encoded) | /usr/bin/base64 -D; exec /bin/cat'")
+        let surface = try #require(view.surfaceModel)
+        let window = NSWindow(contentRect: view.bounds, styleMask: .borderless, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = view
+        window.orderFront(nil)
+        surface.setVisible(true)
+        defer { window.close() }
+        try await waitForText("next-frame", in: surface)
+        let revision = surface.renderRevision
+        #expect(surface.sendKeyEvent(.init(keyCode: 0, action: .press, text: "draw-check")))
+        try await waitForText("draw-check", in: surface)
+        let deadline = ContinuousClock.now + .seconds(5)
+        while surface.renderRevision <= revision {
+            try #require(ContinuousClock.now < deadline, "Image frame did not complete")
+            await Task.yield()
+        }
+        #expect(view.healthy)
+        let png = try #require(view.thumbnailPNG())
+        let bitmap = try #require(NSBitmapImageRep(data: png))
+        var redColumns = Set<Int>()
+        for y in 0..<bitmap.pixelsHigh {
+            for x in 0..<bitmap.pixelsWide {
+                if let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                   color.redComponent > 0.8, color.greenComponent < 0.2, color.blueComponent < 0.2 {
+                    redColumns.insert(x)
+                }
+            }
+        }
+        let bands = redColumns.filter { !redColumns.contains($0 - 1) }.count
+        #expect(bands == 2, "Both red image placements must survive distinct buffer offsets")
+    }
+
+    @Test func searchRefreshesFromPTYChangesAndAfterVisibilityRestoration() async throws {
+        let view = makeView()
+        let surface = try #require(view.surfaceModel)
+        let needle = "unique-search-word"
+        view.searchState = Ghostty.SearchState(from: Ghostty.Action.StartSearch(c: .init(needle: nil)),
+                                               pasteboard: .withUniqueName())
+        #expect(surface.sendKeyEvent(.init(keyCode: 0, action: .press, text: needle)))
+        try await waitForText(needle, in: surface)
+        #expect(surface.search(needle))
+        func waitForMatches(_ total: UInt) async throws {
+            let deadline = ContinuousClock.now + .seconds(5)
+            while view.searchState?.total != total {
+                try #require(ContinuousClock.now < deadline, "Search did not observe the changed terminal")
+                await Task.yield()
+            }
+        }
+        try await waitForMatches(1)
+        surface.setVisible(false)
+        #expect(surface.sendKeyEvent(.init(keyCode: 0, action: .press, text: " " + needle)))
+        try await waitForText(needle + " " + needle, in: surface)
+        surface.setVisible(true)
+        try await waitForMatches(2)
+        #expect(surface.endSearch())
+    }
+
     @Test func repeatedKeyAndPreeditBridgeReachPTY() async throws {
         let view = makeView()
         let surface = try #require(view.surfaceModel)

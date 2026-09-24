@@ -8,6 +8,8 @@ const image = @import("image.zig");
 const CellSize = @import("size.zig").CellSize;
 
 pending: ?Frame = null,
+spare: terminal.RenderState = .empty,
+image_cache: image.State = .empty,
 
 pub const Frame = struct {
     render: terminal.RenderState = .empty,
@@ -26,17 +28,37 @@ pub const Frame = struct {
 
 pub fn deinit(self: *RenderHold, alloc: Allocator) void {
     if (self.pending) |*frame| frame.deinit(alloc);
+    self.spare.deinit(alloc);
+    self.image_cache.deinit(alloc);
     self.* = .{};
+}
+
+/// Return CPU row/style storage only; it never contains GPU objects.
+pub fn recycleRender(self: *RenderHold, alloc: Allocator, render: *terminal.RenderState) void {
+    self.spare.deinit(alloc);
+    self.spare = render.*;
+    render.* = .empty;
+}
+
+pub fn discard(self: *RenderHold, alloc: Allocator) void {
+    if (self.pending) |*frame| {
+        self.recycleRender(alloc, &frame.render);
+        frame.deinit(alloc);
+        self.pending = null;
+    }
 }
 
 /// Capture before processing any bytes belonging to the next frame. A
 /// second capture replaces the pending frame, never queues more history.
 pub fn capture(self: *RenderHold, alloc: Allocator, t: *terminal.Terminal, cell: CellSize, mouse: ?terminal.point.Coordinate) !void {
+    self.discard(alloc);
     var frame: Frame = .{
+        .render = self.spare,
         .scrollbar = t.screens.active.pages.scrollbar(),
         .link_key = .read(t),
         .mouse = mouse,
     };
+    self.spare = .empty;
     errdefer frame.deinit(alloc);
     // This independent consumer must neither depend on nor steal another
     // consumer's dirty bits. Force a complete viewport and leave a complete
@@ -49,9 +71,9 @@ pub fn capture(self: *RenderHold, alloc: Allocator, t: *terminal.Terminal, cell:
     if (mouse) |vp| frame.osc8 = try frame.render.linkCells(alloc, vp);
     // Keep style expansion on the renderer thread. All pending style data
     // is owned by RenderState, including after terminal pages are pruned.
-    frame.images.kittyUpdate(alloc, t, cell);
+    self.image_cache.kittyUpdate(alloc, t, cell);
     t.screens.active.kitty_images.dirty = true;
-    self.deinit(alloc);
+    frame.images = try self.image_cache.cloneCapture(alloc);
     self.pending = frame;
 }
 
@@ -59,7 +81,7 @@ pub fn capture(self: *RenderHold, alloc: Allocator, t: *terminal.Terminal, cell:
 /// resize, reset or timeout), the live terminal supersedes the snapshot.
 pub fn take(self: *RenderHold, alloc: Allocator, held: bool) ?Frame {
     if (!held) {
-        self.deinit(alloc);
+        self.discard(alloc);
         return null;
     }
     const result = self.pending;
@@ -194,4 +216,47 @@ test "render hold keeps Kitty pixels and placements from the same completed fram
     try t.expectEqual(1, displayed.kitty_placements.items.len);
     displayed.kittyUpdate(alloc, &term, .{ .width = 10, .height = 20 });
     try t.expectEqual(0, displayed.kitty_placements.items.len);
+}
+
+test "render hold reuses rows and pixels without borrowing live pages" {
+    const t = std.testing;
+    const alloc = t.allocator;
+    var term = try terminal.Terminal.init(t.io, alloc, .{ .cols = 10, .rows = 3 });
+    defer term.deinit(alloc);
+    try term.printString("first");
+    term.width_px = 100;
+    term.height_px = 60;
+    const storage = &term.screens.active.kitty_images;
+    try storage.addImage(t.io, alloc, term.screens.active, .{
+        .id = 1,
+        .width = 1,
+        .height = 1,
+        .format = .rgba,
+        .data = .{ .complete = try alloc.dupe(u8, "rgba") },
+    });
+    const pin = try term.screens.active.pages.trackPin(term.screens.active.cursor.page_pin.*);
+    try storage.addPlacement(t.io, alloc, term.screens.active, 1, 1, .{
+        .location = .{ .pin = pin },
+        .columns = 1,
+        .rows = 1,
+    });
+    var hold: RenderHold = .{};
+    defer hold.deinit(alloc);
+    try hold.capture(alloc, &term, .{ .width = 10, .height = 20 }, null);
+    var old = hold.take(alloc, true).?;
+    defer old.deinit(alloc);
+    old.render.endUpdate();
+    const rows = old.render.row_data.bytes;
+    const pixels = old.images.images.get(.{ .kitty = 1 }).?.image.pending.data;
+    hold.recycleRender(alloc, &old.render);
+    term.setCursorPos(1, 1);
+    try term.printString("second");
+    try hold.capture(alloc, &term, .{ .width = 10, .height = 20 }, null);
+    try t.expectEqual(rows, hold.pending.?.render.row_data.bytes);
+    try t.expectEqual(pixels, hold.pending.?.images.images.get(.{ .kitty = 1 }).?.image.pending.data);
+    // Removing the source/cache cannot free a displayed frame's pixel owner.
+    term.fullReset();
+    try hold.capture(alloc, &term, .{ .width = 10, .height = 20 }, null);
+    try t.expectEqual(0, hold.image_cache.images.count());
+    try t.expectEqualStrings("rgba", old.images.images.get(.{ .kitty = 1 }).?.image.pending.dataSlice());
 }
