@@ -1,4 +1,5 @@
 import AppKit
+import AppIntents
 import GhosttyKit
 import Testing
 @testable import Ghostty
@@ -55,6 +56,56 @@ import Testing
         view = nil
         surface = nil
         #expect(snapshot.text.contains("桥接🙂snapshot"))
+    }
+
+    @Test func accessibilitySnapshotKeepsTextAndUTF16SelectionTogether() async throws {
+        var view: Ghostty.SurfaceView? = makeView()
+        var surface: Ghostty.Surface? = try #require(view?.surfaceModel)
+        #expect(surface!.sendKeyEvent(.init(keyCode: 0, action: .press, text: "桥接🙂e\u{301}")))
+        try await waitForText("桥接🙂e\u{301}", in: surface!)
+        #expect(surface!.perform(.selectAll))
+        let snapshot = try #require(surface!.readAccessibility())
+        let value = AccessibilityText(snapshot)
+        #expect(value.text == surface!.readContents(viewport: false))
+        // A login banner may precede the input. Select-all must still address
+        // the exact captured UTF-16 string, including that prefix and emoji.
+        #expect(value.selectedRanges == [NSRange(location: 0, length: value.utf16Length)])
+        #expect(value.substring(in: value.selectedRanges[0]) == value.text)
+        #expect(value.substring(in: value.visibleRange) != nil)
+        #expect(surface!.perform(.reset))
+        let reset = try #require(surface!.readAccessibility())
+        #expect(reset.revision > snapshot.revision)
+        #expect(reset.text != snapshot.text)
+        view = nil
+        surface = nil
+        #expect(value.text.contains("桥接🙂e\u{301}"))
+        #expect(value.substring(in: value.selectedRanges[0]) == value.text)
+    }
+
+    @Test func completedFramesAdvanceThumbnailRevisionAndMetadataSkipsImages() async throws {
+        let view = makeView()
+        let surface = try #require(view.surfaceModel)
+        let window = NSWindow(contentRect: view.bounds, styleMask: .borderless, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = view
+        window.orderFront(nil)
+        surface.setVisible(true)
+        defer { window.close() }
+        func waitForFrame(after revision: UInt64) async throws {
+            let deadline = ContinuousClock.now + .seconds(5)
+            while surface.renderRevision <= revision {
+                try #require(ContinuousClock.now < deadline, "No completed terminal frame")
+                try await Task.sleep(for: .milliseconds(10))
+            }
+        }
+        try await waitForFrame(after: 0)
+        let revision = surface.renderRevision
+        #expect(TerminalEntity(view).displayRepresentation.image == nil)
+        #expect(TerminalEntity(view, includeThumbnail: true).displayRepresentation.image != nil)
+        #expect(surface.sendKeyEvent(.init(keyCode: 0, action: .press, text: "new frame")))
+        try await waitForText("new frame", in: surface)
+        try await waitForFrame(after: revision)
+        #expect(surface.renderRevision > revision)
     }
 
     @Test func repeatedKeyAndPreeditBridgeReachPTY() async throws {

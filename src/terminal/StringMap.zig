@@ -26,22 +26,26 @@ pub fn deinit(self: StringMap, alloc: Allocator) void {
 pub fn searchIterator(
     self: StringMap,
     regex: pcre2.Regex,
-) SearchIterator {
-    return .{ .map = self, .regex = regex };
+) pcre2.Error!SearchIterator {
+    return .{ .map = self, .matcher = try regex.matcher() };
 }
 
 /// Iterates over the regular expression matches of the string.
 pub const SearchIterator = struct {
     map: StringMap,
-    regex: pcre2.Regex,
+    matcher: pcre2.Matcher,
     offset: usize = 0,
+
+    pub fn deinit(self: *SearchIterator) void {
+        self.matcher.deinit();
+    }
 
     /// Returns the next regular expression match or null if there are
     /// no more matches.
     pub fn next(self: *SearchIterator) !?Match {
         if (self.offset >= self.map.string.len) return null;
 
-        const region = self.regex.search(self.map.string[self.offset..], 0) catch |err| switch (err) {
+        const region = self.matcher.search(self.map.string[self.offset..], 0) catch |err| switch (err) {
             error.NoMatch, error.MatchLimitExceeded => {
                 self.offset = self.map.string.len;
                 return null;
@@ -106,7 +110,8 @@ test "StringMap searchIterator" {
     defer map.deinit(alloc);
 
     // Get our iterator
-    var it = map.searchIterator(re);
+    var it = try map.searchIterator(re);
+    defer it.deinit();
     {
         const match = (try it.next()).?;
 
@@ -153,7 +158,8 @@ test "StringMap searchIterator URL detection" {
     defer map.deinit(alloc);
 
     // Search for URL match
-    var it = map.searchIterator(re);
+    var it = try map.searchIterator(re);
+    defer it.deinit();
     {
         const match = (try it.next()).?;
 
@@ -205,7 +211,8 @@ test "StringMap searchIterator URL with click position" {
     defer map.deinit(alloc);
 
     // Search for URL match and verify click position is within URL
-    var it = map.searchIterator(re);
+    var it = try map.searchIterator(re);
+    defer it.deinit();
     var found_url = false;
     while (true) {
         const match = (try it.next()) orelse break;
@@ -241,7 +248,8 @@ test "StringMap Unicode URL selections and multiple matches" {
     defer map.deinit(alloc);
     var regex = try pcre2.Regex.init(@import("../config/url.zig").regex);
     defer regex.deinit();
-    var iter = map.searchIterator(regex);
+    var iter = try map.searchIterator(regex);
+    defer iter.deinit();
     for ([_][]const u8{ "./文件.txt", "./cafe\u{0301}.txt" }) |expected| {
         const match = (try iter.next()).?;
         const text = try screen.selectionString(alloc, .{ .sel = match.selection(), .trim = false });
@@ -265,7 +273,8 @@ test "StringMap empty matches and exhausted budgets stop iteration" {
     for ([_][]const u8{ "(?=a)", "(*NO_START_OPT)(*NO_AUTO_POSSESS)^(a+)+$" }) |pattern| {
         var regex = try pcre2.Regex.init(pattern);
         defer regex.deinit();
-        var iter = map.searchIterator(regex);
+        var iter = try map.searchIterator(regex);
+        defer iter.deinit();
         try testing.expectEqual(null, try iter.next());
         try testing.expectEqual(null, try iter.next());
     }

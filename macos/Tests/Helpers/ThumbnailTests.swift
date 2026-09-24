@@ -38,4 +38,53 @@ import Testing
     @Test func emptyViewDoesNotAllocateImage() {
         #expect(TestView(frame: .zero).thumbnailPNG() == nil)
     }
+
+    @Test func cacheInvalidatesForFrameSizeAndScaleAndRetriesFailures() {
+        var cache = SurfaceThumbnailCache()
+        var renders = 0
+        let key = SurfaceThumbnailCache.Key(revision: 1, size: CGSize(width: 800, height: 600), scale: 2)
+        func render() -> Data? { renders += 1; return Data([UInt8(renders)]) }
+        #expect(cache.value(for: key, render: render) == Data([1]))
+        #expect(cache.value(for: key, render: render) == Data([1]))
+        let frame = SurfaceThumbnailCache.Key(revision: 2, size: key.size, scale: key.scale)
+        #expect(cache.value(for: frame, render: render) == Data([2]))
+        let size = SurfaceThumbnailCache.Key(revision: 2, size: CGSize(width: 600, height: 600), scale: 2)
+        #expect(cache.value(for: size, render: render) == Data([3]))
+        let scale = SurfaceThumbnailCache.Key(revision: 2, size: size.size, scale: 1)
+        #expect(cache.value(for: scale, render: { nil }) == nil)
+        #expect(cache.value(for: scale, render: render) == Data([4]))
+        #expect(cache.value(for: scale, render: render) == Data([4]))
+        #expect(renders == 4)
+    }
+
+    // Run under ReleaseLocal for measurements. No timing threshold: system/GPU
+    // load varies, while the one-render contract and image equality must hold.
+    @Test func repeatedThumbnailMeasurement() throws {
+        let view = TestView(frame: NSRect(x: 0, y: 0, width: 1600, height: 800))
+        let window = NSWindow(contentRect: view.bounds, styleMask: .borderless, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = view
+        window.orderFront(nil)
+        window.displayIfNeeded()
+        defer { window.close() }
+        let expected = try #require(view.thumbnailPNG())
+        let clock = ContinuousClock()
+        let count = 100
+        let baseline = try clock.measure {
+            for _ in 0..<count {
+                let image = try #require(view.thumbnailPNG())
+                #expect(image == expected)
+            }
+        }
+        var cache = SurfaceThumbnailCache()
+        let key = SurfaceThumbnailCache.Key(revision: 1, size: view.bounds.size, scale: window.backingScaleFactor)
+        var renders = 0
+        let reused = clock.measure {
+            for _ in 0..<count {
+                #expect(cache.value(for: key) { renders += 1; return view.thumbnailPNG() } == expected)
+            }
+        }
+        #expect(renders == 1)
+        print("Thumbnail benchmark (\(count) reads, 1600x800 → 256x128): fresh=\(baseline), reused=\(reused)")
+    }
 }

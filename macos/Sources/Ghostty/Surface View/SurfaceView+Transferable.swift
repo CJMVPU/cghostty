@@ -4,6 +4,18 @@ import UniformTypeIdentifiers
 
 /// Conformance to `Transferable` enables drag-and-drop.
 extension Ghostty.SurfaceView: Transferable {
+    /// The drag payload is already available; no async provider is needed.
+    func dragPasteboardItem() -> NSPasteboardItem {
+        Self.dragPasteboardItem(id: id)
+    }
+
+    static func dragPasteboardItem(id: UUID) -> NSPasteboardItem {
+        let item = NSPasteboardItem()
+        var bytes = id.uuid
+        item.setData(withUnsafeBytes(of: &bytes) { Data($0) }, forType: .ghosttySurfaceId)
+        return item
+    }
+
     nonisolated static var transferRepresentation: some TransferRepresentation {
         DataRepresentation(contentType: .ghosttySurfaceId) { surface in
             let id = surface.id

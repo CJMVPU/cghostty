@@ -154,7 +154,7 @@ extension Ghostty {
             guard !isTracking, let surfaceView = surfaceView else { return }
 
             // Create our dragging item from our transferable
-            guard let pasteboardItem = surfaceView.pasteboardItem() else { return }
+            let pasteboardItem = surfaceView.dragPasteboardItem()
             let item = NSDraggingItem(pasteboardWriter: pasteboardItem)
 
             // Create a scaled preview image from the surface snapshot

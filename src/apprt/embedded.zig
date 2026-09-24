@@ -1522,6 +1522,44 @@ pub const CAPI = struct {
         return readTextLocked(surface, core_sel, result);
     }
 
+    const Accessibility = extern struct {
+        text: [*:0]const u8,
+        text_len: usize,
+        visible: terminal.accessibility.Range,
+        selected: [*]const terminal.accessibility.Range,
+        selected_len: usize,
+        revision: u64,
+    };
+
+    export fn ghostty_surface_read_accessibility(surface: *Surface, result: *Accessibility) bool {
+        const core = &surface.core_surface;
+        core.render.state.lockDemand(global.io());
+        defer core.render.state.unlockDemand(global.io());
+        const snapshot = terminal.accessibility.capture(global.alloc(), core.io.termio.terminal.screens.active) catch |err| {
+            log.warn("error capturing accessibility text err={}", .{err});
+            return false;
+        };
+        core.accessibility_revision +%= 1;
+        result.* = .{
+            .text = snapshot.text.ptr,
+            .text_len = snapshot.text.len,
+            .visible = snapshot.visible,
+            .selected = snapshot.selected.ptr,
+            .selected_len = snapshot.selected.len,
+            .revision = core.accessibility_revision,
+        };
+        return true;
+    }
+
+    export fn ghostty_surface_free_accessibility(snapshot: *Accessibility) void {
+        global.alloc().free(snapshot.text[0..snapshot.text_len :0]);
+        global.alloc().free(snapshot.selected[0..snapshot.selected_len]);
+    }
+
+    export fn ghostty_surface_render_revision(surface: *Surface) u64 {
+        return surface.core_surface.render.renderer.presented_revision.load(.acquire);
+    }
+
     fn readTextLocked(
         surface: *Surface,
         core_sel: terminal.Selection,

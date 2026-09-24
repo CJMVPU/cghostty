@@ -454,6 +454,18 @@ typedef struct {
   uintptr_t text_len;
 } ghostty_text_s;
 
+// UTF-16 offsets into the text carried by this same snapshot.
+typedef struct { uintptr_t location; uintptr_t length; } ghostty_text_range_s;
+typedef struct {
+  const char* text;
+  uintptr_t text_len;
+  ghostty_text_range_s visible;
+  const ghostty_text_range_s* selected;
+  uintptr_t selected_len;
+  uint64_t revision;
+} ghostty_accessibility_s;
+
+
 typedef enum {
   GHOSTTY_POINT_ACTIVE,
   GHOSTTY_POINT_VIEWPORT,
@@ -1207,6 +1219,10 @@ GHOSTTY_API bool ghostty_surface_read_text(ghostty_surface_t,
                                               ghostty_selection_s,
                                               ghostty_text_s*);
 GHOSTTY_API void ghostty_surface_free_text(ghostty_surface_t, ghostty_text_s*);
+GHOSTTY_API bool ghostty_surface_read_accessibility(ghostty_surface_t, ghostty_accessibility_s*);
+GHOSTTY_API void ghostty_surface_free_accessibility(ghostty_accessibility_s*);
+GHOSTTY_API uint64_t ghostty_surface_render_revision(ghostty_surface_t);
+
 
 #ifdef __APPLE__
 GHOSTTY_API void ghostty_surface_set_display_id(ghostty_surface_t, uint32_t);

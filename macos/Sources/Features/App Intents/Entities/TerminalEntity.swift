@@ -49,13 +49,13 @@ struct TerminalEntity: AppEntity {
     static let defaultQuery = TerminalQuery()
 
     @MainActor
-    init(_ view: Ghostty.SurfaceView) {
+    init(_ view: Ghostty.SurfaceView, includeThumbnail: Bool = false) {
         self.id = view.id
         self.title = view.title
         self.workingDirectory = view.pwd
         self.pid = view.surfaceModel?.foregroundPID
         self.tty = view.surfaceModel?.ttyName
-        self.screenshotData = view.thumbnailPNG()
+        self.screenshotData = includeThumbnail ? view.cachedThumbnailPNG() : nil
 
         // Determine the kind based on the window controller type
         if view.window?.windowController is QuickTerminalController {
@@ -118,13 +118,13 @@ struct TerminalQuery: EntityStringQuery, EnumerableEntityQuery {
         return all.filter {
             $0.title.localizedCaseInsensitiveContains(string)
         }.map {
-            TerminalEntity($0)
+            TerminalEntity($0, includeThumbnail: true)
         }
     }
 
     @MainActor
     func allEntities() async throws -> [TerminalEntity] {
-        return all.map { TerminalEntity($0) }
+        return all.map { TerminalEntity($0, includeThumbnail: true) }
     }
 
     @MainActor

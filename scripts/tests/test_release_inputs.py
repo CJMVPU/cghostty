@@ -41,6 +41,17 @@ class CoreReuseTests(unittest.TestCase):
                     run('check')  # Archives built without a record are not trusted.
                 run('record')
                 run('check')
+                downloaded = root / 'pkg/wuffs/zig-pkg/downloaded/source.zig'
+                downloaded.parent.mkdir(parents=True)
+                downloaded.write_text('cached dependency')
+                run('check')
+                downloaded.write_text('cache replaced')
+                run('check')
+                manifest = root / 'pkg/wuffs/build.zig.zon'
+                manifest.write_text('changed dependency manifest')
+                with self.assertRaises(SystemExit):
+                    run('check')
+                run('record')
                 for kwargs in ({'optimize': 'ReleaseFast'}, {'version': '0.1.10'}):
                     with self.assertRaises(SystemExit):
                         run('check', **kwargs)

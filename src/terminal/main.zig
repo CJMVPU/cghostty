@@ -5,6 +5,7 @@ const csi = @import("csi.zig");
 const render = @import("render.zig");
 const stream_terminal = @import("stream_terminal.zig");
 const style = @import("style.zig");
+pub const accessibility = @import("Accessibility.zig");
 pub const apc = @import("apc.zig");
 pub const dcs = @import("dcs.zig");
 pub const osc = @import("osc.zig");

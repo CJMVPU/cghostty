@@ -31,19 +31,19 @@ extension Ghostty.SurfaceView {
     /// This allows VoiceOver and other assistive technologies to understand
     /// what text the user has selected.
     override func accessibilitySelectedTextRange() -> NSRange {
-        return selectedRange()
+        return cachedScreenContents.get().selectedRanges.first ?? NSRange(location: NSNotFound, length: 0)
     }
 
     /// Returns the currently selected text as a string.
     /// This allows assistive technologies to read the selected content.
     override func accessibilitySelectedText() -> String? {
-        guard let surface = self.surfaceModel else { return nil }
+        let snapshot = cachedScreenContents.get()
+        guard !snapshot.selectedRanges.isEmpty else { return nil }
+        return snapshot.selectedRanges.compactMap { snapshot.substring(in: $0) }.joined(separator: "\n")
+    }
 
-        // Attempt to read the selection
-        guard let text = surface.selection else { return nil }
-
-        let str = text.text
-        return str.isEmpty ? nil : str
+    override func accessibilitySelectedTextRanges() -> [NSValue]? {
+        cachedScreenContents.get().selectedRanges.map { NSValue(range: $0) }
     }
 
     /// Returns the number of characters in the terminal content.
@@ -54,10 +54,10 @@ extension Ghostty.SurfaceView {
     }
 
     /// Returns the visible character range for the terminal.
-    /// For terminals, we typically show all content as visible.
+    /// The range addresses the same immutable snapshot as accessibilityValue.
     override func accessibilityVisibleCharacterRange() -> NSRange {
         let content = cachedScreenContents.get()
-        return NSRange(location: 0, length: content.utf16Length)
+        return content.visibleRange
     }
 
     /// Returns the line number for a given character index.
@@ -105,8 +105,19 @@ struct AccessibilityText {
     let utf16Length: Int
     private let cocoaText: NSString
     private let lineStarts: [Int]
+    let visibleRange: NSRange
+    let selectedRanges: [NSRange]
+    let revision: UInt64
 
-    init(_ text: String) {
+    init(_ snapshot: Ghostty.Surface.AccessibilitySnapshot?) {
+        self.init(snapshot?.text ?? "", visibleRange: snapshot?.visibleRange,
+                  selectedRanges: snapshot?.selectedRanges ?? [], revision: snapshot?.revision ?? 0)
+    }
+
+    init(_ text: String, visibleRange: NSRange? = nil, selectedRanges: [NSRange] = [], revision: UInt64 = 0) {
+        self.visibleRange = visibleRange ?? NSRange(location: 0, length: text.utf16.count)
+        self.selectedRanges = selectedRanges
+        self.revision = revision
         self.text = text
         cocoaText = text as NSString
         var starts = [0]

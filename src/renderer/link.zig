@@ -105,9 +105,11 @@ pub const Set = struct {
         for (self.links) |*link| {
             if (!link.active(mouse_viewport, mouse_mods)) continue;
 
+            var matcher = try link.regex.matcher();
+            defer matcher.deinit();
             var offset: usize = 0;
             while (offset < str.len) {
-                const region = link.regex.search(
+                const region = matcher.search(
                     str[offset..],
                     0,
                 ) catch |err| switch (err) {

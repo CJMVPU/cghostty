@@ -45,6 +45,9 @@ const Metal = @import("Metal.zig");
 // The macOS renderer owns Metal frame resources and terminal presentation.
 const Self = @This();
 
+/// Completed frames invalidate native thumbnail snapshots without taking a lock.
+pub const Revision = std.atomic.Value(u64);
+
 const Target = Metal.Target;
 const Buffer = Metal.Buffer;
 const Sampler = Metal.Sampler;
@@ -56,6 +59,7 @@ const Shaders = shaderpkg.Shaders;
 
 /// Allocator that can be used
 alloc: std.mem.Allocator,
+presented_revision: Revision = .init(0),
 
 /// This mutex must be held whenever any state used in `drawFrame` is
 /// being modified, and also when it's being accessed in `drawFrame`.
@@ -1547,6 +1551,7 @@ pub fn frameCompleted(
     self: *Self,
     health: Health,
 ) void {
+    if (health == .healthy) _ = self.presented_revision.fetchAdd(1, .release);
     // A failed GPU submission must not seed the next visible trail.
     if (health == .unhealthy) self.cursor_motion.invalidate();
     // If our health value hasn't changed, then we do nothing. We don't

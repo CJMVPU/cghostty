@@ -310,6 +310,7 @@ extension Ghostty {
         // The cached contents of the screen.
         private(set) var cachedScreenContents: CachedValue<AccessibilityText>
         private(set) var cachedVisibleContents: CachedValue<String>
+        var thumbnailCache = SurfaceThumbnailCache()
 
         // We need to support being a first responder so that we can get input events
         override var acceptsFirstResponder: Bool { return true }
@@ -334,7 +335,7 @@ extension Ghostty {
 
             // Our cache of screen data
             cachedScreenContents = .init(duration: .milliseconds(500)) { [weak self] in
-                AccessibilityText(self?.surfaceModel?.readContents(viewport: false) ?? "")
+                AccessibilityText(self?.surfaceModel?.readAccessibility())
             }
             cachedVisibleContents = .init(duration: .milliseconds(500)) { [weak self] in
                 guard let self else { return "" }

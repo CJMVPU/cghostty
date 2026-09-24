@@ -34,4 +34,16 @@ pub fn build(b: *std.Build) !void {
 
     const tests = b.addTest(.{ .root_module = module });
     b.step("test", "Test bounded UTF-8 matching").dependOn(&b.addRunArtifact(tests).step);
+
+    const benchmark = b.addExecutable(.{
+        .name = "pcre2-benchmark",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("benchmark.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "pcre2", .module = module }},
+        }),
+    });
+    b.step("benchmark", "Compare per-match allocation with per-traversal reuse (use ReleaseFast)")
+        .dependOn(&b.addRunArtifact(benchmark).step);
 }

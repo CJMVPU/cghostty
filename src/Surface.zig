@@ -137,6 +137,9 @@ config_conditional_state: configpkg.ConditionalState,
 /// This is used to determine if we need to confirm, hold open, etc.
 child_exited: bool = false,
 
+/// Serial number of immutable accessibility captures, protected by terminal mutex.
+accessibility_revision: u64 = 0,
+
 /// Sticky IO failure; a later child-exit event must not dismiss its explanation.
 surface_fault: ?@import("SurfaceFault.zig") = null,
 
@@ -3972,7 +3975,8 @@ fn linkAtPin(
             .always_mods, .hover_mods => |v| if (!v.equal(mods)) continue,
         };
 
-        var it = strmap.searchIterator(link.regex);
+        var it = try strmap.searchIterator(link.regex);
+        defer it.deinit();
         while (true) {
             const match = (try it.next()) orelse break;
             const sel = match.selection();

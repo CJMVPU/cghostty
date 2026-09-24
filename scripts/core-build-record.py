@@ -25,7 +25,7 @@ def input_digest():
     paths = [ROOT / 'build.zig', ROOT / 'build.zig.zon', ROOT / 'scripts/zig-toolchain.json', ROOT / 'scripts/core-build-record.py']
     for directory in ('src', 'pkg', 'include'):
         for parent, dirs, files in os.walk(ROOT / directory):
-            dirs[:] = sorted(d for d in dirs if d not in {'.zig-cache', 'zig-out', '__pycache__', '.git'})
+            dirs[:] = sorted(d for d in dirs if d not in {'.zig-cache', 'zig-out', 'zig-pkg', '__pycache__', '.git'})
             paths.extend(Path(parent) / name for name in sorted(files) if name not in {'.DS_Store', 'README.md', 'AGENTS.md'})
     for path in sorted(paths):
         digest.update(str(path.relative_to(ROOT)).encode() + b'\0')

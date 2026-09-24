@@ -327,27 +327,10 @@ fn setupFd(src: File.Handle, target: i32) !void {
 }
 
 /// Wait for the command to exit and return information about how it exited.
-pub fn wait(self: Command, block: bool) !Exit {
-    const status: u32 = if (block) wait_block: {
-        var status: if (builtin.link_libc) c_int else u32 = undefined;
-        _ = try waitPid(self.pid.?, &status, 0);
-        break :wait_block @bitCast(status);
-    } else wait_nohang: {
-        // We specify NOHANG because its not our fault if the process we launch
-        // for the tty doesn't properly waitpid its children. We don't want
-        // to hang the terminal over it.
-        // When NOHANG is specified, waitpid will return a pid of 0 if the process
-        // doesn't have a status to report. When that happens, it is as though the
-        // wait call has not been performed, so we need to keep trying until we get
-        // a non-zero pid back, otherwise we end up with zombie processes.
-        while (true) {
-            var status: if (builtin.link_libc) c_int else u32 = undefined;
-            const pid = try waitPid(self.pid.?, &status, posix.system.W.NOHANG);
-            if (pid != 0) break :wait_nohang @bitCast(status);
-        }
-    };
-
-    return .init(status);
+pub fn wait(self: Command) !Exit {
+    var status: if (builtin.link_libc) c_int else u32 = undefined;
+    _ = try waitPid(self.pid.?, &status, 0);
+    return .init(@bitCast(status));
 }
 
 /// Wrapper for the raw waitpid syscall. Status is only initialized on success;
@@ -453,7 +436,7 @@ test "Command: os pre exec 1" {
 
     try cmd.testingStart();
     try testing.expect(cmd.pid != null);
-    const exit = try cmd.wait(true);
+    const exit = try cmd.wait();
     try testing.expect(exit == .Exited);
     try testing.expect(exit.Exited == 42);
 }
@@ -477,7 +460,7 @@ test "Command: os pre exec 2" {
 
     try cmd.testingStart();
     try testing.expect(cmd.pid != null);
-    const exit = try cmd.wait(true);
+    const exit = try cmd.wait();
     try testing.expect(exit == .Exited);
     try testing.expect(exit.Exited == 42);
 }
@@ -501,7 +484,7 @@ test "Command: rt pre exec 1" {
 
     try cmd.testingStart();
     try testing.expect(cmd.pid != null);
-    const exit = try cmd.wait(true);
+    const exit = try cmd.wait();
     try testing.expect(exit == .Exited);
     try testing.expect(exit.Exited == 42);
 }
@@ -525,7 +508,7 @@ test "Command: rt pre exec 2" {
 
     try cmd.testingStart();
     try testing.expect(cmd.pid != null);
-    const exit = try cmd.wait(true);
+    const exit = try cmd.wait();
     try testing.expect(exit == .Exited);
     try testing.expect(exit.Exited == 42);
 }
@@ -579,7 +562,7 @@ test "Command: redirect stdout to file" {
 
     try cmd.testingStart();
     try testing.expect(cmd.pid != null);
-    const exit = try cmd.wait(true);
+    const exit = try cmd.wait();
     try testing.expect(exit == .Exited);
     try testing.expectEqual(@as(u32, 0), @as(u32, exit.Exited));
 
@@ -619,7 +602,7 @@ test "Command: custom env vars" {
 
     try cmd.testingStart();
     try testing.expect(cmd.pid != null);
-    const exit = try cmd.wait(true);
+    const exit = try cmd.wait();
     try testing.expect(exit == .Exited);
     try testing.expect(exit.Exited == 0);
 
@@ -658,7 +641,7 @@ test "Command: custom working directory" {
 
     try cmd.testingStart();
     try testing.expect(cmd.pid != null);
-    const exit = try cmd.wait(true);
+    const exit = try cmd.wait();
     try testing.expect(exit == .Exited);
     try testing.expect(exit.Exited == 0);
 
@@ -704,7 +687,7 @@ test "Command: posix fork handles execveZ failure" {
 
     try cmd.testingStart();
     try testing.expect(cmd.pid != null);
-    const exit = try cmd.wait(true);
+    const exit = try cmd.wait();
     try testing.expect(exit == .Exited);
     try testing.expect(exit.Exited == 1);
 }
