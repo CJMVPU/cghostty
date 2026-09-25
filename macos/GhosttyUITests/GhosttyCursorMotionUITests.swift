@@ -2,6 +2,81 @@ import AppKit
 import XCTest
 
 final class GhosttyCursorMotionUITests: GhosttyCustomConfigCase {
+    @MainActor func testWideCellsAndShapeChangesKeepConnectedMotion() throws {
+        try XCTSkipIf(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, "Motion is disabled by system accessibility settings")
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let control = directory.appendingPathComponent("mode")
+        let script = directory.appendingPathComponent("geometry.py")
+        try "idle".write(to: control, atomically: true, encoding: .utf8)
+        // The right target is a real two-cell character. Every moving step
+        // changes width; the shape mode additionally cycles DECSCUSR styles.
+        try """
+        import pathlib, sys, time
+        control = pathlib.Path(sys.argv[1])
+        sys.stdout.write('\\033[2J')
+        mode, tick = '', 0
+        while True:
+            requested = control.read_text()
+            if requested != mode:
+                mode, tick = requested, 0
+            col = 8 if mode == 'idle' else 60 if mode == 'idlewide' else [8, 60][tick % 2]
+            style = [2, 6, 4][tick % 3] if mode == 'shape' else 2
+            # Repaint after startup resizes; publish text and cursor together.
+            sys.stdout.write('\\033[?2026h\\033[?25l\\033[8;60H中')
+            sys.stdout.write('\\033[%d q\\033[8;%dH\\033[?25h\\033[?2026l' % (style, col))
+            sys.stdout.write('\\033]0;Geometry ' + mode + '\\007')
+            sys.stdout.flush()
+            tick += 1
+            time.sleep(0.160)
+        """.write(to: script, atomically: true, encoding: .utf8)
+        try updateConfig("""
+        command = /usr/bin/python3 -u \(script.path) \(control.path)
+        shell-integration = none
+        confirm-close-surface = false
+        cursor-effect = true
+        cursor-color = #00ff00
+        cursor-text = #00ff00
+        cursor-style-blink = false
+        background = #000000
+        foreground = #000000
+        font-size = 16
+        """)
+        let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
+        app.launchEnvironment["MTL_DEBUG_LAYER"] = "1"
+        app.launch()
+        app.activate()
+        defer { app.terminate() }
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.wait(for: \.title, toEqual: "Geometry idle", timeout: 10))
+        app.groups["Terminal pane"].firstMatch.click()
+        let native = try waitForCursor(in: window, name: "Single-cell block") { $0.width > 8 && $0.height > 15 }
+        try "idlewide".write(to: control, atomically: true, encoding: .utf8)
+        XCTAssertTrue(window.wait(for: \.title, toEqual: "Geometry idlewide", timeout: 5))
+        _ = try waitForCursor(in: window, name: "Chinese two-cell block") {
+            abs($0.width - native.width * 2) <= 1 && $0.height == native.height
+        }
+        for mode in ["wide", "shape"] {
+            try mode.write(to: control, atomically: true, encoding: .utf8)
+            XCTAssertTrue(window.wait(for: \.title, toEqual: "Geometry \(mode)", timeout: 5))
+            _ = try waitForCursor(in: window, name: "Connected \(mode) transition") {
+                $0.width > native.width * 4 && $0.isConnected
+            }
+            var movingFrames = 0
+            for _ in 0..<12 {
+                guard let mask = Mask(window.textViews.firstMatch.screenshot().image), !mask.isOccluded else { continue }
+                if mask.width > native.width * 4 && mask.isConnected { movingFrames += 1 }
+            }
+            XCTAssertGreaterThanOrEqual(movingFrames, 4, "\(mode) must keep moving across repeated geometry changes")
+        }
+        try "idle".write(to: control, atomically: true, encoding: .utf8)
+        XCTAssertTrue(window.wait(for: \.title, toEqual: "Geometry idle", timeout: 5))
+        _ = try waitForCursor(in: window, name: "Exact single-cell shape after settling") {
+            $0.width == native.width && $0.height == native.height
+        }
+    }
+
     @MainActor func testCellCacheRefreshAndBlinkTransitions() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

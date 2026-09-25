@@ -1712,7 +1712,6 @@ pub fn changeConfig(self: *Self, config: *DerivedConfig) !void {
         self.config.bg_image_opacity != config.bg_image_opacity;
 
     const old_blending = self.config.blending;
-    self.cursor_motion.reset();
 
     self.config.deinit();
     self.config = config.*;
@@ -1751,7 +1750,8 @@ pub fn setScreenSize(
     self.draw_mutex.lockUncancelable(global.io());
     defer self.draw_mutex.unlock(global.io());
 
-    self.cursor_motion.reset();
+    // Cursor positions are screen pixels. Preserve the displayed body and let
+    // the next native glyph retarget it to the resized grid without snapping.
     self.size = size;
     self.updateScreenSizeUniforms();
 
@@ -1883,7 +1883,7 @@ fn updateSmoothCursor(self: *Self) ?CursorMotion.Frame {
     self.uniforms.smooth_roundness = frame.pose.roundness;
     self.uniforms.smooth_color = c.color;
     self.uniforms.smooth_effect = frame.effect;
-    self.uniforms.smooth_block = if (self.cells.cursor_style == .block) 1 else 0;
+    self.uniforms.smooth_block = frame.pose.block_mix;
     const half = frame.pose.size * @as(SmoothCursor.Vec, @splat(0.5));
     var lo = frame.pose.center - half;
     var hi = frame.pose.center + half;

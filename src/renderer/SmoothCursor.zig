@@ -15,6 +15,7 @@ const maximum_duration: f32 = 0.200;
 // Bridge ordinary key-repeat gaps instead of closing on every cell arrival.
 const burst_hold: f32 = 0.120;
 const release: f32 = 0.100;
+const geometry_duration: f32 = 0.100;
 
 pub const Sample = struct {
     center: Vec,
@@ -23,6 +24,8 @@ pub const Sample = struct {
     trail_radii: [history_capacity]f32 = .{0} ** history_capacity,
     size: Vec,
     roundness: f32 = 0,
+    /// Text recoloring follows block-to-line shape transitions too.
+    block_mix: f32 = 1,
 };
 
 initialized: bool = false,
@@ -34,6 +37,9 @@ history_len: usize = 0,
 velocity_from: Vec = @splat(0),
 target: Vec = @splat(0),
 size: Vec = @splat(0),
+size_from: Vec = @splat(0),
+block_from: f32 = 1,
+geometry_began: f64 = 0,
 shape: Shape = .block,
 began: f64 = 0,
 duration: f32 = 0,
@@ -104,15 +110,31 @@ fn amount(self: *const Self, now: f64) f32 {
     return 1 - ease;
 }
 
+fn geometryProgress(self: *const Self, now: f64) f32 {
+    const t = std.math.clamp(@as(f32, @floatCast(now - self.geometry_began)) / geometry_duration, 0, 1);
+    return t * t * (3 - 2 * t);
+}
+
+fn nativeSize(self: *const Self, now: f64) Vec {
+    const t = self.geometryProgress(now);
+    if (t >= 1) return self.size;
+    return self.size_from + (self.size - self.size_from) * @as(Vec, @splat(t));
+}
+
+fn blockMix(self: *const Self, now: f64) f32 {
+    const target: f32 = if (self.shape == .block) 1 else 0;
+    return self.block_from + (target - self.block_from) * self.geometryProgress(now);
+}
+
 pub fn sample(self: *const Self, now: f64) Sample {
-    var pose: Sample = .{ .center = self.target, .size = self.size };
+    var pose: Sample = .{ .center = self.target, .size = self.nativeSize(now), .block_mix = self.blockMix(now) };
     if (self.running and now < self.hold_until + release) {
         const elapsed: f32 = @floatCast(@max(0, now - self.began));
-        const t = std.math.clamp(elapsed / self.duration, 0, 1);
+        const t = if (self.duration > 0) std.math.clamp(elapsed / self.duration, 0, 1) else 1;
         const deform = self.amount(now);
         pose.center = self.origin + (self.target - self.origin) * @as(Vec, @splat(t * t * (3 - 2 * t))) +
             self.velocity_from * @as(Vec, @splat(self.duration * t * (1 - t) * (1 - t)));
-        pose.size = self.size * @as(Vec, @splat(1 + expansion * deform));
+        pose.size *= @as(Vec, @splat(1 + expansion * deform));
         pose.roundness = deform;
     }
     if (self.history_len == 0) return pose;
@@ -187,9 +209,28 @@ pub fn hide(self: *Self) void {
 
 pub fn update(self: *Self, target: Vec, size: Vec, timing_width: f32, now: f64, shape: Shape) Sample {
     self.hidden = false;
-    if (!self.initialized or shape != self.shape or @reduce(.Or, size != self.size)) {
-        self.* = .{ .initialized = true, .origin = target, .target = target, .size = size, .shape = shape };
+    if (!self.initialized) {
+        self.* = .{
+            .initialized = true,
+            .origin = target,
+            .target = target,
+            .size = size,
+            .size_from = size,
+            .shape = shape,
+            .block_from = if (shape == .block) 1 else 0,
+        };
         return self.sample(now);
+    }
+    // Geometry has its own clock: changing width or mode must neither snap
+    // position nor restart an in-flight move to the same target. Retarget from
+    // the current interpolated size, without compounding the burst expansion.
+    const geometry_changed = shape != self.shape or @reduce(.Or, size != self.size);
+    if (geometry_changed) {
+        self.size_from = self.nativeSize(now);
+        self.block_from = self.blockMix(now);
+        self.size = size;
+        self.shape = shape;
+        self.geometry_began = now;
     }
     if (length(target - self.target) >= 0.5) {
         const displayed = self.sample(now);
@@ -211,6 +252,15 @@ pub fn update(self: *Self, target: Vec, size: Vec, timing_width: f32, now: f64, 
         self.began = now;
         self.duration = duration;
         self.hold_until = now + @max(duration + tailLag(duration), burst_hold);
+        self.running = true;
+    }
+    if (geometry_changed) {
+        if (!self.running or now > self.hold_until) {
+            self.shape_from = self.amount(now);
+            self.shape_began = now;
+        }
+        self.hold_until = @max(self.hold_until, now + geometry_duration);
+        // Size-only transitions need a live draw schedule, even at rest.
         self.running = true;
     }
     if (now >= self.hold_until + release) {
@@ -274,7 +324,7 @@ test "SmoothCursor every frame preserves aspect ratio and twelve percent bounds 
                 if (ms >= 24 and ms <= 119) try std.testing.expectApproxEqAbs(@as(f32, 1.12), p.size[0] / cursor.size[0], 0.000001);
             }
             const final = s.update(step, cursor.size, 10, 2, cursor.shape);
-            try std.testing.expectEqual(Sample{ .center = step, .size = cursor.size }, final);
+            try std.testing.expectEqual(Sample{ .center = step, .size = cursor.size, .block_mix = if (cursor.shape == .block) 1 else 0 }, final);
             try std.testing.expect(!s.running and s.effect(2) == 0);
         }
     }
@@ -324,7 +374,7 @@ test "SmoothCursor release and interrupted release are continuous and settle exa
     try std.testing.expectEqual(Sample{ .center = s.target, .size = s.size }, s.update(s.target, s.size, 10, 2, .block));
 }
 
-test "SmoothCursor Vim redraws preserve motion and shape switches use the new native size" {
+test "SmoothCursor Vim redraws and geometry changes preserve motion" {
     const matches = [_]Vec{ .{ 30, 40 }, .{ 400, 40 }, .{ 150, 240 }, .{ 600, 100 }, .{ 10, 360 } };
     var s: Self = .{};
     _ = s.update(matches[0], .{ 10, 20 }, 10, 0, .block);
@@ -337,14 +387,19 @@ test "SmoothCursor Vim redraws preserve motion and shape switches use the new na
         try std.testing.expect(s.running and s.effect(now) > 0);
         try expectUniform(s.sample(now + 0.008), s.size);
     }
+    const before_bar = s.sample(4);
     const bar = s.update(s.target, .{ 3, 20 }, 10, 4, .bar);
-    try std.testing.expectEqual(@as(Vec, .{ 3, 20 }), bar.size);
-    try std.testing.expect(!s.running);
+    try std.testing.expectEqual(before_bar, bar);
+    try std.testing.expect(s.running);
+    _ = s.update(s.target, s.size, 10, 4.5, .bar);
+    try std.testing.expectEqual(@as(Vec, .{ 3, 20 }), s.sample(4.5).size);
     _ = s.update(s.target + @as(Vec, .{ 10, 0 }), s.size, 10, 5, .bar);
     try std.testing.expectApproxEqAbs(@as(f32, 3.36), s.sample(5.03).size[0], 0.000001);
+    const before_resize = s.sample(5.04);
     const resized = s.update(s.target, .{ 3, 30 }, 15, 5.04, .bar);
-    try std.testing.expectEqual(@as(Vec, .{ 3, 30 }), resized.size);
-    try std.testing.expect(!s.running);
+    try std.testing.expectEqual(before_resize, resized);
+    try std.testing.expect(s.running);
+    try std.testing.expectEqual(@as(Vec, .{ 3, 30 }), s.update(s.target, s.size, 15, 5.5, .bar).size);
     s.reset();
     try std.testing.expect(!s.initialized);
 }
@@ -420,10 +475,78 @@ test "SmoothCursor history retains submitted turns and ignores speculative or ab
     // Straight older samples may collapse, but the previous-frame endpoint
     // above must survive, along with the earlier end of the path.
     try t.expect(length(turned.trail[turned.trail_len - 1]) > length(turned.trail[0]));
-    // Changing cursor geometry cannot reuse the previous shape's trail.
+    // A shape transition retains the path already submitted to the display.
+    const before_bar = s.sample(1.049);
     const bar = s.update(s.target, .{ 3, 42 }, 19, 1.049, .bar);
-    try t.expectEqual(@as(u32, 0), bar.trail_len);
-    try t.expectEqual(@as(usize, 0), s.history_len);
+    try t.expectEqual(before_bar, bar);
+    try t.expect(bar.trail_len > 0);
+    try t.expect(s.history_len > 0);
+}
+
+test "SmoothCursor wide cells and all native shapes retarget continuously at multiple refresh rates" {
+    const t = std.testing;
+    const cursors = [_]struct { size: Vec, shape: Shape }{
+        .{ .size = .{ 10, 20 }, .shape = .block },
+        .{ .size = .{ 20, 20 }, .shape = .block },
+        .{ .size = .{ 2, 20 }, .shape = .bar },
+        .{ .size = .{ 10, 2 }, .shape = .underline },
+        .{ .size = .{ 20, 2 }, .shape = .underline },
+        .{ .size = .{ 30, 30 }, .shape = .block },
+    };
+    for ([_]f64{ 30, 60, 120, 240 }) |hz| {
+        var s: Self = .{};
+        s.recordFrame(0, s.update(.{ 0, 0 }, cursors[0].size, 10, 0, .block));
+        for (1..121) |i| {
+            const now = @as(f64, @floatFromInt(i)) / hz;
+            const cursor = cursors[i % cursors.len];
+            const before = s.sample(now);
+            const pose = s.update(.{ @floatFromInt((i % 3) * 300), @floatFromInt((i % 5) * 100) }, cursor.size, 10, now, cursor.shape);
+            try t.expectEqual(before, pose);
+            try t.expect(s.running and s.effect(now) == 1);
+            inline for (0..2) |axis| {
+                try t.expect(std.math.isFinite(pose.center[axis]));
+                try t.expect(pose.size[axis] >= 2 and pose.size[axis] <= 30 * 1.120001);
+            }
+            try t.expect(pose.block_mix >= 0 and pose.block_mix <= 1);
+            s.recordFrame(now, pose);
+        }
+        // Record settling frames so the submitted trail can drain normally.
+        const start = 120 / hz;
+        for (1..121) |i| {
+            const now = start + @as(f64, @floatFromInt(i)) / hz;
+            s.recordFrame(now, s.update(s.target, s.size, 10, now, s.shape));
+        }
+        try t.expect(!s.running);
+        const final = s.sample(start + 10);
+        try t.expectEqual(s.target, final.center);
+        try t.expectEqual(s.size, final.size);
+        try t.expectEqual(@as(u32, 0), final.trail_len);
+    }
+}
+
+test "SmoothCursor stationary geometry transitions finish and same-target changes keep travel deadline" {
+    const t = std.testing;
+    var s: Self = .{};
+    _ = s.update(.{ 0, 0 }, .{ 10, 20 }, 10, 0, .block);
+    // Same timestamp and no position change: no zero-duration division/NaN.
+    const initial = s.sample(0);
+    try t.expectEqual(initial, s.update(s.target, .{ 2, 20 }, 10, 0, .bar));
+    const middle = s.update(s.target, s.size, 10, 0.05, .bar);
+    try t.expectEqual(s.target, middle.center);
+    try t.expect(middle.size[0] > 2 and middle.size[0] < 10);
+    try t.expectApproxEqAbs(@as(f32, 0.5), middle.block_mix, 0.000001);
+    _ = s.update(s.target, s.size, 10, 0.5, .bar);
+    try t.expect(!s.running and s.effect(0.5) == 0);
+    try t.expectEqual(@as(Vec, .{ 2, 20 }), s.sample(0.5).size);
+
+    _ = s.update(.{ 1000, 500 }, s.size, 10, 1, .bar);
+    const deadline = s.began + s.duration;
+    const before = s.sample(1.04);
+    try t.expectEqual(before, s.update(s.target, .{ 20, 30 }, 15, 1.04, .block));
+    try t.expectEqual(deadline, s.began + s.duration);
+    try t.expectEqual(s.target, s.sample(deadline + 0.001).center);
+    const release_pose = s.sample(s.hold_until + 0.04);
+    try t.expectEqual(release_pose, s.update(s.target, .{ 20, 2 }, 15, s.hold_until + 0.04, .underline));
 }
 
 test "SmoothCursor stalled rendering bridges the last submitted body then drains" {

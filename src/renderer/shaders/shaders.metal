@@ -35,7 +35,7 @@ struct Uniforms {
   float smooth_roundness;
   uchar4 smooth_color;
   float smooth_effect;
-  uint smooth_block;
+  float smooth_block;
 };
 
 //-------------------------------------------------------------------
@@ -763,7 +763,7 @@ fragment float4 cell_text_fragment(
       if (uniforms.smooth_effect > 0 && uniforms.smooth_block != 0) {
         float coverage = smooth_cursor_coverage(in.position.xy, uniforms);
         float4 cursor_text = load_color(uniforms.cursor_color, uniforms.use_display_p3, true);
-        color = mix(color, cursor_text, coverage);
+        color = mix(color, cursor_text, coverage * uniforms.smooth_block);
       }
 
       // If we're not doing linear blending, then we need to

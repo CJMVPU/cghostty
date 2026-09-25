@@ -230,7 +230,7 @@ pub const Uniforms = extern struct {
     smooth_roundness: f32 align(4) = 0,
     smooth_color: [4]u8 align(4) = .{ 0, 0, 0, 0 },
     smooth_effect: f32 align(4) = 0,
-    smooth_block: u32 align(4) = 0,
+    smooth_block: f32 align(4) = 0,
 
     const PaddingExtend = packed struct(u8) {
         left: bool = false,

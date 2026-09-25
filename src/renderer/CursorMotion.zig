@@ -84,7 +84,7 @@ test "CursorMotion hide preserves repeated movement but invalidation snaps on re
     try t.expect(!state.isActive());
 }
 
-test "CursorMotion disabled geometry and Vim shape changes stop old animation" {
+test "CursorMotion Vim shape changes continue drawing while disabled or invalid geometry stops" {
     const t = std.testing;
     var state: Self = .{};
     var target: Target = .{ .center = .{ 0, 0 }, .size = .{ 10, 20 }, .timing_width = 10, .shape = .block };
@@ -94,7 +94,11 @@ test "CursorMotion disabled geometry and Vim shape changes stop old animation" {
     try t.expect(state.isActive());
     target.shape = .bar;
     target.size = .{ 2, 20 };
-    try t.expectEqual(@as(f32, 0), state.sample(true, target, 1.01).?.effect);
+    const before = state.geometry.sample(1.01);
+    const changed = state.sample(true, target, 1.01).?;
+    try t.expectEqual(before, changed.pose);
+    try t.expectEqual(@as(f32, 1), changed.effect);
+    try t.expect(state.isActive());
     target.center = .{ 120, 0 };
     _ = state.sample(true, target, 1.02);
     try t.expect(state.isActive());
