@@ -11,7 +11,7 @@ pub const history_capacity = 32;
 const HistoryPoint = struct { time: f64, center: Vec };
 const attack: f32 = 0.024;
 const minimum_duration: f32 = 0.024;
-const maximum_duration: f32 = 0.220;
+const maximum_duration: f32 = 0.200;
 // Bridge ordinary key-repeat gaps instead of closing on every cell arrival.
 const burst_hold: f32 = 0.120;
 const release: f32 = 0.100;
@@ -234,9 +234,9 @@ pub fn effect(self: *const Self, now: f64) f32 {
 test "SmoothCursor distance timing and monotone center response" {
     const t = std.testing;
     try t.expectApproxEqAbs(@as(f32, 0.024), timing(.{ 10, 0 }, 10), 0.000001);
-    try t.expectApproxEqAbs(@as(f32, 0.220), timing(.{ 80, 0 }, 10), 0.000001);
+    try t.expectApproxEqAbs(@as(f32, 0.200), timing(.{ 80, 0 }, 10), 0.000001);
     try t.expectApproxEqAbs(@as(f32, 0.064), timing(.{ 10, 0 }, 10) + tailLag(timing(.{ 10, 0 }, 10)), 0.000001);
-    try t.expectApproxEqAbs(@as(f32, 0.280), timing(.{ 80, 0 }, 10) + tailLag(timing(.{ 80, 0 }, 10)), 0.000001);
+    try t.expectApproxEqAbs(@as(f32, 0.260), timing(.{ 80, 0 }, 10) + tailLag(timing(.{ 80, 0 }, 10)), 0.000001);
     try t.expectEqual(timing(.{ 30, 40 }, 10), timing(.{ 0, 50 }, 10));
     var previous: f32 = 0;
     for (0..1001) |i| {
@@ -359,9 +359,9 @@ test "SmoothCursor long onset accelerates while one-cell input stays fast" {
         var s: Self = .{};
         _ = s.update(.{ 0, 0 }, .{ 19, 42 }, 19, 0, .block);
         _ = s.update(step, s.size, 19, 1, .block);
-        try t.expect(length(s.sample(1 + 1.0 / 60.0).center) < 17);
-        try t.expect(length(s.sample(1 + 1.0 / 120.0).center) < 5);
-        try t.expectEqual(step, s.sample(1.221).center);
+        try t.expect(length(s.sample(1 + 1.0 / 60.0).center) < 20);
+        try t.expect(length(s.sample(1 + 1.0 / 120.0).center) < 6);
+        try t.expectEqual(step, s.sample(1.201).center);
     }
 }
 
@@ -487,13 +487,13 @@ test "SmoothCursor same direction retarget preserves velocity and arrives withou
     try t.expectEqual(before.center, after.center);
     try t.expectApproxEqAbs(speed[0], s.velocity(1.05)[0], 0.001);
     var previous = after.center[0];
-    for (1..221) |ms| {
+    for (1..201) |ms| {
         const pose = s.sample(1.05 + @as(f64, @floatFromInt(ms)) / 1000);
         try t.expect(pose.center[0] >= previous and pose.center[0] <= 1500);
         previous = pose.center[0];
     }
-    try t.expectEqual(@as(Vec, .{ 1500, 0 }), s.sample(1.271).center);
-    try t.expectEqual(@as(Vec, @splat(0)), s.velocity(1.271));
+    try t.expectEqual(@as(Vec, .{ 1500, 0 }), s.sample(1.251).center);
+    try t.expectEqual(@as(Vec, @splat(0)), s.velocity(1.251));
 }
 
 test "SmoothCursor turns bound lateral drift and strong reversal discards wrong way inertia" {
@@ -506,7 +506,7 @@ test "SmoothCursor turns bound lateral drift and strong reversal discards wrong 
         _ = s.update(origin + delta, s.size, 19, 1.05, .block);
         const direction = delta / @as(Vec, @splat(length(delta)));
         var previous: f32 = 0;
-        for (0..221) |ms| {
+        for (0..201) |ms| {
             const offset = s.sample(1.05 + @as(f64, @floatFromInt(ms)) / 1000).center - origin;
             const along = @reduce(.Add, offset * direction);
             try t.expect(along >= previous - 0.001 and along <= length(delta) + 0.001);

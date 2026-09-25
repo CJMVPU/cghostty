@@ -249,7 +249,7 @@ terminal text. Normal launches do not collect timings or write trace files.
 geometry and atomic invalidation/activity at the thread boundary. Terminal
 hide/show preserves motion; focus, visibility, configuration and size changes
 invalidate it. `SmoothCursor.zig` translates a stable body and uniformly scales
-both dimensions by up to 12%. Body travel takes 24–220ms. Long moves from rest
+both dimensions by up to 12%. Body travel takes 24–200ms. Long moves from rest
 use smooth acceleration/deceleration; one-cell input keeps its fast response.
 Bounded Hermite tangents carry velocity into retargets without changing arrival
 deadlines. Forward velocity is bounded against overshoot, lateral drift is at

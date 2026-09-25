@@ -144,15 +144,15 @@ test "CursorMotion long travel starts visible and keeps rendering through follow
         try t.expectEqual(@as(Geometry.Vec, .{ 0, 0 }), start.pose.center);
         try t.expectEqual(@as(f32, 1), start.effect);
         // Long travel accelerates from rest: the first 60Hz frame travels
-        // about 1.6%, instead of the old immediate 21% leap.
+        // about 2% of the total distance.
         const first = state.geometry.sample(1 + 1.0 / 60.0);
-        try t.expectApproxEqAbs(@as(f32, 0.016348), @reduce(.Add, first.center * step) / 1_000_000, 0.00001);
-        for (0..281) |ms| {
+        try t.expectApproxEqAbs(@as(f32, 0.019676), @reduce(.Add, first.center * step) / 1_000_000, 0.00001);
+        for (0..261) |ms| {
             const frame = state.sample(true, target, 1 + @as(f64, @floatFromInt(ms)) / 1000).?;
             try t.expectEqual(@as(f32, 1), frame.effect);
             try t.expect(state.isActive());
         }
-        const arrived = state.sample(true, target, 1.281).?;
+        const arrived = state.sample(true, target, 1.261).?;
         try t.expectEqual(step, arrived.pose.center);
         try t.expectEqual(@as(u32, 0), arrived.pose.trail_len);
         _ = state.sample(true, target, 1.5);
