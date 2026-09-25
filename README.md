@@ -51,7 +51,7 @@
 
 ### 分类
 
-模板包含 **171 个可编辑配置项**，按八类组织：
+模板包含 **172 个可编辑配置项**，按八类组织：
 
 1. 常规
 2. 外观
@@ -111,6 +111,16 @@ CGHOSTTY="/Applications/cghostty.app/Contents/MacOS/cghostty"
 # 校验指定文件。
 "$CGHOSTTY" +validate-config --config-file="/absolute/path/config.ghostty"
 ```
+
+### Claude Code 顶部进度条
+
+Claude Code 根据终端名称和版本决定是否发送进度指令。0.3.0 起，在配置文件中开启：
+
+```ini
+claude-compatibility = true
+```
+
+保存并重启应用后，直接运行 `claude`。默认关闭，需要 Shell 集成；原生进度条需要 `progress-style = true`（默认值）。打开 Settings 时，旧模板会备份并追加缺少的选项说明，保留已有设置。兼容标识仅由 Claude 及其子进程继承，外层 shell 和应用版本保持原样。详情见 [Claude Code 兼容说明](docs/claude-code.md)。
 
 ## 构建
 

@@ -18,6 +18,7 @@ pub const entries = [_]Entry{
     .{ .key = .@"undo-timeout", .group = 1, .zh = "关闭会话可撤销的保留时长", .en = "Retention time for undoing a closed terminal", .example = "10s" },
     .{ .key = .@"shell-integration", .group = 1, .zh = "Shell 集成检测／注入", .en = "Shell integration detection and injection" },
     .{ .key = .@"shell-integration-features", .group = 1, .zh = "Shell 集成功能集合", .en = "Shell integration features" },
+    .{ .key = .@"claude-compatibility", .group = 1, .zh = "Claude 兼容模式", .en = "Claude compatibility mode", .example = "true", .note = "开启后直接运行 claude 即使用进度条兼容标识；需要 Shell 集成和 progress-style=true。保存后重启应用。 / Wraps claude with progress-compatible terminal identity; requires shell integration and progress-style=true. Restart after saving." },
     .{ .key = .@"macos-hidden", .group = 1, .zh = "应用启动时隐藏策略", .en = "Application visibility on launch" },
     .{ .key = .@"macos-dock-drop-behavior", .group = 1, .zh = "文件拖到 Dock 图标后的行为", .en = "Action for files dropped onto the Dock icon" },
     .{ .key = .@"font-family", .group = 2, .zh = "字体与后备字体", .en = "Font family", .example = "Menlo", .note = "可重复添加后备字体；先写空值可清除原列表。留空使用内置 LXGW WenKai Mono（Medium），粗体和斜体遵循合成样式设置。 / Repeat for fallback fonts; an empty entry clears the list. Unset uses bundled LXGW WenKai Mono (Medium); bold/italic follow synthetic style settings." },

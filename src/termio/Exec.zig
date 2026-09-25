@@ -505,6 +505,7 @@ pub const Config = struct {
     env_override: configpkg.RepeatableStringMap = .{},
     shell_integration: configpkg.Config.ShellIntegration = .detect,
     shell_integration_features: configpkg.Config.ShellIntegrationFeatures = .{},
+    claude_compatibility: bool = false,
     cursor_blink: ?bool = null,
     working_directory: ?[]const u8 = null,
     resources_dir: ?[]const u8,
@@ -730,6 +731,15 @@ const Subprocess = struct {
                 entry.key_ptr.*,
                 entry.value_ptr.*,
             );
+        }
+
+        // The config owns this flag, including when a disabled terminal inherits
+        // an environment from an enabled one. Only the shell wrapper changes
+        // TERM_PROGRAM; ordinary commands keep the application's real identity.
+        if (cfg.claude_compatibility) {
+            try env.put("CGHOSTTY_CLAUDE_COMPATIBILITY", "1");
+        } else {
+            _ = env.orderedRemove("CGHOSTTY_CLAUDE_COMPATIBILITY");
         }
 
         // Build our args list
@@ -1829,6 +1839,35 @@ test "execCommand: direct command, config freed" {
     try testing.expectEqualStrings(result[1], "bar baz");
 }
 
+test "Claude compatibility flag follows config without changing terminal identity" {
+    const t = std.testing;
+    var config = try configpkg.Config.default(t.allocator);
+    defer config.deinit();
+    try t.expect(!config.@"claude-compatibility");
+    for ([_]bool{ false, true }) |enabled| {
+        var env: EnvMap = .init(t.allocator);
+        try env.put("CGHOSTTY_CLAUDE_COMPATIBILITY", "1");
+        var exec = try Exec.init(t.allocator, .{
+            .command = .{ .direct = &.{"/bin/sh"} },
+            .env = env,
+            .claude_compatibility = enabled,
+            .resources_dir = null,
+            .term = "xterm-ghostty",
+            .rt_pre_exec_info = .init(&config),
+            .rt_post_fork_info = .init(&config),
+        });
+        defer exec.deinit();
+        const result = &exec.subprocess.env.?;
+        try t.expectEqualStrings("cghostty", result.get("TERM_PROGRAM").?);
+        try t.expectEqualStrings(build_config.version_string, result.get("TERM_PROGRAM_VERSION").?);
+        if (enabled) {
+            try t.expectEqualStrings("1", result.get("CGHOSTTY_CLAUDE_COMPATIBILITY").?);
+        } else {
+            try t.expect(result.get("CGHOSTTY_CLAUDE_COMPATIBILITY") == null);
+        }
+    }
+}
+
 test "exec initialization owns environment on every allocation failure" {
     const t = std.testing;
     var config = try configpkg.Config.default(t.allocator);
@@ -1844,6 +1883,7 @@ test "exec initialization owns environment on every allocation failure" {
             var exec = try Exec.init(alloc, .{
                 .command = .{ .direct = &.{"/bin/sh"} },
                 .env = environment,
+                .claude_compatibility = true,
                 .resources_dir = null,
                 .term = "xterm-256color",
                 .rt_pre_exec_info = .init(cfg),

@@ -24,6 +24,16 @@ export module ghostty {
     ^$ghostty "+ssh" ...$flags "--" ...$args
   }
 
+  # Keep the compatibility identity scoped to Claude and its child processes.
+  @complete external
+  export def --wrapped claude [...args] {
+    if ($env.CGHOSTTY_CLAUDE_COMPATIBILITY? | default "") == "1" {
+      ^env TERM_PROGRAM=ghostty TERM_PROGRAM_VERSION=1.2.0 claude ...$args
+    } else {
+      ^claude ...$args
+    }
+  }
+
   # Wrap `sudo` to preserve Ghostty's TERMINFO environment variable
   @complete external
   export def --wrapped sudo [...args] {

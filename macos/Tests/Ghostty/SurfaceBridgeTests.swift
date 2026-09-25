@@ -60,6 +60,18 @@ import Testing
         }
     }
 
+    @Test(arguments: [false, true])
+    func claudeCompatibilityConfigReachesPTY(enabled: Bool) async throws {
+        let config = try TemporaryConfig("claude-compatibility = \(enabled)")
+        let app = Ghostty.App(configPath: config.temporaryFile.path)
+        var base = Ghostty.SurfaceConfiguration()
+        base.workingDirectory = FileManager.default.temporaryDirectory.path
+        base.command = #"/bin/sh -c 'printf "compat=%s;terminal=%s" "${CGHOSTTY_CLAUDE_COMPATIBILITY:-off}" "$TERM_PROGRAM"; exec /bin/cat'"#
+        let view = Ghostty.SurfaceView(app, baseConfig: base)
+        let surface = try #require(view.surfaceModel)
+        try await waitForText("compat=\(enabled ? "1" : "off");terminal=cghostty", in: surface)
+    }
+
     @Test func unknownHardwareCodesAndCommittedTextSurviveMarshalling() {
         let event = Ghostty.Input.KeyEvent(
             keyCode: 65535, action: .repeat, text: "中文🙂", composing: true,

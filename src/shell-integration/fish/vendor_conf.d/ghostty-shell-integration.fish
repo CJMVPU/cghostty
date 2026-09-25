@@ -119,6 +119,13 @@ function __ghostty_setup --on-event fish_prompt -d "Setup ghostty integration"
         end
     end
 
+    # Claude compatibility is opt-in and preserves existing functions/aliases.
+    if test "$CGHOSTTY_CLAUDE_COMPATIBILITY" = 1; and not functions -q claude
+        function claude --wraps=claude --description "Claude terminal compatibility"
+            command env TERM_PROGRAM=ghostty TERM_PROGRAM_VERSION=1.2.0 claude $argv
+        end
+    end
+
     # SSH Integration
     #
     # Wrap `ssh` with `cghostty +ssh` and translate the shell-integration

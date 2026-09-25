@@ -55,6 +55,7 @@ pub fn initialize(self: *Self, opts: Options) !void {
         .env_override = config.env,
         .shell_integration = config.@"shell-integration",
         .shell_integration_features = config.@"shell-integration-features",
+        .claude_compatibility = config.@"claude-compatibility",
         .cursor_blink = config.@"cursor-style-blink",
         .working_directory = if (config.@"working-directory") |wd| wd.value() else null,
         .resources_dir = global.resourcesDir().host(),

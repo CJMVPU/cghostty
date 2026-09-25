@@ -12,8 +12,8 @@ pub fn openPath(alloc: Allocator) ![:0]const u8 {
     return try openPathAt(alloc, path);
 }
 
-/// Existing settings retain their exact byte order. The guide is appended once,
-/// after a private backup; atomic replacement never exposes a partial template.
+/// Existing settings retain their exact byte order. The guide (or missing new
+/// sections) is appended after a private backup and an atomic replacement.
 pub fn openPathAt(alloc: Allocator, path: []const u8) ![:0]const u8 {
     const io = global.io();
     if (std.fs.path.dirname(path)) |parent| try std.Io.Dir.cwd().createDirPath(io, parent);
@@ -26,10 +26,17 @@ pub fn openPathAt(alloc: Allocator, path: []const u8) ![:0]const u8 {
     if (stat) |info| if (info.kind != .file) return error.NotAFile;
     const original = if (existing != null) try std.Io.Dir.cwd().readFileAlloc(io, path, alloc, .unlimited) else try alloc.dupe(u8, "");
     defer alloc.free(original);
+    var has_guide = false;
     var lines = std.mem.splitScalar(u8, original, '\n');
     while (lines.next()) |line| {
-        if (std.mem.eql(u8, std.mem.trimEnd(u8, line, "\r"), template.marker)) return try alloc.dupeZ(u8, path);
+        if (std.mem.eql(u8, std.mem.trimEnd(u8, line, "\r"), template.marker)) {
+            has_guide = true;
+            break;
+        }
     }
+    const guide = if (has_guide) try template.generateSupplement(alloc, original) else try template.generate(alloc);
+    defer alloc.free(guide);
+    if (guide.len == 0) return try alloc.dupeZ(u8, path);
 
     // Resolve an existing symlink so editing preserves both the link and its target.
     var resolved: [std.fs.max_path_bytes]u8 = undefined;
@@ -37,8 +44,6 @@ pub fn openPathAt(alloc: Allocator, path: []const u8) ![:0]const u8 {
         resolved[0..try std.Io.Dir.cwd().realPathFile(io, path, &resolved)]
     else
         path;
-    const guide = try template.generate(alloc);
-    defer alloc.free(guide);
     if (existing != null) {
         var name_buf: [@import("../os/file.zig").random_basename_len]u8 = undefined;
         const name = try @import("../os/file.zig").randomBasename(&name_buf);
@@ -126,4 +131,60 @@ test "opening user configuration preserves contents and rejects directories" {
     }
     try testing.expectEqual(@as(usize, 1), backups);
     try testing.expectError(error.NotAFile, openPathAt(alloc, base));
+}
+
+test "opening older configuration guide appends missing options once" {
+    const t = std.testing;
+    var td = try @import("../os/main.zig").TempDir.init();
+    defer td.deinit();
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    const base = buf[0..try td.dir.realPath(t.io, &buf)];
+    const path = try std.fs.path.join(t.allocator, &.{ base, "config.ghostty" });
+    defer t.allocator.free(path);
+    const current = try template.generate(t.allocator);
+    defer t.allocator.free(current);
+    const start = std.mem.indexOf(u8, current, "\n# [claude-compatibility]").?;
+    const end = std.mem.indexOfPos(u8, current, start + 1, "\n# [").?;
+    // A setting already entered by the user must remain active after the guide update.
+    const old = try std.mem.concat(t.allocator, u8, &.{ "claude-compatibility = true\n# My comment\n", current[0..start], current[end..] });
+    defer t.allocator.free(old);
+    {
+        var file = try std.Io.Dir.createFileAbsolute(t.io, path, .{});
+        defer file.close(t.io);
+        var buffer: [4096]u8 = undefined;
+        var writer = file.writer(t.io, &buffer);
+        try writer.interface.writeAll(old);
+        try writer.end();
+    }
+    const opened = try openPathAt(t.allocator, path);
+    defer t.allocator.free(opened);
+    const updated = try std.Io.Dir.cwd().readFileAlloc(t.io, path, t.allocator, .unlimited);
+    defer t.allocator.free(updated);
+    try t.expect(std.mem.startsWith(u8, updated, old));
+    const appended = updated[old.len..];
+    try t.expect(std.mem.indexOf(u8, appended, "# [claude-compatibility]") != null);
+    try t.expect(std.mem.indexOf(u8, appended, "# claude-compatibility = true") != null);
+    try t.expect(std.mem.indexOf(u8, appended, "# [font-size]") == null);
+    var config = try @import("Config.zig").default(t.allocator);
+    defer config.deinit();
+    try config.loadData(t.allocator, updated, path);
+    try t.expect(config.@"claude-compatibility");
+    try t.expectEqual(@as(usize, 0), config._diagnostics.items().len);
+    const reopened = try openPathAt(t.allocator, path);
+    defer t.allocator.free(reopened);
+    const again = try std.Io.Dir.cwd().readFileAlloc(t.io, path, t.allocator, .unlimited);
+    defer t.allocator.free(again);
+    try t.expectEqualStrings(updated, again);
+    var dir = try std.Io.Dir.cwd().openDir(t.io, base, .{ .iterate = true });
+    defer dir.close(t.io);
+    var it = dir.iterate();
+    var backups: usize = 0;
+    while (try it.next(t.io)) |entry| {
+        if (!std.mem.endsWith(u8, entry.name, ".bak")) continue;
+        const saved = try dir.readFileAlloc(t.io, entry.name, t.allocator, .unlimited);
+        defer t.allocator.free(saved);
+        try t.expectEqualStrings(old, saved);
+        backups += 1;
+    }
+    try t.expectEqual(@as(usize, 1), backups);
 }

@@ -2545,6 +2545,18 @@ keybind: Keybinds = .{},
 /// `xterm-256color` with environment variables if terminfo installation fails.
 @"shell-integration-features": ShellIntegrationFeatures = .{},
 
+/// Enable the Claude Code terminal compatibility wrapper in shell integration.
+/// When enabled, invoking `claude` through an integrated interactive shell sets
+/// TERM_PROGRAM=ghostty and TERM_PROGRAM_VERSION=1.2.0 for Claude and its child
+/// processes. This allows Claude Code's terminal allowlist to enable OSC 9;4
+/// progress reports. The outer shell retains cghostty's name and version.
+///
+/// Defaults to false. Requires shell integration; `progress-style` must also
+/// be true to display progress. Existing user aliases/functions take precedence
+/// in zsh, Bash and fish. Explicit executable paths bypass the wrapper.
+/// Restart the application after changing this setting.
+@"claude-compatibility": bool = false,
+
 /// Custom entries into the command palette.
 ///
 /// Each entry requires the title, the corresponding action, and an optional

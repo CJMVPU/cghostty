@@ -123,6 +123,15 @@
     edit:add-var ssh~ $ssh-integration~
   }
 
+  if (has-env CGHOSTTY_CLAUDE_COMPATIBILITY) {
+    if (eq $E:CGHOSTTY_CLAUDE_COMPATIBILITY 1) {
+      fn claude-compatible {|@args|
+        (external env) TERM_PROGRAM=ghostty TERM_PROGRAM_VERSION=1.2.0 claude $@args
+      }
+      edit:add-var claude~ $claude-compatible~
+    }
+  }
+
   # Report changes to the current directory.
   fn report-pwd { printf "\e]7;kitty-shell-cwd://%s%s\a" (platform:hostname) $pwd }
   set after-chdir = (conj $after-chdir {|_| report-pwd })

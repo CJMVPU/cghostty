@@ -286,6 +286,14 @@ _ghostty_deferred_init() {
       fi
     fi
 
+    # Claude compatibility is opt-in and never replaces a user's wrapper.
+    if [[ "${CGHOSTTY_CLAUDE_COMPATIBILITY-}" == 1 ]] &&
+       (( ! $+functions[claude] && ! $+aliases[claude] )); then
+      claude() {
+        builtin command env TERM_PROGRAM=ghostty TERM_PROGRAM_VERSION=1.2.0 claude "$@"
+      }
+    fi
+
     # Sudo
     if [[ "$GHOSTTY_SHELL_FEATURES" == *"sudo"* ]] && [[ -n "$TERMINFO" ]]; then
       # Wrap `sudo` command to ensure Ghostty terminfo is preserved

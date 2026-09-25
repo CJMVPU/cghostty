@@ -114,6 +114,14 @@ if [[ "$GHOSTTY_SHELL_FEATURES" == *"sudo"* && -n "$TERMINFO" ]]; then
   }
 fi
 
+# Claude compatibility is opt-in and never replaces a user's wrapper.
+if [[ "${CGHOSTTY_CLAUDE_COMPATIBILITY-}" == 1 ]] &&
+   ! builtin declare -F claude >/dev/null && ! builtin alias claude >/dev/null 2>&1; then
+  function claude() {
+    builtin command env TERM_PROGRAM=ghostty TERM_PROGRAM_VERSION=1.2.0 claude "$@"
+  }
+fi
+
 # SSH Integration
 #
 # Wrap `ssh` with `cghostty +ssh` and translate the shell-integration

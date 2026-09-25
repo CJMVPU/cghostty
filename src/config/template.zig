@@ -65,36 +65,67 @@ pub fn generate(alloc: std.mem.Allocator) ![:0]const u8 {
         try writer.print("\n# ======================================================================\n# {s}\n# ======================================================================\n", .{group});
         inline for (metadata.entries) |entry| {
             if (entry.group == index) {
-                const name = @tagName(entry.key);
-                const value = @field(config, name);
-                const T = @TypeOf(value);
-                var buf: std.Io.Writer.Allocating = .init(alloc);
-                defer buf.deinit();
-                try formatter.formatEntry(T, name, value, &buf.writer);
-                try writer.print("\n# [{s}] {s} / {s}\n", .{ name, entry.zh, entry.en });
-                if (entry.note) |note| try writer.print("# {s}\n", .{note});
-                try choices(T, writer);
-                const compact = std.mem.trimEnd(u8, buf.written(), " \r\n");
-                if (std.mem.endsWith(u8, compact, "=")) {
-                    try writer.writeAll("# 默认 / Default: 未指定或空值，按自动／继承规则处理。 / Unset or empty; automatic/inherited rules apply.\n");
-                } else try writer.writeAll("# 默认 / Default:\n");
-                var lines = std.mem.tokenizeScalar(u8, buf.written(), '\n');
-                var first: ?[]const u8 = null;
-                while (lines.next()) |line| {
-                    if (first == null) first = line;
-                    try writer.print("#   {s}\n", .{line});
-                }
-                if (first == null) try writer.writeAll("#   自动决定 / Automatic\n");
-                try writer.writeAll("# 示例（取消下一行的 # 后启用）/ Example (uncomment next line to enable):\n");
-                if (entry.example) |example| {
-                    try writer.print("# {s} = {s}\n", .{ name, example });
-                } else if (first) |line| {
-                    try writer.print("# {s}\n", .{line});
-                } else return error.MissingExample;
+                try writeEntry(alloc, &config, entry, writer);
             }
         }
     }
     return try alloc.dupeZ(u8, output.written());
+}
+
+/// Append documentation for new keys without rewriting user settings or old
+/// guide sections. An empty result means opening the file is a read-only step.
+pub fn generateSupplement(alloc: std.mem.Allocator, original: []const u8) ![:0]const u8 {
+    @setEvalBranchQuota(100_000);
+    var present = std.EnumSet(Key).initEmpty();
+    var lines = std.mem.splitScalar(u8, original, '\n');
+    while (lines.next()) |line| {
+        if (!std.mem.startsWith(u8, line, "# [")) continue;
+        const end = std.mem.indexOfScalarPos(u8, line, 3, ']') orelse continue;
+        if (std.meta.stringToEnum(Key, line[3..end])) |key| present.insert(key);
+    }
+    var config = try Config.default(alloc);
+    defer config.deinit();
+    var output: std.Io.Writer.Allocating = .init(alloc);
+    defer output.deinit();
+    inline for (metadata.entries) |entry| {
+        if (!present.contains(entry.key)) {
+            if (output.written().len == 0) try output.writer.print(
+                "# 新增配置说明 / Additional configuration options — cghostty {s}\n",
+                .{build_config.version_string},
+            );
+            try writeEntry(alloc, &config, entry, &output.writer);
+        }
+    }
+    return try alloc.dupeZ(u8, output.written());
+}
+
+fn writeEntry(alloc: std.mem.Allocator, config: *const Config, comptime entry: metadata.Entry, writer: *std.Io.Writer) !void {
+    const name = @tagName(entry.key);
+    const value = @field(config, name);
+    const T = @TypeOf(value);
+    var buf: std.Io.Writer.Allocating = .init(alloc);
+    defer buf.deinit();
+    try formatter.formatEntry(T, name, value, &buf.writer);
+    try writer.print("\n# [{s}] {s} / {s}\n", .{ name, entry.zh, entry.en });
+    if (entry.note) |note| try writer.print("# {s}\n", .{note});
+    try choices(T, writer);
+    const compact = std.mem.trimEnd(u8, buf.written(), " \r\n");
+    if (std.mem.endsWith(u8, compact, "=")) {
+        try writer.writeAll("# 默认 / Default: 未指定或空值，按自动／继承规则处理。 / Unset or empty; automatic/inherited rules apply.\n");
+    } else try writer.writeAll("# 默认 / Default:\n");
+    var lines = std.mem.tokenizeScalar(u8, buf.written(), '\n');
+    var first: ?[]const u8 = null;
+    while (lines.next()) |line| {
+        if (first == null) first = line;
+        try writer.print("#   {s}\n", .{line});
+    }
+    if (first == null) try writer.writeAll("#   自动决定 / Automatic\n");
+    try writer.writeAll("# 示例（取消下一行的 # 后启用）/ Example (uncomment next line to enable):\n");
+    if (entry.example) |example| {
+        try writer.print("# {s} = {s}\n", .{ name, example });
+    } else if (first) |line| {
+        try writer.print("# {s}\n", .{line});
+    } else return error.MissingExample;
 }
 
 fn choices(comptime Original: type, writer: *std.Io.Writer) !void {
