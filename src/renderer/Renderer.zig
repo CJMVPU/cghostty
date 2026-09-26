@@ -168,6 +168,8 @@ api: Metal,
 /// The CVDisplayLink used to drive the rendering loop in
 /// sync with the display.
 display_link: ?DisplayLink = null,
+display_link_draw_now: ?*xev.Async = null,
+last_display_link_ns: std.atomic.Value(u64) = .init(0),
 
 /// Health of the most recently completed frame.
 health: std.atomic.Value(Health) = .{ .raw = .healthy },
@@ -444,6 +446,8 @@ pub const DerivedConfig = struct {
     bg_image_repeat: bool,
     links: link.Set,
     vsync: bool,
+    render_trace: bool,
+    render_trace_directory: []const u8,
     colorspace: configpkg.Config.WindowColorspace,
     blending: configpkg.Config.AlphaBlending,
     background_blur: configpkg.Config.BackgroundBlur,
@@ -516,6 +520,8 @@ pub const DerivedConfig = struct {
             .bg_image_repeat = config.@"background-image-repeat",
             .links = links,
             .vsync = config.@"window-vsync",
+            .render_trace = config.@"render-trace",
+            .render_trace_directory = try alloc.dupe(u8, config.@"render-trace-directory"),
             .colorspace = config.@"window-colorspace",
             .blending = config.@"alpha-blending",
             .background_blur = config.@"background-blur",
@@ -621,13 +627,15 @@ pub fn init(alloc: Allocator, options: renderer.Options) !Self {
         if (try result.loadBackgroundImage(path)) |image| result.bg_image = image;
     }
 
-    result.trace = Trace.init(alloc);
+    result.trace = Trace.init(alloc, options.config.render_trace, options.config.render_trace_directory);
 
     return result;
 }
 
 pub fn deinit(self: *Self) void {
-    self.trace.deinit();
+    // Queued main-thread presentation callbacks must detach their borrowed
+    // trace before it closes. CVDisplayLink is stopped below before close too.
+    self.api.layer.close();
     if (self.frame_scratch) |*arena| arena.deinit();
     self.link_cache.deinit(self.alloc);
     // This only deinitializes and frees CPU-side state
@@ -656,6 +664,7 @@ pub fn deinit(self: *Self) void {
 
     self.config.deinit();
     self.api.deinit();
+    self.trace.deinit();
 
     self.* = undefined;
 }
@@ -729,13 +738,21 @@ pub fn displayUnrealized(self: *Self) void {
     // to rebuild the swap chain or make any graphics API calls.
     // The actual GPU resource release is done by the render thread.
     self.display_realized = false;
+    self.api.layer.invalidate();
 }
 
 fn displayLinkCallback(
     _: *macos.video.DisplayLink,
-    ud: ?*xev.Async,
+    ud: ?*Self,
 ) void {
-    const draw_now = ud orelse return;
+    const self = ud orelse return;
+    const draw_now = self.display_link_draw_now orelse return;
+    if (self.trace.file != null) {
+        const now = Trace.clock();
+        const previous = self.last_display_link_ns.swap(now, .monotonic);
+        // The first callback after a restart is not a dropped-frame interval.
+        if (previous != 0) self.trace.emit("vsync", now - previous, 0, 0);
+    }
     draw_now.notify() catch |err| {
         log.err("error notifying draw_now err={}", .{err});
     };
@@ -763,12 +780,14 @@ pub const AnimationWake = FrameScheduler.Wake;
 /// frame is due. The renderer thread drives its animation
 /// timer off this, re-querying after every wake.
 ///
-/// Must be called on the render thread.
-pub fn animationWake(self: *const Self) ?AnimationWake {
+/// Caller must hold draw_mutex, including the native synchronous draw path.
+fn animationWakeLocked(self: *const Self) ?AnimationWake {
     return self.animationWakeFor(false);
 }
 
-pub fn animationTimerWake(self: *const Self) ?AnimationWake {
+pub fn animationTimerWake(self: *Self) ?AnimationWake {
+    self.draw_mutex.lockUncancelable(global.io());
+    defer self.draw_mutex.unlock(global.io());
     return self.animationWakeFor(self.hasVsync());
 }
 
@@ -801,11 +820,14 @@ pub fn hasVsync(self: *const Self) bool {
 ///
 /// Must be called on the render thread.
 pub fn setFocus(self: *Self, focus: bool) !void {
-    assert(self.focused != focus);
-
-    self.focused = focus;
-
-    self.cursor_motion.invalidate();
+    {
+        self.draw_mutex.lockUncancelable(global.io());
+        defer self.draw_mutex.unlock(global.io());
+        assert(self.focused != focus);
+        self.focused = focus;
+        self.cursor_motion.invalidate();
+        self.trace.emit("state", @intFromBool(self.focused), @intFromBool(self.visible), 0);
+    }
 
     self.syncDisplayLink(null, null);
 }
@@ -814,8 +836,14 @@ pub fn setFocus(self: *Self, focus: bool) !void {
 ///
 /// Must be called on the render thread.
 pub fn setVisible(self: *Self, visible: bool) void {
-    self.cursor_motion.invalidate();
-    self.visible = visible;
+    {
+        self.draw_mutex.lockUncancelable(global.io());
+        defer self.draw_mutex.unlock(global.io());
+        self.cursor_motion.invalidate();
+        self.visible = visible;
+        self.trace.emit("state", @intFromBool(self.focused), @intFromBool(self.visible), 0);
+        if (!visible) self.api.layer.invalidate();
+    }
     self.syncDisplayLink(null, null);
 
     // When we're hidden, release our GPU resources.
@@ -876,10 +904,11 @@ fn syncDisplayLink(
             log.warn("error creating display link; using fallback rendering err={}", .{err});
             return;
         };
+        self.display_link_draw_now = callback;
         result.setOutputCallback(
-            xev.Async,
+            Self,
             &displayLinkCallback,
-            callback,
+            self,
         ) catch |err| {
             log.warn("error configuring display link err={}", .{err});
             result.release();
@@ -898,18 +927,27 @@ fn syncDisplayLink(
         };
     }
 
-    const should_run = FrameScheduler.needsDisplayLink(
-        self.visible,
-        self.cells_rebuilt,
-        self.animationWake(),
-    );
+    const should_run = state: {
+        self.draw_mutex.lockUncancelable(global.io());
+        defer self.draw_mutex.unlock(global.io());
+        break :state FrameScheduler.needsDisplayLink(
+            self.visible,
+            self.cells_rebuilt,
+            self.animationWakeLocked(),
+        );
+    };
 
     if (should_run) {
         if (!display_link.isRunning()) {
-            display_link.start() catch {};
+            self.last_display_link_ns.store(0, .monotonic);
+            display_link.start() catch |err| {
+                log.warn("error starting display link err={}", .{err});
+            };
         }
     } else {
-        display_link.stop() catch {};
+        if (display_link.isRunning()) display_link.stop() catch |err| {
+            log.warn("error stopping display link err={}", .{err});
+        };
     }
 }
 
@@ -993,6 +1031,8 @@ pub fn updateFrame(
         mouse: renderer.State.Mouse,
         preedit: ?renderer.State.Preedit,
         scrollbar: terminal.Scrollbar,
+        kitty_animation_clock: ?std.Io.Timestamp,
+        kitty_animation_next_ms: ?u64,
     };
 
     // Update all our data as tightly as possible within the mutex.
@@ -1026,7 +1066,6 @@ pub fn updateFrame(
             }
             if (held) {
                 const preedit: ?renderer.State.Preedit = if (state.preedit) |p| try p.clone(arena_alloc) else null;
-                self.kitty_animation_next_ms = null;
                 if (self.terminal_state.dirty != .false) state.terminal.flags.search_viewport_dirty = true;
                 const links: terminal.RenderState.CellSet = osc8: {
                     const vp = state.mouse.point orelse break :osc8 .empty;
@@ -1043,6 +1082,8 @@ pub fn updateFrame(
                     .mouse = state.mouse,
                     .preedit = preedit,
                     .scrollbar = frame.scrollbar,
+                    .kitty_animation_clock = self.kitty_animation_clock,
+                    .kitty_animation_next_ms = null,
                 };
             }
         }
@@ -1106,14 +1147,15 @@ pub fn updateFrame(
         // the renderer thread can schedule a wakeup for it.
         // This must happen before the dirty check below:
         // advancing a frame marks the image state dirty.
-        self.kitty_animation_next_ms = next: {
+        var kitty_animation_clock = self.kitty_animation_clock;
+        const kitty_animation_next_ms: ?u64 = next: {
             // Likely case: we have no kitty images, so do nothing.
             const storage = &state.terminal.screens.active.kitty_images;
             if (storage.images.count() == 0) break :next null;
 
             const now: std.Io.Timestamp = .now(global.io(), .awake);
-            const base = self.kitty_animation_clock orelse base: {
-                self.kitty_animation_clock = now;
+            const base = kitty_animation_clock orelse base: {
+                kitty_animation_clock = now;
                 break :base now;
             };
             const now_ms: u64 = @intCast(@divTrunc(
@@ -1169,6 +1211,8 @@ pub fn updateFrame(
             .mouse = state.mouse,
             .preedit = preedit,
             .scrollbar = scrollbar,
+            .kitty_animation_clock = kitty_animation_clock,
+            .kitty_animation_next_ms = kitty_animation_next_ms,
         };
     };
 
@@ -1225,6 +1269,8 @@ pub fn updateFrame(
         self.draw_mutex.lockUncancelable(global.io());
         defer self.draw_mutex.unlock(global.io());
 
+        self.kitty_animation_clock = critical.kitty_animation_clock;
+        self.kitty_animation_next_ms = critical.kitty_animation_next_ms;
         self.scroll_shared = state;
         self.scroll_snapshot = .{
             .journal = self.terminal_state.scroll_state,
@@ -1294,8 +1340,15 @@ pub fn drawFrame(
     // mutex. The display link is synced only after the mutex is
     // released; see `syncDisplayLink` for why it must never be
     // called with the draw mutex held.
+    const start_ns = if (self.trace.file != null) Trace.clock() else 0;
+    var lock_wait_ns: u64 = 0;
+    defer if (start_ns != 0) {
+        self.trace.emit("draw_lock", lock_wait_ns, @intFromBool(sync), 0);
+        self.trace.emit("draw_total", Trace.clock() - start_ns, @intFromBool(sync), 0);
+    };
     const sync_display_link = locked: {
         self.draw_mutex.lockUncancelable(global.io());
+        if (start_ns != 0) lock_wait_ns = Trace.clock() - start_ns;
         defer self.draw_mutex.unlock(global.io());
         break :locked try self.drawFrameLocked(sync);
     };
@@ -1360,12 +1413,14 @@ fn drawFrameLocked(
 
     // Wait until the surface is ready before rebuilding resources
     // or submitting a frame.
-    if (!self.display_realized) return false;
+    if (!self.display_realized or !self.visible) return false;
 
     // Get our swap chain, rebuilding it if it was released
     // while we were hidden. Defer rebuilding until a frame is needed.
     const swap_chain: *SwapChain, const swap_chain_rebuilt: bool =
         if (self.swap_chain) |*sc| .{ sc, false } else rebuild: {
+            const rebuild_ns = if (self.trace.file != null) Trace.clock() else 0;
+            defer if (rebuild_ns != 0) self.trace.emit("rebuild", Trace.clock() - rebuild_ns, 0, 0);
             self.swap_chain = try SwapChain.init(
                 self.api,
             );
@@ -1386,7 +1441,7 @@ fn drawFrameLocked(
         self.scroll_failed.load(.acquire) or
         swap_chain_rebuilt or
         self.cells_rebuilt or
-        self.animationWake() != null or
+        self.animationWakeLocked() != null or
         sync;
 
     if (!needs_redraw) {

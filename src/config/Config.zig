@@ -1870,6 +1870,18 @@ keybind: Keybinds = .{},
 /// This setting is only supported currently on macOS.
 @"window-vsync": bool = true,
 
+/// Enable local renderer timing diagnostics. Disabled by default. Records only
+/// timing/counters, never terminal text or input. Enabling adds diagnostic
+/// overhead; producers drop records rather than wait for the background writer.
+/// Changes take effect after restarting cghostty.
+@"render-trace": bool = false,
+
+/// Absolute directory for renderer CSV diagnostics when `render-trace` is true.
+/// Created automatically if needed; files are readable/writable only by the
+/// current user. Setting this directory alone does not enable diagnostics.
+/// Changes take effect after restarting cghostty.
+@"render-trace-directory": [:0]const u8 = "/tmp/cghostty-render-trace",
+
 /// If true, new windows will inherit the working directory of the
 /// previously focused window. If no window was previously focused, the default
 /// working directory will be used (the `working-directory` option).
@@ -9292,4 +9304,27 @@ test "config native cursor effect toggle" {
     try config.loadIter(alloc, &enable);
     try testing.expect(config.@"cursor-effect");
     try testing.expectEqual(@as(usize, 0), config._diagnostics.list.items.len);
+}
+
+test "config renderer trace defaults off and requires explicit opt-in" {
+    const t = std.testing;
+    var config = try Config.default(t.allocator);
+    defer config.deinit();
+    try t.expect(!config.@"render-trace");
+    try t.expectEqualStrings("/tmp/cghostty-render-trace", config.@"render-trace-directory");
+    var directory: TestIterator = .{ .data = &.{"--render-trace-directory=/tmp/custom-render-trace"} };
+    try config.loadIter(t.allocator, &directory);
+    try t.expect(!config.@"render-trace");
+    try t.expectEqualStrings("/tmp/custom-render-trace", config.@"render-trace-directory");
+    var enable: TestIterator = .{ .data = &.{"--render-trace=true"} };
+    try config.loadIter(t.allocator, &enable);
+    try t.expect(config.@"render-trace");
+    var derived = try @import("../renderer/Renderer.zig").DerivedConfig.init(t.allocator, &config);
+    defer derived.deinit();
+    try t.expect(derived.render_trace);
+    try t.expectEqualStrings("/tmp/custom-render-trace", derived.render_trace_directory);
+    var disable: TestIterator = .{ .data = &.{"--render-trace=false"} };
+    try config.loadIter(t.allocator, &disable);
+    try t.expect(!config.@"render-trace");
+    try t.expectEqual(@as(usize, 0), config._diagnostics.list.items.len);
 }

@@ -126,6 +126,7 @@ pub fn deinit(self: *Metal) void {
 
 pub fn loopEnter(self: *Metal) void {
     const renderer: *align(1) Renderer = @fieldParentPtr("api", self);
+    self.layer.setTrace(@alignCast(&renderer.trace));
     self.layer.setDisplayCallback(
         @ptrCast(&displayCallback),
         @ptrCast(renderer),
@@ -228,11 +229,11 @@ pub fn initContentTexture(self: *const Metal, width: usize, height: usize) !Text
 }
 
 /// Present the provided target.
-pub inline fn present(self: *Metal, target: Target, sync: bool) !void {
+pub inline fn present(self: *Metal, target: Target, sync: bool, sequence: u64) !void {
     if (sync) {
-        self.layer.setSurfaceSync(target.surface);
+        self.layer.setSurfaceSync(target.surface, sequence);
     } else {
-        try self.layer.setSurface(target.surface);
+        try self.layer.setSurface(target.surface, sequence);
     }
 }
 

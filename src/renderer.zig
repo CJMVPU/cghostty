@@ -65,6 +65,8 @@ test {
     _ = FrameScheduler;
     _ = CellUpload;
     _ = Presentation;
+    _ = @import("renderer/PresentationQueue.zig");
+    _ = @import("renderer/Trace.zig");
     _ = size;
     _ = Thread;
     _ = State;

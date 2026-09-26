@@ -205,7 +205,39 @@ python3 scripts/summarize-render-trace.py /private/tmp/renderer-perf-attachments
 记录 draw 路径墙钟耗时（包含等待帧槽，不是进程 CPU 使用率）、
 Metal GPU 执行时间、帧间隔、复制字节、尾部段数和动画定时器唤醒。
 诊断开销也在结果中，单次 GPU/CPU 波动不能用于承诺耗电或全面提速。
-`CGHOSTTY_RENDER_TRACE` 指定已有绝对目录可单独启用记录，正常运行关闭。
+配置 `render-trace = true` 启用记录，默认 `false`。
+`render-trace-directory` 指定绝对输出目录（默认 `/tmp/cghostty-render-trace`，自动创建）。
+只设置目录不会开启记录；旧的 `CGHOSTTY_RENDER_TRACE` 环境变量不再启用记录。
+修改后重启 cghostty 生效。
+关闭时不创建日志线程或缓冲区，也不采集新增时间戳。开启时，每个 surface
+使用有界的 256 条内存缓冲和一个 utility 优先级写入线程，累计 64 条后批量写盘；
+退出时刷新剩余记录。刷新回调、GPU 完成回调和绘制线程只尝试写入缓冲，
+遇到锁竞争或缓冲已满就丢弃并计数，不等待磁盘。`trace_records_dropped`
+非零时应将统计视为不完整；开启诊断仍有计时、原子操作和后台 I/O 开销。
+
+新增 `vsync_interval_ms`（不跨 DisplayLink 停启统计）、`draw_lock_wait_ms`、
+`draw_total_ms`、`swap_chain_rebuild_ms` 和 `main_queue_wait_ms`。
+`present` 记录的是 CALayer 接受画面的时刻，不是显示器实际扫描输出；
+同步重绘单独计数，不以零排队时间稀释异步帧的等待分布。
+原始 CSV 中 `state` 的两个值分别为 focused、visible，可用于对照前后台切换。
+`presentation_drops` 区分过期、合并、尺寸不匹配、隐藏/关闭失效和缓冲复用。
+合并帧数不等同于屏幕掉帧数。
+
+手工排查时可直接启动指定构建并汇总本地目录，无需导出 xcresult：
+
+```sh
+./macos/build/ReleaseLocal/cghostty.app/Contents/MacOS/cghostty \
+  --render-trace=true --render-trace-directory=/private/tmp/cghostty-render-trace
+# 退出这个诊断实例后，最后一个不足 64 条的批次也会写入。
+python3 scripts/summarize-render-trace.py /private/tmp/cghostty-render-trace
+```
+
+帧提交使用一个主线程待处理任务和最新帧邮箱。序号在 GPU 提交前分配，
+同步重绘、隐藏/关闭与缓冲复用会淘汰旧提交；排队任务独立持有 layer 和邮箱，
+不持有已释放 renderer 的裸引用。`PresentationQueue`、`Trace` 核心测试
+分别覆盖乱序/合并/失效和非阻塞丢弃/并发计数/退出刷新；原生
+`focusVisibilityChangesAndSynchronousDisplayKeepRendering` 覆盖真实 Metal
+绘制下的焦点、可见性和同步重绘交错，但不替代电影并行播放时的实测。
 报告见 `RENDERER_PERFORMANCE.md`。
 
 Metal 4 每个在途帧独占可复用的命令缓冲区、分配器、参数表与 residency set，GPU 完成后才允许重用。

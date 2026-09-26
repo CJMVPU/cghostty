@@ -499,12 +499,13 @@ fn renderCallback(
     // If the display is now unrealized, release GPU resources now
     // we're on the render thread, and do not try to update and draw
     // this frame.
-    if (!t.renderer.display_realized) {
+    {
         t.renderer.draw_mutex.lockUncancelable(global.io());
         defer t.renderer.draw_mutex.unlock(global.io());
-
-        t.renderer.releaseGpuResources();
-        return .disarm;
+        if (!t.renderer.display_realized) {
+            t.renderer.releaseGpuResources();
+            return .disarm;
+        }
     }
 
     // If we're not visible there's no point spending CPU rebuilding cells —

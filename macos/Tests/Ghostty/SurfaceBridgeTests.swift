@@ -160,6 +160,31 @@ import Testing
     }
 
     @Test(.enabled(if: try Self.metal4Available(), "Requires a Metal 4 GPU"))
+    func focusVisibilityChangesAndSynchronousDisplayKeepRendering() async throws {
+        let view = makeView()
+        let surface = try #require(view.surfaceModel)
+        let window = try show(view)
+        defer { window.close() }
+        for round in 0..<6 {
+            surface.setFocus(false)
+            surface.setVisible(false)
+            surface.setVisible(true)
+            surface.setFocus(true)
+            let revision = surface.renderRevision
+            let marker = "focus-frame-\(round)"
+            #expect(surface.sendKeyEvent(.init(keyCode: 0, action: .press, text: marker)))
+            try await waitForText(marker, in: surface)
+            try await waitForFrame(after: revision, in: view)
+            // Exercise the main-thread synchronous path while completed async
+            // presentations may still be queued. This must not wait on main.
+            let layer = try #require(view.layer)
+            layer.display()
+            #expect(layer.contents != nil)
+            #expect(view.healthy)
+        }
+    }
+
+    @Test(.enabled(if: try Self.metal4Available(), "Requires a Metal 4 GPU"))
     func kittyPlacementsAndSynchronizedFramesReachNativeRenderer() async throws {
         // Two placements exercise nonzero offsets in the shared instance buffer.
         let output = "\u{1b}[H\u{1b}_Ga=T,f=32,s=1,v=1,i=1,q=2,c=4,r=2;/wAA/w==\u{1b}\\" +

@@ -78,7 +78,7 @@ pub fn begin(opts: Options, renderer: *Renderer, target: *Target) !Self {
     return .{
         .queue = opts.queue,
         .commands = c,
-        .block = CompletionBlock.init(.{ .renderer = renderer, .target = target, .commands = c, .sync = false }, &bufferCompleted),
+        .block = CompletionBlock.init(.{ .renderer = renderer, .target = target, .commands = c, .sync = false, .sequence = renderer.api.layer.beginSurface(target.surface) }, &bufferCompleted),
     };
 }
 
@@ -87,6 +87,7 @@ const CompletionBlock = objc.Block(struct {
     target: *Target,
     commands: *Commands,
     sync: bool,
+    sequence: u64,
 }, .{objc.c.id}, void);
 
 fn bufferCompleted(block: *const CompletionBlock.Context, feedback_id: objc.c.id) callconv(.c) void {
@@ -108,7 +109,7 @@ fn bufferCompleted(block: *const CompletionBlock.Context, feedback_id: objc.c.id
         const message = description.msgSend([*:0]const u8, "UTF8String", .{});
         log.err("Metal 4 submission failed: {s}", .{message});
     }
-    block.renderer.frameCompleted(Presentation.finish(&block.renderer.api, block.target.*, false, health));
+    block.renderer.frameCompleted(Presentation.finish(&block.renderer.api, block.target.*, false, health, block.sequence));
 }
 
 pub fn renderPass(self: *const Self, attachments: []const RenderPass.Options.Attachment) RenderPass {
@@ -130,6 +131,6 @@ pub fn complete(self: *Self, sync: bool) void {
         c.completed.waitUncancelable(global.io());
         // Core Animation's synchronous display callback must present on its
         // caller, never on the Metal feedback queue while the caller waits.
-        self.block.renderer.frameCompleted(Presentation.finish(&self.block.renderer.api, self.block.target.*, true, c.health));
+        self.block.renderer.frameCompleted(Presentation.finish(&self.block.renderer.api, self.block.target.*, true, c.health, self.block.sequence));
     }
 }

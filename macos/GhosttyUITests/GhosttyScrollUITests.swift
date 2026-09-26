@@ -31,7 +31,7 @@ final class GhosttyScrollUITests: GhosttyCustomConfigCase {
         try updateConfig(baseConfig + "\ncommand = /usr/bin/python3 -u \(script.path) \(control.path)")
         let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         app.launchEnvironment["MTL_DEBUG_LAYER"] = "1"
-        app.launchEnvironment["CGHOSTTY_RENDER_TRACE"] = directory.path
+        app.launchArguments += ["--render-trace=true", "--render-trace-directory=\(directory.path)"]
         app.launch()
         app.activate()
         defer { app.terminate() }
@@ -77,7 +77,7 @@ final class GhosttyScrollUITests: GhosttyCustomConfigCase {
         try updateConfig(baseConfig + "\ncommand = /usr/bin/python3 -u \(script.path)")
         let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         app.launchEnvironment["MTL_DEBUG_LAYER"] = "1"
-        app.launchEnvironment["CGHOSTTY_RENDER_TRACE"] = directory.path
+        app.launchArguments += ["--render-trace=true", "--render-trace-directory=\(directory.path)"]
         app.launch()
         app.activate()
         var window = app.windows.firstMatch
@@ -149,7 +149,7 @@ final class GhosttyScrollUITests: GhosttyCustomConfigCase {
         try updateConfig(baseConfig + "\ncommand = /usr/bin/python3 -u \(script.path)")
         let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         app.launchEnvironment["MTL_DEBUG_LAYER"] = "1"
-        app.launchEnvironment["CGHOSTTY_RENDER_TRACE"] = directory.path
+        app.launchArguments += ["--render-trace=true", "--render-trace-directory=\(directory.path)"]
         app.launch()
         app.activate()
         defer { app.terminate() }
