@@ -25,7 +25,11 @@ jobs:
           exec > >(tee macos/build/ci-logs/setup.log) 2>&1
           test "$(uname -m)" = arm64
           test "$(sw_vers -productVersion | cut -d. -f1)" -ge 27
-          python3 scripts/check-versions.py
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            python3 scripts/check-versions.py --tag "$GITHUB_REF_NAME"
+          else
+            python3 scripts/check-versions.py
+          fi
           brew install nushell swiftlint actionlint
           zig_bin="$(bash scripts/install-zig.sh "$RUNNER_TEMP/cghostty-tools")"
           echo "$zig_bin" >> "$GITHUB_PATH"
