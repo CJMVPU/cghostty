@@ -173,6 +173,8 @@ test "configuration guide explicitly disables tracing and every example parses" 
     try untouched.loadData(testing.allocator, data, "/tmp/config.ghostty");
     try testing.expectEqual(@as(usize, 0), untouched._diagnostics.items().len);
     try testing.expect(!untouched.@"render-trace");
+    try testing.expectEqual(.classic, untouched.@"cursor-effect-mode");
+    try testing.expect(std.mem.indexOf(u8, data, "# 可选值 / Values: classic, responsive, instant") != null);
     var lines = std.mem.tokenizeScalar(u8, data, '\n');
     var example = false;
     var count: usize = 0;
@@ -195,7 +197,8 @@ test "configuration guide explicitly disables tracing and every example parses" 
     try testing.expectEqual(metadata.entries.len, count);
     const supplement = try generateSupplement(testing.allocator, "render-trace = true\n");
     defer testing.allocator.free(supplement);
-    try untouched.loadData(testing.allocator, "render-trace = true\n", "/tmp/config.ghostty");
+    try untouched.loadData(testing.allocator, "render-trace = true\ncursor-effect-mode = instant\n", "/tmp/config.ghostty");
     try untouched.loadData(testing.allocator, supplement, "/tmp/config.ghostty");
     try testing.expect(untouched.@"render-trace");
+    try testing.expectEqual(.instant, untouched.@"cursor-effect-mode");
 }

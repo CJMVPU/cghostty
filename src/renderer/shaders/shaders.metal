@@ -617,7 +617,7 @@ float smooth_cursor_coverage(float2 p, constant Uniforms& u) {
     float tail_distance = length(normalized - start - segment * t) - mix(start_radius, end_radius, t);
     float tail_aa = max(0.5 * fwidth(tail_distance), 0.0001);
     float tail_coverage = 1 - smoothstep(-tail_aa, tail_aa, tail_distance);
-    coverage = max(coverage, tail_coverage);
+    coverage = max(coverage, tail_coverage * u.smooth_trail[i].w);
     start = end;
     start_radius = end_radius;
   }

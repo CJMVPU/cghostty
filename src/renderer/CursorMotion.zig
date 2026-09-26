@@ -13,6 +13,7 @@ pub const Target = struct {
     size: Geometry.Vec,
     timing_width: f32,
     shape: Geometry.Shape,
+    mode: Geometry.Mode = .classic,
 };
 
 pub const Frame = struct {
@@ -47,6 +48,10 @@ pub fn sample(self: *Self, enabled: bool, target: ?Target, now: f64) ?Frame {
     if (@reduce(.Or, value.size <= @as(Geometry.Vec, @splat(0)))) {
         self.reset();
         return null;
+    }
+    if (self.geometry.mode != value.mode) {
+        self.geometry.reset();
+        self.geometry.mode = value.mode;
     }
     const pose = self.geometry.update(value.center, value.size, value.timing_width, now, value.shape);
     self.active.store(self.geometry.running, .release);
@@ -162,4 +167,37 @@ test "CursorMotion long travel starts visible and keeps rendering through follow
         _ = state.sample(true, target, 1.5);
         try t.expect(!state.isActive());
     }
+}
+
+test "CursorMotion presets propagate through hide disable invalidation and mode changes" {
+    const t = std.testing;
+    var state: Self = .{};
+    var target: Target = .{ .center = .{ 0, 0 }, .size = .{ 10, 20 }, .timing_width = 10, .shape = .block, .mode = .instant };
+    state.recordFrame(state.sample(true, target, 0).?);
+    target.center = .{ 1000, 0 };
+    const instant = state.sample(true, target, 1).?;
+    try t.expectEqual(target.center, instant.pose.center);
+    try t.expect(instant.pose.trail_len > 0);
+    state.recordFrame(instant);
+    try t.expect(state.sample(true, null, 1.01) == null);
+    target.center = .{ 80, 20 };
+    try t.expectEqual(target.center, state.sample(true, target, 1.02).?.pose.center);
+    state.invalidate();
+    const recovered = state.sample(true, target, 1.03).?;
+    try t.expectEqual(@as(u32, 0), recovered.pose.trail_len);
+    try t.expectEqual(Geometry.Mode.instant, state.geometry.mode);
+    try t.expect(state.sample(false, target, 1.04) == null);
+    try t.expect(!state.isActive());
+    target.mode = .responsive;
+    _ = state.sample(true, target, 2);
+    target.center = .{ 1000, 40 };
+    _ = state.sample(true, target, 3);
+    try t.expectApproxEqAbs(@as(f32, 0.160), state.geometry.duration, 0.000001);
+    target.mode = .classic;
+    const changed = state.sample(true, target, 3.01).?;
+    try t.expectEqual(target.center, changed.pose.center);
+    try t.expectEqual(@as(u32, 0), changed.pose.trail_len);
+    target.center = .{ 0, 60 };
+    _ = state.sample(true, target, 4);
+    try t.expectApproxEqAbs(@as(f32, 0.200), state.geometry.duration, 0.000001);
 }

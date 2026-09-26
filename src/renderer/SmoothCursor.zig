@@ -5,6 +5,7 @@ const std = @import("std");
 const Trail = @import("CursorTrail.zig");
 pub const Vec = @Vector(2, f32);
 pub const Shape = enum { block, bar, underline };
+pub const Mode = @import("CursorEffectMode.zig").Mode;
 
 pub const expansion: f32 = 0.12;
 pub const history_capacity = 32;
@@ -16,18 +17,24 @@ const maximum_duration: f32 = 0.200;
 const burst_hold: f32 = 0.120;
 const release: f32 = 0.100;
 const geometry_duration: f32 = 0.100;
+// Measure repeat activity in seconds, not frames or number of target updates.
+const repeat_gap: f64 = 0.120;
+const acceleration_time: f32 = 0.300;
+const maximum_speed_multiplier: f32 = 2.5;
 
 pub const Sample = struct {
     center: Vec,
     trail: [history_capacity]Vec = .{@as(Vec, @splat(0))} ** history_capacity,
     trail_len: u32 = 0,
     trail_radii: [history_capacity]f32 = .{0} ** history_capacity,
+    trail_opacities: [history_capacity]f32 = .{1} ** history_capacity,
     size: Vec,
     roundness: f32 = 0,
     /// Text recoloring follows block-to-line shape transitions too.
     block_mix: f32 = 1,
 };
 
+mode: Mode = .classic,
 initialized: bool = false,
 running: bool = false,
 hidden: bool = false,
@@ -43,6 +50,10 @@ geometry_began: f64 = 0,
 shape: Shape = .block,
 began: f64 = 0,
 duration: f32 = 0,
+base_duration: f32 = 0,
+last_target_at: ?f64 = null,
+repeat_time: f32 = 0,
+speed_multiplier: f32 = 1,
 shape_from: f32 = 0,
 shape_began: f64 = 0,
 hold_until: f64 = 0,
@@ -59,17 +70,31 @@ pub fn progress(t_: f32) f32 {
 }
 
 pub fn timing(delta: Vec, width: f32) f32 {
+    return timingFor(.classic, delta, width);
+}
+
+fn maximumDuration(mode: Mode) f32 {
+    return if (mode == .classic) maximum_duration else 0.160;
+}
+
+fn timingFor(mode: Mode, delta: Vec, width: f32) f32 {
+    if (mode == .instant) return 0;
     const distance = length(delta) / @max(width, 1);
     const x = std.math.clamp((distance - 1) / 7, 0, 1);
-    return minimum_duration + (maximum_duration - minimum_duration) * x * x * (3 - 2 * x);
+    return minimum_duration + (maximumDuration(mode) - minimum_duration) * x * x * (3 - 2 * x);
 }
 
-fn durationWeight(duration: f32) f32 {
-    return std.math.clamp((duration - minimum_duration) / (maximum_duration - minimum_duration), 0, 1);
+fn durationWeight(mode: Mode, duration: f32) f32 {
+    return std.math.clamp((duration - minimum_duration) / (maximumDuration(mode) - minimum_duration), 0, 1);
 }
 
-fn tailLag(duration: f32) f32 {
-    return 0.040 + 0.020 * durationWeight(duration);
+fn tailLag(self: *const Self) f32 {
+    // Acceleration changes body travel only; retain the preset's trail window.
+    return if (self.mode == .classic) 0.040 + 0.020 * durationWeight(self.mode, self.base_duration) else 0.040;
+}
+
+fn recovery(self: *const Self) f32 {
+    return if (self.mode == .classic) release else 0.080;
 }
 
 /// Hermite interpolation preserves the initial velocity and stops exactly at
@@ -82,20 +107,34 @@ pub fn velocity(self: *const Self, now: f64) Vec {
         self.velocity_from * @as(Vec, @splat((1 - t) * (1 - 3 * t)));
 }
 
-fn boundedVelocity(incoming: Vec, delta: Vec, duration: f32, width: f32) Vec {
-    const distance = length(delta);
-    if (distance < 0.001) return @splat(0);
-    const direction = delta / @as(Vec, @splat(distance));
-    const forward = @reduce(.Add, incoming * direction);
-    // Strong reversals discard old inertia instead of initially moving away.
-    if (forward < -0.5 * length(incoming)) return @splat(0);
-    var lateral = incoming - direction * @as(Vec, @splat(forward));
-    // max(t*(1-t)^2) = 4/27: keep turn bowing within a quarter cell.
-    const lateral_limit = 27.0 / 4.0 * 0.25 * @max(width, 1) / duration;
-    const lateral_speed = length(lateral);
-    if (lateral_speed > lateral_limit) lateral *= @as(Vec, @splat(lateral_limit / lateral_speed));
-    // A scalar Hermite tangent in [0, 3*distance] cannot overshoot.
-    return direction * @as(Vec, @splat(std.math.clamp(forward, 0, 3 * distance / duration))) + lateral;
+fn boundedVelocity(incoming: Vec, delta: Vec, duration: f32) Vec {
+    var result: Vec = @splat(0);
+    inline for (0..2) |axis| {
+        // A reversal or stationary target on one axis must not discard useful
+        // motion on the other. Each scalar Hermite tangent stays in [0, 3],
+        // keeping both coordinates monotone with no overshoot after a turn.
+        if (@abs(delta[axis]) >= 0.001 and incoming[axis] * delta[axis] > 0) {
+            const speed = @min(@abs(incoming[axis]), 3 * @abs(delta[axis]) / duration);
+            result[axis] = std.math.sign(delta[axis]) * speed;
+        }
+    }
+    return result;
+}
+
+/// Called only for a new target. Rendering another frame (or stopping input)
+/// must not restart, lengthen or slow the final segment of a repeat burst.
+fn acceleratedDuration(self: *Self, base: f32, now: f64) f32 {
+    if (self.mode == .instant) return 0;
+    if (self.last_target_at) |last| {
+        const gap = now - last;
+        if (gap >= 0 and gap <= repeat_gap) {
+            self.repeat_time = @min(acceleration_time, self.repeat_time + @as(f32, @floatCast(gap)));
+        } else self.repeat_time = 0;
+    } else self.repeat_time = 0;
+    self.last_target_at = now;
+    const t = self.repeat_time / acceleration_time;
+    self.speed_multiplier = 1 + (maximum_speed_multiplier - 1) * t * t * (3 - 2 * t);
+    return @max(minimum_duration, base / self.speed_multiplier);
 }
 
 fn amount(self: *const Self, now: f64) f32 {
@@ -105,7 +144,7 @@ fn amount(self: *const Self, now: f64) f32 {
         return self.shape_from + (1 - self.shape_from) * progress(elapsed / attack);
     }
     // The hold always outlasts attack, so release starts from exactly one.
-    const t = std.math.clamp(@as(f32, @floatCast(now - self.hold_until)) / release, 0, 1);
+    const t = std.math.clamp(@as(f32, @floatCast(now - self.hold_until)) / self.recovery(), 0, 1);
     const ease = t * t * (3 - 2 * t);
     return 1 - ease;
 }
@@ -128,20 +167,23 @@ fn blockMix(self: *const Self, now: f64) f32 {
 
 pub fn sample(self: *const Self, now: f64) Sample {
     var pose: Sample = .{ .center = self.target, .size = self.nativeSize(now), .block_mix = self.blockMix(now) };
-    if (self.running and now < self.hold_until + release) {
+    if (self.running and now < self.hold_until + self.recovery()) {
         const elapsed: f32 = @floatCast(@max(0, now - self.began));
         const t = if (self.duration > 0) std.math.clamp(elapsed / self.duration, 0, 1) else 1;
         const deform = self.amount(now);
-        pose.center = self.origin + (self.target - self.origin) * @as(Vec, @splat(t * t * (3 - 2 * t))) +
-            self.velocity_from * @as(Vec, @splat(self.duration * t * (1 - t) * (1 - t)));
+        if (self.mode != .instant) {
+            pose.center = self.origin + (self.target - self.origin) * @as(Vec, @splat(t * t * (3 - 2 * t))) +
+                self.velocity_from * @as(Vec, @splat(self.duration * t * (1 - t) * (1 - t)));
+        }
         pose.size *= @as(Vec, @splat(1 + expansion * deform));
         pose.roundness = deform;
     }
+    if (self.mode == .instant) return self.instantTrail(now, pose);
     if (self.history_len == 0) return pose;
 
     // Always include the last submitted body, even after a slow/missed frame.
     // Older points preserve turns instead of cutting across their chord.
-    const cutoff = @min(now - tailLag(self.duration), self.history[self.history_len - 1].time);
+    const cutoff = @min(now - self.tailLag(), self.history[self.history_len - 1].time);
     var i = self.history_len;
     var previous = pose.center;
     while (i > 0) {
@@ -164,6 +206,33 @@ pub fn sample(self: *const Self, now: f64) Sample {
     return pose;
 }
 
+/// Immediate body with time-limited submitted edges. The timestamp of the
+/// newer endpoint dates each segment, so stationary frames do not renew it.
+/// Do not compact turns here: each segment has its own fading opacity.
+fn instantTrail(self: *const Self, now: f64, initial: Sample) Sample {
+    var pose = initial;
+    var previous = pose.center;
+    var arrival = self.began;
+    var i = self.history_len;
+    while (i > 0) {
+        i -= 1;
+        const point = self.history[i];
+        if (length(point.center - previous) > 0.001) {
+            const age: f32 = @floatCast(@max(0, now - arrival));
+            if (age >= self.tailLag()) break;
+            const remaining = 1 - age / self.tailLag();
+            const n = pose.trail_len;
+            pose.trail[n] = point.center - pose.center;
+            pose.trail_radii[n] = 0.55;
+            pose.trail_opacities[n] = 0.35 * remaining;
+            pose.trail_len += 1;
+            previous = point.center;
+        }
+        arrival = point.time;
+    }
+    return pose;
+}
+
 /// Record only after the frame has been encoded and submitted. Sampling,
 /// target changes and aborted draw attempts must not invent visible history.
 pub fn recordFrame(self: *Self, now: f64, pose: Sample) void {
@@ -174,9 +243,9 @@ pub fn recordFrame(self: *Self, now: f64, pose: Sample) void {
     {
         // Drain from the frame that actually reached the target, not the
         // ideal arrival time between two display refreshes.
-        self.hold_until = @max(self.hold_until, now + tailLag(self.duration));
+        self.hold_until = @max(self.hold_until, now + self.tailLag());
     }
-    const cutoff = now - tailLag(self.duration);
+    const cutoff = now - self.tailLag();
     while (self.history_len > 1 and self.history[1].time <= cutoff) {
         std.mem.copyForwards(HistoryPoint, self.history[0 .. self.history_len - 1], self.history[1..self.history_len]);
         self.history_len -= 1;
@@ -199,7 +268,7 @@ pub fn recordFrame(self: *Self, now: f64, pose: Sample) void {
 }
 
 pub fn reset(self: *Self) void {
-    self.* = .{};
+    self.* = .{ .mode = self.mode };
 }
 
 /// Terminal redraw/blink suppresses drawing without discarding motion.
@@ -211,6 +280,7 @@ pub fn update(self: *Self, target: Vec, size: Vec, timing_width: f32, now: f64, 
     self.hidden = false;
     if (!self.initialized) {
         self.* = .{
+            .mode = self.mode,
             .initialized = true,
             .origin = target,
             .target = target,
@@ -237,11 +307,12 @@ pub fn update(self: *Self, target: Vec, size: Vec, timing_width: f32, now: f64, 
         // Nearby logical matches can arrive while the displayed body is still
         // far behind. Budget for that remaining travel too, instead of forcing
         // it into a one-cell duration. Keep the logical-step budget for turns
-        // and reversals; both timings retain the same 200ms upper bound.
-        const duration = @max(
-            timing(target - self.target, timing_width),
-            timing(target - displayed.center, timing_width),
+        // and reversals; both timings retain the selected preset upper bound.
+        const base_duration = @max(
+            timingFor(self.mode, target - self.target, timing_width),
+            timingFor(self.mode, target - displayed.center, timing_width),
         );
+        const duration = self.acceleratedDuration(base_duration, now);
         const in_flight = self.running and now < self.began + self.duration;
         const incoming = self.velocity(now);
         // Continue an opening/held shape without restarting its envelope.
@@ -251,14 +322,17 @@ pub fn update(self: *Self, target: Vec, size: Vec, timing_width: f32, now: f64, 
             self.shape_began = now;
         }
         self.origin = displayed.center;
-        self.velocity_from = if (in_flight)
-            boundedVelocity(incoming, target - displayed.center, duration, timing_width)
+        self.velocity_from = if (self.mode == .instant)
+            @splat(0)
+        else if (in_flight)
+            boundedVelocity(incoming, target - displayed.center, duration)
         else
-            (target - displayed.center) * @as(Vec, @splat(3 * (1 - durationWeight(duration)) / duration));
+            (target - displayed.center) * @as(Vec, @splat(3 * (1 - durationWeight(self.mode, base_duration)) / duration));
         self.target = target;
         self.began = now;
         self.duration = duration;
-        self.hold_until = now + @max(duration + tailLag(duration), burst_hold);
+        self.base_duration = base_duration;
+        self.hold_until = now + @max(duration + self.tailLag(), burst_hold);
         self.running = true;
     }
     if (geometry_changed) {
@@ -270,13 +344,18 @@ pub fn update(self: *Self, target: Vec, size: Vec, timing_width: f32, now: f64, 
         // Size-only transitions need a live draw schedule, even at rest.
         self.running = true;
     }
-    if (now >= self.hold_until + release) {
+    if (now >= self.hold_until + self.recovery()) {
         // If no frame was submitted during a long stall, connect the final
         // body to the last visible position and allow that trail to drain.
         if (self.history_len > 0 and length(self.history[self.history_len - 1].center - target) > 0.001) {
-            self.hold_until = now + tailLag(self.duration);
+            self.hold_until = now + self.tailLag();
             self.running = true;
-        } else self.running = false;
+        } else {
+            self.running = false;
+            self.last_target_at = null;
+            self.repeat_time = 0;
+            self.speed_multiplier = 1;
+        }
     }
     return self.sample(now);
 }
@@ -292,8 +371,8 @@ test "SmoothCursor distance timing and monotone center response" {
     const t = std.testing;
     try t.expectApproxEqAbs(@as(f32, 0.024), timing(.{ 10, 0 }, 10), 0.000001);
     try t.expectApproxEqAbs(@as(f32, 0.200), timing(.{ 80, 0 }, 10), 0.000001);
-    try t.expectApproxEqAbs(@as(f32, 0.064), timing(.{ 10, 0 }, 10) + tailLag(timing(.{ 10, 0 }, 10)), 0.000001);
-    try t.expectApproxEqAbs(@as(f32, 0.260), timing(.{ 80, 0 }, 10) + tailLag(timing(.{ 80, 0 }, 10)), 0.000001);
+    try t.expectApproxEqAbs(@as(f32, 0.064), timing(.{ 10, 0 }, 10) + (Self{ .base_duration = 0.024 }).tailLag(), 0.000001);
+    try t.expectApproxEqAbs(@as(f32, 0.260), timing(.{ 80, 0 }, 10) + (Self{ .base_duration = 0.200 }).tailLag(), 0.000001);
     try t.expectEqual(timing(.{ 30, 40 }, 10), timing(.{ 0, 50 }, 10));
     var previous: f32 = 0;
     for (0..1001) |i| {
@@ -730,4 +809,229 @@ test "SmoothCursor turns bound lateral drift and strong reversal discards wrong 
         }
         if (delta[0] < 0) try t.expectEqual(@as(Vec, @splat(0)), s.velocity_from);
     }
+}
+
+test "SmoothCursor responsive preset keeps short input fast and settles long moves sooner" {
+    const t = std.testing;
+    var s: Self = .{ .mode = .responsive };
+    _ = s.update(.{ 0, 0 }, .{ 10, 20 }, 10, 0, .block);
+    _ = s.update(.{ 10, 0 }, s.size, 10, 1, .block);
+    try t.expectApproxEqAbs(@as(f32, 0.024), s.duration, 0.000001);
+    _ = s.update(.{ 1000, 0 }, s.size, 10, 2, .block);
+    try t.expectApproxEqAbs(@as(f32, 0.160), s.duration, 0.000001);
+    try t.expect(s.sample(2.08).center[0] > 10 and s.sample(2.08).center[0] < 1000);
+    try t.expectEqual(s.target, s.sample(2.161).center);
+    try t.expectApproxEqAbs(@as(f64, 2.200), s.hold_until, 0.000001);
+    const recovering = s.sample(2.24);
+    try t.expect(recovering.size[0] > 10 and recovering.size[0] < 11.2);
+    _ = s.update(s.target, s.size, 10, 2.281, .block);
+    try t.expectEqual(s.size, s.sample(2.281).size);
+    try t.expect(!s.running);
+    s.reset();
+    try t.expectEqual(Mode.responsive, s.mode);
+}
+
+test "SmoothCursor instant body follows rapid alternating long and short lines at every frame rate" {
+    const t = std.testing;
+    for ([_]f64{ 1.0 / 60.0, 1.0 / 120.0, 1.0 / 240.0 }) |interval| {
+        for ([_]Shape{ .block, .bar, .underline }) |shape| {
+            var s: Self = .{ .mode = .instant };
+            s.recordFrame(0, s.update(.{ 600, 0 }, .{ 10, 20 }, 10, 0, shape));
+            for (1..101) |i| {
+                const now = @as(f64, @floatFromInt(i)) * interval;
+                const target: Vec = .{ if (i % 2 == 0) 600 else 80, @as(f32, @floatFromInt(i)) * 20 };
+                const pose = s.update(target, s.size, 10, now, shape);
+                try t.expectEqual(target, pose.center);
+                try t.expectEqual(target, s.sample(now + interval / 2).center);
+                try t.expect(pose.trail_len > 0 and pose.trail_len <= history_capacity);
+                try t.expect(pose.size[0] >= 10 and pose.size[0] <= 11.20001);
+                s.recordFrame(now, pose);
+            }
+            const stop = s.began;
+            try t.expectEqual(@as(u32, 0), s.sample(stop + 0.041).trail_len);
+            _ = s.update(s.target, s.size, 10, stop + 0.201, shape);
+            try t.expect(!s.running);
+            try t.expectEqual(s.size, s.sample(stop + 0.201).size);
+        }
+    }
+}
+
+test "SmoothCursor instant trail spans long jumps retains reversals and fades independently of body" {
+    const t = std.testing;
+    var s: Self = .{ .mode = .instant };
+    s.recordFrame(0, s.update(.{ 0, 0 }, .{ 10, 20 }, 10, 0, .block));
+    const jump = s.update(.{ 2000, 0 }, s.size, 10, 1, .block);
+    try t.expectEqual(@as(Vec, .{ 2000, 0 }), jump.center);
+    try t.expectEqual(@as(u32, 1), jump.trail_len);
+    try t.expectEqual(@as(Vec, .{ -2000, 0 }), jump.trail[0]);
+    try t.expectApproxEqAbs(@as(f32, 0.35), jump.trail_opacities[0], 0.000001);
+    s.recordFrame(1, jump);
+    const reversed = s.update(.{ 100, 20 }, s.size, 10, 1.01, .block);
+    try t.expectEqual(@as(u32, 2), reversed.trail_len);
+    try t.expectEqual(@as(Vec, .{ 2000, 0 }), reversed.center + reversed.trail[0]);
+    try t.expectEqual(@as(Vec, .{ 0, 0 }), reversed.center + reversed.trail[1]);
+    try t.expect(reversed.trail_opacities[1] < reversed.trail_opacities[0]);
+    s.recordFrame(1.01, reversed);
+    const fading = s.sample(1.03);
+    try t.expect(fading.trail_opacities[0] < reversed.trail_opacities[0]);
+    try t.expect(fading.size[0] > s.size[0]);
+    s.recordFrame(1.03, fading);
+    // Stationary submissions must not refresh the lifetime of old edges.
+    const drained = s.sample(1.051);
+    try t.expectEqual(@as(u32, 0), drained.trail_len);
+    try t.expect(drained.size[0] > s.size[0]);
+}
+
+test "SmoothCursor instant aborted frames do not invent trail points and hide preserves mode" {
+    const t = std.testing;
+    var s: Self = .{ .mode = .instant };
+    s.recordFrame(0, s.update(.{ 0, 0 }, .{ 10, 20 }, 10, 0, .block));
+    _ = s.update(.{ 1000, 0 }, s.size, 10, 1, .block);
+    s.hide();
+    const resumed = s.update(.{ 1000, 1000 }, .{ 2, 20 }, 10, 1.01, .bar);
+    try t.expectEqual(s.target, resumed.center);
+    try t.expectEqual(@as(u32, 1), resumed.trail_len);
+    try t.expectEqual(@as(Vec, .{ 0, 0 }), resumed.center + resumed.trail[0]);
+    s.reset();
+    try t.expectEqual(Mode.instant, s.mode);
+    try t.expectEqual(@as(usize, 0), s.history_len);
+}
+
+test "SmoothCursor repeat acceleration follows elapsed input time and keeps the preset tail" {
+    const t = std.testing;
+    for ([_]Mode{ .classic, .responsive }) |mode| {
+        // Repeat intervals and rendering frequencies must not determine the
+        // final multiplier: 300ms of sustained updates reaches the same cap.
+        for ([_]f64{ 0.008, 0.016, 0.033, 0.060, 0.100 }) |interval| {
+            var s: Self = .{ .mode = mode };
+            _ = s.update(.{ 0, 0 }, .{ 10, 20 }, 10, 0, .block);
+            _ = s.update(.{ 1000, 0 }, s.size, 10, 1, .block);
+            try t.expectEqual(@as(f32, 1), s.speed_multiplier);
+            try t.expectApproxEqAbs(maximumDuration(mode), s.duration, 0.000001);
+            var prior_multiplier: f32 = 1;
+            for (1..101) |i| {
+                const now = 1 + @as(f64, @floatFromInt(i)) * interval;
+                const before = s.sample(now);
+                const target: Vec = .{ 1000 + 100 * @as(f32, @floatFromInt(i)), 0 };
+                const after = s.update(target, s.size, 10, now, .block);
+                try t.expectEqual(before.center, after.center);
+                try t.expect(s.speed_multiplier >= prior_multiplier and s.speed_multiplier <= 2.5);
+                if (i == 1) try t.expect(s.speed_multiplier < 1.4);
+                try t.expect(s.duration >= 0.024 and s.duration <= maximumDuration(mode));
+                try t.expectApproxEqAbs(@as(f32, if (mode == .classic) 0.060 else 0.040), s.tailLag(), 0.000001);
+                if (now >= 1.301) try t.expectApproxEqAbs(@as(f32, 2.5), s.speed_multiplier, 0.000001);
+                prior_multiplier = s.speed_multiplier;
+            }
+            try t.expectApproxEqAbs(maximumDuration(mode) / 2.5, s.duration, 0.000001);
+        }
+    }
+}
+
+test "SmoothCursor reversing one axis keeps useful speed on the other without overshoot" {
+    const t = std.testing;
+    for ([_]Mode{ .classic, .responsive }) |mode| {
+        inline for (0..2) |reversed_axis| {
+            var s: Self = .{ .mode = mode };
+            _ = s.update(.{ 0, 0 }, .{ 10, 20 }, 10, 0, .block);
+            _ = s.update(.{ 1000, 1000 }, s.size, 10, 1, .block);
+            const origin = s.sample(1.05).center;
+            const incoming = s.velocity(1.05);
+            var delta: Vec = .{ 1000, 1000 };
+            delta[reversed_axis] = -1000;
+            const target = origin + delta;
+            try t.expectEqual(origin, s.update(target, s.size, 10, 1.05, .block).center);
+            const continuing_axis = 1 - reversed_axis;
+            try t.expectEqual(@as(f32, 0), s.velocity(1.05)[reversed_axis]);
+            try t.expectApproxEqAbs(incoming[continuing_axis], s.velocity(1.05)[continuing_axis], 0.001);
+            var previous = origin;
+            for (1..202) |ms| {
+                const pose = s.sample(1.05 + @as(f64, @floatFromInt(ms)) / 1000);
+                inline for (0..2) |axis| {
+                    const sign = std.math.sign(delta[axis]);
+                    try t.expect((pose.center[axis] - previous[axis]) * sign >= -0.001);
+                    try t.expect((target[axis] - pose.center[axis]) * sign >= -0.001);
+                }
+                previous = pose.center;
+            }
+            try t.expectEqual(target, previous);
+        }
+    }
+}
+
+test "SmoothCursor alternating Vim line lengths retain downward speed during repeated turns" {
+    const t = std.testing;
+    for ([_]Mode{ .classic, .responsive }) |mode| {
+        var s: Self = .{ .mode = mode };
+        _ = s.update(.{ 600, 0 }, .{ 10, 20 }, 10, 0, .block);
+        _ = s.update(.{ 80, 20 }, s.size, 10, 1, .block);
+        for (1..31) |i| {
+            const now = 1 + @as(f64, @floatFromInt(i)) * 0.033;
+            const before = s.sample(now);
+            const speed = s.velocity(now);
+            const target: Vec = .{ if (i % 2 == 0) 80 else 600, 20 * @as(f32, @floatFromInt(i + 1)) };
+            const after = s.update(target, s.size, 10, now, .block);
+            try t.expectEqual(before.center, after.center);
+            try t.expect(speed[1] > 0);
+            try t.expectApproxEqAbs(speed[1], s.velocity(now)[1], 0.001);
+            if (speed[0] * (target[0] - before.center[0]) < 0) {
+                try t.expectEqual(@as(f32, 0), s.velocity(now)[0]);
+            }
+            const next = s.sample(now + 0.008);
+            try t.expect(next.center[1] > before.center[1] and next.center[1] <= target[1]);
+        }
+        try t.expectApproxEqAbs(@as(f32, 2.5), s.speed_multiplier, 0.000001);
+        // After warming up, the body stays within two rows of the new target,
+        // even while the requested column swings between 8 and 60 every 33ms.
+        try t.expect(s.target[1] - s.sample(s.began).center[1] < 40);
+    }
+}
+
+test "SmoothCursor stop retains accelerated final deadline then resets for an isolated jump" {
+    const t = std.testing;
+    for ([_]Mode{ .classic, .responsive }) |mode| {
+        var s: Self = .{ .mode = mode };
+        _ = s.update(.{ 0, 0 }, .{ 10, 20 }, 10, 0, .block);
+        for (0..12) |i| {
+            _ = s.update(.{ @as(f32, @floatFromInt(i + 1)) * 1000, 0 }, s.size, 10, 1 + @as(f64, @floatFromInt(i)) * 0.033, .block);
+        }
+        const start = s.began;
+        const duration = s.duration;
+        const deadline = start + duration;
+        const multiplier = s.speed_multiplier;
+        try t.expectEqual(@as(f32, 2.5), multiplier);
+        for (1..10) |i| {
+            const now = start + @as(f64, @floatFromInt(i)) * duration / 10;
+            const expected = s.sample(now);
+            // No more new positions, just normal render callbacks.
+            try t.expectEqual(expected, s.update(s.target, s.size, 10, now, .block));
+            try t.expectEqual(start, s.began);
+            try t.expectEqual(duration, s.duration);
+            try t.expectEqual(multiplier, s.speed_multiplier);
+        }
+        try t.expectEqual(s.target, s.sample(deadline + 0.001).center);
+        try t.expectEqual(@as(Vec, @splat(0)), s.velocity(deadline + 0.001));
+        _ = s.update(s.target, s.size, 10, start + 1, .block);
+        try t.expect(!s.running);
+        try t.expectEqual(@as(f32, 1), s.speed_multiplier);
+        _ = s.update(s.target + @as(Vec, .{ 1000, 0 }), s.size, 10, start + 2, .block);
+        try t.expectEqual(@as(f32, 1), s.speed_multiplier);
+        try t.expectEqual(maximumDuration(mode), s.duration);
+    }
+}
+
+test "SmoothCursor redraw frequency does not accelerate and sparse targets start fresh" {
+    const t = std.testing;
+    var s: Self = .{};
+    _ = s.update(.{ 0, 0 }, .{ 10, 20 }, 10, 0, .block);
+    _ = s.update(.{ 1000, 0 }, s.size, 10, 1, .block);
+    for (1..101) |i| {
+        _ = s.update(s.target, s.size, 10, 1 + @as(f64, @floatFromInt(i)) * 0.001, .block);
+    }
+    try t.expectEqual(@as(f32, 1), s.speed_multiplier);
+    _ = s.update(.{ 2000, 0 }, s.size, 10, 1.100, .block);
+    try t.expect(s.speed_multiplier > 1);
+    _ = s.update(.{ 3000, 0 }, s.size, 10, 1.221, .block);
+    try t.expectEqual(@as(f32, 1), s.speed_multiplier);
+    s.reset();
+    try t.expect(s.last_target_at == null);
 }

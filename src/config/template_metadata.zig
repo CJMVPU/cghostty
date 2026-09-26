@@ -76,6 +76,7 @@ pub const entries = [_]Entry{
     .{ .key = .@"cursor-style-blink", .group = 2, .zh = "光标闪烁策略", .en = "Cursor style blink", .example = "true", .note = "留空允许程序控制闪烁。 / Unset allows terminal applications to control blinking." },
     .{ .key = .@"cursor-text", .group = 2, .zh = "光标覆盖处的文字色", .en = "Cursor text", .example = "#282c34" },
     .{ .key = .@"cursor-effect", .group = 2, .zh = "光标动画：开启／关闭", .en = "Cursor effect" },
+    .{ .key = .@"cursor-effect-mode", .group = 2, .zh = "光标动画方案", .en = "Cursor animation mode", .note = "classic：24～200ms 基准移动；responsive：24～160ms 移动、40ms 拖尾、80ms 恢复；前两者连续操作渐进加速至最高 2.5 倍，分轴转向，松键后保持最后一段时长。instant：主体立即到位并保留膨胀，40ms 淡出尾迹，不限制长度、不因折返清除。需 cursor-effect=true，重启生效。 / classic uses 24–200ms base travel; responsive uses 24–160ms travel, 40ms trail and 80ms recovery. Both gradually accelerate repeats up to 2.5x, handle turns per axis and preserve the final deadline. instant snaps the expanding body with a fading 40ms trail, without a distance cap or clearing on reversal. Requires cursor-effect=true; restart to apply." },
     .{ .key = .@"selection-foreground", .group = 2, .zh = "选中文字色", .en = "Selection foreground", .example = "#ffffff" },
     .{ .key = .@"selection-background", .group = 2, .zh = "选区背景色", .en = "Selection background", .example = "#3b4252" },
     .{ .key = .@"search-foreground", .group = 2, .zh = "普通搜索结果文字色", .en = "Search foreground" },

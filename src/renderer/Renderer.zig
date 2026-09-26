@@ -439,6 +439,7 @@ pub const DerivedConfig = struct {
     padding_color: configpkg.WindowPaddingColor,
     smooth_scroll: bool,
     cursor_effect: bool,
+    cursor_effect_mode: SmoothCursor.Mode,
     bg_image: ?configpkg.Path,
     bg_image_opacity: f32,
     bg_image_position: configpkg.BackgroundImagePosition,
@@ -513,6 +514,7 @@ pub const DerivedConfig = struct {
 
             .smooth_scroll = config.@"smooth-scroll",
             .cursor_effect = config.@"cursor-effect",
+            .cursor_effect_mode = config.@"cursor-effect-mode",
             .bg_image = bg_image,
             .bg_image_opacity = config.@"background-image-opacity",
             .bg_image_position = config.@"background-image-position",
@@ -2090,6 +2092,7 @@ fn updateSmoothCursor(self: *Self) ?CursorMotion.Frame {
         .size = size,
         .timing_width = timing_width,
         .shape = shape,
+        .mode = self.config.cursor_effect_mode,
     }, now) orelse return null;
     self.uniforms.smooth_center = frame.pose.center;
     self.uniforms.smooth_trail_count = frame.pose.trail_len;
@@ -2098,7 +2101,7 @@ fn updateSmoothCursor(self: *Self) ?CursorMotion.Frame {
             point[0] / @max(frame.pose.size[0] * 0.5, 0.001),
             point[1] / @max(frame.pose.size[1] * 0.5, 0.001),
             frame.pose.trail_radii[i],
-            0,
+            frame.pose.trail_opacities[i],
         };
     }
     self.uniforms.smooth_target = target;
