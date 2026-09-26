@@ -20,7 +20,7 @@ const assert = @import("quirks.zig").inlineAssert;
 const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 const global = @import("global.zig");
-const pcre2 = @import("pcre2");
+const LinkHitCache = @import("surface/LinkHitCache.zig");
 const simd = @import("simd/main.zig");
 const unicode = @import("unicode/main.zig");
 const rendererpkg = @import("renderer.zig");
@@ -51,10 +51,6 @@ const Renderer = rendererpkg.Renderer;
 /// otherwise somewhat arbitrary.
 pub const min_window_width_cells: u32 = 10;
 pub const min_window_height_cells: u32 = 4;
-
-/// The maximum number of key tables that can be active at any
-/// given time. `activate_key_table` calls after this are ignored.
-const max_active_key_tables = 8;
 
 /// Unique ID used to identify this surface for IPC purposes. It is
 /// exposed to the commands running in surfaces as the environment variable
@@ -89,6 +85,7 @@ render: *RenderSession,
 
 /// Mouse state.
 mouse: Mouse,
+link_hit_cache: LinkHitCache = .{},
 
 /// Keyboard input state.
 keyboard: Keyboard,
@@ -225,6 +222,12 @@ const Mouse = struct {
     /// The last x/y in the cursor position for links. We use this to
     /// only process link hover events when the mouse actually moves cells.
     link_point: ?terminal.point.Coordinate = null,
+    hover_key: ?struct {
+        content: terminal.accessibility.Tracker.Key,
+        pin: ?terminal.Pin,
+        point: terminal.point.Coordinate,
+        mods: input.Mods,
+    } = null,
 
     /// Return the left-click pin only if it still belongs to the active screen.
     fn activeLeftClickPin(self: *const Mouse, screens: *const terminal.ScreenSet) ?*terminal.Pin {
@@ -233,35 +236,7 @@ const Mouse = struct {
 };
 
 /// Keyboard state for the surface.
-pub const Keyboard = struct {
-    /// The currently active key sequence for the surface. If this is null
-    /// then we're not currently in a key sequence.
-    sequence_set: ?*const input.Binding.Set = null,
-
-    /// The queued keys when we're in the middle of a sequenced binding.
-    /// These are flushed when the sequence is completed and unconsumed or
-    /// invalid.
-    ///
-    /// This is naturally bounded due to the configuration maximum
-    /// length of a sequence.
-    sequence_queued: std.ArrayListUnmanaged(termio.Message.WriteReq) = .empty,
-
-    /// The stack of tables that is currently active. The first value
-    /// in this is the first activated table (NOT the default keybinding set).
-    ///
-    /// This is bounded by `max_active_key_tables`.
-    table_stack: std.ArrayListUnmanaged(struct {
-        set: *const input.Binding.Set,
-        once: bool,
-    }) = .empty,
-
-    /// The last handled binding. This is used to prevent encoding release
-    /// events for handled bindings. We only need to keep track of one because
-    /// at least at the time of writing this, its impossible for two keys of
-    /// a combination to be handled by different bindings before the release
-    /// of the prior (namely since you can't bind modifier-only).
-    last_trigger: ?u64 = null,
-};
+pub const Keyboard = @import("surface/Keyboard.zig");
 
 /// The configuration that a surface has, this is copied from the main
 /// Config struct usually to prevent sharing a single value.
@@ -317,11 +292,7 @@ const DerivedConfig = struct {
     notify_on_command_finish_after: Duration,
     key_remaps: input.KeyRemapSet,
 
-    const Link = struct {
-        regex: pcre2.Regex,
-        action: input.Link.Action,
-        highlight: input.Link.Highlight,
-    };
+    const Link = LinkHitCache.Entry;
 
     pub fn init(alloc_gpa: Allocator, config: *const configpkg.Config) !DerivedConfig {
         var arena = ArenaAllocator.init(alloc_gpa);
@@ -677,10 +648,10 @@ pub fn deinit(self: *Surface) void {
     self.io.destroy();
     self.render.destroy();
 
+    self.link_hit_cache.deinit(self.alloc);
+
     // Clean up our keyboard state
-    for (self.keyboard.sequence_queued.items) |req| req.deinit();
-    self.keyboard.sequence_queued.deinit(self.alloc);
-    self.keyboard.table_stack.deinit(self.alloc);
+    self.keyboard.deinit(self.alloc);
 
     // Clean up our font grid
     self.app.font_grid_set.deref(self.font_grid_key);
@@ -1266,6 +1237,28 @@ fn mouseRefreshLinks(
     pos_vp: terminal.point.Coordinate,
     over_link: bool,
 ) !void {
+    const cacheable = self.mouse.click_state[@intFromEnum(input.MouseButton.left)] == .release;
+    if (pos.x < 0 or pos.y < 0) {
+        self.mouse.hover_key = null;
+        return;
+    }
+    const key: @typeInfo(@TypeOf(self.mouse.hover_key)).optional.child = .{
+        .content = .read(self.render.state.terminal),
+        .pin = self.posToPin(pos),
+        .point = pos_vp,
+        .mods = self.mouseModsWithCapture(self.mouse.mods),
+    };
+    if (cacheable and over_link and self.mouse.hover_key != null and std.meta.eql(self.mouse.hover_key.?, key)) {
+        self.mouse.over_link = true;
+        self.render.state.mouse.point = pos_vp;
+        return;
+    }
+    self.mouse.hover_key = null;
+    try self.mouseRefreshLinksUncached(pos, pos_vp, over_link);
+    if (cacheable) self.mouse.hover_key = key;
+}
+
+fn mouseRefreshLinksUncached(self: *Surface, pos: apprt.CursorPos, pos_vp: terminal.point.Coordinate, over_link: bool) !void {
     // If the position is outside our viewport, do nothing
     if (pos.x < 0 or pos.y < 0) return;
 
@@ -1450,6 +1443,8 @@ pub fn updateConfig(
     };
     self.config.deinit();
     self.config = derived;
+    self.link_hit_cache.invalidate();
+    self.mouse.hover_key = null;
 
     // If our mouse is hidden but we disabled mouse hiding, then show it again.
     if (!self.config.mouse_hide_while_typing and self.mouse.hidden) {
@@ -2614,10 +2609,7 @@ fn maybeHandleBinding(
             // We don't need to cap this because it is naturally capped by
             // the config validation.
             if (try self.encodeKey(event)) |req| {
-                self.keyboard.sequence_queued.append(self.alloc, req) catch |err| {
-                    req.deinit();
-                    return err;
-                };
+                try self.keyboard.queueSequence(self.alloc, req);
             }
 
             // Setup the next set we'll look at only after all fallible work.
@@ -2750,13 +2742,7 @@ fn maybeHandleBinding(
 }
 
 fn deactivateAllKeyTables(self: *Surface) !bool {
-    switch (self.keyboard.table_stack.items.len) {
-        // No key table active. This does nothing.
-        0 => return false,
-
-        // Clear the entire table stack.
-        else => self.keyboard.table_stack.clearAndFree(self.alloc),
-    }
+    if (!self.keyboard.deactivateAll(self.alloc)) return false;
 
     // Notify the UI.
     _ = self.rt_app.performAction(
@@ -2776,33 +2762,11 @@ fn deactivateAllKeyTables(self: *Surface) !bool {
 /// This checks if the current keybinding sets have a catch_all binding
 /// with `ignore`. This is used to determine some special input cases.
 fn catchAllIsIgnore(self: *Surface) bool {
-    // Get our catch all
-    const entry: input.Binding.Set.Entry = entry: {
-        const trigger: input.Binding.Trigger = .{ .key = .catch_all };
-
-        const table_items = self.keyboard.table_stack.items;
-        for (0..table_items.len) |i| {
-            const rev_i: usize = table_items.len - 1 - i;
-            const entry = table_items[rev_i].set.get(trigger) orelse continue;
-            break :entry entry;
-        }
-
-        break :entry self.config.keybind.set.get(trigger) orelse
-            return false;
-    };
-
-    // We have a catch-all entry, see if its an ignore
-    return switch (entry.value_ptr.*) {
-        .leader => false,
-        .leaf => |leaf| leaf.action == .ignore,
-        .leaf_chained => |leaf| chained: for (leaf.actions.items) |action| {
-            if (action == .ignore) break :chained true;
-        } else false,
-    };
+    return self.keyboard.catchAllIsIgnore(&self.config.keybind.set);
 }
 
-const KeySequenceQueued = enum { flush, drop };
-const KeySequenceMemory = enum { retain, free };
+const KeySequenceQueued = Keyboard.SequenceAction;
+const KeySequenceMemory = Keyboard.SequenceMemory;
 
 /// End a key sequence. Safe to call if no key sequence is active.
 ///
@@ -2825,31 +2789,15 @@ fn endKeySequence(
         );
     };
 
-    // No matter what we clear our current sequence set. This restores
-    // the set we look at to the root set.
-    self.keyboard.sequence_set = null;
+    self.keyboard.endSequence(self.alloc, action, mem, self, sendSequenceWrite);
+}
 
-    // If we have no queued data, there is nothing else to do.
-    if (self.keyboard.sequence_queued.items.len == 0) return;
-
-    // Run the proper action first
-    switch (action) {
-        .flush => for (self.keyboard.sequence_queued.items) |write_req| {
-            self.queueIo(switch (write_req) {
-                .small => |v| .{ .write_small = v },
-                .stable => |v| .{ .write_stable = v },
-                .alloc => |v| .{ .write_alloc = v },
-            }, .unlocked);
-        },
-
-        .drop => for (self.keyboard.sequence_queued.items) |req| req.deinit(),
-    }
-
-    // Memory handling of the sequence after the action
-    switch (mem) {
-        .free => self.keyboard.sequence_queued.clearAndFree(self.alloc),
-        .retain => self.keyboard.sequence_queued.clearRetainingCapacity(),
-    }
+fn sendSequenceWrite(self: *Surface, req: termio.Message.WriteReq) void {
+    self.queueIo(switch (req) {
+        .small => |v| .{ .write_small = v },
+        .stable => |v| .{ .write_stable = v },
+        .alloc => |v| .{ .write_alloc = v },
+    }, .unlocked);
 }
 
 /// Encodes the key event into a write request. The write request will
@@ -3909,10 +3857,7 @@ fn maybePromptClick(self: *Surface) !bool {
     return true;
 }
 
-const Link = struct {
-    action: input.Link.Action,
-    selection: terminal.Selection,
-};
+const Link = LinkHitCache.Hit;
 
 /// Returns the link at the given cursor position, if any.
 ///
@@ -3959,44 +3904,7 @@ fn linkAtPin(
     mouse_pin: terminal.Pin,
     mouse_mods: ?input.Mods,
 ) !?Link {
-    if (self.config.links.len == 0) return null;
-
-    const screen: *terminal.Screen = self.render.state.terminal.screens.active;
-    const line = screen.selectLine(.{
-        .pin = mouse_pin,
-        .whitespace = null,
-        // Respect semantic prompt boundaries so link/path matching doesn't
-        // merge shell prompt content with the text beside it.
-        .semantic_prompt_boundary = true,
-    }) orelse return null;
-
-    const strmap = try screen.selectionStringMap(self.alloc, .{
-        .sel = line,
-        .trim = false,
-    });
-    defer strmap.deinit(self.alloc);
-
-    for (self.config.links) |link| {
-        // Skip highlight/mods check when mouse_mods is null (double-click mode)
-        if (mouse_mods) |mods| switch (link.highlight) {
-            .always, .hover => {},
-            .always_mods, .hover_mods => |v| if (!v.equal(mods)) continue,
-        };
-
-        var it = try strmap.searchIterator(link.regex);
-        defer it.deinit();
-        while (true) {
-            const match = (try it.next()) orelse break;
-            const sel = match.selection();
-            if (!sel.contains(screen, mouse_pin)) continue;
-            return .{
-                .action = link.action,
-                .selection = sel,
-            };
-        }
-    }
-
-    return null;
+    return self.link_hit_cache.lookup(self.alloc, self.render.state.terminal, mouse_pin, mouse_mods, self.config.links);
 }
 
 /// This returns the mouse mods to consider for link highlighting or
@@ -5081,31 +4989,7 @@ pub fn performBindingAction(self: *Surface, action: input.Binding.Action) !bool 
                 return false;
             };
 
-            // If this is the same table as is currently active, then
-            // do nothing.
-            if (self.keyboard.table_stack.items.len > 0) {
-                const items = self.keyboard.table_stack.items;
-                const active = items[items.len - 1].set;
-                if (active == set) {
-                    log.debug("ignoring duplicate activate table: {s}", .{name});
-                    return false;
-                }
-            }
-
-            // If we're already at the max, ignore it.
-            if (self.keyboard.table_stack.items.len >= max_active_key_tables) {
-                log.info(
-                    "ignoring activate table, max depth reached: {s}",
-                    .{name},
-                );
-                return false;
-            }
-
-            // Add the table to the stack.
-            try self.keyboard.table_stack.append(self.alloc, .{
-                .set = set,
-                .once = tag == .activate_key_table_once,
-            });
+            if (!try self.keyboard.activateTable(self.alloc, set, tag == .activate_key_table_once)) return false;
 
             // Notify the UI.
             _ = self.rt_app.performAction(
@@ -5123,18 +5007,7 @@ pub fn performBindingAction(self: *Surface, action: input.Binding.Action) !bool 
         },
 
         .deactivate_key_table => {
-            switch (self.keyboard.table_stack.items.len) {
-                // No key table active. This does nothing.
-                0 => return false,
-
-                // Final key table active, clear our state.
-                1 => self.keyboard.table_stack.clearAndFree(self.alloc),
-
-                // Restore the prior key table. We don't free any memory in
-                // this case because we assume it will be freed later when
-                // we finish our key table.
-                else => _ = self.keyboard.table_stack.pop(),
-            }
+            if (!self.keyboard.deactivateTable(self.alloc)) return false;
 
             // Notify the UI.
             _ = self.rt_app.performAction(
@@ -5489,4 +5362,9 @@ test "queueIo frees allocated writes in readonly mode" {
         .alloc = testing.allocator,
         .data = data,
     } }, .unlocked);
+}
+
+test {
+    _ = LinkHitCache;
+    _ = Keyboard;
 }

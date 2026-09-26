@@ -19,7 +19,7 @@ const isCovering = cellpkg.isCovering;
 const rowNeverExtendBg = @import("row.zig").neverExtendBg;
 const imagepkg = @import("image.zig");
 const ImageState = imagepkg.State;
-const ScrollMotion = @import("ScrollMotion.zig");
+const ScrollScene = @import("ScrollScene.zig");
 const SmoothCursor = @import("SmoothCursor.zig");
 const FrameScheduler = @import("FrameScheduler.zig");
 const CursorMotion = @import("CursorMotion.zig");
@@ -118,7 +118,7 @@ trace: Trace = .{},
 
 /// The current GPU uniform values.
 uniforms: shaderpkg.Uniforms,
-scroll_motion: ScrollMotion = .{},
+scroll: ScrollScene.Scene = .{},
 scroll_shared: ?*renderer.State = null,
 scroll_snapshot: struct {
     journal: @import("../terminal/ScrollState.zig") = .{},
@@ -126,13 +126,6 @@ scroll_snapshot: struct {
     cols: u16 = 0,
     alternate: bool = false,
 } = .{},
-scroll_textures: [3]?Texture = @splat(null),
-scroll_scene: ?usize = null,
-scroll_previous: ?usize = null,
-scroll_presented: ?usize = null,
-scroll_revision: ?u64 = null,
-scroll_config: usize = 0,
-scroll_failed: std.atomic.Value(bool) = .init(false),
 
 cursor_motion: CursorMotion = .{},
 
@@ -384,6 +377,7 @@ const FrameState = struct {
     }
 
     pub fn deinit(self: *FrameState) void {
+        self.cell_upload.deinit();
         self.background_upload.deinit();
         self.commands.deinit();
         self.target.deinit();
@@ -804,7 +798,7 @@ fn animationWakeFor(self: *const Self, vsync_running: bool) ?AnimationWake {
     } else null;
     return FrameScheduler.timerWake(
         now_ms,
-        self.cursor_motion.isActive() or self.scroll_motion.active(),
+        self.cursor_motion.isActive() or self.scroll.motion.active(),
         deadline,
         vsync_running,
     );
@@ -1358,6 +1352,13 @@ pub fn drawFrame(
     if (sync_display_link) self.syncDisplayLink(null, null);
 }
 
+/// Release cached scenes and stop publishing their hit geometry.
+/// Must be called with `draw_mutex` held.
+fn releaseScrollTextures(self: *Self) void {
+    if (self.scroll_shared) |shared| shared.scroll_hit.publish(.{});
+    self.scroll.reset();
+}
+
 /// The body of `drawFrame`. Must be called with `draw_mutex` held.
 ///
 /// Returns true if the display link should be resynced once the
@@ -1365,28 +1366,6 @@ pub fn drawFrame(
 /// path, which a sync draw never takes, so the main thread's sync
 /// draws never touch the display link and `syncDisplayLink` stays
 /// on the render thread.
-fn releaseScrollTextures(self: *Self) void {
-    if (self.scroll_shared) |shared| shared.scroll_hit.publish(.{});
-    for (&self.scroll_textures) |*texture| {
-        if (texture.*) |t| t.deinit();
-        texture.* = null;
-    }
-    self.scroll_scene = null;
-    self.scroll_previous = null;
-    self.scroll_presented = null;
-    self.scroll_revision = null;
-    self.scroll_motion = .{};
-}
-
-fn scrollTexture(self: *Self, excluded: []const ?usize) !usize {
-    outer: for (&self.scroll_textures, 0..) |*texture, i| {
-        for (excluded) |index| if (index == i) continue :outer;
-        if (texture.* == null) texture.* = try self.api.initContentTexture(self.size.screen.width, self.size.screen.height);
-        return i;
-    }
-    unreachable; // Three slots: current scene, frozen history, composed destination.
-}
-
 fn drawFrameLocked(
     self: *Self,
     sync: bool,
@@ -1440,7 +1419,7 @@ fn drawFrameLocked(
     // every draw must actually render.
     const needs_redraw =
         size_changed or
-        self.scroll_failed.load(.acquire) or
+        self.scroll.failed.load(.acquire) or
         swap_chain_rebuilt or
         self.cells_rebuilt or
         self.animationWakeLocked() != null or
@@ -1499,6 +1478,7 @@ fn drawFrameLocked(
     }
 
     // Upload images to the GPU as necessary.
+    if (self.images.upload_dirty) self.scroll.key = null;
     _ = self.images.upload(self.alloc, &self.api);
     _ = try self.images.prepareDraw(&frame.image_instances, &frame.image_revision);
 
@@ -1509,24 +1489,24 @@ fn drawFrameLocked(
 
     const scroll_enabled = self.config.smooth_scroll and !self.api.reduceMotion() and
         self.images.kitty_placements.items.len == self.images.kitty_text_end;
-    if (self.scroll_failed.swap(false, .acq_rel) or self.scroll_config != self.target_config_modified or size_changed or !scroll_enabled) {
+    if (self.scroll.failed.swap(false, .acq_rel) or self.scroll.config != self.target_config_modified or size_changed or !scroll_enabled) {
         self.releaseScrollTextures();
-        self.scroll_config = self.target_config_modified;
+        self.scroll.config = self.target_config_modified;
     }
     // A terminal resize can arrive before the native backing size update.
-    if (self.scroll_textures[0]) |t| {
+    if (self.scroll.textures[0]) |t| {
         if (t.width != self.size.screen.width or t.height != self.size.screen.height) self.releaseScrollTextures();
     }
     const scroll_now = @as(f64, @floatFromInt(std.Io.Timestamp.now(global.io(), .awake).nanoseconds)) / std.time.ns_per_s;
-    if (self.scroll_motion.update(self.scroll_snapshot.journal, self.scrollbar.offset, self.scroll_snapshot.rows, self.scroll_snapshot.cols, self.scroll_snapshot.alternate, @floatFromInt(self.size.cell.height), scroll_now, scroll_enabled)) {
-        self.scroll_previous = self.scroll_presented;
+    if (self.scroll.motion.update(self.scroll_snapshot.journal, self.scrollbar.offset, self.scroll_snapshot.rows, self.scroll_snapshot.cols, self.scroll_snapshot.alternate, @floatFromInt(self.size.cell.height), scroll_now, scroll_enabled)) {
+        self.scroll.previous = self.scroll.presented;
     }
-    self.scroll_motion.sample(scroll_now);
-    if (self.trace.file != null and self.scroll_motion.len > 0) self.trace.emit("scroll", self.scroll_motion.len, @intFromFloat(@abs(self.scroll_motion.regions[0].shown) * 1000), @intFromFloat(@abs(self.scroll_motion.regions[0].start) * 1000));
-    if (self.scroll_previous == null) self.scroll_motion.reset();
-    self.uniforms.scroll_count = @intCast(self.scroll_motion.len);
+    self.scroll.motion.sample(scroll_now);
+    if (self.trace.file != null and self.scroll.motion.len > 0) self.trace.emit("scroll", self.scroll.motion.len, @intFromFloat(@abs(self.scroll.motion.regions[0].shown) * 1000), @intFromFloat(@abs(self.scroll.motion.regions[0].start) * 1000));
+    if (self.scroll.previous == null) self.scroll.motion.reset();
+    self.uniforms.scroll_count = @intCast(self.scroll.motion.len);
     self.uniforms.scroll_mode = if (scroll_enabled) 2 else 0;
-    for (self.scroll_motion.regions[0..self.scroll_motion.len], 0..) |r, i| {
+    for (self.scroll.motion.regions[0..self.scroll.motion.len], 0..) |r, i| {
         const cw: f32 = @floatFromInt(self.size.cell.width);
         const ch: f32 = @floatFromInt(self.size.cell.height);
         const px = self.uniforms.grid_padding[3];
@@ -1534,8 +1514,9 @@ fn drawFrameLocked(
         self.uniforms.scroll_rects[i] = .{ px + @as(f32, @floatFromInt(r.rect.left)) * cw, py + @as(f32, @floatFromInt(r.rect.top)) * ch, px + @as(f32, @floatFromInt(r.rect.right)) * cw, py + @as(f32, @floatFromInt(r.rect.bottom)) * ch };
         self.uniforms.scroll_offsets[i] = .{ r.shown, r.start };
     }
-    const scene_dirty = self.scroll_scene == null or self.scroll_revision != self.cells_revision;
-    if (scroll_enabled and scene_dirty) self.scroll_scene = try self.scrollTexture(&.{ self.scroll_presented, self.scroll_previous });
+    const scene_key: ScrollScene.Key = .{ .content = self.cells.bg_revision, .images = self.images.placement_revision, .background = self.uniforms.bg_color };
+    const scene_dirty = self.scroll.dirty(scene_key);
+    if (scroll_enabled and scene_dirty) self.scroll.scene = try self.scroll.acquire(&self.api, self.size.screen.width, self.size.screen.height, &.{ self.scroll.presented, self.scroll.previous });
 
     // Uniform buffers are per in-flight frame; content and cursor passes must
     // never overwrite a buffer already referenced by an earlier pass.
@@ -1552,11 +1533,7 @@ fn drawFrameLocked(
         self.cells.bg_versions,
         self.cells.bg_revision,
     );
-    if (frame.cell_upload.needed(self.cells_revision)) {
-        const count = try frame.cells.syncFromArrayLists(self.cells.fg_rows);
-        frame.cell_upload.commit(self.cells_revision, count);
-        copied_bytes += count * @sizeOf(shaderpkg.CellText);
-    }
+    copied_bytes += try frame.cell_upload.sync(self.alloc, &frame.cells, &self.cells, self.cells_revision);
     const fg_count = frame.cell_upload.foreground_count;
 
     // If our background image buffer has changed, sync it.
@@ -1593,7 +1570,7 @@ fn drawFrameLocked(
     if (!scroll_enabled or scene_dirty) {
         const content_buffer = if (scroll_enabled) frame.content_uniforms.buffer else frame.uniforms.buffer;
         var pass = frame_ctx.renderPass(&.{.{
-            .target = if (scroll_enabled) .{ .texture = self.scroll_textures[self.scroll_scene.?].? } else .{ .target = frame.target },
+            .target = if (scroll_enabled) .{ .texture = self.scroll.textures[self.scroll.scene.?].? } else .{ .target = frame.target },
             .clear_color = .{ 0.0, 0.0, 0.0, 0.0 },
         }});
         defer pass.complete();
@@ -1697,19 +1674,19 @@ fn drawFrameLocked(
     }
 
     if (scroll_enabled) {
-        self.scroll_revision = self.cells_revision;
-        var displayed = self.scroll_scene.?;
-        if (self.scroll_motion.len > 0) {
-            displayed = try self.scrollTexture(&.{ self.scroll_scene, self.scroll_previous });
-            var pass = frame_ctx.renderPass(&.{.{ .target = .{ .texture = self.scroll_textures[displayed].? }, .clear_color = .{ 0, 0, 0, 0 } }});
+        self.scroll.key = scene_key;
+        var displayed = self.scroll.scene.?;
+        if (self.scroll.motion.len > 0) {
+            displayed = try self.scroll.acquire(&self.api, self.size.screen.width, self.size.screen.height, &.{ self.scroll.scene, self.scroll.previous });
+            var pass = frame_ctx.renderPass(&.{.{ .target = .{ .texture = self.scroll.textures[displayed].? }, .clear_color = .{ 0, 0, 0, 0 } }});
             pass.step(.{
                 .pipeline = self.shaders.pipelines.scroll_compose,
                 .uniforms = frame.uniforms.buffer,
-                .textures = &.{ self.scroll_textures[self.scroll_scene.?].?, self.scroll_textures[self.scroll_previous.?].? },
+                .textures = &.{ self.scroll.textures[self.scroll.scene.?].?, self.scroll.textures[self.scroll.previous.?].? },
                 .draw = .{ .type = .triangle, .vertex_count = 3 },
             });
             pass.complete();
-        } else self.scroll_previous = null;
+        } else self.scroll.previous = null;
 
         var pass = frame_ctx.renderPass(&.{.{ .target = .{ .target = frame.target }, .clear_color = .{ 0, 0, 0, 0 } }});
         defer pass.complete();
@@ -1726,7 +1703,7 @@ fn drawFrameLocked(
         };
         pass.step(.{
             .pipeline = self.shaders.pipelines.scroll_copy,
-            .textures = &.{self.scroll_textures[displayed].?},
+            .textures = &.{self.scroll.textures[displayed].?},
             .draw = .{ .type = .triangle, .vertex_count = 3 },
         });
         if (self.uniforms.smooth_effect > 0 and self.uniforms.smooth_block != 0) pass.step(.{
@@ -1746,7 +1723,7 @@ fn drawFrameLocked(
             .uniforms = frame.uniforms.buffer,
             .draw = .{ .type = .triangle, .vertex_count = 3 },
         });
-        self.scroll_presented = displayed;
+        self.scroll.presented = displayed;
     }
 
     if (self.scroll_shared) |shared| shared.scroll_hit.publish(.{
@@ -1773,7 +1750,7 @@ pub fn frameCompleted(
     // A failed GPU submission must not seed the next visible trail.
     if (health == .unhealthy) {
         self.cursor_motion.invalidate();
-        self.scroll_failed.store(true, .release);
+        self.scroll.failed.store(true, .release);
     }
     // If our health value hasn't changed, then we do nothing. We don't
     // do a cmpxchg here because strict atomicity isn't important.

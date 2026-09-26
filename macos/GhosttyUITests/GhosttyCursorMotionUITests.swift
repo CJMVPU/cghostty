@@ -92,9 +92,9 @@ final class GhosttyCursorMotionUITests: GhosttyCustomConfigCase {
             requested = control.read_text()
             if requested != mode:
                 mode = requested
-                color = '1' if mode == 'red' else '4'
-                sys.stdout.write('\\033[0m\\033[2J\\033[1;1H\\033[3' + color + 'mMMMMMMMM')
-                sys.stdout.write('\\033[2;1H\\033[4' + color + 'm          \\033[0m\\033[3;8H')
+                color = '255;0;0' if mode == 'red' else '0;0;255'
+                sys.stdout.write('\\033[0m\\033[2J\\033[1;1H\\033[38;2;' + color + 'mMMMMMMMM')
+                sys.stdout.write('\\033[2;1H\\033[48;2;' + color + 'm          \\033[0m\\033[3;8H')
                 sys.stdout.write('\\033[' + ('5' if mode == 'blink' else '6') + ' q')
                 sys.stdout.write('\\033]0;Cache ' + mode + '\\007')
             if mode in ['red', 'blue']:
@@ -110,8 +110,6 @@ final class GhosttyCursorMotionUITests: GhosttyCustomConfigCase {
         background = #000000
         cursor-color = #00ff00
         cursor-effect = true
-        palette = 1=#ff0000
-        palette = 4=#0000ff
         """)
         let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         app.launchEnvironment["MTL_DEBUG_LAYER"] = "1"

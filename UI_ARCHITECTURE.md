@@ -163,3 +163,12 @@ can prepare new terminals; it does not clear the failed session's explanation.
 Ordinary child exit notices and synchronous surface-allocation failures remain
 separate. If native presentation declines the fault, Surface owns the text
 fallback and rendering wakeup; the IO worker owns neither native UI nor prose.
+
+## Batch tab closing
+
+`TerminalController+TabClose` selects an ordered target snapshot and shares one
+confirmation, undo grouping, focus restoration and redo path for closing other
+tabs or tabs to the right. A confirmation never includes tabs opened afterward;
+targets that moved out of the group are ignored. Undo retains the existing split
+trees and SurfaceViews, preserving shell sessions. Deferred focus restoration
+requires the anchor controller to remain registered with its owning app.

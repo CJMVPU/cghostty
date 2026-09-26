@@ -227,6 +227,19 @@ copy. Initial font references are also released when surface creation fails.
 Surface still owns IO startup, input coordination and effective configuration;
 those boundaries have not yet been replaced with separate sessions.
 
+`surface/Keyboard.zig` owns bounded key-table state and queued sequence writes.
+It releases discarded writes, transfers flushed writes to a supplied sink and
+frees retained storage on configuration reset. Surface keeps native notifications,
+key encoding, closing-action lifetime checks and actual IO submission.
+
+`surface/LinkHitCache.zig` caches one logical line's ordered regex hits, including
+misses. Lookup requires the terminal mutex. Its terminal mutation, screen
+identity, page serial, viewport and modifier key must match before any cached
+untracked selection is accessed. Configuration changes explicitly invalidate it.
+Cached hits are bounded to 1024; larger match sets fall back to uncached lookup.
+Overlapping rules retain their original priority. Hover notifications are also
+coalesced within an unchanged cell, including the scroll-adjusted pin identity.
+
 ## Rendering and change boundaries
 
 Terminal semantics, frame preparation, motion geometry and Metal resource
@@ -235,15 +248,27 @@ terminal/frame updates and retain deadlines; a Boolean 'animate' flag is not
 enough for Kitty animations and cursor movement to coexist. Native window/tab
 animations stay in AppKit/SwiftUI.
 
-Each swap-chain slot tracks its own uploaded cell revision and foreground
-count (`CellUpload`). A content rebuild advances the revision; a draw-only
-frame reuses both cell buffers once that slot has caught up. Both uploads must
-succeed before committing the revision. Resizing/recreating a frame invalidates
-its cache, and revision wrap invalidates all slots. Uniforms remain per-frame.
+Each swap-chain slot tracks its own foreground revision, row versions, packed
+row offsets and draw count (`CellUpload`). Changed rows are copied; unchanged
+rows are copied only if a preceding row changes their offset. Two fixed,
+degenerate cursor slots preserve text offsets while blinking or switching cursor
+shape. `RowUpload` independently tracks background rows. Versions publish only
+after a successful upload; allocation/buffer failures force a complete retry.
+Resizing/recreating a frame invalidates its cache, and revision wrap invalidates
+all slots. Draw-only frames reuse buffers. Uniforms remain per-frame.
+
+`renderer/ScrollScene.zig` owns the three scene/history/composition textures and
+scroll motion state under the draw lock. Cached scene identity includes content
+row revision, image placement revision and background color, but excludes cursor
+changes. Pending image uploads invalidate the scene, including retry after a
+failed upload. Config/size/visibility changes release resources through the same
+reset path. The renderer retains pass ordering, hit publication and synchronization;
+GPU failure only publishes an atomic invalidation request.
+
 GPU and presentation failures share one health result (`Presentation`), with
 the frame-slot semaphore released exactly once by the existing completion path.
-Opt-in `CGHOSTTY_RENDER_TRACE` writes per-surface timing/count CSVs without
-terminal text. Normal launches do not collect timings or write trace files.
+Opt-in `render-trace = true` writes per-surface timing/count CSVs without terminal
+text. Normal launches do not collect timings or write trace files.
 
 `renderer/CursorMotion.zig` owns cursor motion lifecycle: draw-lock-owned
 geometry and atomic invalidation/activity at the thread boundary. Terminal

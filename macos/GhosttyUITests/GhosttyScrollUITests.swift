@@ -28,10 +28,9 @@ final class GhosttyScrollUITests: GhosttyCustomConfigCase {
             tick += 1
             time.sleep(0.16)
         """.write(to: script, atomically: true, encoding: .utf8)
-        try updateConfig(baseConfig + "\ncommand = /usr/bin/python3 -u \(script.path) \(control.path)")
+        try updateConfig(baseConfig(directory) + "\ncommand = /usr/bin/python3 -u \(script.path) \(control.path)")
         let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         app.launchEnvironment["MTL_DEBUG_LAYER"] = "1"
-        app.launchArguments += ["--render-trace=true", "--render-trace-directory=\(directory.path)"]
         app.launch()
         app.activate()
         defer { app.terminate() }
@@ -44,7 +43,12 @@ final class GhosttyScrollUITests: GhosttyCustomConfigCase {
         try "moving".write(to: control, atomically: true, encoding: .utf8)
         XCTAssertTrue(window.wait(for: \.title, toEqual: "Scroll moving", timeout: 5))
         var intermediates = 0
-        for _ in 0..<16 {
+        var samples = 0
+        let deadline = ProcessInfo.processInfo.systemUptime + 5
+        // Screenshot cadence can align with settled frames. Keep sampling
+        // until motion is observed, with a bounded deadline and no fixed sleep.
+        while (samples < 16 || intermediates == 0) && ProcessInfo.processInfo.systemUptime < deadline {
+            samples += 1
             let shot = surface.screenshot()
             guard let bands = Bands(shot.image), bands.edges.count > 2 else { continue }
             XCTAssertEqual(bands.green, baseline.green, "The status row must not move")
@@ -74,19 +78,21 @@ final class GhosttyScrollUITests: GhosttyCustomConfigCase {
         print('\\033]0;Scroll history\\007', end='', flush=True)
         time.sleep(120)
         """.write(to: script, atomically: true, encoding: .utf8)
-        try updateConfig(baseConfig + "\ncommand = /usr/bin/python3 -u \(script.path)")
+        try updateConfig(baseConfig(directory) + "\ncommand = /usr/bin/python3 -u \(script.path)")
         let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         app.launchEnvironment["MTL_DEBUG_LAYER"] = "1"
-        app.launchArguments += ["--render-trace=true", "--render-trace-directory=\(directory.path)"]
         app.launch()
         app.activate()
         var window = app.windows.firstMatch
         XCTAssertTrue(window.wait(for: \.title, toEqual: "Scroll history", timeout: 10))
         let before = window.textViews.firstMatch.screenshot().pngRepresentation
-        window.textViews.firstMatch.scroll(byDeltaX: 0, deltaY: 12)
+        // Use more than one cell of wheel distance at this font size.
+        // A sub-cell gesture can change the cursor screenshot without scrolling.
+        window.textViews.firstMatch.scroll(byDeltaX: 0, deltaY: 120)
         let changed = NSPredicate { _, _ in window.textViews.firstMatch.screenshot().pngRepresentation != before }
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: changed, object: nil)], timeout: 5), .completed)
-        window.textViews.firstMatch.scroll(byDeltaX: 0, deltaY: -8)
+        window.textViews.firstMatch.scroll(byDeltaX: 0, deltaY: -80)
+        closeAndFlushScrollTrace(app, directory: directory)
         app.terminate()
         try assertHealthyTrace(directory, requiresMotion: true)
 
@@ -110,7 +116,7 @@ final class GhosttyScrollUITests: GhosttyCustomConfigCase {
           vim.o.titlestring = 'Scroll nvim '..vim.fn.line('w0')
         end})
         """.write(to: config, atomically: true, encoding: .utf8)
-        try updateConfig(baseConfig + "\ncommand = \(nvim) -u \(config.path) -i NONE -n")
+        try updateConfig(baseConfig(directory) + "\ncommand = \(nvim) -u \(config.path) -i NONE -n")
         app.launch()
         app.activate()
         defer { app.terminate() }
@@ -123,6 +129,7 @@ final class GhosttyScrollUITests: GhosttyCustomConfigCase {
         let moved = NSPredicate { _, _ in window.title.hasPrefix("Scroll nvim ") && window.title != "Scroll nvim 1" }
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: moved, object: nil)], timeout: 5), .completed)
         XCTAssertEqual(Bands(surface.screenshot().image)?.green, status)
+        closeAndFlushScrollTrace(app, directory: directory)
         app.terminate()
         try assertHealthyTrace(directory, requiresMotion: true)
     }
@@ -146,10 +153,9 @@ final class GhosttyScrollUITests: GhosttyCustomConfigCase {
             os.write(1, data.encode())
             time.sleep(0.25)
         """.write(to: script, atomically: true, encoding: .utf8)
-        try updateConfig(baseConfig + "\ncommand = /usr/bin/python3 -u \(script.path)")
+        try updateConfig(baseConfig(directory) + "\ncommand = /usr/bin/python3 -u \(script.path)")
         let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         app.launchEnvironment["MTL_DEBUG_LAYER"] = "1"
-        app.launchArguments += ["--render-trace=true", "--render-trace-directory=\(directory.path)"]
         app.launch()
         app.activate()
         defer { app.terminate() }
@@ -166,15 +172,19 @@ final class GhosttyScrollUITests: GhosttyCustomConfigCase {
         try assertHealthyTrace(directory, requiresMotion: false)
     }
 
-    private var baseConfig: String {
+    private func baseConfig(_ directory: URL) -> String {
         """
         shell-integration = none
         confirm-close-surface = false
+        undo-timeout = 0s
+        quit-after-last-window-closed = false
         background = #000000
         foreground = #ffffff
         smooth-scroll = true
         cursor-style-blink = false
         font-size = 16
+        render-trace = true
+        render-trace-directory = \(directory.path)
         """
     }
 
@@ -192,6 +202,22 @@ final class GhosttyScrollUITests: GhosttyCustomConfigCase {
         }
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: ready, object: nil)], timeout: 5), .completed)
         return try XCTUnwrap(found)
+    }
+
+    @MainActor private func closeAndFlushScrollTrace(_ app: XCUIApplication, directory: URL) {
+        // Closing with undo disabled destroys the surface and flushes the
+        // partial trace batch. Killing an idle process can lose that batch.
+        app.typeKey("w", modifierFlags: .command)
+        XCTAssertTrue(app.wait(for: \.windows.count, toEqual: 0, timeout: 5))
+        let ready = NSPredicate { _, _ in
+            guard let paths = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else { return false }
+            let traces = paths.filter { $0.pathExtension == "csv" }
+            return !traces.isEmpty && traces.allSatisfy { path in
+                guard let text = try? String(contentsOf: path, encoding: .utf8) else { return false }
+                return text.split(separator: "\n").contains { $0.hasPrefix("scroll,") }
+            }
+        }
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: ready, object: nil)], timeout: 5), .completed)
     }
 
     private func assertHealthyTrace(_ directory: URL, requiresMotion: Bool) throws {
