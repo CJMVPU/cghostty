@@ -38,7 +38,7 @@ pub const FileFormatter = struct {
         defer if (default) |*v| v.deinit();
 
         inline for (@typeInfo(Config).@"struct".fields) |field| {
-            if (field.name[0] == '_') continue;
+            if (comptime !Config.isUserConfigKey(field.name)) continue;
 
             const value = @field(self.config, field.name);
             const do_format = if (default) |*d| format: {
@@ -85,7 +85,8 @@ test "format default config" {
     };
     try fmt.format(&buf.writer);
 
-    //std.log.warn("{s}", .{buf.written()});
+    try testing.expect(!std.mem.startsWith(u8, buf.written(), "palette ="));
+    try testing.expect(std.mem.indexOf(u8, buf.written(), "\npalette =") == null);
 }
 
 test "format default config changed" {
@@ -106,5 +107,6 @@ test "format default config changed" {
     };
     try fmt.format(&buf.writer);
 
-    //std.log.warn("{s}", .{buf.written()});
+    try testing.expect(!std.mem.startsWith(u8, buf.written(), "palette ="));
+    try testing.expect(std.mem.indexOf(u8, buf.written(), "\npalette =") == null);
 }

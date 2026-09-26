@@ -48,6 +48,10 @@
 - 文件缺失或为空时，使用内置默认值
 - 主动打开配置时，生成带中英文名称、默认值和示例的模板
 - 现有配置首次加入模板前自动备份，保留原有内容
+- 模板开头分为中文、英文两段；每项只保留名称、默认值和示例，枚举可选值并入默认行
+- `keybind`、`command-palette-entry` 的完整默认列表统一放在末尾附录
+- 终端调色板由主题提供；个人配置和命令行不再支持 `palette` 手动覆盖
+- 已有配置按原有规则保留，只补充缺少的配置项；可先导出新模板对照整理，避免重置有效设置
 
 ### 分类
 
@@ -128,6 +132,9 @@ smooth-scroll = true
 
 ```sh
 CGHOSTTY="/Applications/cghostty.app/Contents/MacOS/cghostty"
+
+# 导出精简的中英文模板，不读取或改写当前用户配置。
+"$CGHOSTTY" +show-config --template --no-pager > config-template.ghostty
 
 # 查看默认配置与英文说明。
 "$CGHOSTTY" +show-config --default --docs --no-pager

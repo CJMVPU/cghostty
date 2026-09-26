@@ -114,6 +114,7 @@ pub fn run(alloc: Allocator) !u8 {
 }
 
 fn explainOption(name: []const u8) ?[]const u8 {
+    if (!@import("../config/Config.zig").isUserConfigKey(name)) return null;
     const key = std.meta.stringToEnum(ConfigKey, name) orelse return null;
     return switch (key) {
         inline else => |tag| {

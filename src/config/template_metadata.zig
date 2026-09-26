@@ -62,7 +62,6 @@ pub const entries = [_]Entry{
     .{ .key = .@"background-image-fit", .group = 2, .zh = "背景图片缩放方式", .en = "Background image fit" },
     .{ .key = .@"background-image-repeat", .group = 2, .zh = "背景图片平铺", .en = "Background image repeat" },
     .{ .key = .@"minimum-contrast", .group = 2, .zh = "最低对比度", .en = "Minimum contrast", .note = "对比度比值：1～21；1 不额外增强。 / Contrast ratio 1–21; 1 leaves contrast unchanged." },
-    .{ .key = .palette, .group = 2, .zh = "终端 256 色调色板覆盖", .en = "Palette", .example = "1=#bf616a", .note = "索引 0～255；可重复设置不同索引。 / Index 0–255; repeat for multiple colors." },
     .{ .key = .@"palette-generate", .group = 2, .zh = "自动生成扩展调色板", .en = "Palette generate" },
     .{ .key = .@"palette-harmonious", .group = 2, .zh = "扩展调色板协调处理", .en = "Palette harmonious" },
     .{ .key = .@"background-opacity", .group = 2, .zh = "背景不透明度", .en = "Background opacity", .example = "0.9", .note = "范围：0～1。 / Range: 0–1." },

@@ -97,7 +97,7 @@ fn writeBashCompletions(writer: *std.Io.Writer) !void {
     );
 
     for (@typeInfo(Config).@"struct".fields) |field| {
-        if (field.name[0] == '_') continue;
+        if (!Config.isUserConfigKey(field.name)) continue;
         switch (field.type) {
             bool, ?bool => try writer.writeAll(pad2 ++ "config+=\" '--" ++ field.name ++ " '\"\n"),
             else => try writer.writeAll(pad2 ++ "config+=\" --" ++ field.name ++ "=\"\n"),
@@ -111,7 +111,7 @@ fn writeBashCompletions(writer: *std.Io.Writer) !void {
     );
 
     for (@typeInfo(Config).@"struct".fields) |field| {
-        if (field.name[0] == '_') continue;
+        if (!Config.isUserConfigKey(field.name)) continue;
         try writer.writeAll(pad3 ++ "--" ++ field.name ++ ") ");
 
         if (std.mem.startsWith(u8, field.name, "font-family"))

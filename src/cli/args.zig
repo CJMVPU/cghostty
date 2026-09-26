@@ -232,6 +232,10 @@ pub fn parseIntoField(
     const info = @typeInfo(T);
     assert(info == .@"struct");
 
+    if (@hasDecl(T, "allowConfigField")) {
+        if (!dst.allowConfigField(key)) return Error.InvalidField;
+    }
+
     inline for (info.@"struct".fields) |field| {
         if (field.name[0] != '_' and mem.eql(u8, field.name, key)) {
             // For optional fields, we just treat it as the child type.

@@ -19,6 +19,9 @@ pub const Options = struct {
     /// if available.
     docs: bool = false,
 
+    /// Print the editable bilingual template, without loading user settings.
+    template: bool = false,
+
     /// Disable automatic paging of output.
     @"no-pager": bool = false,
 
@@ -62,6 +65,10 @@ pub const Options = struct {
 ///     options, especially paired with `--default`.
 ///
 ///   * `--no-pager`: Disable automatic paging of output.
+///
+///   * `--template`: Print the compact bilingual editing template and its
+///     default-value appendices. Does not load or change the user configuration;
+///     overrides `--default`, `--changes-only`, and `--docs`.
 pub fn run(alloc: Allocator) !u8 {
     var opts: Options = .{};
     defer opts.deinit();
@@ -72,22 +79,26 @@ pub fn run(alloc: Allocator) !u8 {
         try args.parse(Options, alloc, &opts, &iter);
     }
 
-    var config = if (opts.default) try Config.default(alloc) else try Config.load(alloc);
-    defer config.deinit();
-
-    const configfmt: configpkg.FileFormatter = .{
-        .alloc = alloc,
-        .config = &config,
-        .changed = !opts.default and opts.@"changes-only",
-        .docs = opts.docs,
-    };
-
     var pager: Pager = if (!opts.@"no-pager") .init() else .{};
     defer pager.deinit();
     var buffer: [4096]u8 = undefined;
     const writer = pager.writer(&buffer);
 
-    try configfmt.format(writer);
+    if (opts.template) {
+        const data = try @import("../config/template.zig").generate(alloc);
+        defer alloc.free(data);
+        try writer.writeAll(data);
+    } else {
+        var config = if (opts.default) try Config.default(alloc) else try Config.load(alloc);
+        defer config.deinit();
+        const configfmt: configpkg.FileFormatter = .{
+            .alloc = alloc,
+            .config = &config,
+            .changed = !opts.default and opts.@"changes-only",
+            .docs = opts.docs,
+        };
+        try configfmt.format(writer);
+    }
     try writer.flush();
     return 0;
 }

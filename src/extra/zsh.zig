@@ -46,7 +46,7 @@ fn writeZshCompletions(writer: *std.Io.Writer) !void {
     try writer.writeAll("    \"--help\" \\\n");
     try writer.writeAll("    \"--version\" \\\n");
     for (@typeInfo(Config).@"struct".fields) |field| {
-        if (field.name[0] == '_') continue;
+        if (!Config.isUserConfigKey(field.name)) continue;
         try writer.writeAll("    \"--");
         try writer.writeAll(field.name);
 

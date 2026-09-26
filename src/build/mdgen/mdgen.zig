@@ -28,7 +28,7 @@ pub fn genConfig(writer: *std.Io.Writer, cli: bool) !void {
 
     @setEvalBranchQuota(5000);
     inline for (@typeInfo(Config).@"struct".fields) |field| {
-        if (field.name[0] == '_') continue;
+        if (comptime !Config.isUserConfigKey(field.name)) continue;
 
         try writer.writeAll("**`");
         if (cli) try writer.writeAll("--");
