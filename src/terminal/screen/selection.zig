@@ -292,14 +292,13 @@ pub fn selectWord(
 
     // If our cell is empty we can't select a word, because we can't select
     // areas where the screen is not yet written.
-    const start_cell = pin.rowAndCell().cell;
-    if (!start_cell.hasText()) return null;
+    const start_codepoint = selectWordCodepoint(pin) orelse return null;
 
     // Determine if we are a boundary or not to determine what our boundary is.
     const expect_boundary = std.mem.indexOfScalar(
         u21,
         boundary_codepoints,
-        start_cell.content.codepoint.data,
+        start_codepoint,
     ) != null;
 
     // Go forwards to find our end boundary
@@ -307,25 +306,21 @@ pub fn selectWord(
         var it = pin.cellIterator(.right_down, null);
         var prev = it.next().?; // Consume one, our start
         while (it.next()) |p| {
-            const rac = p.rowAndCell();
-            const cell = rac.cell;
+            // Only cross a row boundary if the previous row wraps.
+            if (prev.x == prev.node.cols() - 1 and !prev.rowAndCell().row.wrap) {
+                break :end prev;
+            }
 
             // If we reached an empty cell its always a boundary
-            if (!cell.hasText()) break :end prev;
+            const codepoint = selectWordCodepoint(p) orelse break :end prev;
 
             // If we do not match our expected set, we hit a boundary
             const this_boundary = std.mem.indexOfScalar(
                 u21,
                 boundary_codepoints,
-                cell.content.codepoint.data,
+                codepoint,
             ) != null;
             if (this_boundary != expect_boundary) break :end prev;
-
-            // If we are going to the next row and it isn't wrapped, we
-            // return the previous.
-            if (p.x == p.node.cols() - 1 and !rac.row.wrap) {
-                break :end p;
-            }
 
             prev = p;
         }
@@ -339,7 +334,6 @@ pub fn selectWord(
         var prev = it.next().?; // Consume one, our start
         while (it.next()) |p| {
             const rac = p.rowAndCell();
-            const cell = rac.cell;
 
             // If we are going to the next row and it isn't wrapped, we
             // return the previous.
@@ -348,13 +342,13 @@ pub fn selectWord(
             }
 
             // If we reached an empty cell its always a boundary
-            if (!cell.hasText()) break :start prev;
+            const codepoint = selectWordCodepoint(p) orelse break :start prev;
 
             // If we do not match our expected set, we hit a boundary
             const this_boundary = std.mem.indexOfScalar(
                 u21,
                 boundary_codepoints,
-                cell.content.codepoint.data,
+                codepoint,
             ) != null;
             if (this_boundary != expect_boundary) break :start prev;
 
@@ -365,6 +359,22 @@ pub fn selectWord(
     };
 
     return .init(start, end, false);
+}
+
+/// Return the codepoint for word selection, following wide-character spacers.
+fn selectWordCodepoint(pin: Pin) ?u21 {
+    const rac = pin.rowAndCell();
+    const cell = switch (rac.cell.wide) {
+        .narrow, .wide => rac.cell,
+        .spacer_tail => pin.left(1).rowAndCell().cell,
+        .spacer_head => cell: {
+            const next_row = pin.down(1) orelse return null;
+            const owner = &next_row.cells(.all)[0];
+            if (owner.wide != .wide) return null;
+            break :cell owner;
+        },
+    };
+    return if (cell.hasText()) cell.content.codepoint.data else null;
 }
 
 /// Select the command output under the given point. The limits of the output

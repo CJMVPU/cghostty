@@ -2880,3 +2880,173 @@ test "Screen: selectLine does not join lines across a recycled row" {
         try testing.expectEqualStrings("world", contents);
     }
 }
+
+test "Screen: selectWord at hard line breaks" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    const io = testing.io;
+
+    const cases = [_]struct { cols: size.CellCountInt, text: []const u8 }{
+        .{ .cols = 5, .text = "abcde\nfghij" },
+        .{ .cols = 5, .text = "     \n     " },
+        .{ .cols = 1, .text = "a\nb" },
+        .{ .cols = 1, .text = " \n " },
+    };
+    for (cases) |case| {
+        var s = try init(io, alloc, .{
+            .cols = case.cols,
+            .rows = 2,
+            .max_scrollback_bytes = 0,
+        });
+        defer s.deinit();
+        try s.testWriteString(case.text);
+
+        for (0..2) |y| {
+            for (0..case.cols) |x| {
+                var sel = s.selectWord(s.pages.pin(.{ .active = .{
+                    .x = @intCast(x),
+                    .y = @intCast(y),
+                } }).?, &.{ 0, ' ' }).?;
+                defer sel.deinit(&s);
+                try testing.expectEqual(point.Point{ .screen = .{
+                    .x = 0,
+                    .y = @intCast(y),
+                } }, s.pages.pointFromPin(.screen, sel.start()).?);
+                try testing.expectEqual(point.Point{ .screen = .{
+                    .x = case.cols - 1,
+                    .y = @intCast(y),
+                } }, s.pages.pointFromPin(.screen, sel.end()).?);
+            }
+        }
+    }
+}
+
+test "Screen: selectWord across soft-wrap at right edge" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    const io = testing.io;
+
+    var s = try init(io, alloc, .{
+        .cols = 5,
+        .rows = 3,
+        .max_scrollback_bytes = 0,
+    });
+    defer s.deinit();
+    try s.testWriteString("abcdefghij\nklmno");
+
+    for (0..2) |y| {
+        for (0..5) |x| {
+            var sel = s.selectWord(s.pages.pin(.{ .active = .{
+                .x = @intCast(x),
+                .y = @intCast(y),
+            } }).?, &.{ 0, ' ' }).?;
+            defer sel.deinit(&s);
+            try testing.expectEqual(point.Point{ .screen = .{
+                .x = 0,
+                .y = 0,
+            } }, s.pages.pointFromPin(.screen, sel.start()).?);
+            try testing.expectEqual(point.Point{ .screen = .{
+                .x = 4,
+                .y = 1,
+            } }, s.pages.pointFromPin(.screen, sel.end()).?);
+        }
+    }
+}
+
+test "Screen: selectWord wide characters" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    const io = testing.io;
+
+    const cases = [_]struct {
+        text: []const u8,
+        cols: size.CellCountInt = 10,
+        boundary_codepoints: []const u21 = &.{ 0, ' ' },
+        start: usize = 0,
+        end: usize,
+        expected: []const u8,
+    }{
+        .{ .text = "日本語", .end = 5, .expected = "日本語" },
+        .{ .text = "中文词", .end = 5, .expected = "中文词" },
+        .{ .text = "中文词", .cols = 5, .end = 6, .expected = "中文词" },
+        .{ .text = "a中\u{0301}文b", .end = 5, .expected = "a中\u{0301}文b" },
+        .{ .text = "日本語", .end = 5, .expected = "日本語", .boundary_codepoints = &.{' '} },
+        .{ .text = "a日b語c", .end = 6, .expected = "a日b語c" },
+        .{ .text = " 日本語 ", .start = 1, .end = 6, .expected = "日本語" },
+        .{ .text = "日本語", .cols = 4, .end = 5, .expected = "日本語" },
+        .{ .text = "日本語", .cols = 5, .end = 6, .expected = "日本語" },
+        .{ .text = "日本\n語文", .cols = 4, .end = 3, .expected = "日本" },
+        .{ .text = "日本\n語文", .cols = 4, .start = 4, .end = 7, .expected = "語文" },
+        .{ .text = "a語b", .boundary_codepoints = &.{ 0, '語' }, .end = 0, .expected = "a" },
+        .{ .text = "a語b", .boundary_codepoints = &.{ 0, '語' }, .start = 1, .end = 2, .expected = "語" },
+        .{ .text = "a語b", .boundary_codepoints = &.{ 0, '語' }, .start = 3, .end = 3, .expected = "b" },
+        .{ .text = "abcd語ef", .cols = 5, .boundary_codepoints = &.{ 0, '語' }, .end = 3, .expected = "abcd" },
+        .{ .text = "abcd語ef", .cols = 5, .boundary_codepoints = &.{ 0, '語' }, .start = 4, .end = 6, .expected = "語" },
+        .{ .text = "abcd語ef", .cols = 5, .boundary_codepoints = &.{ 0, '語' }, .start = 7, .end = 8, .expected = "ef" },
+    };
+
+    for (cases) |case| {
+        var s = try init(io, alloc, .{
+            .cols = case.cols,
+            .rows = 4,
+            .max_scrollback_bytes = 0,
+        });
+        defer s.deinit();
+        try s.testWriteString(case.text);
+
+        // Selecting any cell in the word should select the whole word.
+        for (case.start..case.end + 1) |offset| {
+            const pin = s.pages.pin(.{ .active = .{
+                .x = @intCast(offset % case.cols),
+                .y = @intCast(offset / case.cols),
+            } }).?;
+            var sel = s.selectWord(pin, case.boundary_codepoints).?;
+            defer sel.deinit(&s);
+            try testing.expectEqual(point.Point{ .screen = .{
+                .x = @intCast(case.start % case.cols),
+                .y = @intCast(case.start / case.cols),
+            } }, s.pages.pointFromPin(.screen, sel.start()).?);
+            try testing.expectEqual(point.Point{ .screen = .{
+                .x = @intCast(case.end % case.cols),
+                .y = @intCast(case.end / case.cols),
+            } }, s.pages.pointFromPin(.screen, sel.end()).?);
+
+            const contents = try s.selectionString(alloc, .{ .sel = sel });
+            defer alloc.free(contents);
+            try testing.expectEqualStrings(case.expected, contents);
+        }
+    }
+}
+
+test "Screen: selectWord Chinese punctuation defaults and custom boundaries" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    const defaults = &@import("../../selection_codepoints.zig").default_word_boundaries;
+    const punctuation = [_]u21{ '，', '。', '；', '：', '！', '？', '、', '（', '）', '【', '】', '「', '」', '『', '』', '《', '》', '〈', '〉', '“', '”', '‘', '’', '　' };
+    for (punctuation) |codepoint| {
+        var s = try init(testing.io, alloc, .{ .cols = 20, .rows = 2, .max_scrollback_bytes = 0 });
+        defer s.deinit();
+        const delimiter = try std.fmt.allocPrint(alloc, "{u}", .{codepoint});
+        defer alloc.free(delimiter);
+        try s.testWriteString("你好");
+        try s.testWriteString(delimiter);
+        const right_start = s.cursor.x;
+        try s.testWriteString("世界");
+        for (0..s.cursor.x) |x| {
+            const pin = s.pages.pin(.{ .active = .{ .x = @intCast(x), .y = 0 } }).?;
+            var sel = s.selectWord(pin, defaults).?;
+            defer sel.deinit(&s);
+            const contents = try s.selectionString(alloc, .{ .sel = sel });
+            defer alloc.free(contents);
+            try testing.expectEqualStrings(if (x < 4) "你好" else if (x < right_start) delimiter else "世界", contents);
+        }
+        // An explicit custom set replaces the defaults, including punctuation.
+        var custom = s.selectWord(s.pages.pin(.{ .active = .{ .x = 1, .y = 0 } }).?, &.{ 0, ' ' }).?;
+        defer custom.deinit(&s);
+        const contents = try s.selectionString(alloc, .{ .sel = custom });
+        defer alloc.free(contents);
+        const expected = try std.fmt.allocPrint(alloc, "你好{s}世界", .{delimiter});
+        defer alloc.free(expected);
+        try testing.expectEqualStrings(expected, contents);
+    }
+}

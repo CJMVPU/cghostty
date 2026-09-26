@@ -1927,6 +1927,7 @@ pub fn cursorLeft(self: *Terminal, count_req: usize) void {
     if (self.screens.active.cursor.pending_wrap) {
         count -= 1;
         self.screens.active.cursor.pending_wrap = false;
+        if (count == 0) return;
     }
 
     // The margins we can move to.

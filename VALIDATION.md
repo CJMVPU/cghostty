@@ -1,5 +1,8 @@
 # 验证记录
 
+最新宽字符选词、中文标点边界及反向换行修复见
+[2026-09-27 选词与反向换行](docs/validation/2026-09-27-word-selection-wrap.md)。
+
 最新核心测试分离、职责拆分与 GPU 光标文字覆盖层测量见
 [2026-09-27 核心测试分离与光标覆盖层优化](docs/validation/2026-09-27-test-separation-overlay.md)。
 

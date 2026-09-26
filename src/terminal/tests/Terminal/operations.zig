@@ -1335,3 +1335,42 @@ test "Terminal: DECCOLM preserves SGR bg" {
         }, list_cell.cell.content.color_rgb);
     }
 }
+
+test "Terminal: cursorLeft reverse wrap with pending wrap above top margin" {
+    const alloc = testing.allocator;
+    const io_impl = testing.io;
+    for (0..3) |action| {
+        var t = try init(io_impl, alloc, .{ .rows = 5, .cols = 5 });
+        defer t.deinit(alloc);
+
+        t.modes.set(.wraparound, true);
+        t.modes.set(.reverse_wrap, true);
+        t.modes.set(.enable_left_and_right_margin, true);
+        t.setLeftAndRightMargin(1, 2);
+        for ("AB") |c| try t.print(c);
+        t.saveCursor();
+
+        // Restore pending wrap at the left margin, above the top margin.
+        t.setLeftAndRightMargin(2, 5);
+        t.setTopAndBottomMargin(3, 5);
+        t.restoreCursor();
+        try testing.expect(t.screens.active.cursor.pending_wrap);
+
+        switch (action) {
+            0 => t.cursorLeft(1),
+            1 => t.cursorLeft(0), // CUB zero means one.
+            2 => t.backspace(),
+            else => unreachable,
+        }
+        try testing.expect(!t.screens.active.cursor.pending_wrap);
+        try testing.expectEqual(1, t.screens.active.cursor.x);
+        try testing.expectEqual(0, t.screens.active.cursor.y);
+        try t.print('X');
+
+        {
+            const str = try t.plainString(alloc);
+            defer alloc.free(str);
+            try testing.expectEqualStrings("AX", str);
+        }
+    }
+}

@@ -3,7 +3,7 @@
 // subsystems can import it without introducing a number of
 // dependencies.
 
-/// Default boundary characters for word selection: ` \t'"│`|:;,()[]{}<>$`
+/// Default word boundaries include common ASCII and Chinese punctuation.
 pub const default_word_boundaries = [_]u21{
     0, // null
     ' ', // space
@@ -25,6 +25,31 @@ pub const default_word_boundaries = [_]u21{
     '<', // less than
     '>', // greater than
     '$', // dollar
+    // Chinese punctuation, quotation marks, brackets, and fullwidth space.
+    '，',
+    '。',
+    '；',
+    '：',
+    '！',
+    '？',
+    '、',
+    '（',
+    '）',
+    '【',
+    '】',
+    '「',
+    '」',
+    '『',
+    '』',
+    '《',
+    '》',
+    '〈',
+    '〉',
+    '“',
+    '”',
+    '‘',
+    '’',
+    '　',
 };
 
 /// Default whitespace characters trimmed from line selections.

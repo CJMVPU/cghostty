@@ -635,7 +635,9 @@ foreground: Color = .{ .r = 0xFF, .g = 0xFF, .b = 0xFF },
 /// This is similar to the `WORDCHARS` environment variable in zsh, except this
 /// specifies the boundary characters rather than the word characters. The
 /// default includes common delimiters and punctuation that typically separate
-/// words in code and prose.
+/// words in code and prose, including common Chinese punctuation and fullwidth
+/// space. This groups text between delimiters; it does not perform linguistic
+/// word segmentation.
 ///
 /// Each character in this string becomes a word boundary. Multi-byte UTF-8
 /// characters are supported, but only single codepoints can be specified.
@@ -644,12 +646,12 @@ foreground: Color = .{ .r = 0xFF, .g = 0xFF, .b = 0xFF },
 /// The null character (U+0000) is always treated as a boundary and does not
 /// need to be included in this configuration.
 ///
-/// Default: ``\t '"│`|:;,()[]{}<>$``
+/// Default: ``\t '"│`|:;,()[]{}<>$，。；：！？、（）【】「」『』《》〈〉“”‘’　``
 ///
 /// To add or remove specific characters, you can set this to a custom value.
 /// For example, to treat semicolons as part of words:
 ///
-///     selection-word-chars = "\t '\"│`|:,()[]{}<>$"
+///     selection-word-chars = "\t '\"│`|:,()[]{}<>$，。；：！？、（）【】「」『』《》〈〉“”‘’　"
 ///
 /// Available since: 1.3.0
 @"selection-word-chars": SelectionWordChars = .{},
