@@ -17,6 +17,16 @@ const pipeline_descs: []const struct { [:0]const u8, PipelineDescription } =
             .fragment_fn = "bg_color_fragment",
             .blending_enabled = false,
         } },
+        .{ "scroll_copy", .{
+            .vertex_fn = "full_screen_vertex",
+            .fragment_fn = "scroll_copy_fragment",
+            .blending_enabled = true,
+        } },
+        .{ "scroll_compose", .{
+            .vertex_fn = "full_screen_vertex",
+            .fragment_fn = "scroll_compose_fragment",
+            .blending_enabled = false,
+        } },
         .{ "smooth_cursor", .{
             .vertex_fn = "smooth_cursor_vertex",
             .fragment_fn = "smooth_cursor_fragment",
@@ -231,6 +241,11 @@ pub const Uniforms = extern struct {
     smooth_color: [4]u8 align(4) = .{ 0, 0, 0, 0 },
     smooth_effect: f32 align(4) = 0,
     smooth_block: f32 align(4) = 0,
+    scroll_rects: [4][4]f32 align(16) = @splat(@splat(0)),
+    scroll_offsets: [4][2]f32 align(8) = @splat(@splat(0)),
+    scroll_count: u32 align(4) = 0,
+    // 0 = normal, 1 = cursor-free content, 2 = cursor overlay.
+    scroll_mode: u32 align(4) = 0,
 
     const PaddingExtend = packed struct(u8) {
         left: bool = false,

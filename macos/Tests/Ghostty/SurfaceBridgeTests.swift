@@ -54,8 +54,15 @@ import Testing
 
     private func waitForText(_ text: String, in surface: Ghostty.Surface) async throws {
         let deadline = ContinuousClock.now + .seconds(5)
-        while !surface.readContents(viewport: false).contains(text) {
-            try #require(ContinuousClock.now < deadline, "Terminal output did not contain \(text)")
+        while true {
+            let contents = surface.readContents(viewport: false)
+            if contents.contains(text) { return }
+            try #require(ContinuousClock.now < deadline,
+                         """
+                         Terminal output did not contain \(text).
+                         grid=\(surface.size.columns)x\(surface.size.rows), exited=\(surface.processExited),
+                         output=\(String(reflecting: String(contents.suffix(2048))))
+                         """)
             try await Task.sleep(for: .milliseconds(10))
         }
     }
@@ -184,9 +191,17 @@ import Testing
         #expect(bands == 2, "Both red image placements must survive distinct buffer offsets")
     }
 
-    @Test func searchRefreshesFromPTYChangesAndAfterVisibilityRestoration() async throws {
-        let view = makeView()
+    @Test(arguments: [false, true])
+    func searchRefreshesFromPTYChangesAndAfterVisibilityRestoration(delayedStartup: Bool) async throws {
+        // PTY echo can arrive before login prints its banner and launches the
+        // command. Wait for the child after configuring raw, non-echoing input
+        // so both writes below must make a real round trip through cat.
+        let delay = delayedStartup ? "/bin/sleep 0.2; " : ""
+        let command = "/bin/sh -c '\(delay)/bin/stty raw -echo && " +
+            "printf \"search-pty-ready\\r\\n\" && exec /bin/cat'"
+        let view = makeView(command: command)
         let surface = try #require(view.surfaceModel)
+        try await waitForText("search-pty-ready", in: surface)
         let needle = "unique-search-word"
         view.searchState = Ghostty.SearchState(from: Ghostty.Action.StartSearch(c: .init(needle: nil)),
                                                pasteboard: .withUniqueName())
@@ -196,14 +211,16 @@ import Testing
         func waitForMatches(_ total: UInt) async throws {
             let deadline = ContinuousClock.now + .seconds(5)
             while view.searchState?.total != total {
-                try #require(ContinuousClock.now < deadline, "Search did not observe the changed terminal")
-                await Task.yield()
+                try #require(ContinuousClock.now < deadline,
+                             "Search total expected=\(total), actual=\(String(describing: view.searchState?.total))")
+                try await Task.sleep(for: .milliseconds(10))
             }
         }
         try await waitForMatches(1)
         surface.setVisible(false)
         #expect(surface.sendKeyEvent(.init(keyCode: 0, action: .press, text: " " + needle)))
         try await waitForText(needle + " " + needle, in: surface)
+        #expect(view.searchState?.total == 1)
         surface.setVisible(true)
         try await waitForMatches(2)
         #expect(surface.endSearch())

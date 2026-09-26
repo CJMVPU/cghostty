@@ -78,6 +78,9 @@ pub const Mode = enum {
     @"links-cached",
     @"hold-fresh",
     @"hold-reuse",
+    @"hold-incremental",
+    @"hold-partial",
+    @"hold-partial-full",
 };
 
 pub fn create(
@@ -116,7 +119,7 @@ pub fn benchmark(self: *ScreenClone) Benchmark {
             .@"render-partial" => stepRenderPartial,
             .accessibility, .@"accessibility-reuse" => stepAccessibility,
             .links, .@"links-cached" => stepLinks,
-            .@"hold-fresh", .@"hold-reuse" => stepHold,
+            .@"hold-fresh", .@"hold-reuse", .@"hold-incremental", .@"hold-partial", .@"hold-partial-full" => stepHold,
         },
         .setupFn = setup,
         .teardownFn = teardown,
@@ -374,8 +377,8 @@ fn stepLinks(ptr: *anyopaque) Benchmark.Error!void {
     std.debug.print("mode={s} elapsed_ns={d} rebuilds={d} highlighted_cells={d}\n", .{ @tagName(self.opts.mode), elapsed, cache.rebuilds, cells });
 }
 
-// Fresh storage reproduces the previous capture allocation policy. Both
-// variants capture full viewports; reuse never skips content or dirty rows.
+// Full modes reproduce the former forced whole-viewport capture policy;
+// incremental modes use the same workload and the production delta handoff.
 fn stepHold(ptr: *anyopaque) Benchmark.Error!void {
     const self: *ScreenClone = @ptrCast(@alignCast(ptr));
     const Hold = @import("../renderer/RenderHold.zig");
@@ -390,18 +393,37 @@ fn stepHold(ptr: *anyopaque) Benchmark.Error!void {
     var pixel_bytes: usize = 0;
     var it = hold.pending.?.images.images.iterator();
     while (it.next()) |entry| pixel_bytes += entry.value_ptr.image.pending.len();
-    hold.discard(alloc);
+    var displayed: terminalpkg.RenderState = .empty;
+    defer displayed.deinit(alloc);
+    for (0..2) |_| {
+        var warm = hold.take().?;
+        displayed.applyDelta(&warm.render);
+        hold.recycleRender(alloc, &warm.render);
+        warm.deinit(alloc);
+        displayed.endUpdate();
+        displayed.clean();
+        hold.capture(alloc, &self.terminal, .{ .width = 10, .height = 20 }, null) catch return error.BenchmarkFailed;
+    }
+    var copied_rows: usize = 0;
     var checksum: usize = 0;
     const start: std.Io.Timestamp = .now(global.io(), .awake);
     for (0..2_000 * @as(usize, self.opts.loops)) |_| {
         if (self.opts.mode == .@"hold-fresh") hold.deinit(alloc);
+        if (self.opts.mode == .@"hold-partial" or self.opts.mode == .@"hold-partial-full") {
+            self.terminal.setCursorPos(1, 1);
+            self.terminal.printString("x") catch return error.BenchmarkFailed;
+        }
+        if (self.opts.mode == .@"hold-fresh" or self.opts.mode == .@"hold-reuse" or self.opts.mode == .@"hold-partial-full") self.terminal.flags.dirty.clear = true;
         hold.capture(alloc, &self.terminal, .{ .width = 10, .height = 20 }, null) catch return error.BenchmarkFailed;
-        var frame = hold.take(alloc, true).?;
-        frame.render.endUpdate();
-        checksum +%= frame.render.row_data.items(.cells)[0].get(0).raw.codepoint();
-        if (self.opts.mode == .@"hold-reuse") hold.recycleRender(alloc, &frame.render);
+        var frame = hold.take().?;
+        for (frame.render.row_data.items(.dirty)) |dirty| copied_rows += @intFromBool(dirty);
+        displayed.applyDelta(&frame.render);
+        if (self.opts.mode != .@"hold-fresh") hold.recycleRender(alloc, &frame.render);
+        displayed.endUpdate();
+        checksum +%= displayed.row_data.items(.cells)[0].get(0).raw.codepoint();
+        displayed.clean();
         frame.deinit(alloc);
     }
     const elapsed = start.durationTo(.now(global.io(), .awake)).nanoseconds;
-    std.debug.print("mode={s} elapsed_ns={d} checksum={d} captures={d} images={d} pixel_bytes={d}\n", .{ @tagName(self.opts.mode), elapsed, checksum, 2_000 * @as(usize, self.opts.loops), images, pixel_bytes });
+    std.debug.print("mode={s} elapsed_ns={d} checksum={d} captures={d} images={d} pixel_bytes={d} copied_rows={d}\n", .{ @tagName(self.opts.mode), elapsed, checksum, 2_000 * @as(usize, self.opts.loops), images, pixel_bytes, copied_rows });
 }

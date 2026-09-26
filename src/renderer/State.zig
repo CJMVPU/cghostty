@@ -39,6 +39,8 @@ preedit: ?Preedit = null,
 /// need about the mouse.
 mouse: Mouse = .{},
 
+scroll_hit: @import("ScrollHit.zig") = .{},
+
 /// The number of threads currently waiting to acquire `mutex` via
 /// `lockDemand`. This is not protected by the mutex; it is read by
 /// hot lock/unlock loops (the IO parse thread) in `yieldToDemand` to

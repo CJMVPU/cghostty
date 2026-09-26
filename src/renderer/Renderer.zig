@@ -19,6 +19,7 @@ const isCovering = cellpkg.isCovering;
 const rowNeverExtendBg = @import("row.zig").neverExtendBg;
 const imagepkg = @import("image.zig");
 const ImageState = imagepkg.State;
+const ScrollMotion = @import("ScrollMotion.zig");
 const SmoothCursor = @import("SmoothCursor.zig");
 const FrameScheduler = @import("FrameScheduler.zig");
 const CursorMotion = @import("CursorMotion.zig");
@@ -117,6 +118,21 @@ trace: Trace = .{},
 
 /// The current GPU uniform values.
 uniforms: shaderpkg.Uniforms,
+scroll_motion: ScrollMotion = .{},
+scroll_shared: ?*renderer.State = null,
+scroll_snapshot: struct {
+    journal: @import("../terminal/ScrollState.zig") = .{},
+    rows: u16 = 0,
+    cols: u16 = 0,
+    alternate: bool = false,
+} = .{},
+scroll_textures: [3]?Texture = @splat(null),
+scroll_scene: ?usize = null,
+scroll_previous: ?usize = null,
+scroll_presented: ?usize = null,
+scroll_revision: ?u64 = null,
+scroll_config: usize = 0,
+scroll_failed: std.atomic.Value(bool) = .init(false),
 
 cursor_motion: CursorMotion = .{},
 
@@ -269,6 +285,7 @@ const FrameState = struct {
     cell_upload: CellUpload = .{},
     background_upload: @import("RowUpload.zig") = .{},
     uniforms: UniformBuffer,
+    content_uniforms: UniformBuffer,
     cells: CellTextBuffer,
     cells_bg: CellBgBuffer,
     image_instances: Buffer(shaderpkg.Image),
@@ -305,6 +322,8 @@ const FrameState = struct {
         // a frame is drawn.
         var uniforms = try UniformBuffer.init(api.uniformBufferOptions(), 1);
         errdefer uniforms.deinit();
+        var content_uniforms = try UniformBuffer.init(api.uniformBufferOptions(), 1);
+        errdefer content_uniforms.deinit();
 
         // Create GPU buffers for our cells.
         //
@@ -350,6 +369,7 @@ const FrameState = struct {
 
         return .{
             .uniforms = uniforms,
+            .content_uniforms = content_uniforms,
             .cells = cells,
             .cells_bg = cells_bg,
             .image_instances = image_instances,
@@ -366,6 +386,7 @@ const FrameState = struct {
         self.commands.deinit();
         self.target.deinit();
         self.uniforms.deinit();
+        self.content_uniforms.deinit();
         self.cells.deinit();
         self.cells_bg.deinit();
         self.image_instances.deinit();
@@ -414,6 +435,7 @@ pub const DerivedConfig = struct {
     faint_opacity: u8,
     min_contrast: f32,
     padding_color: configpkg.WindowPaddingColor,
+    smooth_scroll: bool,
     cursor_effect: bool,
     bg_image: ?configpkg.Path,
     bg_image_opacity: f32,
@@ -485,6 +507,7 @@ pub const DerivedConfig = struct {
             .search_selected_background = config.@"search-selected-background",
             .search_selected_foreground = config.@"search-selected-foreground",
 
+            .smooth_scroll = config.@"smooth-scroll",
             .cursor_effect = config.@"cursor-effect",
             .bg_image = bg_image,
             .bg_image_opacity = config.@"background-image-opacity",
@@ -760,7 +783,7 @@ fn animationWakeFor(self: *const Self, vsync_running: bool) ?AnimationWake {
     } else null;
     return FrameScheduler.timerWake(
         now_ms,
-        self.cursor_motion.isActive(),
+        self.cursor_motion.isActive() or self.scroll_motion.active(),
         deadline,
         vsync_running,
     );
@@ -816,6 +839,7 @@ pub fn setVisible(self: *Self, visible: bool) void {
 /// Caller must lock the draw mutex before calling this function.
 /// Resources that are already released are skipped.
 pub fn releaseGpuResources(self: *Self) void {
+    self.releaseScrollTextures();
     if (self.swap_chain) |*sc| {
         // Waits for any in-flight frames to complete, then
         // frees all GPU resources.
@@ -956,19 +980,6 @@ pub fn updateFrame(
     // when rebuilding the frame fails due to memory pressure.
     defer self.font_shaper.endFrame();
 
-    // We fully deinit and reset the terminal state every so often
-    // so that a particularly large terminal state doesn't cause
-    // the renderer to hold on to retained memory.
-    //
-    // Frame count is ~12 minutes at 120Hz.
-    const max_terminal_state_frame_count = 100_000;
-    if (self.terminal_state_frame_count >= max_terminal_state_frame_count) {
-        self.terminal_state.deinit(self.alloc);
-        self.terminal_state = .empty;
-        self.terminal_state_frame_count = 0;
-    }
-    self.terminal_state_frame_count += 1;
-
     // Reuse bounded scratch for rebuilding; no published state borrows it.
     if (self.frame_scratch == null) self.frame_scratch = .init(self.alloc);
     const arena = &self.frame_scratch.?;
@@ -1003,37 +1014,48 @@ pub fn updateFrame(
         // when reset/set occur within a single PTY read. Take ownership under
         // the terminal lock; only this thread touches the resulting GPU state.
         const held = state.terminal.modes.get(.synchronized_output);
-        if (state.render_hold.take(self.alloc, held)) |captured| {
+        if (state.render_hold.take()) |captured| {
             var frame = captured;
             defer frame.deinit(self.alloc);
-            const preedit: ?renderer.State.Preedit = if (state.preedit) |p| try p.clone(arena_alloc) else null;
-            std.mem.swap(terminal.RenderState, &self.terminal_state, &frame.render);
+            self.terminal_state.applyDelta(&frame.render);
             state.render_hold.recycleRender(self.alloc, &frame.render);
             {
                 self.draw_mutex.lockUncancelable(global.io());
                 defer self.draw_mutex.unlock(global.io());
                 self.images.adopt(self.alloc, &frame.images);
             }
-            self.kitty_animation_next_ms = null;
-            state.terminal.flags.search_viewport_dirty = true;
-            const links: terminal.RenderState.CellSet = osc8: {
-                const vp = state.mouse.point orelse break :osc8 .empty;
-                const captured_mouse = frame.mouse orelse break :osc8 .empty;
-                if (!vp.eql(captured_mouse) or
-                    !state.mouse.mods.equal(inputpkg.ctrlOrSuper(.{}))) break :osc8 .empty;
-                // The original terminal pages may have been pruned since
-                // capture. Only use the owned cell coordinates here.
-                break :osc8 frame.osc8.clone(arena_alloc) catch .empty;
-            };
-            break :critical .{
-                .links = links,
-                .link_key = frame.link_key,
-                .mouse = state.mouse,
-                .preedit = preedit,
-                .scrollbar = frame.scrollbar,
-            };
+            if (held) {
+                const preedit: ?renderer.State.Preedit = if (state.preedit) |p| try p.clone(arena_alloc) else null;
+                self.kitty_animation_next_ms = null;
+                if (self.terminal_state.dirty != .false) state.terminal.flags.search_viewport_dirty = true;
+                const links: terminal.RenderState.CellSet = osc8: {
+                    const vp = state.mouse.point orelse break :osc8 .empty;
+                    const captured_mouse = frame.mouse orelse break :osc8 .empty;
+                    if (!vp.eql(captured_mouse) or
+                        !state.mouse.mods.equal(inputpkg.ctrlOrSuper(.{}))) break :osc8 .empty;
+                    // The original terminal pages may have been pruned since
+                    // capture. Only use the owned cell coordinates here.
+                    break :osc8 frame.osc8.clone(arena_alloc) catch .empty;
+                };
+                break :critical .{
+                    .links = links,
+                    .link_key = frame.link_key,
+                    .mouse = state.mouse,
+                    .preedit = preedit,
+                    .scrollbar = frame.scrollbar,
+                };
+            }
         }
         if (held) return;
+
+        // Reclaim oversized CPU storage only after merging pending deltas and
+        // while live terminal content is available for a complete refresh.
+        if (self.terminal_state_frame_count >= 100_000) {
+            self.terminal_state.deinit(self.alloc);
+            self.terminal_state = .empty;
+            self.terminal_state_frame_count = 0;
+        }
+        self.terminal_state_frame_count += 1;
 
         // If scroll-to-bottom on output is enabled, check if the final line
         // changed by comparing the bottom-right pin. If the node pointer or
@@ -1047,10 +1069,17 @@ pub fn updateFrame(
         // denormalization) is deferred to the endUpdate call
         // outside of this critical section, keeping our lock
         // hold time as short as possible.
-        try self.terminal_state.beginUpdate(
+        self.terminal_state.beginUpdate(
             self.alloc,
             state.terminal,
-        );
+        ) catch |err| {
+            // A failed update may have consumed dirty bits or only resized
+            // part of its row storage. The next live update/capture must
+            // rebuild completely before incremental handoff resumes.
+            state.terminal.flags.dirty.clear = true;
+            return err;
+        };
+        state.render_hold.syncLive(&self.terminal_state);
 
         // If our terminal state is dirty at all we need to redo
         // the viewport search.
@@ -1196,6 +1225,14 @@ pub fn updateFrame(
         self.draw_mutex.lockUncancelable(global.io());
         defer self.draw_mutex.unlock(global.io());
 
+        self.scroll_shared = state;
+        self.scroll_snapshot = .{
+            .journal = self.terminal_state.scroll_state,
+            .rows = self.terminal_state.rows,
+            .cols = self.terminal_state.cols,
+            .alternate = self.terminal_state.screen == .alternate,
+        };
+
         // Build our GPU cells
         self.rebuildCells(
             critical.preedit,
@@ -1273,6 +1310,28 @@ pub fn drawFrame(
 /// path, which a sync draw never takes, so the main thread's sync
 /// draws never touch the display link and `syncDisplayLink` stays
 /// on the render thread.
+fn releaseScrollTextures(self: *Self) void {
+    if (self.scroll_shared) |shared| shared.scroll_hit.publish(.{});
+    for (&self.scroll_textures) |*texture| {
+        if (texture.*) |t| t.deinit();
+        texture.* = null;
+    }
+    self.scroll_scene = null;
+    self.scroll_previous = null;
+    self.scroll_presented = null;
+    self.scroll_revision = null;
+    self.scroll_motion = .{};
+}
+
+fn scrollTexture(self: *Self, excluded: []const ?usize) !usize {
+    outer: for (&self.scroll_textures, 0..) |*texture, i| {
+        for (excluded) |index| if (index == i) continue :outer;
+        if (texture.* == null) texture.* = try self.api.initContentTexture(self.size.screen.width, self.size.screen.height);
+        return i;
+    }
+    unreachable; // Three slots: current scene, frozen history, composed destination.
+}
+
 fn drawFrameLocked(
     self: *Self,
     sync: bool,
@@ -1324,6 +1383,7 @@ fn drawFrameLocked(
     // every draw must actually render.
     const needs_redraw =
         size_changed or
+        self.scroll_failed.load(.acquire) or
         swap_chain_rebuilt or
         self.cells_rebuilt or
         self.animationWake() != null or
@@ -1390,8 +1450,43 @@ fn drawFrameLocked(
 
     const cursor_frame = self.updateSmoothCursor();
 
-    // Setup our frame data
+    const scroll_enabled = self.config.smooth_scroll and !self.api.reduceMotion() and
+        self.images.kitty_placements.items.len == self.images.kitty_text_end;
+    if (self.scroll_failed.swap(false, .acq_rel) or self.scroll_config != self.target_config_modified or size_changed or !scroll_enabled) {
+        self.releaseScrollTextures();
+        self.scroll_config = self.target_config_modified;
+    }
+    // A terminal resize can arrive before the native backing size update.
+    if (self.scroll_textures[0]) |t| {
+        if (t.width != self.size.screen.width or t.height != self.size.screen.height) self.releaseScrollTextures();
+    }
+    const scroll_now = @as(f64, @floatFromInt(std.Io.Timestamp.now(global.io(), .awake).nanoseconds)) / std.time.ns_per_s;
+    if (self.scroll_motion.update(self.scroll_snapshot.journal, self.scrollbar.offset, self.scroll_snapshot.rows, self.scroll_snapshot.cols, self.scroll_snapshot.alternate, @floatFromInt(self.size.cell.height), scroll_now, scroll_enabled)) {
+        self.scroll_previous = self.scroll_presented;
+    }
+    self.scroll_motion.sample(scroll_now);
+    if (self.trace.file != null and self.scroll_motion.len > 0) self.trace.emit("scroll", self.scroll_motion.len, @intFromFloat(@abs(self.scroll_motion.regions[0].shown) * 1000), @intFromFloat(@abs(self.scroll_motion.regions[0].start) * 1000));
+    if (self.scroll_previous == null) self.scroll_motion.reset();
+    self.uniforms.scroll_count = @intCast(self.scroll_motion.len);
+    self.uniforms.scroll_mode = if (scroll_enabled) 2 else 0;
+    for (self.scroll_motion.regions[0..self.scroll_motion.len], 0..) |r, i| {
+        const cw: f32 = @floatFromInt(self.size.cell.width);
+        const ch: f32 = @floatFromInt(self.size.cell.height);
+        const px = self.uniforms.grid_padding[3];
+        const py = self.uniforms.grid_padding[0];
+        self.uniforms.scroll_rects[i] = .{ px + @as(f32, @floatFromInt(r.rect.left)) * cw, py + @as(f32, @floatFromInt(r.rect.top)) * ch, px + @as(f32, @floatFromInt(r.rect.right)) * cw, py + @as(f32, @floatFromInt(r.rect.bottom)) * ch };
+        self.uniforms.scroll_offsets[i] = .{ r.shown, r.start };
+    }
+    const scene_dirty = self.scroll_scene == null or self.scroll_revision != self.cells_revision;
+    if (scroll_enabled and scene_dirty) self.scroll_scene = try self.scrollTexture(&.{ self.scroll_presented, self.scroll_previous });
+
+    // Uniform buffers are per in-flight frame; content and cursor passes must
+    // never overwrite a buffer already referenced by an earlier pass.
     try frame.uniforms.sync(&.{self.uniforms});
+    var content_uniforms = self.uniforms;
+    content_uniforms.scroll_mode = 1;
+    content_uniforms.scroll_count = 0;
+    try frame.content_uniforms.sync(&.{content_uniforms});
     copied_bytes += try frame.background_upload.sync(
         self.alloc,
         &frame.cells_bg,
@@ -1438,9 +1533,10 @@ fn drawFrameLocked(
         if (cursor_frame) |cursor| self.cursor_motion.recordFrame(cursor);
     }
 
-    {
+    if (!scroll_enabled or scene_dirty) {
+        const content_buffer = if (scroll_enabled) frame.content_uniforms.buffer else frame.uniforms.buffer;
         var pass = frame_ctx.renderPass(&.{.{
-            .target = .{ .target = frame.target },
+            .target = if (scroll_enabled) .{ .texture = self.scroll_textures[self.scroll_scene.?].? } else .{ .target = frame.target },
             .clear_color = .{ 0.0, 0.0, 0.0, 0.0 },
         }});
         defer pass.complete();
@@ -1456,19 +1552,21 @@ fn drawFrameLocked(
         //       CPU-side. In the future when we have utilities for
         //       that we should remove this step and use clear_color.
 
-        if (self.bg_image) |img| switch (img) {
-            .ready => |texture| pass.step(.{
-                .pipeline = self.shaders.pipelines.bg_image,
-                .uniforms = frame.uniforms.buffer,
-                .buffers = &.{frame.bg_image_buffer.buffer},
-                .textures = &.{texture},
-                .draw = .{ .type = .triangle, .vertex_count = 3 },
-            }),
-            else => {},
+        if (self.bg_image) |img| {
+            if (!scroll_enabled) switch (img) {
+                .ready => |texture| pass.step(.{
+                    .pipeline = self.shaders.pipelines.bg_image,
+                    .uniforms = content_buffer,
+                    .buffers = &.{frame.bg_image_buffer.buffer},
+                    .textures = &.{texture},
+                    .draw = .{ .type = .triangle, .vertex_count = 3 },
+                }),
+                else => {},
+            };
         } else {
             pass.step(.{
                 .pipeline = self.shaders.pipelines.bg_color,
-                .uniforms = frame.uniforms.buffer,
+                .uniforms = content_buffer,
                 .buffers = &.{ null, frame.cells_bg.buffer },
                 .draw = .{ .type = .triangle, .vertex_count = 3 },
             });
@@ -1486,7 +1584,7 @@ fn drawFrameLocked(
         // Then we draw any opaque cell backgrounds.
         pass.step(.{
             .pipeline = self.shaders.pipelines.cell_bg,
-            .uniforms = frame.uniforms.buffer,
+            .uniforms = content_buffer,
             .buffers = &.{ null, frame.cells_bg.buffer },
             .draw = .{ .type = .triangle, .vertex_count = 3 },
         });
@@ -1499,16 +1597,16 @@ fn drawFrameLocked(
             .kitty_below_text,
         );
 
-        if (self.uniforms.smooth_effect > 0 and self.uniforms.smooth_block != 0) pass.step(.{
+        if (!scroll_enabled and self.uniforms.smooth_effect > 0 and self.uniforms.smooth_block != 0) pass.step(.{
             .pipeline = self.shaders.pipelines.smooth_cursor,
-            .uniforms = frame.uniforms.buffer,
+            .uniforms = content_buffer,
             .draw = .{ .type = .triangle, .vertex_count = 3 },
         });
 
         // Text.
         pass.step(.{
             .pipeline = self.shaders.pipelines.cell_text,
-            .uniforms = frame.uniforms.buffer,
+            .uniforms = content_buffer,
             .buffers = &.{
                 frame.cells.buffer,
                 frame.cells_bg.buffer,
@@ -1526,9 +1624,9 @@ fn drawFrameLocked(
 
         // Bar and underline cursors overlay text, matching the native
         // cursor order without recoloring the underlying glyphs.
-        if (self.uniforms.smooth_effect > 0 and self.uniforms.smooth_block == 0) pass.step(.{
+        if (!scroll_enabled and self.uniforms.smooth_effect > 0 and self.uniforms.smooth_block == 0) pass.step(.{
             .pipeline = self.shaders.pipelines.smooth_cursor,
-            .uniforms = frame.uniforms.buffer,
+            .uniforms = content_buffer,
             .draw = .{ .type = .triangle, .vertex_count = 3 },
         });
 
@@ -1541,6 +1639,71 @@ fn drawFrameLocked(
         );
     }
 
+    if (scroll_enabled) {
+        self.scroll_revision = self.cells_revision;
+        var displayed = self.scroll_scene.?;
+        if (self.scroll_motion.len > 0) {
+            displayed = try self.scrollTexture(&.{ self.scroll_scene, self.scroll_previous });
+            var pass = frame_ctx.renderPass(&.{.{ .target = .{ .texture = self.scroll_textures[displayed].? }, .clear_color = .{ 0, 0, 0, 0 } }});
+            pass.step(.{
+                .pipeline = self.shaders.pipelines.scroll_compose,
+                .uniforms = frame.uniforms.buffer,
+                .textures = &.{ self.scroll_textures[self.scroll_scene.?].?, self.scroll_textures[self.scroll_previous.?].? },
+                .draw = .{ .type = .triangle, .vertex_count = 3 },
+            });
+            pass.complete();
+        } else self.scroll_previous = null;
+
+        var pass = frame_ctx.renderPass(&.{.{ .target = .{ .target = frame.target }, .clear_color = .{ 0, 0, 0, 0 } }});
+        defer pass.complete();
+        // Wallpaper stays fixed under the independently scrolling content.
+        if (self.bg_image) |img| switch (img) {
+            .ready => |texture| pass.step(.{
+                .pipeline = self.shaders.pipelines.bg_image,
+                .uniforms = frame.uniforms.buffer,
+                .buffers = &.{frame.bg_image_buffer.buffer},
+                .textures = &.{texture},
+                .draw = .{ .type = .triangle, .vertex_count = 3 },
+            }),
+            else => {},
+        };
+        pass.step(.{
+            .pipeline = self.shaders.pipelines.scroll_copy,
+            .textures = &.{self.scroll_textures[displayed].?},
+            .draw = .{ .type = .triangle, .vertex_count = 3 },
+        });
+        if (self.uniforms.smooth_effect > 0 and self.uniforms.smooth_block != 0) pass.step(.{
+            .pipeline = self.shaders.pipelines.smooth_cursor,
+            .uniforms = frame.uniforms.buffer,
+            .draw = .{ .type = .triangle, .vertex_count = 3 },
+        });
+        pass.step(.{
+            .pipeline = self.shaders.pipelines.cell_text,
+            .uniforms = frame.uniforms.buffer,
+            .buffers = &.{ frame.cells.buffer, frame.cells_bg.buffer },
+            .textures = &.{ frame.grayscale, frame.color },
+            .draw = .{ .type = .triangle_strip, .vertex_count = 4, .instance_count = fg_count },
+        });
+        if (self.uniforms.smooth_effect > 0 and self.uniforms.smooth_block == 0) pass.step(.{
+            .pipeline = self.shaders.pipelines.smooth_cursor,
+            .uniforms = frame.uniforms.buffer,
+            .draw = .{ .type = .triangle, .vertex_count = 3 },
+        });
+        self.scroll_presented = displayed;
+    }
+
+    if (self.scroll_shared) |shared| shared.scroll_hit.publish(.{
+        .rects = self.uniforms.scroll_rects,
+        .offsets = self.uniforms.scroll_offsets,
+        .count = self.uniforms.scroll_count,
+        .viewport = self.scrollbar.offset,
+        .alternate = self.scroll_snapshot.alternate,
+        .epoch = self.scroll_snapshot.journal.epoch,
+        .serial = self.scroll_snapshot.journal.serial,
+        .width = self.size.screen.width,
+        .height = self.size.screen.height,
+    });
+
     return false;
 }
 
@@ -1551,7 +1714,10 @@ pub fn frameCompleted(
 ) void {
     if (health == .healthy) _ = self.presented_revision.fetchAdd(1, .release);
     // A failed GPU submission must not seed the next visible trail.
-    if (health == .unhealthy) self.cursor_motion.invalidate();
+    if (health == .unhealthy) {
+        self.cursor_motion.invalidate();
+        self.scroll_failed.store(true, .release);
+    }
     // If our health value hasn't changed, then we do nothing. We don't
     // do a cmpxchg here because strict atomicity isn't important.
     if (self.health.load(.seq_cst) != health) {
@@ -1679,6 +1845,8 @@ pub fn changeConfig(self: *Self, config: *DerivedConfig) !void {
     self.draw_mutex.lockUncancelable(global.io());
     defer self.draw_mutex.unlock(global.io());
 
+    self.releaseScrollTextures();
+
     // We always redo the font shaper in case font features changed. We
     // could check to see if there was an actual config change but this is
     // easier and rare enough to not cause performance issues.
@@ -1752,6 +1920,7 @@ pub fn setScreenSize(
 
     // Cursor positions are screen pixels. Preserve the displayed body and let
     // the next native glyph retarget it to the resized grid without snapping.
+    if (!std.meta.eql(self.size, size)) self.releaseScrollTextures();
     self.size = size;
     self.updateScreenSizeUniforms();
 

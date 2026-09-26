@@ -604,7 +604,7 @@ pub const StreamHandler = struct {
             self.renderer_state.render_hold.capture(self.alloc, self.terminal, self.size.cell, if (self.renderer_state.mouse.mods.equal(@import("../input.zig").ctrlOrSuper(.{}))) self.renderer_state.mouse.point else null) catch |err| {
                 log.warn("error capturing synchronized frame err={}", .{err});
             };
-        } else self.renderer_state.render_hold.discard(self.alloc);
+        } // Release retains consumed row deltas until the GUI merges them.
         self.terminal.modes.set(.synchronized_output, enabled);
         if (enabled) self.messageWriter(.{ .start_synchronized_output = {} });
     }
@@ -1970,7 +1970,7 @@ test "GUI synchronized output captures completed frames within one write" {
     // the watchdog. A mode-only renderer cannot observe the release below.
     stream.nextSlice("\x1b[?2026hZ\x1b[?2026l\x1b[?2026h\x1b[H123");
     try t.expect(term.modes.get(.synchronized_output));
-    var frame = shared.render_hold.take(t.allocator, true).?;
+    var frame = shared.render_hold.take().?;
     defer frame.deinit(t.allocator);
     frame.render.endUpdate();
     for ("XYZ", 0..) |cp, i| try t.expectEqual(cp, frame.render.row_data.items(.cells)[0].get(i).raw.codepoint());
@@ -1984,7 +1984,7 @@ test "GUI synchronized output captures completed frames within one write" {
 
     stream.nextSlice("\x1b[?2026l\x1b[?2026s\x1b[?2026h\x1b[?2026r");
     try t.expect(!term.modes.get(.synchronized_output));
-    try t.expect(shared.render_hold.pending == null);
+    try t.expect(shared.render_hold.pending != null);
     stream.nextSlice("\x1b[?2026h\x1b[?2026s\x1b[?2026l\x1b[?2026r");
     try t.expect(term.modes.get(.synchronized_output));
     try t.expect(shared.render_hold.pending != null);

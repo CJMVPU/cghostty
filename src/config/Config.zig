@@ -2640,6 +2640,10 @@ keybind: Keybinds = .{},
 /// Set to `false` to disable. Enabled by default.
 @"cursor-effect": bool = true,
 
+/// Animate wheel scrolling and explicit alternate-screen scroll regions.
+/// Precision trackpad input follows pixel deltas without adding inertia.
+@"smooth-scroll": bool = true,
+
 /// Bell features to enable. The format of this is a list of
 /// features to enable separated by commas. If you prefix a feature with `no-`
 /// then it is disabled. If you omit a feature, its default value is used.

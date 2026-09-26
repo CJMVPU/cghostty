@@ -216,6 +216,17 @@ pub fn initTarget(self: *const Metal, width: usize, height: usize) !Target {
     });
 }
 
+/// Private content textures used by scroll composition. Queue barriers in
+/// RenderPass order their writes and reads across in-flight submissions.
+pub fn initContentTexture(self: *const Metal, width: usize, height: usize) !Texture {
+    return Texture.init(.{
+        .device = self.device,
+        .pixel_format = if (self.blending.isLinear()) .bgra8unorm_srgb else .bgra8unorm,
+        .resource_options = .{ .storage_mode = .private },
+        .usage = .{ .shader_read = true, .render_target = true },
+    }, width, height, null);
+}
+
 /// Present the provided target.
 pub inline fn present(self: *Metal, target: Target, sync: bool) !void {
     if (sync) {

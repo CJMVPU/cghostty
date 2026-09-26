@@ -78,6 +78,8 @@ pub const RenderState = struct {
     ///
     /// The viewport is always exactly equal to the active area size so this
     /// is also the viewport size.
+    scroll_state: @import("ScrollState.zig") = .{},
+
     rows: size.CellCountInt,
     cols: size.CellCountInt,
 
@@ -113,14 +115,8 @@ pub const RenderState = struct {
     /// if possible.
     selection_cache: ?SelectionCache = null,
 
-    /// The pending style runs requiring an endUpdate call, in the
-    /// order they were recorded. If multiple begins happen without an
-    /// endUpdate call, runs accumulate; rows rebuilt more than once
-    /// may then have superseded (stale) runs in this list, which is
-    /// harmless: newer runs are appended later so they win, and cells
-    /// not covered by newer runs have a default style ID in their raw
-    /// data so their style is undefined by contract anyway. See
-    /// beginUpdate.
+    /// Owned style runs awaiting endUpdate. Rebuilding a row replaces its
+    /// pending runs, bounding storage even when many input frames coalesce.
     pending_styles: std.ArrayList(StyleRun) = .empty,
 
     /// Initial state.
@@ -405,6 +401,7 @@ pub const RenderState = struct {
         };
 
         // Always set our cheap fields, its more expensive to compare
+        self.scroll_state = t.scroll_state;
         self.rows = s.pages.rows;
         self.cols = s.pages.cols;
         self.viewport_pin = viewport_pin;
@@ -524,6 +521,7 @@ pub const RenderState = struct {
             .highlights = row_highlights,
             .dirties = row_dirties,
             .pending_styles = &self.pending_styles,
+            .replace_pending = self.pending_styles.items.len != 0,
             .applied_styles = row_applied,
         };
         var y: usize = 0;
@@ -809,6 +807,50 @@ pub const RenderState = struct {
     pub fn clean(self: *RenderState) void {
         self.dirty = .false;
         @memset(self.row_data.items(.dirty), false);
+    }
+
+    /// Apply a row delta from the synchronized-output mailbox. Clean rows in
+    /// delta are scratch storage, not a second copy of the visible screen.
+    /// Transfer ownership of changed rows; no cell or grapheme copy is needed.
+    /// Both states must belong to the same coordinated dirty-bit consumer.
+    pub fn applyDelta(self: *RenderState, delta: *RenderState) void {
+        self.endUpdate();
+        const previous_dirty = self.dirty;
+        if (self.rows != delta.rows or self.cols != delta.cols or self.row_data.len != delta.row_data.len) {
+            assert(delta.dirty == .full);
+            std.mem.swap(RenderState, self, delta);
+        } else {
+            // Copy pins before swapping: afterwards delta owns displaced
+            // rows whose pins may belong to an older viewport or screen.
+            self.copyMetadata(delta);
+            for (delta.row_data.items(.dirty), 0..) |dirty, y| {
+                if (!dirty) continue;
+                const old = self.row_data.get(y);
+                self.row_data.set(y, delta.row_data.get(y));
+                delta.row_data.set(y, old);
+            }
+            std.mem.swap(std.ArrayList(StyleRun), &self.pending_styles, &delta.pending_styles);
+            self.dirty = if (previous_dirty == .full or delta.dirty == .full) .full else if (previous_dirty == .partial or delta.dirty == .partial) .partial else .false;
+        }
+        // Prepare the displaced storage for the next capture. Metadata/pins
+        // describe the displayed frame even though clean cell storage may not.
+        delta.clean();
+        delta.copyMetadata(self);
+    }
+
+    /// Align a reusable delta with the live renderer after it consumes dirty
+    /// bits. If storage dimensions differ, leave them alone: beginUpdate will
+    /// populate the entire viewport before any partial delta can be emitted.
+    pub fn copyMetadata(self: *RenderState, source: *const RenderState) void {
+        if (self.rows != source.rows or self.cols != source.cols) return;
+        self.scroll_state = source.scroll_state;
+        self.colors = source.colors;
+        self.cursor = source.cursor;
+        self.screen = source.screen;
+        self.viewport_pin = source.viewport_pin;
+        self.selection_cache = source.selection_cache;
+        @memcpy(self.row_data.items(.pin), source.row_data.items(.pin));
+        @memcpy(self.row_data.items(.serial), source.row_data.items(.serial));
     }
 
     /// Fill a slice of styles with one value.
@@ -1127,7 +1169,8 @@ pub const RenderState = struct {
 
         const row_slice = self.row_data.slice();
         const row_pins = row_slice.items(.pin);
-        const row_cells = row_slice.items(.cells);
+        // Pins are refreshed even for clean delta rows. Resolve links from
+        // the live page while the caller still holds the terminal lock.
 
         // Our viewport point is sent in by the caller and can't be trusted.
         // If it is outside the valid area then just return empty because
@@ -1161,12 +1204,12 @@ pub const RenderState = struct {
         for (
             0..,
             row_pins,
-            row_cells,
-        ) |y, pin, cells| {
-            for (0.., cells.items(.raw)) |x, cell| {
+        ) |y, pin| {
+            const other_page: *page.Page = pin.node.page();
+            const cells = other_page.getRowAndCell(0, pin.y).row.cells.ptr(other_page.memory)[0..self.cols];
+            for (0.., cells) |x, cell| {
                 if (!cell.hyperlink) continue;
 
-                const other_page: *page.Page = pin.node.page();
                 const other = link: {
                     const rac = other_page.getRowAndCell(x, pin.y);
                     const link_id = other_page.lookupHyperlink(rac.cell) orelse continue;
@@ -1225,6 +1268,7 @@ const RowBuilder = struct {
     highlights: []std.ArrayList(RenderState.Highlight),
     dirties: []bool,
     pending_styles: *std.ArrayList(RenderState.StyleRun),
+    replace_pending: bool,
     applied_styles: []std.ArrayList(RenderState.StyleRun),
 
     fn row(
@@ -1233,6 +1277,18 @@ const RowBuilder = struct {
         page_row: *const page.Row,
         vy: usize,
     ) Allocator.Error!void {
+        // Multiple captures can coalesce before the GUI consumes them. Drop
+        // superseded runs so memory and endUpdate work stay viewport-bounded.
+        if (b.replace_pending and b.dirties[vy]) {
+            var kept: usize = 0;
+            for (b.pending_styles.items) |run| {
+                if (run.y == vy) continue;
+                b.pending_styles.items[kept] = run;
+                kept += 1;
+            }
+            b.pending_styles.items.len = kept;
+        }
+
         // Promote our arena. State is copied by value so we need to
         // restore it on all exit paths so we don't leak memory.
         var arena = b.arenas[vy].promote(b.alloc);
@@ -2567,4 +2623,23 @@ test "indexed flattened highlights unwind allocation failures" {
             _ = try state.replaceHighlightsFlattened(alloc, alloc, &.{.{ .tag = 1, .highlights = &.{hl} }});
         }
     }.check, .{});
+}
+
+test "scroll journal render snapshot stays at its completed boundary" {
+    const t = std.testing;
+    const alloc = t.allocator;
+    var term = try Terminal.init(t.io, alloc, .{ .cols = 10, .rows = 5 });
+    defer term.deinit(alloc);
+    var snapshot: RenderState = .empty;
+    defer snapshot.deinit(alloc);
+    term.screens.active.cursorAbsolute(0, 1);
+    term.deleteLines(1);
+    term.scroll_state.viewport_fraction = -0.25;
+    try snapshot.update(alloc, &term);
+    // Subsequent IO can wrap the live journal before this owned frame is drawn.
+    for (0..20) |_| term.insertLines(1);
+    term.scroll_state.viewport_fraction = 0.5;
+    try t.expectEqual(@as(u64, 1), snapshot.scroll_state.serial);
+    try t.expectEqual(@as(i32, -1), snapshot.scroll_state.event(0).?.rows);
+    try t.expectEqual(@as(f64, -0.25), snapshot.scroll_state.viewport_fraction);
 }

@@ -36,6 +36,10 @@ struct Uniforms {
   uchar4 smooth_color;
   float smooth_effect;
   float smooth_block;
+  float4 scroll_rects[4];
+  float2 scroll_offsets[4];
+  uint scroll_count;
+  uint scroll_mode;
 };
 
 //-------------------------------------------------------------------
@@ -232,6 +236,38 @@ vertex FullScreenVertexOut full_screen_vertex(
 // Background Color Shader
 //-------------------------------------------------------------------
 #pragma mark - BG Color Shader
+
+// Scroll composition uses pixel coordinates and preserves premultiplied alpha.
+// The frozen image contains no cursor, so outgoing rows cannot leave a cursor ghost.
+bool scroll_contains(float2 p, float4 rect) {
+  return all(p >= rect.xy) && all(p < rect.zw);
+}
+fragment float4 scroll_copy_fragment(
+  FullScreenVertexOut in [[stage_in]],
+  texture2d<float> content [[texture(0)]]
+) {
+  return content.read(uint2(in.position.xy));
+}
+fragment float4 scroll_compose_fragment(
+  FullScreenVertexOut in [[stage_in]],
+  constant Uniforms& u [[buffer(1)]],
+  texture2d<float> content [[texture(0)]],
+  texture2d<float> previous [[texture(1)]]
+) {
+  constexpr sampler pixels(coord::pixel, address::clamp_to_edge, filter::linear);
+  float2 p = in.position.xy;
+  for (uint i = 0; i < u.scroll_count; i++) {
+    float4 rect = u.scroll_rects[i];
+    if (!scroll_contains(p, rect)) continue;
+    float2 q = p - float2(0, u.scroll_offsets[i].x);
+    if (scroll_contains(q, rect)) return content.sample(pixels, q);
+    float2 old = p + float2(0, u.scroll_offsets[i].y - u.scroll_offsets[i].x);
+    // Never sample a neighboring split or status line at an outgoing edge.
+    old = clamp(old, rect.xy + 0.5, rect.zw - 0.5);
+    return previous.sample(pixels, old);
+  }
+  return content.read(uint2(p));
+}
 
 fragment float4 bg_color_fragment(
   FullScreenVertexOut in [[stage_in]],
@@ -614,6 +650,9 @@ struct CellTextVertexOut {
   float4 color [[flat]];
   float4 bg_color [[flat]];
   float2 tex_coord;
+  bool cursor_glyph [[flat]];
+  bool cursor_cell [[flat]];
+  float4 scroll_clip [[flat]];
 };
 
 vertex CellTextVertexOut cell_text_vertex(
@@ -645,6 +684,18 @@ vertex CellTextVertexOut cell_text_vertex(
 
   CellTextVertexOut out;
   out.atlas = in.atlas;
+  out.cursor_glyph = (in.bools & IS_CURSOR_GLYPH) != 0;
+  out.scroll_clip = float4(0, 0, uniforms.screen_size);
+  if (uniforms.scroll_mode == 2 && !out.cursor_glyph) {
+    float2 center = (float2(in.grid_pos) + 0.5) * uniforms.cell_size + uniforms.grid_padding.wx;
+    for (uint i = 0; i < uniforms.scroll_count; i++) {
+      if (scroll_contains(center, uniforms.scroll_rects[i])) {
+        cell_pos.y += uniforms.scroll_offsets[i].x;
+        out.scroll_clip = uniforms.scroll_rects[i];
+        break;
+      }
+    }
+  }
 
   //              === Grid Cell ===
   //      +X
@@ -727,7 +778,8 @@ vertex CellTextVertexOut cell_text_vertex(
 
   // If this cell is the cursor cell, but we're not processing
   // the cursor glyph itself, then we need to change the color.
-  if (uniforms.smooth_effect == 0 && (in.bools & IS_CURSOR_GLYPH) == 0 && is_cursor_pos) {
+  out.cursor_cell = is_cursor_pos;
+  if (uniforms.scroll_mode != 1 && uniforms.smooth_effect == 0 && (in.bools & IS_CURSOR_GLYPH) == 0 && is_cursor_pos) {
     out.color = load_color(
       uniforms.cursor_color,
       uniforms.use_display_p3,
@@ -737,7 +789,7 @@ vertex CellTextVertexOut cell_text_vertex(
 
   // The animated cursor is drawn separately. Suppress the
   // static cursor glyph without changing the underlying cell data.
-  if (uniforms.smooth_effect > 0 && (in.bools & IS_CURSOR_GLYPH) != 0)
+  if ((uniforms.smooth_effect > 0 || uniforms.scroll_mode == 1) && (in.bools & IS_CURSOR_GLYPH) != 0)
     out.position = float4(-2, -2, 0, 1);
 
   return out;
@@ -749,6 +801,13 @@ fragment float4 cell_text_fragment(
   texture2d<float> textureColor [[texture(1)]],
   constant Uniforms& uniforms [[buffer(1)]]
 ) {
+  if (uniforms.scroll_mode == 2 && !in.cursor_glyph) {
+    if (!scroll_contains(in.position.xy, in.scroll_clip)) discard_fragment();
+    if (uniforms.smooth_effect > 0) {
+      if (uniforms.smooth_block == 0 || smooth_cursor_coverage(in.position.xy, uniforms) == 0)
+        discard_fragment();
+    } else if (!in.cursor_cell) discard_fragment();
+  }
   constexpr sampler textureSampler(
     coord::pixel,
     address::clamp_to_edge,
@@ -760,7 +819,7 @@ fragment float4 cell_text_fragment(
     case ATLAS_GRAYSCALE: {
       // Our input color is always linear.
       float4 color = in.color;
-      if (uniforms.smooth_effect > 0 && uniforms.smooth_block != 0) {
+      if (uniforms.scroll_mode != 1 && uniforms.smooth_effect > 0 && uniforms.smooth_block != 0) {
         float coverage = smooth_cursor_coverage(in.position.xy, uniforms);
         float4 cursor_text = load_color(uniforms.cursor_color, uniforms.use_display_p3, true);
         color = mix(color, cursor_text, coverage * uniforms.smooth_block);

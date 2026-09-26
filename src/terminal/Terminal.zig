@@ -45,6 +45,8 @@ const TABSTOP_INTERVAL = 8;
 /// Conservative text mutation epoch; never cleared by the renderer.
 accessibility_revision: u64 = 0,
 
+scroll_state: @import("ScrollState.zig") = .{},
+
 /// The set of screens behind this terminal (e.g. primary vs alternate).
 screens: ScreenSet,
 
@@ -2404,11 +2406,13 @@ pub fn index(self: *Terminal) !void {
                 if (screen.kitty_images.placements.count() != 0) {
                     @branchHint(.unlikely);
                     try self.indexScrollWithImages(.window_shift);
+                    self.recordScroll(self.scrolling_region.top, -1);
                     return;
                 }
             }
 
             try screen.cursorScrollAbove();
+            self.recordScroll(self.scrolling_region.top, -1);
             return;
         }
 
@@ -2427,6 +2431,7 @@ pub fn index(self: *Terminal) !void {
             if (screen.kitty_images.placements.count() != 0) {
                 @branchHint(.unlikely);
                 try self.indexScrollWithImages(.in_place);
+                self.recordScroll(self.scrolling_region.top, -1);
                 return;
             }
         }
@@ -2436,6 +2441,7 @@ pub fn index(self: *Terminal) !void {
         try screen.cursorScrollRegionUp(
             self.scrolling_region.bottom - self.scrolling_region.top,
         );
+        self.recordScroll(self.scrolling_region.top, -1);
 
         return;
     }
@@ -2728,6 +2734,7 @@ pub fn scrollUp(self: *Terminal, count: usize) !void {
         // use the cursorScrollAbove function to create scrollback
         self.screens.active.cursorAbsolute(0, self.scrolling_region.bottom);
         for (0..adjusted_count) |_| try self.screens.active.cursorScrollAbove();
+        self.recordScroll(self.scrolling_region.top, -@as(i32, @intCast(adjusted_count)));
         return;
     }
 
@@ -2764,6 +2771,9 @@ pub const ScrollViewport = union(Tag) {
 
 /// Scroll the viewport of the terminal grid.
 pub fn scrollViewport(self: *Terminal, behavior: ScrollViewport) void {
+    self.scroll_state.viewport_serial +%= 1;
+    self.scroll_state.viewport_animate = false;
+    self.scroll_state.viewport_fraction = 0;
     self.screens.active.scroll(switch (behavior) {
         .top => .{ .top = {} },
         .bottom => .{ .active = {} },
@@ -2974,6 +2984,7 @@ pub fn insertLines(self: *Terminal, count: usize) void {
     // We can only insert lines up to our remaining lines in the scroll
     // region. So we take whichever is smaller.
     const adjusted_count = @min(count, rem);
+    self.recordScroll(start_y, @intCast(adjusted_count));
 
     // Create a new tracked pin which we'll use to navigate the page list
     // so that if we need to adjust capacity it will be properly tracked.
@@ -3148,6 +3159,7 @@ pub fn deleteLines(self: *Terminal, count: usize) void {
     // We can only insert lines up to our remaining lines in the scroll
     // region. So we take whichever is smaller.
     const adjusted_count = @min(count, rem);
+    self.recordScroll(start_y, -@as(i32, @intCast(adjusted_count)));
 
     // Create a new tracked pin which we'll use to navigate the page list
     // so that if we need to adjust capacity it will be properly tracked.
@@ -3572,6 +3584,7 @@ pub fn eraseDisplay(
     protected_req: bool,
 ) void {
     self.accessibility_revision +%= 1;
+    if (mode == .complete or mode == .scroll_complete) self.scroll_state.invalidate();
     // We respect protected attributes if explicitly requested (probably
     // a DECSEL sequence) or if our last protected mode was ISO even if its
     // not currently set.
@@ -4008,6 +4021,7 @@ pub fn resize(
     alloc: Allocator,
     opts: Resize,
 ) ResizeError!void {
+    self.scroll_state.invalidate();
     self.accessibility_revision +%= 1;
     const tw = resize_tw;
 
@@ -4106,6 +4120,7 @@ pub fn resize(
         // so we can safely remove the alt and recreate it blank. This loses
         // the data but hopefully keeps us on the alt screen.
         const charset = alt.charset;
+        self.scroll_state.invalidate();
         self.screens.switchTo(.primary);
         self.screens.remove(alloc, .alternate);
 
@@ -4133,6 +4148,7 @@ pub fn resize(
         };
 
         replacement.charset = charset;
+        self.scroll_state.invalidate();
         self.screens.switchTo(.alternate);
     }
 
@@ -4757,6 +4773,7 @@ pub fn switchScreen(self: *Terminal, key: ScreenSet.Key) !?*Screen {
     self.flags.dirty.clear = true;
 
     // Finalize the switch
+    self.scroll_state.invalidate();
     self.screens.switchTo(key);
 
     return old;
@@ -4883,6 +4900,7 @@ pub fn plainStringUnwrapped(self: *Terminal, alloc: Allocator) ![]const u8 {
 /// this will reuse the existing memory. In the latter case, memory may
 /// be wasted (since its unused) but it isn't leaked.
 pub fn fullReset(self: *Terminal) void {
+    self.scroll_state.invalidate();
     self.accessibility_revision +%= 1;
     // Ensure we're back on primary screen
     self.screens.switchTo(.primary);
@@ -16557,4 +16575,38 @@ test "Terminal: eraseDisplay complete ignores stale prompt on recycled row" {
     t.eraseDisplay(.complete, false);
 
     try testing.expectEqual(t.screens.active.pages.rows, t.screens.active.pages.total_rows);
+}
+
+/// Record only actual terminal region movement; never infer movement from keys.
+fn recordScroll(self: *Terminal, top: u16, rows: i32) void {
+    if (rows == 0) return;
+    self.scroll_state.record(.{
+        .left = self.scrolling_region.left,
+        .top = top,
+        .right = self.scrolling_region.right + 1,
+        .bottom = self.scrolling_region.bottom + 1,
+    }, rows);
+}
+
+test "scroll journal records exact terminal regions once" {
+    const alloc = testing.allocator;
+    var t = try init(testing.io, alloc, .{ .cols = 20, .rows = 10 });
+    defer t.deinit(alloc);
+    t.scrolling_region = .{ .left = 0, .top = 1, .right = 19, .bottom = 8 };
+    t.screens.active.cursorAbsolute(0, 3);
+    t.deleteLines(2);
+    var event = t.scroll_state.event(0).?;
+    try testing.expectEqual(@as(u16, 3), event.rect.top);
+    try testing.expectEqual(@as(u16, 9), event.rect.bottom);
+    try testing.expectEqual(@as(i32, -2), event.rows);
+    t.insertLines(1);
+    try testing.expectEqual(@as(i32, 1), t.scroll_state.event(1).?.rows);
+    try t.scrollUp(1);
+    try testing.expectEqual(@as(u64, 3), t.scroll_state.serial);
+    event = t.scroll_state.event(2).?;
+    try testing.expectEqual(@as(u16, 1), event.rect.top);
+    t.screens.active.cursorAbsolute(0, 8);
+    try t.index();
+    try testing.expectEqual(@as(u64, 4), t.scroll_state.serial);
+    try testing.expectEqual(@as(i32, -1), t.scroll_state.event(3).?.rows);
 }

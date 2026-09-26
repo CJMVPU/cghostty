@@ -127,6 +127,7 @@ pub const entries = [_]Entry{
     .{ .key = .@"mouse-hide-while-typing", .group = 5, .zh = "输入时隐藏鼠标", .en = "Mouse hide while typing" },
     .{ .key = .@"mouse-shift-capture", .group = 5, .zh = "Shift 与终端鼠标捕获策略", .en = "Mouse shift capture" },
     .{ .key = .@"mouse-reporting", .group = 5, .zh = "允许终端程序接收鼠标事件", .en = "Mouse reporting" },
+    .{ .key = .@"smooth-scroll", .group = 5, .zh = "终端平滑滚动", .en = "Smooth terminal scrolling", .note = "滚轮使用连续过渡，触控板跟随像素位移；TUI 支持明确的区域滚动指令。 / Animates wheel and explicit TUI region scrolling; trackpads follow pixel deltas." },
     .{ .key = .@"mouse-scroll-multiplier", .group = 5, .zh = "触控板／滚轮滚动倍数", .en = "Mouse scroll multiplier" },
     .{ .key = .@"right-click-action", .group = 5, .zh = "右键动作", .en = "Right click action" },
     .{ .key = .@"middle-click-action", .group = 5, .zh = "中键动作", .en = "Middle click action" },

@@ -288,6 +288,7 @@ const DerivedConfig = struct {
     mouse_interval: u64,
     mouse_hide_while_typing: bool,
     mouse_reporting: bool,
+    smooth_scroll: bool,
     mouse_scroll_multiplier: configpkg.MouseScrollMultiplier,
     mouse_shift_capture: configpkg.MouseShiftCapture,
     fullscreen: configpkg.Fullscreen,
@@ -368,6 +369,7 @@ const DerivedConfig = struct {
             .mouse_interval = config.@"click-repeat-interval" * 1_000_000, // 500ms
             .mouse_hide_while_typing = config.@"mouse-hide-while-typing",
             .mouse_reporting = config.@"mouse-reporting",
+            .smooth_scroll = config.@"smooth-scroll",
             .mouse_scroll_multiplier = config.@"mouse-scroll-multiplier",
             .mouse_shift_capture = config.@"mouse-shift-capture",
             .fullscreen = config.fullscreen,
@@ -3137,7 +3139,7 @@ pub fn scrollCallback(
         // We scroll by the number of rows in the offset and save the remainder
         const amount = poff / cell_size;
         assert(@abs(amount) >= 1);
-        self.mouse.pending_scroll_y = poff - (amount * cell_size);
+        self.mouse.pending_scroll_y = poff - (@trunc(amount) * cell_size);
 
         // Round towards zero.
         const delta: isize = @intFromFloat(@trunc(amount));
@@ -3162,7 +3164,7 @@ pub fn scrollCallback(
 
         const amount = poff / cell_size;
         assert(@abs(amount) >= 1);
-        self.mouse.pending_scroll_x = poff - (amount * cell_size);
+        self.mouse.pending_scroll_x = poff - (@trunc(amount) * cell_size);
         const delta: isize = @intFromFloat(@trunc(amount));
         assert(@abs(delta) >= 1);
         break :x .{ .delta = delta };
@@ -3242,11 +3244,32 @@ pub fn scrollCallback(
             return;
         }
 
-        if (y.delta != 0) {
+        const term = &self.io.termio.terminal;
+        if (self.config.smooth_scroll and scroll_mods.precision and yoff != 0) {
+            const bar = term.screens.active.pages.scrollbar();
+            const height: f64 = @floatFromInt(self.size.cell.height);
+            const current = @as(f64, @floatFromInt(bar.offset)) - term.scroll_state.viewport_fraction;
+            const desired = std.math.clamp(current - yoff * self.config.mouse_scroll_multiplier.precision / height, 0, @as(f64, @floatFromInt(bar.total - bar.len)));
+            // Load the incoming row before it becomes partly visible. The old
+            // displayed texture supplies the outgoing edge during composition.
+            const anchor: usize = @intFromFloat(if (desired > current) @ceil(desired) else @floor(desired));
+            term.scrollViewport(.{ .row = anchor });
+            const actual = term.screens.active.pages.scrollbar().offset;
+            term.scroll_state.viewport_fraction = @as(f64, @floatFromInt(actual)) - desired;
+            term.scroll_state.viewport_animate = true;
+            term.scroll_state.viewport_precision = true;
+            term.scroll_state.viewport_serial +%= 1;
+            self.mouse.pending_scroll_y = 0;
+        } else if (y.delta != 0) {
             // Modify our viewport, this requires a lock since it affects
             // rendering. We have to switch signs here because our delta
             // is negative down but our viewport is positive down.
             self.io.termio.terminal.scrollViewport(.{ .delta = y.delta * -1 });
+            if (self.config.smooth_scroll) {
+                term.scroll_state.viewport_animate = true;
+                term.scroll_state.viewport_precision = false;
+                term.scroll_state.viewport_serial +%= 1;
+            }
         }
     }
 
@@ -3336,6 +3359,18 @@ fn mouseReport(
         break :opts opts;
     };
 
+    const hit = self.render.state.scroll_hit.read();
+    // Wheel events target a pane, not a text row. In particular, do not drop
+    // repeated wheel input when the pointer is over an outgoing edge row.
+    const wheel_button = if (button) |b| switch (b) {
+        .four, .five, .six, .seven => true,
+        else => false,
+    } else false;
+    const report_y = if (!wheel_button and self.config.smooth_scroll and hit.width == self.size.screen.width and hit.height == self.size.screen.height)
+        hit.resolve(pos.x, pos.y, self.io.termio.terminal.scroll_state, @floatFromInt(self.size.cell.width), @floatFromInt(self.size.cell.height), @floatFromInt(self.size.padding.left), @floatFromInt(self.size.padding.top)) orelse return
+    else
+        pos.y;
+
     var data: termio.Message.WriteReq.Small.Array = undefined;
     var writer: std.Io.Writer = .fixed(&data);
     input.mouse_encode.encode(&writer, .{
@@ -3344,7 +3379,7 @@ fn mouseReport(
         .mods = mods,
         .pos = .{
             .x = pos.x,
-            .y = pos.y,
+            .y = @floatCast(report_y),
         },
     }, encoding_opts) catch |err| switch (err) {
         error.WriteFailed => {
@@ -3480,11 +3515,7 @@ pub fn mouseButtonCallback(
         // gesture can conservatively treat the release as having moved away
         // from the pressed cell.
         const release_pin: ?terminal.Pin = if (release_pos) |pos| pin: {
-            const release_vp = self.posToViewport(pos.x, pos.y);
-            break :pin self.io.termio.terminal.screens.active.pages.pin(.{ .viewport = .{
-                .x = release_vp.x,
-                .y = release_vp.y,
-            } });
+            break :pin self.posToPin(pos);
         } else null;
         self.mouse.selection_gesture.release(
             self.render.state.terminal,
@@ -3583,24 +3614,10 @@ pub fn mouseButtonCallback(
         self.render.state.mutex.lockUncancelable(global.io());
         defer self.render.state.mutex.unlock(global.io());
         const t: *terminal.Terminal = self.render.state.terminal;
-        const screen: *terminal.Screen = self.render.state.terminal.screens.active;
 
         const pos = try self.rt_surface.getCursorPos();
         const pin = pin: {
-            const pt_viewport = self.posToViewport(pos.x, pos.y);
-            const pin = screen.pages.pin(.{
-                .viewport = .{
-                    .x = pt_viewport.x,
-                    .y = pt_viewport.y,
-                },
-            }) orelse {
-                // Weird... our viewport x/y that we just converted isn't
-                // found in our pages. This is probably a bug but we don't
-                // want to crash in releases because its harmless. So, we
-                // only assert in debug mode.
-                if (comptime std.debug.runtime_safety) unreachable;
-                break :click;
-            };
+            const pin = self.posToPin(pos) orelse break :click;
 
             break :pin pin;
         };
@@ -3687,16 +3704,7 @@ pub fn mouseButtonCallback(
         const screen: *terminal.Screen = self.render.state.terminal.screens.active;
         const pos = try self.rt_surface.getCursorPos();
         const pin = pin: {
-            const pt_viewport = self.posToViewport(pos.x, pos.y);
-            const pin = screen.pages.pin(.{
-                .viewport = .{
-                    .x = pt_viewport.x,
-                    .y = pt_viewport.y,
-                },
-            }) orelse {
-                if (comptime std.debug.runtime_safety) unreachable;
-                break :sel;
-            };
+            const pin = self.posToPin(pos) orelse break :sel;
 
             break :pin pin;
         };
@@ -3914,10 +3922,8 @@ fn linkAtPos(
     pos: apprt.CursorPos,
 ) !?Link {
     // Convert our cursor position to a screen point.
-    const screen: *terminal.Screen = self.render.state.terminal.screens.active;
     const mouse_pin: terminal.Pin = mouse_pin: {
-        const point = self.posToViewport(pos.x, pos.y);
-        const pin = screen.pages.pin(.{ .viewport = point }) orelse {
+        const pin = self.posToPin(pos) orelse {
             log.warn("failed to get pin for clicked point", .{});
             return null;
         };
@@ -4268,16 +4274,7 @@ pub fn cursorPosCallback(
         try self.queueRender();
 
         // Convert to points
-        const screen: *terminal.Screen = t.screens.active;
-        const pin = screen.pages.pin(.{
-            .viewport = .{
-                .x = pos_vp.x,
-                .y = pos_vp.y,
-            },
-        }) orelse {
-            if (comptime std.debug.runtime_safety) unreachable;
-            return;
-        };
+        const pin = self.posToPin(pos) orelse return;
 
         // Perform our drag behavior in our gesture handler.
         const drag_selection = self.mouse.selection_gesture.drag(t, .{
@@ -4337,10 +4334,38 @@ pub fn colorSchemeCallback(self: *Surface, scheme: apprt.ColorScheme) !void {
 }
 
 pub fn posToViewport(self: Surface, xpos: f64, ypos: f64) terminal.point.Coordinate {
-    // Get our grid cell
-    const coord: rendererpkg.Coordinate = .{ .surface = .{ .x = xpos, .y = ypos } };
+    // Mouse coordinates follow the currently displayed content, not its target.
+    const hit = self.render.state.scroll_hit.read();
+    const mapped_y = if (self.config.smooth_scroll and hit.width == self.size.screen.width and hit.height == self.size.screen.height)
+        hit.unmap(xpos, ypos) orelse ypos
+    else
+        ypos;
+    const coord: rendererpkg.Coordinate = .{ .surface = .{ .x = xpos, .y = mapped_y } };
     const grid = coord.convert(.grid, self.size).grid;
     return .{ .x = grid.x, .y = grid.y };
+}
+
+/// Requires the terminal mutex. Scrollback edges can refer to a row just
+/// outside the integral viewport, so resolve via the full screen coordinate.
+fn posToPin(self: *Surface, pos: apprt.CursorPos) ?terminal.Pin {
+    const t = self.render.state.terminal;
+    const hit = self.render.state.scroll_hit.read();
+    if (self.config.smooth_scroll and hit.count > 0 and
+        hit.width == self.size.screen.width and hit.height == self.size.screen.height and
+        hit.epoch == t.scroll_state.epoch and hit.alternate == (t.screens.active_key == .alternate))
+    {
+        const y = hit.resolve(pos.x, pos.y, t.scroll_state, @floatFromInt(self.size.cell.width), @floatFromInt(self.size.cell.height), @floatFromInt(self.size.padding.left), @floatFromInt(self.size.padding.top)) orelse return null;
+        const coord: rendererpkg.Coordinate = .{ .surface = .{ .x = pos.x, .y = y } };
+        const grid = coord.convert(.grid, self.size).grid;
+        if (!hit.alternate) {
+            const row: i64 = @intFromFloat(@floor((y - @as(f64, @floatFromInt(self.size.padding.top))) / @as(f64, @floatFromInt(self.size.cell.height))));
+            const absolute = @as(i64, @intCast(hit.viewport)) + row;
+            if (absolute < 0) return null;
+            return t.screens.active.pages.pin(.{ .screen = .{ .x = grid.x, .y = @intCast(absolute) } });
+        }
+        return t.screens.active.pages.pin(.{ .viewport = .{ .x = grid.x, .y = grid.y } });
+    }
+    return t.screens.active.pages.pin(.{ .viewport = self.posToViewport(pos.x, pos.y) });
 }
 
 /// Scroll to the bottom of the viewport.
