@@ -87,6 +87,7 @@ test "format default config" {
 
     try testing.expect(!std.mem.startsWith(u8, buf.written(), "palette ="));
     try testing.expect(std.mem.indexOf(u8, buf.written(), "\npalette =") == null);
+    try testing.expect(std.mem.indexOf(u8, buf.written(), "command-palette-entry") == null);
 }
 
 test "format default config changed" {
@@ -109,4 +110,5 @@ test "format default config changed" {
 
     try testing.expect(!std.mem.startsWith(u8, buf.written(), "palette ="));
     try testing.expect(std.mem.indexOf(u8, buf.written(), "\npalette =") == null);
+    try testing.expect(std.mem.indexOf(u8, buf.written(), "command-palette-entry") == null);
 }

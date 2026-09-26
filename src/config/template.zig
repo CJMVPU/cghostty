@@ -56,7 +56,7 @@ fn generateGuide(alloc: std.mem.Allocator, explicit_trace_default: bool) ![:0]co
         \\# 中文说明
         \\# Settings（⌘,）打开此文件；修改后保存、退出并重新启动应用。
         \\# 取消示例行开头的 # 启用设置，优先修改已有设置，避免重复定义。
-        \\# 默认值不含主题或用户覆盖；完整快捷键和命令面板默认值见末尾附录。
+        \\# 默认值不含主题或用户覆盖；完整快捷键默认值见末尾附录。
         \\# 新模板显式关闭 render-trace；其他示例及附录均为注释。
         \\# 列表和规则可能追加或合并，请保留顺序。配置无效时回退到上次成功配置或内置默认值。
         \\# Restore Default Settings… 会先备份再恢复模板。详细说明：cghostty +show-config --default --docs
@@ -64,7 +64,7 @@ fn generateGuide(alloc: std.mem.Allocator, explicit_trace_default: bool) ![:0]co
         \\# English guide
         \\# Open with Settings (⌘,); save, quit, and restart the app to apply changes.
         \\# Uncomment an example to enable it. Edit existing settings first to avoid duplicates.
-        \\# Defaults exclude theme/user overrides; full key bindings and command entries are in the appendix.
+        \\# Defaults exclude theme/user overrides; full key bindings are in the appendix.
         \\# New templates explicitly disable render-trace; other examples and appendix entries are comments.
         \\# Lists and rules may append or merge: preserve their order. Invalid settings fall back to the last good config or defaults.
         \\# Restore Default Settings… backs up the file before restoring the guide. Details: cghostty +show-config --default --docs
@@ -112,7 +112,7 @@ pub fn generateSupplement(alloc: std.mem.Allocator, original: []const u8) ![:0]c
     return try alloc.dupeZ(u8, output.written());
 }
 
-const appendix_keys = [_]Key{ .keybind, .@"command-palette-entry" };
+const appendix_keys = [_]Key{.keybind};
 
 fn hasAppendix(key: Key) bool {
     for (appendix_keys) |candidate| if (key == candidate) return true;
@@ -265,6 +265,7 @@ test "configuration guide compact entries and grouped language introduction" {
     }
     try t.expectEqual(metadata.entries.len, entries);
     try t.expect(std.mem.indexOf(u8, data, "# [palette]") == null);
+    try t.expect(std.mem.indexOf(u8, data, "command-palette-entry") == null);
     try t.expect(std.mem.indexOf(u8, data, "# palette =") == null);
     try t.expect(std.mem.indexOf(u8, data, "#   command =") == null);
 }

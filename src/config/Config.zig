@@ -2555,47 +2555,8 @@ keybind: Keybinds = .{},
 /// Restart the application after changing this setting.
 @"claude-compatibility": bool = false,
 
-/// Custom entries into the command palette.
-///
-/// Each entry requires the title, the corresponding action, and an optional
-/// description. Each field should be prefixed with the field name, a colon
-/// (`:`), and then the specified value. The syntax for actions is identical
-/// to the one for keybind actions. Whitespace in between fields is ignored.
-///
-/// If you need to embed commas or any other special characters in the values,
-/// enclose the value in double quotes and it will be interpreted as a Zig
-/// string literal. This is also useful for including whitespace at the
-/// beginning or the end of a value. See the
-/// [Zig documentation](https://ziglang.org/documentation/master/#Escape-Sequences)
-/// for more information on string literals. Note that multiline string literals
-/// are not supported.
-///
-/// Double quotes can not be used around the field names.
-///
-/// ```ini
-/// command-palette-entry = title:Reset Font Style, action:csi:0m
-/// command-palette-entry = title:Crash on Main Thread,description:Causes a crash on the main (UI) thread.,action:crash:main
-/// command-palette-entry = title:Focus Split: Right,description:"Focus the split to the right, if it exists.",action:goto_split:right
-/// command-palette-entry = title:"Ghostty",description:"Add a little Ghostty to your terminal.",action:"text:\xf0\x9f\x91\xbb"
-/// ```
-///
-/// There are some additional special values that can be specified for
-/// command-palette-entry:
-///
-///   * `command-palette-entry=clear` will clear all command entries. Warning: this
-///     removes ALL entries up to this point, including the default
-///     entries. Available since: 1.4.0
-///
-/// By default, the command palette is preloaded with most actions that might
-/// be useful in an interactive setting yet do not have easily accessible or
-/// memorizable shortcuts. The default entries can be restored by setting this
-/// setting to an empty value:
-///
-/// ```ini
-/// command-palette-entry =
-/// ```
-///
-/// Available since: 1.2.0
+// Built-in command palette entries exposed to the native UI through the
+// existing read-only bridge. User configuration cannot add or clear entries.
 @"command-palette-entry": RepeatableCommand = .{},
 
 /// Sets the reporting format for OSC sequences that request color information.
@@ -3030,7 +2991,9 @@ _loading_theme: bool = false,
 
 /// Fields exposed in user configuration, documentation and shell completion.
 pub fn isUserConfigKey(name: []const u8) bool {
-    return name.len > 0 and name[0] != '_' and !std.mem.eql(u8, name, "palette");
+    return name.len > 0 and name[0] != '_' and
+        !std.mem.eql(u8, name, "palette") and
+        !std.mem.eql(u8, name, "command-palette-entry");
 }
 
 /// Parser hook shared by files and CLI arguments, including empty resets.
@@ -7196,39 +7159,10 @@ pub const RepeatableCommand = struct {
         }
     }
 
-    pub fn parseCLI(
-        self: *Self,
-        alloc: Allocator,
-        input_: ?[]const u8,
-    ) !void {
-        // Unset or empty input clears the list
-        const input = input_ orelse "";
-        if (input.len == 0) {
-            log.info("config has 'command-palette-entry =', using default entries", .{});
-            try self.init(alloc);
-            return;
-        }
-
-        if (std.mem.eql(u8, input, "clear")) {
-            log.info("config has 'command-palette-entry = clear', all command entries cleared", .{});
-            self.value.clearRetainingCapacity();
-            self.value_c.clearRetainingCapacity();
-            return;
-        }
-
-        // Reserve space in our lists
-        try self.value.ensureUnusedCapacity(alloc, 1);
-        try self.value_c.ensureUnusedCapacity(alloc, 1);
-
-        const cmd = try cli.args.parseAutoStruct(
-            inputpkg.Command,
-            alloc,
-            input,
-            null,
-        );
-        const cmd_c = try cmd.cval(alloc);
-        self.value.appendAssumeCapacity(cmd);
-        self.value_c.appendAssumeCapacity(cmd_c);
+    // The generic config parser requires a parser for field types, but this
+    // bridge-only value can only be populated from the built-in command list.
+    pub fn parseCLI(_: *Self, _: Allocator, _: ?[]const u8) error{InvalidField}!void {
+        return error.InvalidField;
     }
 
     /// Deep copy of the struct. Required by Config.
@@ -7264,215 +7198,24 @@ pub const RepeatableCommand = struct {
         return true;
     }
 
-    /// Used by Formatter
-    pub fn formatEntry(
-        self: RepeatableCommand,
-        formatter: formatterpkg.EntryFormatter,
-    ) !void {
-        if (self.value.items.len == 0) {
-            try formatter.formatEntry(void, {});
-            return;
-        }
-
-        for (self.value.items) |item| {
-            var buf: [4096]u8 = undefined;
-            var writer: std.Io.Writer = .fixed(&buf);
-
-            writer.print(
-                "title:\"{f}\"",
-                .{std.zig.fmtString(item.title)},
-            ) catch return error.OutOfMemory;
-
-            if (item.description.len > 0) {
-                writer.print(
-                    ",description:\"{f}\"",
-                    .{std.zig.fmtString(item.description)},
-                ) catch return error.OutOfMemory;
-            }
-
-            writer.print(",action:\"{f}\"", .{item.action}) catch return error.OutOfMemory;
-
-            try formatter.formatEntry([]const u8, writer.buffered());
-        }
-    }
-
-    test "RepeatableCommand parseCLI" {
-        const testing = std.testing;
-        var arena = ArenaAllocator.init(testing.allocator);
+    test "built-in command palette C mirror and clone" {
+        const t = std.testing;
+        var arena = ArenaAllocator.init(t.allocator);
         defer arena.deinit();
         const alloc = arena.allocator();
-
-        var list: RepeatableCommand = .{};
-        try list.parseCLI(alloc, "title:Foo,action:ignore");
-        try list.parseCLI(alloc, "title:Bar,description:bobr,action:text:ale bydle");
-        try list.parseCLI(alloc, "title:Quux,description:boo,action:increase_font_size:2.5");
-        try list.parseCLI(alloc, "title:Baz,description:Raspberry Pie,action:set_font_size:3.14");
-
-        try testing.expectEqual(@as(usize, 4), list.value.items.len);
-
-        try testing.expectEqual(inputpkg.Binding.Action.ignore, list.value.items[0].action);
-        try testing.expectEqualStrings("Foo", list.value.items[0].title);
-
-        try testing.expect(list.value.items[1].action == .text);
-        try testing.expectEqualStrings("ale bydle", list.value.items[1].action.text);
-        try testing.expectEqualStrings("Bar", list.value.items[1].title);
-        try testing.expectEqualStrings("bobr", list.value.items[1].description);
-
-        try testing.expectEqual(
-            inputpkg.Binding.Action{ .increase_font_size = 2.5 },
-            list.value.items[2].action,
-        );
-        try testing.expectEqualStrings("Quux", list.value.items[2].title);
-        try testing.expectEqualStrings("boo", list.value.items[2].description);
-
-        try testing.expectEqual(
-            inputpkg.Binding.Action{ .set_font_size = 3.14 },
-            list.value.items[3].action,
-        );
-        try testing.expectEqualStrings("Baz", list.value.items[3].title);
-        try testing.expectEqualStrings("Raspberry Pie", list.value.items[3].description);
-
-        try list.parseCLI(alloc, "clear");
-        try testing.expectEqual(@as(usize, 0), list.value.items.len);
-
-        try list.parseCLI(alloc, "");
-        try testing.expectEqual(inputpkg.command.defaults.len, list.value.items.len);
-    }
-
-    test "RepeatableCommand clone rebuilds the C mirror" {
-        const testing = std.testing;
-        var arena = ArenaAllocator.init(testing.allocator);
-        defer arena.deinit();
-        const alloc = arena.allocator();
-
-        var list: RepeatableCommand = .{};
-        try list.parseCLI(alloc, "title:Foo,description:bar,action:new_tab");
-
-        const copy = try list.clone(alloc);
-        try testing.expectEqual(list.value_c.items.len, copy.value_c.items.len);
-        // The clone's C strings must not alias the source's — the
-        // source config can be freed while the clone lives on.
-        try testing.expect(list.value_c.items[0].title != copy.value_c.items[0].title);
-        try testing.expectEqualStrings(
-            std.mem.span(list.value_c.items[0].title),
-            std.mem.span(copy.value_c.items[0].title),
-        );
-    }
-
-    test "RepeatableCommand formatConfig empty" {
-        const testing = std.testing;
-        var buf: std.Io.Writer.Allocating = .init(testing.allocator);
-        defer buf.deinit();
-
-        var list: RepeatableCommand = .{};
-        try list.formatEntry(formatterpkg.entryFormatter("a", &buf.writer));
-        try std.testing.expectEqualSlices(u8, "a = \n", buf.written());
-    }
-
-    test "RepeatableCommand formatConfig single item" {
-        const testing = std.testing;
-        var buf: std.Io.Writer.Allocating = .init(testing.allocator);
-        defer buf.deinit();
-
-        var arena = ArenaAllocator.init(testing.allocator);
-        defer arena.deinit();
-        const alloc = arena.allocator();
-
-        var list: RepeatableCommand = .{};
-        try list.parseCLI(alloc, "title:Bobr, action:text:Bober");
-        try list.formatEntry(formatterpkg.entryFormatter("a", &buf.writer));
-        try std.testing.expectEqualSlices(u8, "a = title:\"Bobr\",action:\"text:Bober\"\n", buf.written());
-    }
-
-    test "RepeatableCommand formatConfig multiple items" {
-        const testing = std.testing;
-        var buf: std.Io.Writer.Allocating = .init(testing.allocator);
-        defer buf.deinit();
-
-        var arena = ArenaAllocator.init(testing.allocator);
-        defer arena.deinit();
-        const alloc = arena.allocator();
-
-        var list: RepeatableCommand = .{};
-        try list.parseCLI(alloc, "title:Bobr, action:text:kurwa");
-        try list.parseCLI(alloc, "title:Ja,   description: pierdole,  action:text:jakie bydle");
-        try list.formatEntry(formatterpkg.entryFormatter("a", &buf.writer));
-        try std.testing.expectEqualSlices(u8, "a = title:\"Bobr\",action:\"text:kurwa\"\na = title:\"Ja\",description:\"pierdole\",action:\"text:jakie bydle\"\n", buf.written());
-    }
-
-    test "RepeatableCommand parseCLI commas" {
-        const testing = std.testing;
-
-        var arena = ArenaAllocator.init(testing.allocator);
-        defer arena.deinit();
-        const alloc = arena.allocator();
-
-        {
-            var list: RepeatableCommand = .{};
-            try list.parseCLI(alloc, "title:\"Bo,br\",action:\"text:kur,wa\"");
-            try testing.expectEqual(@as(usize, 1), list.value.items.len);
-
-            const item = list.value.items[0];
-            try testing.expectEqualStrings("Bo,br", item.title);
-            try testing.expectEqualStrings("", item.description);
-            try testing.expect(item.action == .text);
-            try testing.expectEqualStrings("kur,wa", item.action.text);
-        }
-        {
-            var list: RepeatableCommand = .{};
-            try list.parseCLI(alloc, "title:\"Bo,br\",description:\"abc,def\",action:text:kurwa");
-            try testing.expectEqual(@as(usize, 1), list.value.items.len);
-
-            const item = list.value.items[0];
-            try testing.expectEqualStrings("Bo,br", item.title);
-            try testing.expectEqualStrings("abc,def", item.description);
-            try testing.expect(item.action == .text);
-            try testing.expectEqualStrings("kurwa", item.action.text);
-        }
-    }
-
-    test "RepeatableCommand cval" {
-        const testing = std.testing;
-
-        var arena = ArenaAllocator.init(testing.allocator);
-        defer arena.deinit();
-        const alloc = arena.allocator();
-
-        var list: RepeatableCommand = .{};
-        try list.parseCLI(alloc, "title:Foo,action:ignore");
-        try list.parseCLI(alloc, "title:Bar,description:bobr,action:text:ale bydle");
-
-        try testing.expectEqual(@as(usize, 2), list.value.items.len);
-        try testing.expectEqual(@as(usize, 2), list.value_c.items.len);
-
+        var list: Self = .{};
+        try list.init(alloc);
         const cv = list.cval();
-        try testing.expectEqual(@as(usize, 2), cv.len);
-
-        // First entry
-        try testing.expectEqualStrings("Foo", std.mem.sliceTo(cv.commands[0].title, 0));
-        try testing.expectEqualStrings("ignore", std.mem.sliceTo(cv.commands[0].action_key, 0));
-        try testing.expectEqualStrings("ignore", std.mem.sliceTo(cv.commands[0].action, 0));
-
-        // Second entry
-        try testing.expectEqualStrings("Bar", std.mem.sliceTo(cv.commands[1].title, 0));
-        try testing.expectEqualStrings("bobr", std.mem.sliceTo(cv.commands[1].description, 0));
-        try testing.expectEqualStrings("text", std.mem.sliceTo(cv.commands[1].action_key, 0));
-        try testing.expectEqualStrings("text:ale bydle", std.mem.sliceTo(cv.commands[1].action, 0));
-    }
-
-    test "RepeatableCommand cval cleared" {
-        const testing = std.testing;
-
-        var arena = ArenaAllocator.init(testing.allocator);
-        defer arena.deinit();
-        const alloc = arena.allocator();
-
-        var list: RepeatableCommand = .{};
-        try list.parseCLI(alloc, "title:Foo,action:ignore");
-        try testing.expectEqual(@as(usize, 1), list.cval().len);
-
-        try list.parseCLI(alloc, "clear");
-        try testing.expectEqual(@as(usize, 0), list.cval().len);
+        try t.expectEqual(inputpkg.command.defaults.len, cv.len);
+        for (inputpkg.command.defaults, list.value.items, list.value_c.items) |expected, actual, native| {
+            try t.expect(expected.equal(actual));
+            try t.expectEqualStrings(expected.title, std.mem.span(native.title));
+        }
+        const copy = try list.clone(alloc);
+        try t.expect(list.equal(copy));
+        try t.expectEqual(cv.len, copy.cval().len);
+        try t.expect(list.value_c.items[0].title != copy.value_c.items[0].title);
+        try t.expectEqualStrings(std.mem.span(list.value_c.items[0].title), std.mem.span(copy.value_c.items[0].title));
     }
 };
 
@@ -9459,4 +9202,26 @@ test "palette theme colors survive replay and user overrides remain rejected" {
     var cloned = try cfg.clone(t.allocator);
     defer cloned.deinit();
     try t.expect(cfg.palette.equal(cloned.palette));
+}
+
+test "command palette customization is rejected while built-in entries remain" {
+    const t = std.testing;
+    var cfg = try Config.default(t.allocator);
+    defer cfg.deinit();
+    const original = cfg.@"command-palette-entry";
+    try cfg.loadData(t.allocator, "command-palette-entry = title:Custom,action:new_tab\n" ++
+        "command-palette-entry = clear\ncommand-palette-entry =\n" ++
+        "keybind = super+t=new_tab\n", "/tmp/config.ghostty");
+    try t.expectEqual(@as(usize, 3), cfg._diagnostics.items().len);
+    for (cfg._diagnostics.items()) |diag| try t.expectEqualStrings("unknown field", diag.message);
+    var it: TestIterator = .{ .data = &.{ "--command-palette-entry=clear", "--command-palette-entry=", "--command-palette-entry=title:Custom,action:new_tab" } };
+    try cfg.loadIter(t.allocator, &it);
+    try t.expectEqual(@as(usize, 6), cfg._diagnostics.items().len);
+    // Theme files cannot customize the command palette either.
+    cfg._loading_theme = true;
+    try cfg.loadData(t.allocator, "command-palette-entry = clear\n", "/tmp/theme");
+    cfg._loading_theme = false;
+    try t.expectEqual(@as(usize, 7), cfg._diagnostics.items().len);
+    try t.expect(original.equal(cfg.@"command-palette-entry"));
+    try t.expectEqual(inputpkg.command.defaults.len, cfg.@"command-palette-entry".cval().len);
 }

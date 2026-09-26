@@ -169,7 +169,6 @@ pub const entries = [_]Entry{
     .{ .key = .@"font-codepoint-map", .group = 8, .zh = "按字符范围指定字体", .en = "Fonts for Unicode character ranges", .example = "U+E000-U+F8FF=Menlo", .note = "Unicode 范围=字体；可重复。字体应已安装。 / Unicode range=font; repeatable. The font should be installed." },
     .{ .key = .@"grapheme-width-method", .group = 8, .zh = "Unicode 字素宽度计算策略", .en = "Grapheme width method" },
     .{ .key = .@"config-file", .group = 8, .zh = "包含其他配置文件", .en = "Additional configuration files", .example = "?extra.ghostty", .note = "相对路径以本文件目录为基准；? 允许文件不存在。引用文件后加载，可覆盖主配置和启动参数。 / Relative to this file; ? allows a missing file. Included files load last and can override main-file and CLI values." },
-    .{ .key = .@"command-palette-entry", .group = 8, .zh = "自定义命令面板条目", .en = "Command palette entry", .example = "title:New Tab,action:new_tab", .note = "可重复添加；clear 清空，空值恢复内置条目。 / Repeat to add; clear removes all entries, an empty value restores built-ins." },
     .{ .key = .@"window-vsync", .group = 8, .zh = "垂直同步", .en = "Vertical synchronization" },
     .{ .key = .@"render-trace", .group = 8, .zh = "渲染性能诊断记录", .en = "Renderer timing diagnostics", .note = "默认关闭；启用会增加诊断开销，重启生效。 / Disabled by default; enabling adds diagnostic overhead. Restart to apply." },
     .{ .key = .@"render-trace-directory", .group = 8, .zh = "渲染诊断输出目录", .en = "Renderer trace directory", .note = "使用绝对路径，启用诊断时自动创建；仅设置目录不会开启记录。 / Absolute path, created when diagnostics are enabled. Setting the directory alone does not enable tracing." },
