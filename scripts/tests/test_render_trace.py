@@ -11,6 +11,17 @@ spec.loader.exec_module(trace)
 
 
 class RenderTraceTests(unittest.TestCase):
+    def test_overlay_counts_distinguish_reference_work_from_submitted_work(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'render-1.csv').write_text(
+                'overlay,1,3202,80,121\n'
+                'overlay,2,3202,0,0\n')
+            result = trace.summarize(root)['local']
+            self.assertEqual(result['overlay_reference_instances'], 6404)
+            self.assertEqual(result['overlay_submitted_instances'], 80)
+            self.assertEqual(result['overlay_scissor_pixels']['max'], 121)
+
     def test_raw_traces_separate_queue_wait_from_gpu_and_sync_draws(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -53,6 +64,7 @@ class RenderTraceTests(unittest.TestCase):
             self.assertEqual(result['copied_cell_bytes'], 30)
             self.assertIsNone(result['main_queue_wait_ms'])
             self.assertIsNone(result['vsync_interval_ms'])
+            self.assertIsNone(result['overlay_reference_instances'])
 
 
 if __name__ == '__main__':

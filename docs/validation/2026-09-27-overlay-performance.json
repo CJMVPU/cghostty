@@ -1,0 +1,993 @@
+{
+  "date": "2026-09-27",
+  "baseline_commit": "d7917f21f",
+  "implementation": "Working tree committed alongside this record; no production changes between after_1 and after_2.",
+  "environment": {
+    "os": "macOS 27.0",
+    "architecture": "arm64",
+    "configuration": "ReleaseLocal / ReleaseFast",
+    "vsync": true,
+    "columns": 140,
+    "rows": 42,
+    "font_size": 10,
+    "warmup_seconds": 1,
+    "observation_seconds": 6
+  },
+  "workload": "GhosttyRendererPerformanceUITests/testVsyncWorkloads",
+  "limitations": [
+    "One baseline run and two post-change runs are diagnostic observations, not a statistically established speedup.",
+    "Trace records are flushed asynchronously; phase boundaries and GPU completion can differ slightly.",
+    "Consult trace_records_dropped per phase. Missing records make affected timing/count samples incomplete.",
+    "Overlay reduction compares reference and submitted instances within each post-change trace, not total GPU work.",
+    "Kitty above-text rendering uses the existing fallback and emits no overlay events; null is unknown/not applicable, not zero.",
+    "GPU execution duration excludes display scanout; instrumentation and scheduling contribute variability."
+  ],
+  "runs": {
+    "baseline": {
+      "vsync-idle": {
+        "surfaces": 1,
+        "draws": 0,
+        "copied_cell_bytes": 0,
+        "frames_reusing_cells": 0,
+        "overlay_reference_instances": null,
+        "overlay_submitted_instances": null,
+        "overlay_scissor_pixels": null,
+        "draw_wall_ms": null,
+        "gpu_execution_ms": null,
+        "draw_interval_ms": null,
+        "trail_segments": null,
+        "vsync_interval_ms": null,
+        "draw_lock_wait_ms": null,
+        "draw_total_ms": null,
+        "swap_chain_rebuild_ms": null,
+        "main_queue_wait_ms": null,
+        "trace_records_dropped": 0,
+        "layer_assignments": 0,
+        "synchronous_layer_assignments": 0,
+        "presentation_drops": {
+          "stale": 0,
+          "replaced": 0,
+          "size_mismatch": 0,
+          "invalidated": 0,
+          "target_reused": 0
+        },
+        "timer_draw_wakes": 0,
+        "timer_update_wakes": 0
+      },
+      "vsync-jumps": {
+        "surfaces": 1,
+        "draws": 715,
+        "copied_cell_bytes": 1036800,
+        "frames_reusing_cells": 607,
+        "overlay_reference_instances": null,
+        "overlay_submitted_instances": null,
+        "overlay_scissor_pixels": null,
+        "draw_wall_ms": {
+          "count": 715,
+          "mean": 0.2554,
+          "p95": 0.3706,
+          "max": 0.5554
+        },
+        "gpu_execution_ms": {
+          "count": 715,
+          "mean": 0.7557,
+          "p95": 2.0221,
+          "max": 3.1252
+        },
+        "draw_interval_ms": {
+          "count": 714,
+          "mean": 8.3335,
+          "p95": 9.1466,
+          "max": 9.517
+        },
+        "trail_segments": {
+          "count": 715,
+          "mean": 5.1133,
+          "p95": 8,
+          "max": 8
+        },
+        "vsync_interval_ms": {
+          "count": 715,
+          "mean": 8.3334,
+          "p95": 9.1543,
+          "max": 9.3214
+        },
+        "draw_lock_wait_ms": {
+          "count": 715,
+          "mean": 0.0001,
+          "p95": 0.0005,
+          "max": 0.0078
+        },
+        "draw_total_ms": {
+          "count": 715,
+          "mean": 0.2842,
+          "p95": 0.4037,
+          "max": 0.625
+        },
+        "swap_chain_rebuild_ms": null,
+        "main_queue_wait_ms": {
+          "count": 715,
+          "mean": 0.0623,
+          "p95": 0.0821,
+          "max": 0.2662
+        },
+        "trace_records_dropped": 0,
+        "layer_assignments": 715,
+        "synchronous_layer_assignments": 0,
+        "presentation_drops": {
+          "stale": 0,
+          "replaced": 0,
+          "size_mismatch": 0,
+          "invalidated": 0,
+          "target_reused": 0
+        },
+        "timer_draw_wakes": 0,
+        "timer_update_wakes": 0
+      },
+      "vsync-kitty": {
+        "surfaces": 1,
+        "draws": 741,
+        "copied_cell_bytes": 1094400,
+        "frames_reusing_cells": 627,
+        "overlay_reference_instances": null,
+        "overlay_submitted_instances": null,
+        "overlay_scissor_pixels": null,
+        "draw_wall_ms": {
+          "count": 741,
+          "mean": 0.2925,
+          "p95": 0.4315,
+          "max": 0.6477
+        },
+        "gpu_execution_ms": {
+          "count": 741,
+          "mean": 0.9485,
+          "p95": 2.2916,
+          "max": 3.671
+        },
+        "draw_interval_ms": {
+          "count": 740,
+          "mean": 8.3329,
+          "p95": 9.1903,
+          "max": 9.6018
+        },
+        "trail_segments": {
+          "count": 741,
+          "mean": 5.1093,
+          "p95": 8,
+          "max": 8
+        },
+        "vsync_interval_ms": {
+          "count": 741,
+          "mean": 8.3328,
+          "p95": 9.213,
+          "max": 9.3433
+        },
+        "draw_lock_wait_ms": {
+          "count": 741,
+          "mean": 0.0001,
+          "p95": 0.0003,
+          "max": 0.0029
+        },
+        "draw_total_ms": {
+          "count": 741,
+          "mean": 0.3211,
+          "p95": 0.466,
+          "max": 0.6933
+        },
+        "swap_chain_rebuild_ms": null,
+        "main_queue_wait_ms": {
+          "count": 741,
+          "mean": 0.0632,
+          "p95": 0.0818,
+          "max": 1.559
+        },
+        "trace_records_dropped": 1,
+        "layer_assignments": 741,
+        "synchronous_layer_assignments": 0,
+        "presentation_drops": {
+          "stale": 0,
+          "replaced": 0,
+          "size_mismatch": 0,
+          "invalidated": 0,
+          "target_reused": 0
+        },
+        "timer_draw_wakes": 0,
+        "timer_update_wakes": 152
+      },
+      "vsync-split": {
+        "surfaces": 2,
+        "draws": 1448,
+        "copied_cell_bytes": 1061160,
+        "frames_reusing_cells": 1226,
+        "overlay_reference_instances": null,
+        "overlay_submitted_instances": null,
+        "overlay_scissor_pixels": null,
+        "draw_wall_ms": {
+          "count": 1448,
+          "mean": 0.2579,
+          "p95": 0.5268,
+          "max": 1.771
+        },
+        "gpu_execution_ms": {
+          "count": 1448,
+          "mean": 0.5195,
+          "p95": 1.4755,
+          "max": 3.6681
+        },
+        "draw_interval_ms": {
+          "count": 1446,
+          "mean": 8.3331,
+          "p95": 9.195,
+          "max": 10.0258
+        },
+        "trail_segments": {
+          "count": 1448,
+          "mean": 5.1181,
+          "p95": 8,
+          "max": 8
+        },
+        "vsync_interval_ms": {
+          "count": 1448,
+          "mean": 8.3333,
+          "p95": 9.1596,
+          "max": 9.3379
+        },
+        "draw_lock_wait_ms": {
+          "count": 1448,
+          "mean": 0.0001,
+          "p95": 0.0003,
+          "max": 0.0135
+        },
+        "draw_total_ms": {
+          "count": 1448,
+          "mean": 0.2841,
+          "p95": 0.5653,
+          "max": 1.788
+        },
+        "swap_chain_rebuild_ms": null,
+        "main_queue_wait_ms": {
+          "count": 1448,
+          "mean": 0.0748,
+          "p95": 0.2335,
+          "max": 0.5034
+        },
+        "trace_records_dropped": 0,
+        "layer_assignments": 1448,
+        "synchronous_layer_assignments": 0,
+        "presentation_drops": {
+          "stale": 0,
+          "replaced": 0,
+          "size_mismatch": 0,
+          "invalidated": 0,
+          "target_reused": 0
+        },
+        "timer_draw_wakes": 0,
+        "timer_update_wakes": 149
+      },
+      "vsync-typing": {
+        "surfaces": 1,
+        "draws": 726,
+        "copied_cell_bytes": 4815024,
+        "frames_reusing_cells": 213,
+        "overlay_reference_instances": null,
+        "overlay_submitted_instances": null,
+        "overlay_scissor_pixels": null,
+        "draw_wall_ms": {
+          "count": 726,
+          "mean": 0.2758,
+          "p95": 0.3857,
+          "max": 0.9757
+        },
+        "gpu_execution_ms": {
+          "count": 726,
+          "mean": 0.8052,
+          "p95": 2.1186,
+          "max": 3.4289
+        },
+        "draw_interval_ms": {
+          "count": 725,
+          "mean": 8.3335,
+          "p95": 9.2255,
+          "max": 9.5227
+        },
+        "trail_segments": {
+          "count": 726,
+          "mean": 2.0096,
+          "p95": 2,
+          "max": 3
+        },
+        "vsync_interval_ms": {
+          "count": 726,
+          "mean": 8.3333,
+          "p95": 9.222,
+          "max": 9.3318
+        },
+        "draw_lock_wait_ms": {
+          "count": 726,
+          "mean": 0.0001,
+          "p95": 0.0004,
+          "max": 0.0079
+        },
+        "draw_total_ms": {
+          "count": 726,
+          "mean": 0.3041,
+          "p95": 0.4188,
+          "max": 1.0131
+        },
+        "swap_chain_rebuild_ms": null,
+        "main_queue_wait_ms": {
+          "count": 726,
+          "mean": 0.0631,
+          "p95": 0.0822,
+          "max": 0.1786
+        },
+        "trace_records_dropped": 0,
+        "layer_assignments": 726,
+        "synchronous_layer_assignments": 0,
+        "presentation_drops": {
+          "stale": 0,
+          "replaced": 0,
+          "size_mismatch": 0,
+          "invalidated": 0,
+          "target_reused": 0
+        },
+        "timer_draw_wakes": 0,
+        "timer_update_wakes": 0
+      }
+    },
+    "after_1": {
+      "vsync-idle": {
+        "surfaces": 1,
+        "draws": 0,
+        "copied_cell_bytes": 0,
+        "frames_reusing_cells": 0,
+        "overlay_reference_instances": null,
+        "overlay_submitted_instances": null,
+        "overlay_scissor_pixels": null,
+        "draw_wall_ms": null,
+        "gpu_execution_ms": null,
+        "draw_interval_ms": null,
+        "trail_segments": null,
+        "vsync_interval_ms": null,
+        "draw_lock_wait_ms": null,
+        "draw_total_ms": null,
+        "swap_chain_rebuild_ms": null,
+        "main_queue_wait_ms": null,
+        "trace_records_dropped": 0,
+        "layer_assignments": 0,
+        "synchronous_layer_assignments": 0,
+        "presentation_drops": {
+          "stale": 0,
+          "replaced": 0,
+          "size_mismatch": 0,
+          "invalidated": 0,
+          "target_reused": 0
+        },
+        "timer_draw_wakes": 0,
+        "timer_update_wakes": 0
+      },
+      "vsync-jumps": {
+        "surfaces": 1,
+        "draws": 727,
+        "copied_cell_bytes": 1065600,
+        "frames_reusing_cells": 616,
+        "overlay_reference_instances": 3941392,
+        "overlay_submitted_instances": 1212156,
+        "overlay_scissor_pixels": {
+          "count": 728,
+          "mean": 76334.3544,
+          "p95": 213712,
+          "max": 220934
+        },
+        "draw_wall_ms": {
+          "count": 727,
+          "mean": 0.2452,
+          "p95": 0.3472,
+          "max": 0.6355
+        },
+        "gpu_execution_ms": {
+          "count": 727,
+          "mean": 0.6483,
+          "p95": 1.798,
+          "max": 2.7426
+        },
+        "draw_interval_ms": {
+          "count": 726,
+          "mean": 8.3322,
+          "p95": 9.1212,
+          "max": 9.4246
+        },
+        "trail_segments": {
+          "count": 727,
+          "mean": 5.099,
+          "p95": 8,
+          "max": 8
+        },
+        "vsync_interval_ms": {
+          "count": 728,
+          "mean": 8.3334,
+          "p95": 9.1139,
+          "max": 9.3358
+        },
+        "draw_lock_wait_ms": {
+          "count": 727,
+          "mean": 0.0,
+          "p95": 0.0001,
+          "max": 0.0018
+        },
+        "draw_total_ms": {
+          "count": 727,
+          "mean": 0.2737,
+          "p95": 0.3801,
+          "max": 0.6832
+        },
+        "swap_chain_rebuild_ms": null,
+        "main_queue_wait_ms": {
+          "count": 728,
+          "mean": 0.0628,
+          "p95": 0.0805,
+          "max": 0.1403
+        },
+        "trace_records_dropped": 0,
+        "layer_assignments": 728,
+        "synchronous_layer_assignments": 0,
+        "presentation_drops": {
+          "stale": 0,
+          "replaced": 0,
+          "size_mismatch": 0,
+          "invalidated": 0,
+          "target_reused": 0
+        },
+        "timer_draw_wakes": 0,
+        "timer_update_wakes": 0
+      },
+      "vsync-kitty": {
+        "surfaces": 1,
+        "draws": 730,
+        "copied_cell_bytes": 1084800,
+        "frames_reusing_cells": 617,
+        "overlay_reference_instances": null,
+        "overlay_submitted_instances": null,
+        "overlay_scissor_pixels": null,
+        "draw_wall_ms": {
+          "count": 730,
+          "mean": 0.2781,
+          "p95": 0.4095,
+          "max": 0.5683
+        },
+        "gpu_execution_ms": {
+          "count": 729,
+          "mean": 0.9327,
+          "p95": 2.1488,
+          "max": 3.5142
+        },
+        "draw_interval_ms": {
+          "count": 729,
+          "mean": 8.3343,
+          "p95": 9.1495,
+          "max": 9.5413
+        },
+        "trail_segments": {
+          "count": 730,
+          "mean": 5.0918,
+          "p95": 8,
+          "max": 8
+        },
+        "vsync_interval_ms": {
+          "count": 730,
+          "mean": 8.3335,
+          "p95": 9.1467,
+          "max": 9.3349
+        },
+        "draw_lock_wait_ms": {
+          "count": 730,
+          "mean": 0.0001,
+          "p95": 0.0001,
+          "max": 0.0013
+        },
+        "draw_total_ms": {
+          "count": 730,
+          "mean": 0.3074,
+          "p95": 0.4453,
+          "max": 0.6249
+        },
+        "swap_chain_rebuild_ms": null,
+        "main_queue_wait_ms": {
+          "count": 729,
+          "mean": 0.0622,
+          "p95": 0.0781,
+          "max": 1.3213
+        },
+        "trace_records_dropped": 0,
+        "layer_assignments": 729,
+        "synchronous_layer_assignments": 0,
+        "presentation_drops": {
+          "stale": 0,
+          "replaced": 0,
+          "size_mismatch": 0,
+          "invalidated": 0,
+          "target_reused": 0
+        },
+        "timer_draw_wakes": 0,
+        "timer_update_wakes": 152
+      },
+      "vsync-split": {
+        "surfaces": 2,
+        "draws": 1456,
+        "copied_cell_bytes": 1070648,
+        "frames_reusing_cells": 1232,
+        "overlay_reference_instances": 3912959,
+        "overlay_submitted_instances": 2552697,
+        "overlay_scissor_pixels": {
+          "count": 1456,
+          "mean": 365771.2294,
+          "p95": 693292,
+          "max": 693292
+        },
+        "draw_wall_ms": {
+          "count": 1456,
+          "mean": 0.2216,
+          "p95": 0.3392,
+          "max": 0.6617
+        },
+        "gpu_execution_ms": {
+          "count": 1456,
+          "mean": 0.5497,
+          "p95": 1.5822,
+          "max": 2.564
+        },
+        "draw_interval_ms": {
+          "count": 1454,
+          "mean": 8.3333,
+          "p95": 9.0317,
+          "max": 9.4015
+        },
+        "trail_segments": {
+          "count": 1456,
+          "mean": 5.0989,
+          "p95": 8,
+          "max": 8
+        },
+        "vsync_interval_ms": {
+          "count": 1457,
+          "mean": 8.3343,
+          "p95": 9.0913,
+          "max": 9.3315
+        },
+        "draw_lock_wait_ms": {
+          "count": 1456,
+          "mean": 0.0001,
+          "p95": 0.0001,
+          "max": 0.0027
+        },
+        "draw_total_ms": {
+          "count": 1456,
+          "mean": 0.2483,
+          "p95": 0.3776,
+          "max": 0.6996
+        },
+        "swap_chain_rebuild_ms": null,
+        "main_queue_wait_ms": {
+          "count": 1457,
+          "mean": 0.0654,
+          "p95": 0.1199,
+          "max": 0.4141
+        },
+        "trace_records_dropped": 0,
+        "layer_assignments": 1457,
+        "synchronous_layer_assignments": 0,
+        "presentation_drops": {
+          "stale": 0,
+          "replaced": 0,
+          "size_mismatch": 0,
+          "invalidated": 0,
+          "target_reused": 0
+        },
+        "timer_draw_wakes": 0,
+        "timer_update_wakes": 151
+      },
+      "vsync-typing": {
+        "surfaces": 1,
+        "draws": 717,
+        "copied_cell_bytes": 4459744,
+        "frames_reusing_cells": 211,
+        "overlay_reference_instances": 3896930,
+        "overlay_submitted_instances": 194080,
+        "overlay_scissor_pixels": {
+          "count": 719,
+          "mean": 1072.274,
+          "p95": 870,
+          "max": 31349
+        },
+        "draw_wall_ms": {
+          "count": 717,
+          "mean": 0.2695,
+          "p95": 0.3898,
+          "max": 0.674
+        },
+        "gpu_execution_ms": {
+          "count": 719,
+          "mean": 0.6938,
+          "p95": 2.0234,
+          "max": 3.2641
+        },
+        "draw_interval_ms": {
+          "count": 716,
+          "mean": 8.3449,
+          "p95": 9.1423,
+          "max": 15.8537
+        },
+        "trail_segments": {
+          "count": 717,
+          "mean": 2.0098,
+          "p95": 2,
+          "max": 3
+        },
+        "vsync_interval_ms": {
+          "count": 719,
+          "mean": 8.3333,
+          "p95": 9.1598,
+          "max": 9.3327
+        },
+        "draw_lock_wait_ms": {
+          "count": 718,
+          "mean": 0.0001,
+          "p95": 0.0001,
+          "max": 0.0018
+        },
+        "draw_total_ms": {
+          "count": 718,
+          "mean": 0.2985,
+          "p95": 0.4273,
+          "max": 0.7225
+        },
+        "swap_chain_rebuild_ms": null,
+        "main_queue_wait_ms": {
+          "count": 719,
+          "mean": 0.0635,
+          "p95": 0.0827,
+          "max": 0.1246
+        },
+        "trace_records_dropped": 1,
+        "layer_assignments": 719,
+        "synchronous_layer_assignments": 0,
+        "presentation_drops": {
+          "stale": 0,
+          "replaced": 0,
+          "size_mismatch": 0,
+          "invalidated": 0,
+          "target_reused": 0
+        },
+        "timer_draw_wakes": 0,
+        "timer_update_wakes": 0
+      }
+    },
+    "after_2": {
+      "vsync-idle": {
+        "surfaces": 1,
+        "draws": 0,
+        "copied_cell_bytes": 0,
+        "frames_reusing_cells": 0,
+        "overlay_reference_instances": null,
+        "overlay_submitted_instances": null,
+        "overlay_scissor_pixels": null,
+        "draw_wall_ms": null,
+        "gpu_execution_ms": null,
+        "draw_interval_ms": null,
+        "trail_segments": null,
+        "vsync_interval_ms": null,
+        "draw_lock_wait_ms": null,
+        "draw_total_ms": null,
+        "swap_chain_rebuild_ms": null,
+        "main_queue_wait_ms": null,
+        "trace_records_dropped": 0,
+        "layer_assignments": 0,
+        "synchronous_layer_assignments": 0,
+        "presentation_drops": {
+          "stale": 0,
+          "replaced": 0,
+          "size_mismatch": 0,
+          "invalidated": 0,
+          "target_reused": 0
+        },
+        "timer_draw_wakes": 0,
+        "timer_update_wakes": 0
+      },
+      "vsync-jumps": {
+        "surfaces": 1,
+        "draws": 724,
+        "copied_cell_bytes": 1065600,
+        "frames_reusing_cells": 613,
+        "overlay_reference_instances": 3925150,
+        "overlay_submitted_instances": 1217304,
+        "overlay_scissor_pixels": {
+          "count": 725,
+          "mean": 76100.0262,
+          "p95": 212887,
+          "max": 220698
+        },
+        "draw_wall_ms": {
+          "count": 724,
+          "mean": 0.2618,
+          "p95": 0.388,
+          "max": 0.6772
+        },
+        "gpu_execution_ms": {
+          "count": 725,
+          "mean": 0.6022,
+          "p95": 1.6574,
+          "max": 3.4664
+        },
+        "draw_interval_ms": {
+          "count": 723,
+          "mean": 8.345,
+          "p95": 8.9866,
+          "max": 16.6173
+        },
+        "trail_segments": {
+          "count": 724,
+          "mean": 5.0994,
+          "p95": 8,
+          "max": 8
+        },
+        "vsync_interval_ms": {
+          "count": 726,
+          "mean": 8.3336,
+          "p95": 9.0055,
+          "max": 9.3135
+        },
+        "draw_lock_wait_ms": {
+          "count": 724,
+          "mean": 0.0001,
+          "p95": 0.0001,
+          "max": 0.0017
+        },
+        "draw_total_ms": {
+          "count": 724,
+          "mean": 0.2914,
+          "p95": 0.4278,
+          "max": 0.6995
+        },
+        "swap_chain_rebuild_ms": null,
+        "main_queue_wait_ms": {
+          "count": 726,
+          "mean": 0.0659,
+          "p95": 0.091,
+          "max": 0.2219
+        },
+        "trace_records_dropped": 4,
+        "layer_assignments": 726,
+        "synchronous_layer_assignments": 0,
+        "presentation_drops": {
+          "stale": 0,
+          "replaced": 0,
+          "size_mismatch": 0,
+          "invalidated": 0,
+          "target_reused": 0
+        },
+        "timer_draw_wakes": 0,
+        "timer_update_wakes": 0
+      },
+      "vsync-kitty": {
+        "surfaces": 1,
+        "draws": 722,
+        "copied_cell_bytes": 1036800,
+        "frames_reusing_cells": 614,
+        "overlay_reference_instances": null,
+        "overlay_submitted_instances": null,
+        "overlay_scissor_pixels": null,
+        "draw_wall_ms": {
+          "count": 722,
+          "mean": 0.291,
+          "p95": 0.4325,
+          "max": 0.6363
+        },
+        "gpu_execution_ms": {
+          "count": 722,
+          "mean": 0.8574,
+          "p95": 1.9924,
+          "max": 3.0462
+        },
+        "draw_interval_ms": {
+          "count": 721,
+          "mean": 8.3339,
+          "p95": 9.0097,
+          "max": 9.5124
+        },
+        "trail_segments": {
+          "count": 722,
+          "mean": 5.097,
+          "p95": 8,
+          "max": 8
+        },
+        "vsync_interval_ms": {
+          "count": 722,
+          "mean": 8.3342,
+          "p95": 9.0051,
+          "max": 9.3197
+        },
+        "draw_lock_wait_ms": {
+          "count": 722,
+          "mean": 0.0,
+          "p95": 0.0001,
+          "max": 0.0004
+        },
+        "draw_total_ms": {
+          "count": 722,
+          "mean": 0.321,
+          "p95": 0.4694,
+          "max": 0.6749
+        },
+        "swap_chain_rebuild_ms": null,
+        "main_queue_wait_ms": {
+          "count": 722,
+          "mean": 0.0627,
+          "p95": 0.0808,
+          "max": 0.4294
+        },
+        "trace_records_dropped": 0,
+        "layer_assignments": 722,
+        "synchronous_layer_assignments": 0,
+        "presentation_drops": {
+          "stale": 0,
+          "replaced": 0,
+          "size_mismatch": 0,
+          "invalidated": 0,
+          "target_reused": 0
+        },
+        "timer_draw_wakes": 0,
+        "timer_update_wakes": 149
+      },
+      "vsync-split": {
+        "surfaces": 2,
+        "draws": 1445,
+        "copied_cell_bytes": 1046928,
+        "frames_reusing_cells": 1226,
+        "overlay_reference_instances": 3886248,
+        "overlay_submitted_instances": 2529156,
+        "overlay_scissor_pixels": {
+          "count": 1446,
+          "mean": 364666.7407,
+          "p95": 693292,
+          "max": 693292
+        },
+        "draw_wall_ms": {
+          "count": 1445,
+          "mean": 0.3128,
+          "p95": 0.6501,
+          "max": 2.4717
+        },
+        "gpu_execution_ms": {
+          "count": 1447,
+          "mean": 0.5078,
+          "p95": 1.514,
+          "max": 3.3004
+        },
+        "draw_interval_ms": {
+          "count": 1443,
+          "mean": 8.3448,
+          "p95": 9.1401,
+          "max": 16.736
+        },
+        "trail_segments": {
+          "count": 1445,
+          "mean": 6.5405,
+          "p95": 8,
+          "max": 8
+        },
+        "vsync_interval_ms": {
+          "count": 1445,
+          "mean": 8.3331,
+          "p95": 8.9994,
+          "max": 9.322
+        },
+        "draw_lock_wait_ms": {
+          "count": 1445,
+          "mean": 0.0001,
+          "p95": 0.0001,
+          "max": 0.0032
+        },
+        "draw_total_ms": {
+          "count": 1445,
+          "mean": 0.3452,
+          "p95": 0.7075,
+          "max": 2.4807
+        },
+        "swap_chain_rebuild_ms": null,
+        "main_queue_wait_ms": {
+          "count": 1446,
+          "mean": 0.0582,
+          "p95": 0.0977,
+          "max": 0.2897
+        },
+        "trace_records_dropped": 7,
+        "layer_assignments": 1446,
+        "synchronous_layer_assignments": 0,
+        "presentation_drops": {
+          "stale": 0,
+          "replaced": 0,
+          "size_mismatch": 0,
+          "invalidated": 0,
+          "target_reused": 0
+        },
+        "timer_draw_wakes": 0,
+        "timer_update_wakes": 149
+      },
+      "vsync-typing": {
+        "surfaces": 1,
+        "draws": 723,
+        "copied_cell_bytes": 4479840,
+        "frames_reusing_cells": 213,
+        "overlay_reference_instances": 3918619,
+        "overlay_submitted_instances": 195169,
+        "overlay_scissor_pixels": {
+          "count": 723,
+          "mean": 1068.8686,
+          "p95": 870,
+          "max": 31378
+        },
+        "draw_wall_ms": {
+          "count": 723,
+          "mean": 0.2546,
+          "p95": 0.381,
+          "max": 0.6355
+        },
+        "gpu_execution_ms": {
+          "count": 723,
+          "mean": 0.5316,
+          "p95": 1.4862,
+          "max": 3.6269
+        },
+        "draw_interval_ms": {
+          "count": 722,
+          "mean": 8.3338,
+          "p95": 9.1468,
+          "max": 9.4897
+        },
+        "trail_segments": {
+          "count": 723,
+          "mean": 2.0097,
+          "p95": 2,
+          "max": 3
+        },
+        "vsync_interval_ms": {
+          "count": 723,
+          "mean": 8.3341,
+          "p95": 9.1216,
+          "max": 9.3349
+        },
+        "draw_lock_wait_ms": {
+          "count": 723,
+          "mean": 0.0,
+          "p95": 0.0001,
+          "max": 0.0003
+        },
+        "draw_total_ms": {
+          "count": 723,
+          "mean": 0.2822,
+          "p95": 0.414,
+          "max": 0.6625
+        },
+        "swap_chain_rebuild_ms": null,
+        "main_queue_wait_ms": {
+          "count": 723,
+          "mean": 0.0663,
+          "p95": 0.0939,
+          "max": 0.206
+        },
+        "trace_records_dropped": 0,
+        "layer_assignments": 723,
+        "synchronous_layer_assignments": 0,
+        "presentation_drops": {
+          "stale": 0,
+          "replaced": 0,
+          "size_mismatch": 0,
+          "invalidated": 0,
+          "target_reused": 0
+        },
+        "timer_draw_wakes": 0,
+        "timer_update_wakes": 0
+      }
+    }
+  }
+}

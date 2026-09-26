@@ -240,6 +240,24 @@ Cached hits are bounded to 1024; larger match sets fall back to uncached lookup.
 Overlapping rules retain their original priority. Hover notifications are also
 coalesced within an unchanged cell, including the scroll-adjusted pin identity.
 
+## Terminal implementation and regression boundaries
+
+`Screen`, `Terminal`, and `PageList` keep ownership and state mutation in their
+main modules. Their named regression tests live under `terminal/tests`, grouped
+by behavior and imported only from `test` blocks. Private white-box operations
+are available through `TestAccess` only in test builds. Detached page fixtures
+live in `tests/PageList/fixtures.zig`, retaining the `PageList.TestSupport` name.
+
+`screen/selection.zig` computes line, word and command-output ranges without
+owning tracked selections. `pagelist/Pin.zig` holds stable page coordinates and
+traversal; PageList still tracks, remaps and invalidates those pins. Existing
+Screen methods and `PageList.Pin` remain aliases to these implementations.
+
+Page allocation, reclamation, reflow and viewport accounting intentionally stay
+together in PageList because they update shared invariants. Terminal's streaming
+printer, wrap and region movement likewise retain one state owner. File length
+alone is not a reason to split these mutation paths further.
+
 ## Rendering and change boundaries
 
 Terminal semantics, frame preparation, motion geometry and Metal resource
@@ -256,6 +274,15 @@ shape. `RowUpload` independently tracks background rows. Versions publish only
 after a successful upload; allocation/buffer failures force a complete retry.
 Resizing/recreating a frame invalidates its cache, and revision wrap invalidates
 all slots. Draw-only frames reuse buffers. Uniforms remain per-frame.
+
+Each uploaded row also caches its actual glyph bounds, refreshed only when its
+version or cell size changes. `CursorOverlay` chooses one contiguous candidate
+row range for animated block cursor text and scissors it to the cursor's existing
+body/trail bounds. It includes glyph overhangs, padding and conservative scroll
+offsets. The original packed buffer is bound at the selected byte offset; no
+second text buffer is built. Animated bars/underlines skip the text overlay;
+native cursors retain the full fallback. RenderPass restores the full attachment
+scissor after each clipped step so later passes cannot inherit it.
 
 `renderer/ScrollScene.zig` owns the three scene/history/composition textures and
 scroll motion state under the draw lock. Cached scene identity includes content

@@ -130,6 +130,7 @@ pub fn clock() u64 {
 
 /// event,time_ns,a,b,c. Draw: wall CPU path ns / copied cell bytes / segments.
 /// GPU: execution ns / healthy / unused. Timer: update kind / vsync / unused.
+/// Overlay: full foreground count / submitted instances / scissor pixels.
 /// Vsync: callback interval ns (restart excluded). Draw_lock/draw_total:
 /// wait/total ns / synchronous / unused. Rebuild: swap-chain initialization ns.
 /// Present: main-queue wait ns / submission sequence / synchronous. This is

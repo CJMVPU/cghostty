@@ -43,6 +43,7 @@ pub const Step = struct {
     /// Set of samplers to use for this step. The index maps to an index
     /// of a fragment texture in the Metal 4 argument table.
     samplers: []const ?Sampler = &.{},
+    scissor: ?@import("../CursorOverlay.zig").Scissor = null,
     draw: Draw,
 
     /// Describes the draw call for this step.
@@ -56,6 +57,7 @@ pub const Step = struct {
 /// MTL4RenderCommandEncoder
 encoder: objc.Object,
 commands: *Frame.Commands,
+full_scissor: @import("../CursorOverlay.zig").Scissor,
 
 /// Begin a render pass.
 pub fn begin(
@@ -119,12 +121,18 @@ pub fn begin(
 
     // Make earlier queue writes visible before this render pass consumes them.
     encoder.msgSend(void, "barrierAfterQueueStages:beforeStages:visibilityOptions:", .{ @as(c_ulong, 0x7fffffffffffffff), @as(c_ulong, 3), @as(c_ulong, 1) });
-    return .{ .encoder = encoder, .commands = opts.commands };
+    const dimensions = switch (opts.attachments[0].target) {
+        inline else => |t| .{ t.width, t.height },
+    };
+    return .{ .encoder = encoder, .commands = opts.commands, .full_scissor = .{ .x = 0, .y = 0, .width = dimensions[0], .height = dimensions[1] } };
 }
 
 /// Add a step to this render pass.
 pub fn step(self: *const Self, s: Step) void {
     if (s.draw.instance_count == 0) return;
+
+    if (s.scissor) |rect| self.encoder.msgSend(void, "setScissorRect:", .{rect});
+    defer if (s.scissor != null) self.encoder.msgSend(void, "setScissorRect:", .{self.full_scissor});
 
     // Set pipeline state
     self.encoder.msgSend(

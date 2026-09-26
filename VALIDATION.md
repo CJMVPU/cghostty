@@ -1,5 +1,8 @@
 # 验证记录
 
+最新核心测试分离、职责拆分与 GPU 光标文字覆盖层测量见
+[2026-09-27 核心测试分离与光标覆盖层优化](docs/validation/2026-09-27-test-separation-overlay.md)。
+
 最新缓存、输入与标签页整理见
 [2026-09-27 渲染缓存、输入状态与批量关闭整理](docs/validation/2026-09-27-render-input-refactor.md)。
 

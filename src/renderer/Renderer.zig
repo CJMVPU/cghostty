@@ -1533,7 +1533,7 @@ fn drawFrameLocked(
         self.cells.bg_versions,
         self.cells.bg_revision,
     );
-    copied_bytes += try frame.cell_upload.sync(self.alloc, &frame.cells, &self.cells, self.cells_revision);
+    copied_bytes += try frame.cell_upload.sync(self.alloc, &frame.cells, &self.cells, self.cells_revision, self.uniforms.cell_size);
     const fg_count = frame.cell_upload.foreground_count;
 
     // If our background image buffer has changed, sync it.
@@ -1711,12 +1711,16 @@ fn drawFrameLocked(
             .uniforms = frame.uniforms.buffer,
             .draw = .{ .type = .triangle, .vertex_count = 3 },
         });
+        const overlay = frame.cell_upload.overlay(&self.uniforms);
+        if (self.trace.file != null) self.trace.emit("overlay", fg_count, overlay.count, if (overlay.count == 0) 0 else if (overlay.scissor) |r| r.width * r.height else self.size.screen.width * @as(u64, self.size.screen.height));
         pass.step(.{
             .pipeline = self.shaders.pipelines.cell_text,
             .uniforms = frame.uniforms.buffer,
             .buffers = &.{ frame.cells.buffer, frame.cells_bg.buffer },
+            .buffer_offsets = &.{ overlay.offset * @sizeOf(shaderpkg.CellText), 0 },
             .textures = &.{ frame.grayscale, frame.color },
-            .draw = .{ .type = .triangle_strip, .vertex_count = 4, .instance_count = fg_count },
+            .scissor = overlay.scissor,
+            .draw = .{ .type = .triangle_strip, .vertex_count = 4, .instance_count = overlay.count },
         });
         if (self.uniforms.smooth_effect > 0 and self.uniforms.smooth_block == 0) pass.step(.{
             .pipeline = self.shaders.pipelines.smooth_cursor,
