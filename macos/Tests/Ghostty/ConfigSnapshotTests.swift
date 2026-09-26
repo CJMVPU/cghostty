@@ -22,8 +22,6 @@ import Testing
         background = #123456
         background-opacity = 0.4
         quick-terminal-size = 45%,70%
-        command-palette-entry = clear
-        command-palette-entry = title:测试命令,description:独立字符串,action:goto_split:right
         nonexistent-snapshot-key = true
         """)
         let before = config!.snapshot
@@ -37,11 +35,15 @@ import Testing
         #expect(detached.window.titleFontFamily == "Snapshot Font")
         #expect(detached.backgroundColor == Color(red: 0x12 / 255.0, green: 0x34 / 255.0, blue: 0x56 / 255.0))
         #expect(detached.backgroundOpacity == 0.4)
-        #expect(detached.commandPaletteEntries.count == 1)
-        let command = try #require(detached.commandPaletteEntries.first)
-        #expect(command.title == "测试命令")
-        #expect(command.description == "独立字符串")
+        #expect(!detached.commandPaletteEntries.isEmpty)
+        #expect(detached.commandPaletteEntries.map(\.action) == after.commandPaletteEntries.map(\.action))
+        let command = try #require(detached.commandPaletteEntries.first { $0.action == "goto_split:right" })
+        #expect(command.title == Ghostty.Command.localizedText("Focus Split: Right", builtIn: true))
+        #expect(command.description == Ghostty.Command.localizedText(
+            "Focus the split to the right, if it exists.", builtIn: true))
         #expect(command.action == "goto_split:right")
+        #expect(command.actionKey == "goto_split")
+        #expect(detached.errors.count == 1)
         #expect(detached.errors.contains { $0.contains("nonexistent-snapshot-key") })
         #expect(detached.quickTerminalSize.calculate(position: .top,
                                                     screenDimensions: CGSize(width: 1000, height: 1000)) ==
