@@ -251,6 +251,9 @@ hide/show preserves motion; focus, visibility, configuration and size changes
 invalidate it. `SmoothCursor.zig` translates a stable body and uniformly scales
 both dimensions by up to 12%. Body travel takes 24–200ms. Long moves from rest
 use smooth acceleration/deceleration; one-cell input keeps its fast response.
+Retarget duration accounts for both the logical target step and remaining body
+travel, preventing nearby search matches from compressing an unfinished jump
+into a one-cell sprint. Each segment remains bounded to 200ms.
 Bounded Hermite tangents carry velocity into retargets without changing arrival
 deadlines. Forward velocity is bounded against overshoot, lateral drift is at
 most a quarter cell, and strong reversals discard wrong-way inertia. Velocity

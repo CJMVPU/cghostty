@@ -234,7 +234,14 @@ pub fn update(self: *Self, target: Vec, size: Vec, timing_width: f32, now: f64, 
     }
     if (length(target - self.target) >= 0.5) {
         const displayed = self.sample(now);
-        const duration = timing(target - self.target, timing_width);
+        // Nearby logical matches can arrive while the displayed body is still
+        // far behind. Budget for that remaining travel too, instead of forcing
+        // it into a one-cell duration. Keep the logical-step budget for turns
+        // and reversals; both timings retain the same 200ms upper bound.
+        const duration = @max(
+            timing(target - self.target, timing_width),
+            timing(target - displayed.center, timing_width),
+        );
         const in_flight = self.running and now < self.began + self.duration;
         const incoming = self.velocity(now);
         // Continue an opening/held shape without restarting its envelope.
@@ -617,6 +624,91 @@ test "SmoothCursor same direction retarget preserves velocity and arrives withou
     }
     try t.expectEqual(@as(Vec, .{ 1500, 0 }), s.sample(1.251).center);
     try t.expectEqual(@as(Vec, @splat(0)), s.velocity(1.251));
+}
+
+test "SmoothCursor nearby search match does not compress an unfinished long jump" {
+    const t = std.testing;
+    for ([_]Vec{ .{ 1, 0 }, .{ -1, 0 }, .{ 0, 1 }, .{ 0, -1 }, .{ 0.6, 0.8 }, .{ -0.6, 0.8 }, .{ 0.6, -0.8 }, .{ -0.6, -0.8 } }) |direction| {
+        var s: Self = .{};
+        _ = s.update(.{ 0, 0 }, .{ 19, 42 }, 19, 0, .block);
+        _ = s.update(direction * @as(Vec, @splat(1000)), s.size, 19, 1, .block);
+        const before = s.sample(1.033);
+        const speed = s.velocity(1.033);
+        const target = direction * @as(Vec, @splat(1019));
+        try t.expectEqual(before, s.update(target, s.size, 19, 1.033, .block));
+        try t.expect(length(s.velocity(1.033) - speed) < 0.001);
+        // A nearby logical match must not turn 946px of remaining travel
+        // into a 24ms sprint (278px in the next 120Hz frame).
+        try t.expect(length(s.sample(1.033 + 1.0 / 120.0).center - before.center) < 50);
+        try t.expect(s.duration <= 0.200);
+        var previous: f32 = @reduce(.Add, before.center * direction);
+        for (1..202) |ms| {
+            const pose = s.sample(1.033 + @as(f64, @floatFromInt(ms)) / 1000);
+            const along = @reduce(.Add, pose.center * direction);
+            try t.expect(along >= previous - 0.001 and along <= 1019.001);
+            previous = along;
+        }
+        try t.expectEqual(target, s.sample(1.234).center);
+    }
+}
+
+test "SmoothCursor repeated nearby matches settle and ordinary cell input stays fast" {
+    const t = std.testing;
+    for ([_]f64{ 0.008, 0.016, 0.033, 0.060, 0.100 }) |interval| {
+        var s: Self = .{};
+        _ = s.update(.{ 0, 0 }, .{ 19, 42 }, 19, 0, .block);
+        _ = s.update(.{ 1000, 0 }, s.size, 19, 1, .block);
+        for (1..101) |i| {
+            const now = 1 + @as(f64, @floatFromInt(i)) * interval;
+            const before = s.sample(now);
+            const target: Vec = .{ 1000 + 19 * @as(f32, @floatFromInt(i)), 0 };
+            try t.expectEqual(before, s.update(target, s.size, 19, now, .block));
+            try t.expect(s.duration <= 0.200);
+            try t.expect(s.velocity(now)[0] >= 0);
+        }
+        try t.expectEqual(s.target, s.sample(s.began + 0.201).center);
+        _ = s.update(s.target, s.size, 19, s.began + 1, .block);
+        try t.expect(!s.running);
+    }
+    var short: Self = .{};
+    _ = short.update(.{ 0, 0 }, .{ 19, 42 }, 19, 0, .block);
+    for (1..101) |i| {
+        const now = @as(f64, @floatFromInt(i)) * 0.033;
+        _ = short.update(.{ 19 * @as(f32, @floatFromInt(i)), 0 }, short.size, 19, now, .block);
+        try t.expectApproxEqAbs(@as(f32, 0.024), short.duration, 0.000001);
+    }
+}
+
+test "SmoothCursor nearby search retarget preserves English Chinese and line geometry transitions" {
+    const t = std.testing;
+    const Geometry = struct { size: Vec, shape: Shape };
+    const geometries = [_]Geometry{
+        .{ .size = .{ 19, 42 }, .shape = .block },
+        .{ .size = .{ 38, 42 }, .shape = .block },
+        .{ .size = .{ 3, 42 }, .shape = .bar },
+        .{ .size = .{ 38, 3 }, .shape = .underline },
+    };
+    for (geometries) |from| {
+        for (geometries) |to| {
+            var s: Self = .{};
+            _ = s.update(.{ 0, 0 }, from.size, 19, 0, from.shape);
+            _ = s.update(.{ 1000, 0 }, from.size, 19, 1, from.shape);
+            const before = s.sample(1.033);
+            try t.expectEqual(before, s.update(.{ 1019, 0 }, to.size, 19, 1.033, to.shape));
+            try t.expect(s.sample(1.033 + 1.0 / 120.0).center[0] - before.center[0] < 50);
+            // Geometry still takes 100ms independently of the travel budget.
+            const middle = s.sample(1.083);
+            const expected = (from.size + to.size) * @as(Vec, @splat(0.5 * 1.12));
+            inline for (0..2) |axis| try t.expectApproxEqAbs(expected[axis], middle.size[axis], 0.0001);
+            const geometry_done = s.sample(1.134);
+            inline for (0..2) |axis| try t.expectApproxEqAbs(to.size[axis] * 1.12, geometry_done.size[axis], 0.0001);
+            try t.expect(geometry_done.center[0] < 1019);
+            try t.expectEqual(@as(Vec, .{ 1019, 0 }), s.sample(1.234).center);
+            const settled = s.update(s.target, to.size, 19, 1.5, to.shape);
+            try t.expectEqual(to.size, settled.size);
+            try t.expect(!s.running);
+        }
+    }
 }
 
 test "SmoothCursor turns bound lateral drift and strong reversal discards wrong way inertia" {

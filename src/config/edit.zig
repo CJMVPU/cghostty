@@ -34,7 +34,12 @@ pub fn openPathAt(alloc: Allocator, path: []const u8) ![:0]const u8 {
             break;
         }
     }
-    const guide = if (has_guide) try template.generateSupplement(alloc, original) else try template.generate(alloc);
+    const guide = if (has_guide)
+        try template.generateSupplement(alloc, original)
+    else if (original.len > 0)
+        try template.generateComments(alloc)
+    else
+        try template.generate(alloc);
     defer alloc.free(guide);
     if (guide.len == 0) return try alloc.dupeZ(u8, path);
 
@@ -98,7 +103,7 @@ test "opening user configuration preserves contents and rejects directories" {
     defer alloc.free(initial);
     try testing.expect(std.mem.startsWith(u8, initial, template.marker));
 
-    const contents = "# Keep my settings\nfont-size = 19\n";
+    const contents = "# Keep my settings\nfont-size = 19\nrender-trace = true\n";
     {
         var file = try std.Io.Dir.createFileAbsolute(testing.io, path, .{});
         defer file.close(testing.io);
@@ -113,6 +118,10 @@ test "opening user configuration preserves contents and rejects directories" {
     defer alloc.free(actual);
     try testing.expect(std.mem.startsWith(u8, actual, contents));
     try testing.expect(std.mem.indexOf(u8, actual, template.marker) != null);
+    var config = try @import("Config.zig").default(alloc);
+    defer config.deinit();
+    try config.loadData(alloc, actual, path);
+    try testing.expect(config.@"render-trace");
     const again = try openPathAt(alloc, path);
     defer alloc.free(again);
     const unchanged = try std.Io.Dir.cwd().readFileAlloc(testing.io, path, alloc, .unlimited);

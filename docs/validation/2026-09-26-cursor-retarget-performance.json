@@ -1,0 +1,297 @@
+{
+  "vsync-idle": {
+    "surfaces": 1,
+    "draws": 0,
+    "copied_cell_bytes": 0,
+    "frames_reusing_cells": 0,
+    "draw_wall_ms": null,
+    "gpu_execution_ms": null,
+    "draw_interval_ms": null,
+    "trail_segments": null,
+    "vsync_interval_ms": null,
+    "draw_lock_wait_ms": null,
+    "draw_total_ms": null,
+    "swap_chain_rebuild_ms": null,
+    "main_queue_wait_ms": null,
+    "trace_records_dropped": 0,
+    "layer_assignments": 0,
+    "synchronous_layer_assignments": 0,
+    "presentation_drops": {
+      "stale": 0,
+      "replaced": 0,
+      "size_mismatch": 0,
+      "invalidated": 0,
+      "target_reused": 0
+    },
+    "timer_draw_wakes": 0,
+    "timer_update_wakes": 0
+  },
+  "vsync-jumps": {
+    "surfaces": 1,
+    "draws": 726,
+    "copied_cell_bytes": 19351296,
+    "frames_reusing_cells": 615,
+    "draw_wall_ms": {
+      "count": 726,
+      "mean": 0.2478,
+      "p95": 0.4271,
+      "max": 0.789
+    },
+    "gpu_execution_ms": {
+      "count": 726,
+      "mean": 0.5637,
+      "p95": 1.5012,
+      "max": 2.6008
+    },
+    "draw_interval_ms": {
+      "count": 725,
+      "mean": 8.3334,
+      "p95": 9.1698,
+      "max": 9.7324
+    },
+    "trail_segments": {
+      "count": 726,
+      "mean": 5.1171,
+      "p95": 8,
+      "max": 8
+    },
+    "vsync_interval_ms": {
+      "count": 726,
+      "mean": 8.3333,
+      "p95": 9.1919,
+      "max": 9.3289
+    },
+    "draw_lock_wait_ms": {
+      "count": 726,
+      "mean": 0.0001,
+      "p95": 0.0003,
+      "max": 0.0074
+    },
+    "draw_total_ms": {
+      "count": 726,
+      "mean": 0.2755,
+      "p95": 0.4873,
+      "max": 0.8595
+    },
+    "swap_chain_rebuild_ms": null,
+    "main_queue_wait_ms": {
+      "count": 726,
+      "mean": 0.0576,
+      "p95": 0.0786,
+      "max": 0.1147
+    },
+    "trace_records_dropped": 0,
+    "layer_assignments": 726,
+    "synchronous_layer_assignments": 0,
+    "presentation_drops": {
+      "stale": 0,
+      "replaced": 0,
+      "size_mismatch": 0,
+      "invalidated": 0,
+      "target_reused": 0
+    },
+    "timer_draw_wakes": 0,
+    "timer_update_wakes": 0
+  },
+  "vsync-kitty": {
+    "surfaces": 1,
+    "draws": 731,
+    "copied_cell_bytes": 84654848,
+    "frames_reusing_cells": 243,
+    "draw_wall_ms": {
+      "count": 731,
+      "mean": 0.3292,
+      "p95": 0.5713,
+      "max": 0.9335
+    },
+    "gpu_execution_ms": {
+      "count": 731,
+      "mean": 0.7389,
+      "p95": 1.6618,
+      "max": 3.0762
+    },
+    "draw_interval_ms": {
+      "count": 730,
+      "mean": 8.3324,
+      "p95": 9.2792,
+      "max": 9.7493
+    },
+    "trail_segments": {
+      "count": 731,
+      "mean": 5.067,
+      "p95": 8,
+      "max": 8
+    },
+    "vsync_interval_ms": {
+      "count": 729,
+      "mean": 8.3313,
+      "p95": 9.2491,
+      "max": 9.338
+    },
+    "draw_lock_wait_ms": {
+      "count": 731,
+      "mean": 0.0001,
+      "p95": 0.0003,
+      "max": 0.0096
+    },
+    "draw_total_ms": {
+      "count": 731,
+      "mean": 0.3589,
+      "p95": 0.6129,
+      "max": 0.9687
+    },
+    "swap_chain_rebuild_ms": null,
+    "main_queue_wait_ms": {
+      "count": 731,
+      "mean": 0.0568,
+      "p95": 0.0769,
+      "max": 1.08
+    },
+    "trace_records_dropped": 1,
+    "layer_assignments": 731,
+    "synchronous_layer_assignments": 0,
+    "presentation_drops": {
+      "stale": 0,
+      "replaced": 0,
+      "size_mismatch": 0,
+      "invalidated": 0,
+      "target_reused": 0
+    },
+    "timer_draw_wakes": 0,
+    "timer_update_wakes": 150
+  },
+  "vsync-split": {
+    "surfaces": 2,
+    "draws": 1446,
+    "copied_cell_bytes": 51370952,
+    "frames_reusing_cells": 847,
+    "draw_wall_ms": {
+      "count": 1446,
+      "mean": 0.2301,
+      "p95": 0.402,
+      "max": 0.8201
+    },
+    "gpu_execution_ms": {
+      "count": 1445,
+      "mean": 0.4304,
+      "p95": 1.2564,
+      "max": 2.3438
+    },
+    "draw_interval_ms": {
+      "count": 1444,
+      "mean": 8.3338,
+      "p95": 9.1228,
+      "max": 9.5311
+    },
+    "trail_segments": {
+      "count": 1446,
+      "mean": 2.1535,
+      "p95": 3,
+      "max": 3
+    },
+    "vsync_interval_ms": {
+      "count": 1446,
+      "mean": 8.3334,
+      "p95": 9.1513,
+      "max": 9.3495
+    },
+    "draw_lock_wait_ms": {
+      "count": 1446,
+      "mean": 0.0001,
+      "p95": 0.0003,
+      "max": 0.017
+    },
+    "draw_total_ms": {
+      "count": 1446,
+      "mean": 0.2573,
+      "p95": 0.4399,
+      "max": 0.9169
+    },
+    "swap_chain_rebuild_ms": null,
+    "main_queue_wait_ms": {
+      "count": 1445,
+      "mean": 0.0567,
+      "p95": 0.0962,
+      "max": 0.1699
+    },
+    "trace_records_dropped": 0,
+    "layer_assignments": 1445,
+    "synchronous_layer_assignments": 0,
+    "presentation_drops": {
+      "stale": 0,
+      "replaced": 0,
+      "size_mismatch": 0,
+      "invalidated": 0,
+      "target_reused": 0
+    },
+    "timer_draw_wakes": 0,
+    "timer_update_wakes": 149
+  },
+  "vsync-typing": {
+    "surfaces": 1,
+    "draws": 715,
+    "copied_cell_bytes": 88027040,
+    "frames_reusing_cells": 209,
+    "draw_wall_ms": {
+      "count": 715,
+      "mean": 0.2841,
+      "p95": 0.4884,
+      "max": 0.7215
+    },
+    "gpu_execution_ms": {
+      "count": 715,
+      "mean": 0.8226,
+      "p95": 1.9155,
+      "max": 3.43
+    },
+    "draw_interval_ms": {
+      "count": 714,
+      "mean": 8.3333,
+      "p95": 9.206,
+      "max": 9.7107
+    },
+    "trail_segments": {
+      "count": 715,
+      "mean": 2.007,
+      "p95": 2,
+      "max": 3
+    },
+    "vsync_interval_ms": {
+      "count": 715,
+      "mean": 8.3332,
+      "p95": 9.1973,
+      "max": 9.3542
+    },
+    "draw_lock_wait_ms": {
+      "count": 715,
+      "mean": 0.0001,
+      "p95": 0.0003,
+      "max": 0.004
+    },
+    "draw_total_ms": {
+      "count": 715,
+      "mean": 0.3104,
+      "p95": 0.5293,
+      "max": 0.7725
+    },
+    "swap_chain_rebuild_ms": null,
+    "main_queue_wait_ms": {
+      "count": 715,
+      "mean": 0.0561,
+      "p95": 0.079,
+      "max": 0.1213
+    },
+    "trace_records_dropped": 0,
+    "layer_assignments": 715,
+    "synchronous_layer_assignments": 0,
+    "presentation_drops": {
+      "stale": 0,
+      "replaced": 0,
+      "size_mismatch": 0,
+      "invalidated": 0,
+      "target_reused": 0
+    },
+    "timer_draw_wakes": 0,
+    "timer_update_wakes": 0
+  }
+}

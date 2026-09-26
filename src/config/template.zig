@@ -1,4 +1,5 @@
-//! Comment-only editing guide. Runtime defaults remain owned by Config.
+//! Editing guide with tracing explicitly disabled in newly generated files.
+//! Supplements remain comment-only. Runtime defaults remain owned by Config.
 const std = @import("std");
 const Config = @import("Config.zig");
 const Key = @import("key.zig").Key;
@@ -35,6 +36,15 @@ comptime {
 }
 
 pub fn generate(alloc: std.mem.Allocator) ![:0]const u8 {
+    return generateGuide(alloc, true);
+}
+
+/// Appending a guide must not override existing settings.
+pub fn generateComments(alloc: std.mem.Allocator) ![:0]const u8 {
+    return generateGuide(alloc, false);
+}
+
+fn generateGuide(alloc: std.mem.Allocator, explicit_trace_default: bool) ![:0]const u8 {
     @setEvalBranchQuota(100_000);
     var config = try Config.default(alloc);
     defer config.deinit();
@@ -45,8 +55,9 @@ pub fn generate(alloc: std.mem.Allocator) ![:0]const u8 {
     try writer.writeAll(
         \\# Settings（⌘,）打开此文件。保存后退出并重新启动应用才生效。
         \\# Open with Settings (⌘,). Save, quit, and restart the app to apply changes.
-        \\# 下方默认值和示例都是注释；取消示例行开头的 # 才启用设置。
-        \\# Defaults and examples below are comments. Remove # from an example to enable it.
+        \\# 新模板明确设置 render-trace = false；其他默认值和示例都是注释。
+        \\# New templates explicitly set render-trace = false; other defaults and examples are comments.
+        \\# 取消示例行开头的 # 才启用设置。 / Remove # from an example to enable it.
         \\# 默认值由当前版本生成，不包含主题或用户覆盖。留空可能表示自动、继承或空列表。
         \\# Defaults reflect this version before themes/user overrides. Unset may mean automatic, inherited, or an empty list.
         \\# 不要取消所有默认值的注释，否则可能覆盖主题。优先修改已有设置，避免重复定义。
@@ -65,7 +76,7 @@ pub fn generate(alloc: std.mem.Allocator) ![:0]const u8 {
         try writer.print("\n# ======================================================================\n# {s}\n# ======================================================================\n", .{group});
         inline for (metadata.entries) |entry| {
             if (entry.group == index) {
-                try writeEntry(alloc, &config, entry, writer);
+                try writeEntry(alloc, &config, entry, writer, explicit_trace_default);
             }
         }
     }
@@ -93,13 +104,13 @@ pub fn generateSupplement(alloc: std.mem.Allocator, original: []const u8) ![:0]c
                 "# 新增配置说明 / Additional configuration options — cghostty {s}\n",
                 .{build_config.version_string},
             );
-            try writeEntry(alloc, &config, entry, &output.writer);
+            try writeEntry(alloc, &config, entry, &output.writer, false);
         }
     }
     return try alloc.dupeZ(u8, output.written());
 }
 
-fn writeEntry(alloc: std.mem.Allocator, config: *const Config, comptime entry: metadata.Entry, writer: *std.Io.Writer) !void {
+fn writeEntry(alloc: std.mem.Allocator, config: *const Config, comptime entry: metadata.Entry, writer: *std.Io.Writer, explicit_trace_default: bool) !void {
     const name = @tagName(entry.key);
     const value = @field(config, name);
     const T = @TypeOf(value);
@@ -120,6 +131,11 @@ fn writeEntry(alloc: std.mem.Allocator, config: *const Config, comptime entry: m
         try writer.print("#   {s}\n", .{line});
     }
     if (first == null) try writer.writeAll("#   自动决定 / Automatic\n");
+    if (entry.key == .@"render-trace" and explicit_trace_default) {
+        try writer.writeAll("# 当前设置：关闭诊断；改为 true 后重启启用。 / Disabled; set true and restart to enable.\n");
+        try writer.print("{s} = {s}\n", .{ name, if (config.@"render-trace") "true" else "false" });
+        return;
+    }
     try writer.writeAll("# 示例（取消下一行的 # 后启用）/ Example (uncomment next line to enable):\n");
     if (entry.example) |example| {
         try writer.print("# {s} = {s}\n", .{ name, example });
@@ -148,7 +164,7 @@ fn choices(comptime Original: type, writer: *std.Io.Writer) !void {
     }
 }
 
-test "configuration guide is comment-only and every example parses" {
+test "configuration guide explicitly disables tracing and every example parses" {
     const testing = std.testing;
     const data = try generate(testing.allocator);
     defer testing.allocator.free(data);
@@ -156,10 +172,15 @@ test "configuration guide is comment-only and every example parses" {
     defer untouched.deinit();
     try untouched.loadData(testing.allocator, data, "/tmp/config.ghostty");
     try testing.expectEqual(@as(usize, 0), untouched._diagnostics.items().len);
+    try testing.expect(!untouched.@"render-trace");
     var lines = std.mem.tokenizeScalar(u8, data, '\n');
     var example = false;
     var count: usize = 0;
     while (lines.next()) |line| {
+        if (std.mem.eql(u8, line, "render-trace = false")) {
+            count += 1;
+            continue;
+        }
         try testing.expect(std.mem.startsWith(u8, line, "#"));
         if (example) {
             var config = try Config.default(testing.allocator);
@@ -172,4 +193,9 @@ test "configuration guide is comment-only and every example parses" {
         example = std.mem.startsWith(u8, line, "# 示例（");
     }
     try testing.expectEqual(metadata.entries.len, count);
+    const supplement = try generateSupplement(testing.allocator, "render-trace = true\n");
+    defer testing.allocator.free(supplement);
+    try untouched.loadData(testing.allocator, "render-trace = true\n", "/tmp/config.ghostty");
+    try untouched.loadData(testing.allocator, supplement, "/tmp/config.ghostty");
+    try testing.expect(untouched.@"render-trace");
 }

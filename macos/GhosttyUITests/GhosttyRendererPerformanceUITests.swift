@@ -60,9 +60,10 @@ final class GhosttyRendererPerformanceUITests: GhosttyCustomConfigCase {
         window-width = 140
         window-height = 42
         window-vsync = \(vsync)
+        render-trace = true
+        render-trace-directory = \(directory.path)
         """)
         let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
-        app.launchArguments += ["--render-trace=true", "--render-trace-directory=\(directory.path)"]
         app.launch()
         app.activate()
         defer { app.terminate() }
