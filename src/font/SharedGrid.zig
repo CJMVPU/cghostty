@@ -286,6 +286,17 @@ pub fn renderGlyph(
     glyph_index: u32,
     opts: RenderOptions,
 ) RenderGlyphError!Render {
+    return self.renderGlyphTraced(alloc, index, glyph_index, opts, null);
+}
+
+pub fn renderGlyphTraced(
+    self: *SharedGrid,
+    alloc: Allocator,
+    index: Collection.Index,
+    glyph_index: u32,
+    opts: RenderOptions,
+    trace: ?*@import("../renderer/Trace.zig"),
+) RenderGlyphError!Render {
     const tw = renderGlyph_tw;
 
     const key = GlyphKey.from(.{ .index = index, .glyph = glyph_index, .opts = opts });
@@ -344,7 +355,9 @@ pub fn renderGlyph(
     ) catch |err| switch (err) {
         // If the atlas is full, we resize it
         error.AtlasFull => blk: {
+            const start = if (trace) |t| if (t.file != null) @import("../renderer/Trace.zig").clock() else 0 else 0;
             try atlas.grow(alloc, atlas.size * 2);
+            if (start != 0) trace.?.emit("atlas_grow", @import("../renderer/Trace.zig").clock() - start, atlas.size, @intFromEnum(p));
             break :blk try self.resolver.renderGlyph(
                 alloc,
                 atlas,

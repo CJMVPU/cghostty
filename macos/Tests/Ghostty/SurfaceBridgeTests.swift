@@ -1,22 +1,11 @@
 import AppKit
 import AppIntents
 import GhosttyKit
-import Metal
 import Testing
 @testable import Ghostty
 
 @Suite(.serialized)
 @MainActor struct SurfaceBridgeTests {
-    // Apple Silicon uses the system GPU. Unsupported hardware is an explicit
-    // skip; a capable device with a broken compiler must still fail.
-    nonisolated private static func metal4Available() throws -> Bool {
-        guard let device = MTLCreateSystemDefaultDevice() else { return false }
-        print("GPU frame tests: device=\(device.name), Metal4=\(device.supportsFamily(.metal4))")
-        guard device.supportsFamily(.metal4) else { return false }
-        _ = try device.makeCompiler(descriptor: MTL4CompilerDescriptor())
-        return true
-    }
-
     private func show(_ view: Ghostty.SurfaceView) throws -> NSWindow {
         let surface = try #require(view.surfaceModel)
         let window = NSWindow(contentRect: view.bounds, styleMask: .borderless, backing: .buffered, defer: false)
@@ -140,7 +129,7 @@ import Testing
         #expect(value.substring(in: value.selectedRanges[0]) == value.text)
     }
 
-    @Test(.enabled(if: try Self.metal4Available(), "Requires a Metal 4 GPU"))
+    @Test(.enabled(if: try MetalTestSupport.metal4Available(), "Requires a Metal 4 GPU"))
     func completedFramesAdvanceThumbnailRevisionAndMetadataSkipsImages() async throws {
         let view = makeView()
         let surface = try #require(view.surfaceModel)
@@ -159,7 +148,7 @@ import Testing
         #expect(surface.renderRevision > revision)
     }
 
-    @Test(.enabled(if: try Self.metal4Available(), "Requires a Metal 4 GPU"))
+    @Test(.enabled(if: try MetalTestSupport.metal4Available(), "Requires a Metal 4 GPU"))
     func focusVisibilityChangesAndAppKitInvalidationKeepRendering() async throws {
         let view = makeView()
         let surface = try #require(view.surfaceModel)
@@ -185,7 +174,7 @@ import Testing
         }
     }
 
-    @Test(.enabled(if: try Self.metal4Available(), "Requires a Metal 4 GPU"))
+    @Test(.enabled(if: try MetalTestSupport.metal4Available(), "Requires a Metal 4 GPU"))
     func kittyPlacementsAndSynchronizedFramesReachNativeRenderer() async throws {
         // Two placements exercise nonzero offsets in the shared instance buffer.
         let output = "\u{1b}[H\u{1b}_Ga=T,f=32,s=1,v=1,i=1,q=2,c=4,r=2;/wAA/w==\u{1b}\\" +

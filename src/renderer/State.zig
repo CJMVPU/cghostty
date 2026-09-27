@@ -21,6 +21,9 @@ terminal: *terminalpkg.Terminal,
 /// Owned CPU snapshot of the latest synchronized-output boundary.
 render_hold: @import("RenderHold.zig") = .{},
 
+/// Parsed PTY batch revision, protected by mutex. Used only to correlate trace probes.
+output_revision: u64 = 0,
+
 /// Independently synchronized; callers need not hold the terminal mutex.
 search_changes: terminalpkg.search.ChangeSignal = .{},
 

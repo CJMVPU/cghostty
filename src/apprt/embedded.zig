@@ -1593,6 +1593,19 @@ pub const CAPI = struct {
             1 => trace.emit("metal_callback", ns(time), sequence, 0),
             2 => trace.emit("present_submit", ns(time), sequence, 0),
             3 => trace.emit("displayed", ns(time), sequence, 0),
+            4 => trace.emit("window_prepare", ns(time), ns(prediction), sequence),
+            5 => trace.emit("window_lock", ns(time), sequence, 0),
+            // Explicit diagnostic probes: caller verifies its unique PTY echo
+            // before stage 7. No text, key codes or automatic causality guesses.
+            6 => trace.emit("input_probe", ns(time), sequence, 0),
+            7 => {
+                if (trace.file == null) return;
+                const state = &surface.core_surface.render.state;
+                state.lockDemand(global.io());
+                const revision = state.output_revision;
+                state.unlockDemand(global.io());
+                trace.emit("input_ready", revision, sequence, 0);
+            },
             else => {},
         }
     }

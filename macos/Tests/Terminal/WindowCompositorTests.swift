@@ -3,9 +3,10 @@ import GhosttyKit
 import Metal
 import QuartzCore
 import Testing
+import Synchronization
 @testable import Ghostty
 
-@Suite(.serialized)
+@Suite(.serialized, .enabled(if: try MetalTestSupport.metal4Available(), "Requires a Metal 4 GPU"))
 @MainActor struct WindowCompositorTests {
     @Test(arguments: ["native", "linear", "linear-corrected"], [1, 2])
     func panesShareClockCacheAndMoveWithoutLosingSession(blending: String, latency: Int) async throws {
@@ -216,7 +217,7 @@ import Testing
         #expect(updates.contains { UInt64($0[2])! > 1 })
         // Frame sequence is global; a pane must never rebuild twice in one tick.
         #expect(Set(updates.map { $0[3] }).count == updates.count)
-        #expect(!lines.contains { $0.hasPrefix("trace_drop,") })
+        print("Frame-clock trace complete: \(!lines.contains { $0.hasPrefix("trace_drop,") })")
         let ticks = Set(lines.filter { $0.hasPrefix("metal_tick,") }.map { $0.split(separator: ",")[4] })
         #expect(updates.allSatisfy { ticks.contains($0[3]) })
         print("Window clock updates: \(updates.count), merged requests: \(updates.map { UInt64($0[2])! }.max() ?? 0)")
@@ -295,6 +296,168 @@ import Testing
         let color = try #require(bitmap.colorAt(x: bitmap.pixelsWide / 2, y: bitmap.pixelsHigh / 2))
         #expect(abs(color.alphaComponent - 0.5) < 0.02)
         #expect(bitmap.pixelsWide > 0 && bitmap.pixelsHigh > 0)
+    }
+
+    @Test func membershipAndCloseDoNotWaitForFramePreparation() async throws {
+        let config = try TemporaryConfig("cursor-style-blink = false\ncursor-effect = false")
+        let app = Ghostty.App(configPath: config.temporaryFile.path)
+        let view = makeView(app: app, color: "255;0;0", marker: "lock-ready")
+        let window = makeWindow()
+        let destination = makeWindow()
+        defer { window.close(); destination.close() }
+        view.frame = window.contentView!.bounds
+        window.contentView?.addSubview(view)
+        window.orderFront(nil)
+        view.sizeDidChange(window.contentView!.bounds.size)
+        view.surfaceModel?.setVisible(true)
+        let owner = try #require(view.windowCompositor)
+        owner.updateGeometry()
+        try await wait {
+            guard view.surfaceModel?.readContents(viewport: false).contains("lock-ready") == true,
+                  owner.worker.statistics.displayed > 0, owner.worker.isIdle else { return false }
+            return try centerIsRed(owner.worker)
+        }
+        let entered = Mutex(false)
+        let release = DispatchSemaphore(value: 0)
+        defer { release.signal() }
+        owner.worker.beforeNextPrepareForTesting {
+            entered.withLock { $0 = true }
+            // Timeout is only a deadlock guard; readiness and release are explicit.
+            _ = release.wait(timeout: .now() + 3)
+        }
+        try await wait { entered.withLock { $0 } }
+        let start = CACurrentMediaTime()
+        owner.updateGeometry()
+        view.removeFromSuperview()
+        destination.contentView?.addSubview(view)
+        destination.orderFront(nil)
+        view.surfaceModel?.setVisible(true)
+        let moved = try #require(view.windowCompositor)
+        moved.updateGeometry()
+        window.close()
+        let elapsed = CACurrentMediaTime() - start
+        print("Membership/update/remove/stop while worker held: \(elapsed * 1000) ms")
+        #expect(elapsed < 0.5, "Main must return before the blocked frame's 3 second guard")
+        #expect(owner.worker.paneCount == 0)
+        release.signal()
+        try await wait { moved.worker.statistics.displayed > 0 && moved.worker.isIdle }
+        #expect(moved !== owner)
+        #expect(try centerIsRed(moved.worker))
+        #expect(view.surfaceModel?.sendKeyEvent(.init(keyCode: 0, action: .press, text: "after-blocked-move")) == true)
+        try await wait { view.surfaceModel?.readContents(viewport: false).contains("after-blocked-move") == true }
+        #expect(moved.worker.statistics.failed == 0)
+    }
+
+    @Test(arguments: [false, true])
+    func controlledEchoPresentationProbes(animated: Bool) async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("cghostty-probe-\(animated ? "active" : "idle")-\(UUID().uuidString)")
+        print("Input probe trace: \(directory.path)")
+        let config = try TemporaryConfig("""
+        cursor-style-blink = false
+        cursor-effect = \(animated)
+        shell-integration = none
+        render-trace = true
+        render-trace-directory = \(directory.path)
+        """)
+        let app = Ghostty.App(configPath: config.temporaryFile.path)
+        var view: Ghostty.SurfaceView? = makeView(app: app, color: "0;0;0", marker: "probe-ready")
+        weak let surface = view?.surfaceModel
+        let window = makeWindow()
+        defer { window.close() }
+        window.contentView = view
+        window.orderFront(nil)
+        view?.sizeDidChange(window.contentView!.bounds.size)
+        surface?.setVisible(true)
+        surface?.setFocus(true)
+        let owner = try #require(view?.windowCompositor)
+        owner.updateGeometry()
+        try await wait { surface?.readContents(viewport: false).contains("probe-ready") == true && owner.worker.isIdle }
+        if animated {
+            #expect(surface?.sendKeyEvent(.init(keyCode: 0, action: .press, text: "animation-warmup ")) == true)
+            try await wait { surface?.readContents(viewport: false).contains("animation-warmup") == true }
+        }
+        for index in 1...200 {
+            if !animated { try await wait { owner.worker.isIdle } }
+            let marker = "probe-\(index)-end "
+            surface?.traceCompositor(stage: 6, sequence: UInt64(index), time: CACurrentMediaTime())
+            #expect(surface?.sendKeyEvent(.init(keyCode: 0, action: .press, text: marker)) == true)
+            try await wait { surface?.readContents(viewport: false).contains(marker) == true }
+            surface?.traceCompositor(stage: 7, sequence: UInt64(index), time: 0)
+        }
+        try await wait { owner.worker.isIdle }
+        window.close()
+        window.contentView = nil
+        view = nil
+        try await wait { surface == nil }
+        let files = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+        let text = try files.map { try String(contentsOf: $0, encoding: .utf8) }.joined()
+        // Telemetry is deliberately nonblocking and may drop records. The
+        // summarizer reports completeness; correctness never depends on logging.
+        #expect(text.contains("input_probe,"))
+        #expect(text.contains("input_ready,"))
+        #expect(text.contains("pane_content,"))
+        print("Input probe records: \(text.components(separatedBy: "input_probe,").count - 1)/200; trace complete: \(!text.contains("trace_drop,"))")
+    }
+
+    @Test(arguments: [1, 4])
+    func multilingualPreparationWorkload(paneCount: Int) async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("cghostty-prepare-\(paneCount)-\(UUID().uuidString)")
+        print("Preparation workload trace: \(directory.path)")
+        let config = try TemporaryConfig("""
+        cursor-style-blink = false
+        cursor-effect = false
+        shell-integration = none
+        render-trace = true
+        render-trace-directory = \(directory.path)
+        """)
+        let app = Ghostty.App(configPath: config.temporaryFile.path)
+        let window = makeWindow()
+        defer { window.close() }
+        var views = (0..<paneCount).map { makeView(app: app, color: "0;0;0", marker: "prepare-ready-\($0)") }
+        weak let first = views.first?.surfaceModel
+        let content = try #require(window.contentView)
+        for (index, view) in views.enumerated() {
+            view.frame = CGRect(x: 0, y: index * 240 / paneCount, width: 480, height: 240 / paneCount)
+            content.addSubview(view)
+            view.sizeDidChange(view.bounds.size)
+            view.surfaceModel?.setVisible(true)
+        }
+        window.orderFront(nil)
+        let owner = try #require(views.first?.windowCompositor)
+        owner.updateGeometry()
+        try await wait { owner.worker.statistics.paneDraws >= paneCount }
+        for round in 0..<100 {
+            for (index, view) in views.enumerated() {
+                // Separate glyph streams prevent four panes from merely sharing
+                // the first pane's cold rasterization work in this workload.
+                let chinese = String(String.UnicodeScalarView((0..<60).compactMap {
+                    UnicodeScalar(0x4e00 + (round * 60 + index * 1500 + $0) % 6000)
+                }))
+                let marker = "round-\(round)-pane-\(index)-end"
+                #expect(view.surfaceModel?.sendKeyEvent(.init(keyCode: 0, action: .press, text: "\r\n\(chinese)\r\n\(marker)")) == true)
+            }
+            try await wait {
+                views.enumerated().allSatisfy { index, view in
+                    view.surfaceModel?.readContents(viewport: false).contains("round-\(round)-pane-\(index)-end") == true
+                }
+            }
+        }
+        try await wait { owner.worker.isIdle }
+        #expect(owner.worker.statistics.failed == 0)
+        window.close()
+        views.forEach { $0.removeFromSuperview() }
+        views.removeAll()
+        try await wait { first == nil }
+    }
+
+    private func centerIsRed(_ worker: WindowCompositorWorker) throws -> Bool {
+        let image = try worker.readback()
+        let pixel = (image.height / 2 * image.width + image.width / 2) * 4
+        // The window texture is Display P3; compare in sRGB like assertColors.
+        let color = try #require(NSColor(displayP3Red: CGFloat(image.pixels[pixel + 2]) / 255,
+            green: CGFloat(image.pixels[pixel + 1]) / 255, blue: CGFloat(image.pixels[pixel]) / 255,
+            alpha: CGFloat(image.pixels[pixel + 3]) / 255).usingColorSpace(.sRGB))
+        return color.redComponent > 0.95 && color.greenComponent < 0.05 && color.blueComponent < 0.05
     }
 
     private func assertColors(_ worker: WindowCompositorWorker, split: Double) throws {

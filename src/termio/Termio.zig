@@ -714,6 +714,7 @@ fn processOutputLocked(self: *Termio, buf: []const u8) void {
     }
 
     self.terminal_stream.nextSlice(buf);
+    self.renderer_state.output_revision +%= 1;
 
     // If our stream handling caused messages to be sent to the mailbox
     // thread, then we need to wake it up so that it processes them.

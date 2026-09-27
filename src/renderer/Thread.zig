@@ -36,7 +36,7 @@ wakeup: xev.Async,
 wakeup_c: xev.Completion = .{},
 
 /// Serializes mailbox/config/font ownership with window-thread frame updates.
-/// Lock order: native window membership -> update_mutex -> terminal/draw locks.
+/// Lock order: native per-surface compositor gate -> update_mutex -> terminal/draw locks.
 /// Producer callbacks never acquire native membership (requestFrame only queues).
 update_mutex: std.Io.Mutex = .init,
 compositor_ready: bool = false,
@@ -477,7 +477,9 @@ fn renderCallback(
 /// keeps this worker/state alive; the gate protects state formerly worker-only.
 /// Updates arriving after this call remain pending and wake the next frame.
 pub fn renderCompositor(self: *Thread, texture: @import("objc").Object, queue: @import("objc").Object, target_time: f64, force: bool, sequence: u64) !u32 {
+    const wait_start = if (self.renderer.trace.file != null) @import("Trace.zig").clock() else 0;
     self.update_mutex.lockUncancelable(global.io());
+    if (wait_start != 0) self.renderer.trace.emit("update_lock", @import("Trace.zig").clock() - wait_start, sequence, 0);
     defer self.update_mutex.unlock(global.io());
     if (!self.compositor_ready or !self.flags.visible) return 0;
     {
@@ -494,7 +496,9 @@ pub fn renderCompositor(self: *Thread, texture: @import("objc").Object, queue: @
         self.renderer.trace.emit("compositor_update", requests, sequence, if (start != 0) @import("Trace.zig").clock() - start else 0);
         self.frame_ready.notify() catch {};
     }
-    return self.renderer.drawCompositor(texture, queue, target_time, force);
+    const result = try self.renderer.drawCompositor(texture, queue, target_time, force);
+    if (result & 1 != 0) self.renderer.trace.emit("pane_content", self.renderer.output_revision, sequence, 0);
+    return result;
 }
 
 fn frameReadyCallback(self_: ?*Thread, _: *xev.Loop, _: *xev.Completion, result: xev.Async.WaitError!void) xev.CallbackAction {

@@ -114,6 +114,10 @@ cells_revision: u64 = 0,
 /// Render-thread-owned; reflects whether blink phase changes pixels.
 cursor_blink_needed: bool = false,
 trace: Trace = .{},
+shape_lookups: u64 = 0,
+shape_misses: u64 = 0,
+shape_ns: u64 = 0,
+output_revision: u64 = 0,
 
 /// The current GPU uniform values.
 uniforms: shaderpkg.Uniforms,
@@ -862,10 +866,19 @@ pub fn updateFrame(
     state: *renderer.State,
     cursor_blink_visible: bool,
 ) Allocator.Error!void {
+    self.shape_lookups = 0;
+    self.shape_misses = 0;
+    self.shape_ns = 0;
+    defer if (self.trace.file != null and self.shape_lookups != 0)
+        self.trace.emit("shape", self.shape_lookups, self.shape_misses, self.shape_ns);
     // CoreText shaping accumulates objects for deferred release over
     // the course of a frame. Always flush those objects, including
     // when rebuilding the frame fails due to memory pressure.
-    defer self.font_shaper.endFrame();
+    defer {
+        const release_start = if (self.trace.file != null) Trace.clock() else 0;
+        self.font_shaper.endFrame();
+        if (release_start != 0) self.trace.emit("cf_release_enqueue", Trace.clock() - release_start, 0, 0);
+    }
 
     // Reuse bounded scratch for rebuilding; no published state borrows it.
     if (self.frame_scratch == null) self.frame_scratch = .init(self.alloc);
@@ -896,8 +909,10 @@ pub fn updateFrame(
         //     std.log.err("[updateFrame critical time] start={}\tduration={} us", .{ start_micro, end.since(start) / std.time.ns_per_us });
         // }
 
+        const wait_start = if (self.trace.file != null) Trace.clock() else 0;
         state.lockDemand(global.io());
         defer state.unlockDemand(global.io());
+        if (wait_start != 0) self.trace.emit("terminal_lock", Trace.clock() - wait_start, 0, 0);
 
         // A hold captures the completed frame at the input boundary, even
         // when reset/set occur within a single PTY read. Take ownership under
@@ -937,6 +952,7 @@ pub fn updateFrame(
             }
         }
         if (held) return;
+        self.output_revision = state.output_revision;
 
         // Reclaim oversized CPU storage only after merging pending deltas and
         // while live terminal content is available for a complete refresh.
@@ -1321,7 +1337,9 @@ fn drawFrameLocked(
     };
 
     // Wait for a frame to be available.
+    const slot_start = if (self.trace.file != null) Trace.clock() else 0;
     const frame = swap_chain.nextFrame();
+    if (slot_start != 0) self.trace.emit("frame_slot", Trace.clock() - slot_start, 0, 0);
     errdefer swap_chain.releaseFrame();
     // log.debug("drawing frame index={}", .{swap_chain.frame_index});
 
@@ -1444,14 +1462,26 @@ fn drawFrameLocked(
         if (modified <= frame.grayscale_modified) break :texture;
         self.font_grid.lock.lockSharedUncancelable(global.io());
         defer self.font_grid.lock.unlockShared(global.io());
-        _ = try @import("AtlasUpload.zig").sync(self.api, &self.font_grid.atlas_grayscale, &frame.grayscale, &frame.grayscale_modified);
+        const old_size = frame.grayscale.width;
+        const upload_start = if (self.trace.file != null) Trace.clock() else 0;
+        const bytes = try @import("AtlasUpload.zig").sync(self.api, &self.font_grid.atlas_grayscale, &frame.grayscale, &frame.grayscale_modified);
+        if (upload_start != 0) {
+            self.trace.emit("atlas_upload", Trace.clock() - upload_start, bytes, 0);
+            if (frame.grayscale.width != old_size) self.trace.emit("atlas_resize", old_size, frame.grayscale.width, 0);
+        }
     }
     texture: {
         const modified = self.font_grid.atlas_color.modified.load(.monotonic);
         if (modified <= frame.color_modified) break :texture;
         self.font_grid.lock.lockSharedUncancelable(global.io());
         defer self.font_grid.lock.unlockShared(global.io());
-        _ = try @import("AtlasUpload.zig").sync(self.api, &self.font_grid.atlas_color, &frame.color, &frame.color_modified);
+        const old_size = frame.color.width;
+        const upload_start = if (self.trace.file != null) Trace.clock() else 0;
+        const bytes = try @import("AtlasUpload.zig").sync(self.api, &self.font_grid.atlas_color, &frame.color, &frame.color_modified);
+        if (upload_start != 0) {
+            self.trace.emit("atlas_upload", Trace.clock() - upload_start, bytes, 1);
+            if (frame.color.width != old_size) self.trace.emit("atlas_resize", old_size, frame.color.width, 1);
+        }
     }
 
     // Get a frame context from the graphics API.
@@ -2420,10 +2450,15 @@ fn rebuildRow(
             // If we haven't shaped this run, do so now.
             shaper_cells = shaper_cells orelse
                 // Try to read the cells from the shaping cache if we can.
-                self.font_shaper_cache.get(run) orelse
+                self.cachedShape(run) orelse
                 cache: {
                     // Otherwise we have to shape them.
+                    const shape_start = if (self.trace.file != null) Trace.clock() else 0;
                     const new_cells = try self.font_shaper.shape(run);
+                    if (shape_start != 0) {
+                        self.shape_misses += 1;
+                        self.shape_ns += Trace.clock() - shape_start;
+                    }
 
                     // Try to cache them. If caching fails for any reason we
                     // continue because it is just a performance optimization,
@@ -2689,10 +2724,15 @@ fn rebuildRow(
             // If we haven't shaped this run yet, do so.
             shaper_cells = shaper_cells orelse
                 // Try to read the cells from the shaping cache if we can.
-                self.font_shaper_cache.get(run) orelse
+                self.cachedShape(run) orelse
                 cache: {
                     // Otherwise we have to shape them.
+                    const shape_start = if (self.trace.file != null) Trace.clock() else 0;
                     const new_cells = try self.font_shaper.shape(run);
+                    if (shape_start != 0) {
+                        self.shape_misses += 1;
+                        self.shape_ns += Trace.clock() - shape_start;
+                    }
 
                     // Try to cache them. If caching fails for any reason we
                     // continue because it is just a performance optimization,
@@ -2784,7 +2824,7 @@ fn addUnderline(
         .curly => .underline_curly,
     };
 
-    const render = try self.font_grid.renderGlyph(
+    const render = try self.font_grid.renderGlyphTraced(
         self.alloc,
         font.sprite_index,
         @intFromEnum(sprite),
@@ -2792,6 +2832,7 @@ fn addUnderline(
             .cell_width = 1,
             .grid_metrics = self.grid_metrics,
         },
+        &self.trace,
     );
 
     try self.cells.add(self.alloc, .underline, .{
@@ -2815,7 +2856,7 @@ fn addOverline(
     color: terminal.color.RGB,
     alpha: u8,
 ) !void {
-    const render = try self.font_grid.renderGlyph(
+    const render = try self.font_grid.renderGlyphTraced(
         self.alloc,
         font.sprite_index,
         @intFromEnum(font.Sprite.overline),
@@ -2823,6 +2864,7 @@ fn addOverline(
             .cell_width = 1,
             .grid_metrics = self.grid_metrics,
         },
+        &self.trace,
     );
 
     try self.cells.add(self.alloc, .overline, .{
@@ -2846,7 +2888,7 @@ fn addStrikethrough(
     color: terminal.color.RGB,
     alpha: u8,
 ) !void {
-    const render = try self.font_grid.renderGlyph(
+    const render = try self.font_grid.renderGlyphTraced(
         self.alloc,
         font.sprite_index,
         @intFromEnum(font.Sprite.strikethrough),
@@ -2854,6 +2896,7 @@ fn addStrikethrough(
             .cell_width = 1,
             .grid_metrics = self.grid_metrics,
         },
+        &self.trace,
     );
 
     try self.cells.add(self.alloc, .strikethrough, .{
@@ -2867,6 +2910,11 @@ fn addStrikethrough(
             @intCast(render.glyph.offset_y),
         },
     });
+}
+
+fn cachedShape(self: *Self, run: font.shape.TextRun) ?[]const font.shape.Cell {
+    if (self.trace.file != null) self.shape_lookups += 1;
+    return self.font_shaper_cache.get(run);
 }
 
 // Add a glyph to the specified cell.
@@ -2885,7 +2933,7 @@ fn addGlyph(
     const cp = cell.codepoint();
 
     // Render
-    const render = try self.font_grid.renderGlyph(
+    const render = try self.font_grid.renderGlyphTraced(
         self.alloc,
         shaper_run.font_index,
         shaper_cell.glyph_index,
@@ -2907,6 +2955,7 @@ fn addGlyph(
                 cols,
             ),
         },
+        &self.trace,
     );
 
     // If the glyph is 0 width or height, it will be invisible
@@ -2973,7 +3022,7 @@ fn addCursor(
                 .lock => unreachable,
             };
 
-            break :render self.font_grid.renderGlyph(
+            break :render self.font_grid.renderGlyphTraced(
                 self.alloc,
                 font.sprite_index,
                 @intFromEnum(sprite),
@@ -2981,6 +3030,7 @@ fn addCursor(
                     .cell_width = if (wide) 2 else 1,
                     .grid_metrics = self.grid_metrics,
                 },
+                &self.trace,
             ) catch |err| {
                 log.warn("error rendering cursor glyph err={}", .{err});
                 return;

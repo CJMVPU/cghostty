@@ -11,6 +11,29 @@ spec.loader.exec_module(trace)
 
 
 class RenderTraceTests(unittest.TestCase):
+    def test_probes_require_acknowledged_content_and_real_presentation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'render-pane.csv').write_text(
+                'input_probe,1,1000000,1,0\n'
+                'input_probe,2,2000000,2,0\n'
+                'input_ready,3,9,1,0\n'
+                'pane_content,4,8,40,0\n'
+                'pane_content,5,9,41,0\n'
+                'pane_content,6,9,42,0\n'
+                'shape,7,20,5,2000000\n'
+                'window_prepare,8,3000000,2000000,42\n')
+            (root / 'render-owner.csv').write_text(
+                'displayed,1,1500000,40,0\n'
+                'displayed,2,0,41,0\n'
+                'displayed,3,4000000,42,0\n')
+            result = trace.summarize(root)['local']
+            self.assertEqual(result['input_probes'], 2)
+            self.assertEqual(result['input_probes_matched'], 1)
+            self.assertEqual(result['input_probe_to_content_display_ms']['median'], 3)
+            self.assertEqual(result['shape_miss_ratio'], 0.25)
+            self.assertEqual(result['window_slowest_pane_ms']['max'], 2)
+
     def test_compositor_coalescing_counts_duplicates_within_each_pane(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

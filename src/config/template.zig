@@ -135,9 +135,9 @@ fn writeEntry(alloc: std.mem.Allocator, config: *const Config, comptime entry: m
 
     try writer.print("\n# [{s}] {s} / {s}\n# Default: ", .{ name, entry.zh, entry.en });
     if (comptime hasAppendix(entry.key)) {
-        try writer.print("完整列表见附录 [{s}]。 / Full list in appendix [{s}].", .{ name, name });
+        try writer.print("Full list in appendix [{s}].", .{name});
     } else if (default_value.len == 0) {
-        try writer.writeAll("未指定或空值，按自动／继承规则处理。 / Unset or empty; automatic/inherited rules apply.");
+        try writer.writeAll("Unset or empty; automatic/inherited rules apply.");
     } else try writer.writeAll(default_value);
     try choices(T, writer);
     try writer.writeAll(" / Example: ");
@@ -236,10 +236,11 @@ test "configuration guide compact entries and grouped language introduction" {
     try t.expect(chinese < english and english < body);
     try t.expect(std.mem.indexOf(u8, data[chinese..english], "# Open with") == null);
     try t.expect(std.mem.indexOf(u8, data[english..body], "# 取消示例") == null);
+    try t.expect(std.mem.indexOf(u8, data, "# Default: Full list in appendix [keybind].") != null);
     const command_end = std.mem.indexOfPos(u8, data, body, "\n\n").?;
     try t.expectEqualStrings(
         "# [command] 新终端启动命令／Shell / Terminal shell or command\n" ++
-            "# Default: 未指定或空值，按自动／继承规则处理。 / Unset or empty; automatic/inherited rules apply. / Example: command = /bin/zsh",
+            "# Default: Unset or empty; automatic/inherited rules apply. / Example: command = /bin/zsh",
         data[body..command_end],
     );
     const appendix = std.mem.indexOf(u8, data, "# 附录 / Appendix").?;

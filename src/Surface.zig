@@ -2359,6 +2359,14 @@ pub fn keyEventIsBinding(
     };
 }
 
+/// Input and frame snapshots use the same bounded IO handoff protocol.
+fn lockInput(self: *const Surface, site: u64) void {
+    const trace = &self.render.renderer.trace;
+    const start = if (trace.file != null) @import("renderer/Trace.zig").clock() else 0;
+    self.render.state.lockDemand(global.io());
+    if (start != 0) trace.emit("input_lock", @import("renderer/Trace.zig").clock() - start, site, 0);
+}
+
 /// Called for any key events. This handles keybindings, encoding and
 /// sending to the terminal, etc.
 pub fn keyCallback(
@@ -2382,8 +2390,8 @@ pub fn keyCallback(
     if (try self.maybeHandleBinding(event)) |v| return v;
     // If we allow KAM and KAM is enabled then we do nothing.
     if (self.config.vt_kam_allowed) {
-        self.render.state.mutex.lockUncancelable(global.io());
-        defer self.render.state.mutex.unlock(global.io());
+        self.lockInput(1);
+        defer self.render.state.unlockDemand(global.io());
         if (self.io.termio.terminal.modes.get(.disable_keyboard)) return .consumed;
     }
 
@@ -2413,8 +2421,8 @@ pub fn keyCallback(
         {
             // Refresh our link state
             const pos = self.rt_surface.getCursorPos() catch break :mouse_mods;
-            self.render.state.mutex.lockUncancelable(global.io());
-            defer self.render.state.mutex.unlock(global.io());
+            self.lockInput(1);
+            defer self.render.state.unlockDemand(global.io());
             self.mouseRefreshLinks(
                 pos,
                 self.posToViewport(pos.x, pos.y),
@@ -2503,8 +2511,8 @@ pub fn keyCallback(
     // some data to send to the pty, then we move the viewport down to the
     // bottom. We also clear the selection for any key other then modifiers.
     if (!event.key.modifier()) {
-        self.render.state.mutex.lockUncancelable(global.io());
-        defer self.render.state.mutex.unlock(global.io());
+        self.lockInput(1);
+        defer self.render.state.unlockDemand(global.io());
 
         if (self.config.selection_clear_on_typing or
             event.key == .escape)
@@ -2861,8 +2869,8 @@ fn encodeKey(
 }
 
 fn encodeKeyOpts(self: *const Surface) input.key_encode.Options {
-    self.render.state.mutex.lockUncancelable(global.io());
-    defer self.render.state.mutex.unlock(global.io());
+    self.lockInput(1);
+    defer self.render.state.unlockDemand(global.io());
     const t = &self.io.termio.terminal;
 
     var opts: input.key_encode.Options = .fromTerminal(t);
@@ -4082,8 +4090,8 @@ pub fn cursorPosCallback(
             try self.queueRender();
         }
 
-        self.render.state.mutex.lockUncancelable(global.io());
-        defer self.render.state.mutex.unlock(global.io());
+        self.lockInput(2);
+        defer self.render.state.unlockDemand(global.io());
 
         // No mouse point so we don't highlight links
         self.render.state.mouse.point = null;
@@ -4109,8 +4117,8 @@ pub fn cursorPosCallback(
     self.mouse.over_link = false;
 
     // We are reading/writing state for the remainder
-    self.render.state.mutex.lockUncancelable(global.io());
-    defer self.render.state.mutex.unlock(global.io());
+    self.lockInput(2);
+    defer self.render.state.unlockDemand(global.io());
 
     // Update our mouse state. We set this to null initially because we only
     // want to set it when we're not selecting or doing any other mouse

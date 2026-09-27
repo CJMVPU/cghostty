@@ -1,5 +1,7 @@
 # 渲染优化实测（2026-09-21）
 
+窗口合成器的当前锁边界、测量字段和后续优化取舍见[窗口响应性验证](docs/validation/2026-09-27-window-responsiveness.md)。以下为历史 VSync 实验，不能直接外推到当前架构。
+
 本次实测使用主体上限 220ms、形变 12%、长距离尾部窗口 60ms。
 同一台 Apple Silicon Mac、ReleaseLocal/ReleaseFast、同一受控 PTY 负载。
 每场景预热 1 秒，再观测 6 秒；分别测试垂直同步和定时器绘制。

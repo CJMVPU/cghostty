@@ -1,6 +1,7 @@
 import Cocoa
 import GhosttyKit
 import Metal
+import Synchronization
 
 extension Ghostty {
     /// Owns one core terminal handle and exposes native terminal operations.
@@ -15,6 +16,10 @@ extension Ghostty {
         /// briefly by queued work after a window or controller has closed.
         private let app: Ghostty.App
         let callbackContext: SurfaceCallbackContext
+        nonisolated let compositorLatency: Float
+        private let requestedCompositor = Mutex<WindowCompositorSignal?>(nil)
+        private let compositorGate = NSLock()
+        nonisolated(unsafe) private var activeCompositor: WindowCompositorSignal?
 
         /// Read the underlying C value for this surface. This is unsafe because the value will be
         /// freed when the Surface class is deinitialized.
@@ -25,6 +30,7 @@ extension Ghostty {
         /// Initialize from the C structure.
         init(cSurface: ghostty_surface_t, app: Ghostty.App, callbackContext: SurfaceCallbackContext) {
             self.surface = cSurface
+            compositorLatency = ghostty_surface_compositor_info(cSurface).latency
             self.app = app
             self.callbackContext = callbackContext
             callbackContext.surface = self
@@ -51,8 +57,39 @@ extension Ghostty {
             }
         }
 
-        nonisolated func setCompositor(_ sink: AnyObject?) {
-            ghostty_surface_set_compositor(surface, sink.map { Unmanaged.passUnretained($0).toOpaque() })
+        /// Main only publishes ownership; GPU waits are confined to workers.
+        nonisolated func requestCompositor(_ sink: WindowCompositorSignal) {
+            requestedCompositor.withLock { $0 = sink }
+        }
+
+        nonisolated func removeCompositor(_ sink: WindowCompositorSignal) {
+            requestedCompositor.withLock { if $0 === sink { $0 = nil } }
+        }
+
+        nonisolated func ownsCompositor(_ sink: WindowCompositorSignal) -> Bool {
+            requestedCompositor.withLock { $0 === sink }
+        }
+
+        /// Only compositor workers enter this gate. A moving pane skips a tick
+        /// while its previous worker finishes, rather than blocking another window.
+        nonisolated func withCompositor<T>(_ sink: WindowCompositorSignal, _ body: () throws -> T) rethrows -> T? {
+            guard compositorGate.try() else { return nil }
+            defer { compositorGate.unlock() }
+            guard ownsCompositor(sink) else { return nil }
+            if activeCompositor !== sink {
+                ghostty_surface_set_compositor(surface, Unmanaged.passUnretained(sink).toOpaque())
+                activeCompositor = sink
+            }
+            return try body()
+        }
+
+        nonisolated func retireCompositor(_ sink: WindowCompositorSignal) {
+            compositorGate.lock()
+            defer { compositorGate.unlock() }
+            // A newer window may already have installed its sink.
+            guard activeCompositor === sink, !ownsCompositor(sink) else { return }
+            ghostty_surface_set_compositor(surface, nil)
+            activeCompositor = nil
         }
 
         nonisolated var compositorInfo: ghostty_compositor_info_s { ghostty_surface_compositor_info(surface) }

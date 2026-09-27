@@ -93,12 +93,56 @@ def summarize(directory):
                     submit_to_display.append((row[2] - submissions[row[3]]) / 1e6)
                 if row[3] in predictions:
                     prediction_error.append((row[2] - predictions[row[3]]) / 1e6)
+        # Window sequences are process-wide for compositor traces. A probe is
+        # explicitly acknowledged after the harness sees its unique PTY echo;
+        # match that pane's output revision, not the next unrelated cursor frame.
+        presentations = {r[3]: r[2] for r in rows if r[0] == "displayed" and r[2] > 0}
+        probe_latencies = []
+        probes_total = 0
+        for surface in surfaces:
+            probes = {r[3]: r[2] for r in surface if r[0] == "input_probe"}
+            ready = {r[3]: r[2] for r in surface if r[0] == "input_ready"}
+            content = [r for r in surface if r[0] == "pane_content"]
+            probes_total += len(probes)
+            for probe, started in probes.items():
+                if probe not in ready:
+                    continue
+                times = [presentations[r[3]] for r in content
+                         if r[2] >= ready[probe] and r[3] in presentations
+                         and presentations[r[3]] >= started]
+                if times:
+                    probe_latencies.append((min(times) - started) / 1e6)
+        shapes = [r for r in rows if r[0] == "shape"]
+        lookups = sum(r[2] for r in shapes)
+        misses = sum(r[3] for r in shapes)
         presents = [row for row in rows if row[0] == "present"]
         drops = collections.Counter(row[2] for row in rows if row[0] == "present_drop")
         def event_ms(event):
             return distribution([row[2] / 1e6 for row in rows if row[0] == event])
         result[group] = {
             "surfaces": len(surfaces),
+            "window_prepare_ms": event_ms("window_prepare"),
+            "window_slowest_pane_ms": distribution([r[3] / 1e6 for r in rows if r[0] == "window_prepare"]),
+            "window_membership_lock_wait_ms": event_ms("window_lock"),
+            "terminal_snapshot_lock_wait_ms": event_ms("terminal_lock"),
+            "renderer_update_lock_wait_ms": event_ms("update_lock"),
+            "cf_release_enqueue_ms": event_ms("cf_release_enqueue"),
+            "input_lock_wait_ms": event_ms("input_lock"),
+            "gpu_frame_slot_wait_ms": event_ms("frame_slot"),
+            "shape_lookups": lookups,
+            "shape_misses": misses,
+            "shape_miss_ratio": round(misses / lookups, 4) if lookups else None,
+            "shape_miss_total_ms": round(sum(r[4] for r in shapes) / 1e6, 4),
+            "shape_miss_frame_ms": distribution([r[4] / 1e6 for r in shapes]),
+            "atlas_cpu_grows": sum(r[0] == "atlas_grow" for r in rows),
+            "atlas_cpu_grow_ms": event_ms("atlas_grow"),
+            "atlas_upload_ms": event_ms("atlas_upload"),
+            "atlas_upload_bytes": sum(r[3] for r in rows if r[0] == "atlas_upload"),
+            "atlas_texture_resizes": sum(r[0] == "atlas_resize" for r in rows),
+            "input_probe_trace_complete": not any(r[0] == "trace_drop" and r[2] > 0 for r in rows),
+            "input_probes": probes_total,
+            "input_probes_matched": len(probe_latencies),
+            "input_probe_to_content_display_ms": distribution(probe_latencies),
             "draws": len(draws),
             "compositor_updates": len(updates),
             "compositor_update_requests": sum(row[2] for row in updates),

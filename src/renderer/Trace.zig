@@ -1,4 +1,4 @@
-//! Opt-in local performance trace. Never records terminal text or input.
+//! Opt-in local performance trace. Never records text, key codes or input payloads.
 //! Controlled by render-trace (default false) and render-trace-directory.
 //! Producers never wait for the writer: contention/overflow drops are counted.
 const Self = @This();
@@ -137,6 +137,19 @@ pub fn clock() u64 {
 /// Present: main-queue wait ns / submission sequence / synchronous. This is
 /// layer assignment, NOT scanout. Present_drop: reason / sequence / unused;
 /// reasons: 0 stale, 1 replaced, 2 size mismatch, 3 invalidated, 4 target reused.
+/// Window_prepare: total pane preparation ns / slowest pane ns / window sequence.
+/// Window_lock: native membership lock wait ns / unused / unused.
+/// Terminal_lock, input_lock, frame_slot: wait ns / input site (1 key, 2 mouse) / unused.
+/// Update_lock: renderer update gate wait ns / window sequence / unused.
+/// Cf_release_enqueue: deferred release enqueue wall ns / unused / unused.
+/// Shape: run cache lookups / misses / total miss shaping ns in this update.
+/// Atlas_upload: upload ns / bytes / 0 grayscale, 1 color.
+/// Atlas_grow: CPU resize ns / new width / presentation enum.
+/// Atlas_resize: old GPU texture width / new width / 0 grayscale, 1 color.
+/// Pane_content: parsed PTY revision captured by this pane / window sequence / unused.
+/// Input_probe: explicit harness send media time ns / probe ID / unused.
+/// Input_ready: parsed PTY revision after harness verifies echo / probe ID / unused.
+/// Probes record no text and do not infer causality for arbitrary application output.
 /// Compositor_update: coalesced worker requests / window sequence / update wall ns.
 /// Metal_tick: target deadline / predicted presentation / next sequence.
 /// Metal_callback: callback media time / next sequence / unused.

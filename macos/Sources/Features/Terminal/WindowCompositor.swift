@@ -24,12 +24,11 @@ final class WindowCompositor {
             if let existing = owners.object(forKey: window) {
                 owner = existing
             } else {
-                owner = try WindowCompositor(window: window, content: content, latency: surface.compositorInfo.latency)
+                owner = try WindowCompositor(window: window, content: content, latency: surface.compositorLatency)
                 owners.setObject(owner, forKey: window)
             }
             owner.views[view.id] = WeakView(value: view)
             owner.worker.add(id: view.id, surface: surface)
-            surface.setCompositor(owner.worker.signal)
             owner.updateGeometry()
             return owner
         } catch {
@@ -160,8 +159,8 @@ nonisolated final class WindowCompositorSignal: NSObject, @unchecked Sendable {
     }
 }
 
-/// Thread confinement owns encoding and the display link. Membership/geometry
-/// uses a separate lock, so close/reparent can drain old GPU reads before moving.
+/// Membership/geometry is a short-lock snapshot. Encoding and retirement stay
+/// on the window worker; a per-surface gate serializes cross-window handoff.
 nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDelegate, @unchecked Sendable {
     struct Geometry: Sendable, Equatable { var rect: CGRect; var clip: CGRect; var visible: Bool }
     struct Statistics: Sendable {
@@ -181,6 +180,7 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
         init(_ surface: Ghostty.Surface) { self.surface = surface }
     }
     private struct Pane {
+        let token = UUID()
         let surface: Ghostty.Surface
         var geometry = Geometry(rect: .zero, clip: .zero, visible: false)
         var target: (any MTLTexture)?
@@ -197,6 +197,7 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
         var drawableTexture: (any MTLTexture)?
         var tables: [any MTL4ArgumentTable] = []
         var textures: [any MTLTexture] = []
+        var surfaces: [Ghostty.Surface] = []
         init(device: any MTLDevice) throws {
             guard let allocator = device.makeCommandAllocator(), let buffer = device.makeCommandBuffer() else {
                 throw Failure.resource
@@ -216,13 +217,16 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
     private let latency: Float
     private let lock = NSLock()
     private var panes: [UUID: Pane] = [:]
+    private var retired: [Ghostty.Surface] = []
+    // Test readback shares encoding state; production rendering stays on worker.
+    private let encodingLock = NSLock()
+    private var paused = true
     private var size: CGSize = .zero
     private var stopping = false
     private var started = false
     private var loop: CFRunLoop?
     private var link: CAMetalDisplayLink?
     private var index = 0
-    private let exited = DispatchSemaphore(value: 0)
     private let inFlight = DispatchGroup()
     private static let sequences = Mutex<UInt64>(0)
     private let statsLock = NSLock()
@@ -234,6 +238,12 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
     private let completionCondition = NSCondition()
     private var testCompleted = 0
     private var testUpdatesPaused = false
+    private var testBeforePrepare: (@Sendable () -> Void)?
+
+    func beforeNextPrepareForTesting(_ action: @escaping @Sendable () -> Void) {
+        lock.withLock { testBeforePrepare = action }
+        signal.requestFrame()
+    }
 
     /// Simulates a delayed display clock while real PTY output keeps arriving.
     func pauseUpdatesForTesting(_ paused: Bool) {
@@ -247,7 +257,7 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
     var isIdle: Bool {
         lock.withLock {
             let state = statistics
-            return link?.isPaused == true && !signal.hasPending && state.completed == state.submitted &&
+            return paused && !signal.hasPending && state.completed == state.submitted &&
                 state.presentationCallbacks == state.submitted
         }
     }
@@ -284,35 +294,50 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
     }
 
     func add(id: UUID, surface: Ghostty.Surface) {
-        lock.withLock { panes[id] = Pane(surface: surface) }
+        surface.requestCompositor(signal)
+        withMembership { panes[id] = Pane(surface: surface) }
+        signal.requestFrame()
     }
 
     func remove(id: UUID) {
-        lock.lock()
-        // The completion blocks never acquire lock, so draining here is safe.
-        inFlight.wait()
-        panes.removeValue(forKey: id)?.surface.setCompositor(nil)
-        for slot in slots {
-            slot.textures.removeAll(keepingCapacity: true)
-            slot.tables.removeAll(keepingCapacity: true)
+        withMembership {
+            if let pane = panes.removeValue(forKey: id) {
+                pane.surface.removeCompositor(signal)
+                retired.append(pane.surface)
+            }
         }
-        lock.unlock()
         signal.requestFrame()
     }
 
     func update(size: CGSize, geometry: [UUID: Geometry]) {
-        lock.withLock {
+        let changed = withMembership {
             var changed = self.size != size
             self.size = size
-            if size.width > 0, size.height > 0 { layer.drawableSize = size }
             for id in panes.keys {
                 let value = geometry[id] ?? .init(rect: .zero, clip: .zero, visible: false)
                 if panes[id]?.geometry != value { changed = true }
                 panes[id]?.geometry = value
             }
-            if changed { statsLock.withLock { skippedRetryBudget = 4 } }
+            return changed
         }
+        if changed { statsLock.withLock { skippedRetryBudget = 4 } }
         signal.requestFrame()
+    }
+
+    private func withMembership<T>(_ body: () -> T) -> T {
+        let start = CACurrentMediaTime()
+        lock.lock()
+        let elapsed = CACurrentMediaTime() - start
+        let owner = panes.values.first?.surface
+        let result = body()
+        lock.unlock()
+        owner?.traceCompositor(stage: 5, sequence: 0, time: elapsed)
+        return result
+    }
+
+    private func retirePending() {
+        let removed = lock.withLock { let result = retired; retired.removeAll(); return result }
+        for surface in removed { surface.retireCompositor(signal) }
     }
 
     func start() {
@@ -324,22 +349,21 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
     }
 
     func stop() {
-        lock.lock()
-        guard started, !stopping else { lock.unlock(); return }
-        stopping = true
-        let runLoop = loop
-        lock.unlock()
+        let runLoop: CFRunLoop? = lock.withLock {
+            guard started, !stopping else { return nil }
+            stopping = true
+            for pane in panes.values {
+                pane.surface.removeCompositor(signal)
+                retired.append(pane.surface)
+            }
+            panes.removeAll()
+            return loop
+        }
         if let runLoop {
             CFRunLoopPerformBlock(runLoop, CFRunLoopMode.defaultMode.rawValue) { CFRunLoopStop(runLoop) }
             CFRunLoopWakeUp(runLoop)
         }
-        exited.wait()
-        lock.withLock {
-            inFlight.wait()
-            for pane in panes.values { pane.surface.setCompositor(nil) }
-            panes.removeAll()
-        }
-        queue.removeResidencySet(layer.residencySet)
+        // The worker retains itself until all submitted GPU work is retired.
     }
 
     private func run() {
@@ -357,7 +381,8 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
             lock.withLock { loop = runLoop }
             signal.install(runLoop: runLoop) { [weak self] in
                 guard let self else { return }
-                lock.withLock { link?.isPaused = false }
+                retirePending()
+                lock.withLock { link?.isPaused = false; paused = false }
             }
             signal.requestFrame()
             while !lock.withLock({ stopping }) {
@@ -367,8 +392,15 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
             displayLink.invalidate()
             lock.withLock { link = nil; loop = nil }
             port.invalidate()
+            inFlight.wait()
+            retirePending()
+            for slot in slots {
+                slot.surfaces.removeAll()
+                slot.textures.removeAll()
+                slot.tables.removeAll()
+            }
+            queue.removeResidencySet(layer.residencySet)
         }
-        exited.signal()
     }
 
     func metalDisplayLink(_ link: CAMetalDisplayLink, needsUpdate update: CAMetalDisplayLink.Update) {
@@ -377,21 +409,28 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
     }
 
     private func draw(_ link: CAMetalDisplayLink, update: CAMetalDisplayLink.Update, callbackTime: Double) {
-        lock.lock()
-        defer { lock.unlock() }
+        encodingLock.lock()
+        defer { encodingLock.unlock() }
+        let snapshot = lock.withLock { (panes, size, stopping) }
+        var framePanes = snapshot.0
+        let size = snapshot.1
         #if CGHOSTTY_TESTING
-        if testUpdatesPaused { link.isPaused = true; return }
+        if lock.withLock({ testUpdatesPaused }) { setPaused(true, link: link); return }
         #endif
-        guard !stopping, size.width > 0, size.height > 0 else { link.isPaused = true; return }
+        guard !snapshot.2, size.width > 0, size.height > 0 else { setPaused(true, link: link); return }
         if layer.drawableSize != size { layer.drawableSize = size; return }
+        #if CGHOSTTY_TESTING
+        let beforePrepare = lock.withLock { let value = testBeforePrepare; testBeforePrepare = nil; return value }
+        beforePrepare?()
+        #endif
         let slot = slots[index]
         guard slot.available.wait(timeout: .now()) == .success else { return }
         index = (index + 1) % slots.count
         let sequence = Self.sequences.withLock { $0 &+= 1; return $0 }
         // One trace owner per window frame avoids multiplying presentation
         // samples by pane count. Process-wide IDs survive owner/window changes.
-        let participants = panes.keys.sorted(by: { $0.uuidString < $1.uuidString }).compactMap { id -> Ghostty.Surface? in
-            guard let pane = panes[id], pane.geometry.visible, !pane.geometry.clip.isEmpty else { return nil }
+        let participants = framePanes.keys.sorted(by: { $0.uuidString < $1.uuidString }).compactMap { id -> Ghostty.Surface? in
+            guard let pane = framePanes[id], pane.geometry.visible, !pane.geometry.clip.isEmpty else { return nil }
             return pane.surface
         }.prefix(1)
         for surface in participants {
@@ -403,31 +442,55 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
         do {
             var more = false
             var draws = 0
-            for id in panes.keys.sorted(by: { $0.uuidString < $1.uuidString }) {
-                guard var pane = panes[id], pane.geometry.visible, !pane.geometry.clip.isEmpty else { continue }
-                let info = pane.surface.compositorInfo
-                guard info.width > 0, info.height > 0 else { continue }
-                if pane.target?.width != Int(info.width) || pane.target?.height != Int(info.height) ||
-                    pane.target?.pixelFormat.rawValue != UInt(info.pixel_format) {
-                    let desc = MTLTextureDescriptor.texture2DDescriptor(
-                        pixelFormat: MTLPixelFormat(rawValue: UInt(info.pixel_format))!,
-                        width: Int(info.width), height: Int(info.height), mipmapped: false)
-                    desc.storageMode = .private
-                    desc.usage = [.renderTarget, .shaderRead, .pixelFormatView]
-                    guard let target = device.makeTexture(descriptor: desc),
-                          let sample = target.makeTextureView(pixelFormat: .bgra8Unorm) else { throw Failure.resource }
-                    pane.target = target
-                    pane.sample = sample
-                    pane.initialized = false
+            let prepareStart = CACurrentMediaTime()
+            var slowestPane: Double = 0
+            for id in framePanes.keys.sorted(by: { $0.uuidString < $1.uuidString }) {
+                guard var pane = framePanes[id], pane.geometry.visible, !pane.geometry.clip.isEmpty else { continue }
+                let paneStart = CACurrentMediaTime()
+                let rendered = try pane.surface.withCompositor(signal) {
+                    let info = pane.surface.compositorInfo
+                    guard info.width > 0, info.height > 0 else { return UInt32(0) }
+                    if pane.target?.width != Int(info.width) || pane.target?.height != Int(info.height) ||
+                        pane.target?.pixelFormat.rawValue != UInt(info.pixel_format) {
+                        let desc = MTLTextureDescriptor.texture2DDescriptor(
+                            pixelFormat: MTLPixelFormat(rawValue: UInt(info.pixel_format))!,
+                            width: Int(info.width), height: Int(info.height), mipmapped: false)
+                        desc.storageMode = .private
+                        desc.usage = [.renderTarget, .shaderRead, .pixelFormatView]
+                        guard let target = device.makeTexture(descriptor: desc),
+                              let sample = target.makeTextureView(pixelFormat: .bgra8Unorm) else { throw Failure.resource }
+                        pane.target = target
+                        pane.sample = sample
+                        pane.initialized = false
+                    }
+                    return pane.surface.renderCompositor(texture: pane.target!, queue: queue,
+                        targetTime: update.targetPresentationTimestamp, force: !pane.initialized, sequence: sequence)
                 }
-                let result = pane.surface.renderCompositor(texture: pane.target!, queue: queue,
-                    targetTime: update.targetPresentationTimestamp, force: !pane.initialized, sequence: sequence)
+                slowestPane = max(slowestPane, CACurrentMediaTime() - paneStart)
+                guard let result = rendered else {
+                    if pane.surface.ownsCompositor(signal) { more = true }
+                    continue
+                }
                 if result & 1 != 0 { pane.initialized = true; draws += 1 }
                 if result & 2 != 0 { more = true }
                 if result & 8 != 0 { statsLock.withLock { stats.failed += 1 } }
-                panes[id] = pane
+                framePanes[id] = pane
             }
-            try encode(slot: slot, target: update.drawable.texture)
+            for surface in participants {
+                surface.traceCompositor(stage: 4, sequence: sequence, time: CACurrentMediaTime() - prepareStart, prediction: slowestPane)
+            }
+            // Publish only resources; newer layout or membership wins.
+            lock.withLock {
+                for (id, pane) in framePanes where panes[id]?.token == pane.token {
+                    panes[id]?.target = pane.target
+                    panes[id]?.sample = pane.sample
+                    panes[id]?.initialized = pane.initialized
+                }
+                framePanes = framePanes.filter { panes[$0.key]?.token == $0.value.token }
+            }
+            framePanes = framePanes.filter { $0.value.surface.ownsCompositor(signal) }
+            try encode(slot: slot, target: update.drawable.texture, panes: framePanes)
+            slot.surfaces = framePanes.values.map(\.surface)
             let options = MTL4CommitOptions()
             inFlight.enter()
             slot.drawableTexture = update.drawable.texture
@@ -443,10 +506,11 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
                 completionCondition.unlock()
                 #endif
                 slot.drawableTexture = nil
+                slot.surfaces.removeAll()
                 slot.available.signal()
                 inFlight.leave()
             }
-            let retrySkipped = panes.values.contains { $0.geometry.visible && !$0.geometry.clip.isEmpty }
+            let retrySkipped = framePanes.values.contains { $0.geometry.visible && !$0.geometry.clip.isEmpty }
             let traceOwners = participants.map(TraceOwner.init)
             update.drawable.addPresentedHandler { [weak self, traceOwners] drawable in
                 for owner in traceOwners { owner.surface?.traceCompositor(stage: 3, sequence: sequence, time: drawable.presentedTime) }
@@ -477,15 +541,20 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
                 statsLock.withLock { stats.missedDeadlines += 1 }
                 more = true
             }
-            link.isPaused = !more
+            setPaused(!more, link: link)
         } catch {
             Ghostty.logger.error("Window composition failed: \(error)")
             statsLock.withLock { stats.failed += 1 }
-            link.isPaused = true
+            setPaused(true, link: link)
         }
     }
 
-    private func encode(slot: Slot, target: any MTLTexture) throws {
+    private func setPaused(_ value: Bool, link: CAMetalDisplayLink) {
+        link.isPaused = value
+        lock.withLock { paused = value }
+    }
+
+    private func encode(slot: Slot, target: any MTLTexture, panes: [UUID: Pane]) throws {
         slot.allocator.reset()
         slot.residency.removeAllAllocations()
         slot.textures.removeAll(keepingCapacity: true)
@@ -546,8 +615,9 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
     /// Read back the same composition pass into an independent shared texture.
     /// This runs only on explicit test requests and never retains a drawable.
     func readback() throws -> (width: Int, height: Int, pixels: [UInt8]) {
-        lock.lock()
-        defer { lock.unlock() }
+        encodingLock.lock()
+        defer { encodingLock.unlock() }
+        let (panes, size) = lock.withLock { (self.panes, self.size) }
         guard size.width > 0, size.height > 0 else { throw Failure.resource }
         let desc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm,
             width: Int(size.width), height: Int(size.height), mipmapped: false)
@@ -555,7 +625,7 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
         desc.usage = .renderTarget
         guard let texture = device.makeTexture(descriptor: desc) else { throw Failure.resource }
         let slot = try Slot(device: device)
-        try encode(slot: slot, target: texture)
+        try encode(slot: slot, target: texture, panes: panes)
         // encode already committed its residency; include the offscreen target.
         slot.residency.addAllocation(texture)
         slot.residency.commit()
