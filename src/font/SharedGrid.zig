@@ -286,8 +286,15 @@ pub fn renderGlyph(
     glyph_index: u32,
     opts: RenderOptions,
 ) RenderGlyphError!Render {
-    return self.renderGlyphTraced(alloc, index, glyph_index, opts, null);
+    return self.renderGlyphTraced(alloc, index, glyph_index, opts, null, null);
 }
+
+pub const GlyphMetrics = struct {
+    calls: u64 = 0,
+    misses: u64 = 0,
+    lock_ns: u64 = 0,
+    raster_ns: u64 = 0,
+};
 
 pub fn renderGlyphTraced(
     self: *SharedGrid,
@@ -296,26 +303,47 @@ pub fn renderGlyphTraced(
     glyph_index: u32,
     opts: RenderOptions,
     trace: ?*@import("../renderer/Trace.zig"),
+    metrics: ?*GlyphMetrics,
 ) RenderGlyphError!Render {
     const tw = renderGlyph_tw;
 
     const key = GlyphKey.from(.{ .index = index, .glyph = glyph_index, .opts = opts });
 
+    const trace_start = if (trace) |t| if (t.file != null) @import("../renderer/Trace.zig").clock() else 0 else 0;
+    var lock_ns: u64 = 0;
+    var miss = false;
+    var raster_start: u64 = 0;
+    defer if (trace_start != 0) {
+        const now = @import("../renderer/Trace.zig").clock();
+        if (metrics) |m| {
+            m.calls += 1;
+            m.misses += @intFromBool(miss);
+            m.lock_ns += lock_ns;
+            m.raster_ns += if (raster_start != 0) now - raster_start else 0;
+        }
+    };
+
     // Fast path: the cache has the value. This is almost always true and
     // only requires a read lock.
     {
         self.lock.lockSharedUncancelable(global.io());
+        if (trace_start != 0) lock_ns += @import("../renderer/Trace.zig").clock() - trace_start;
         defer self.lock.unlockShared(global.io());
         if (self.glyphs.get(key)) |v| return v;
     }
 
     // Slow path: we need to search this codepoint
+    const write_start = if (trace_start != 0) @import("../renderer/Trace.zig").clock() else 0;
     self.lock.lockUncancelable(global.io());
+    if (write_start != 0) lock_ns += @import("../renderer/Trace.zig").clock() - write_start;
     defer self.lock.unlock(global.io());
 
     const gop = try self.glyphs.getOrPut(alloc, key);
     if (gop.found_existing) return gop.value_ptr.*;
     errdefer self.glyphs.removeByPtr(gop.key_ptr);
+
+    miss = true;
+    raster_start = if (trace_start != 0) @import("../renderer/Trace.zig").clock() else 0;
 
     // Get the presentation to determine what atlas to use
     try tw.check(.get_presentation);

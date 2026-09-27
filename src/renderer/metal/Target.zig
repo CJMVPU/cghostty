@@ -1,6 +1,6 @@
 //! Represents a render target.
 //!
-//! Borrowed pane texture, or an owned shared Metal texture for explicit snapshots.
+//! Borrowed window drawable view, or an owned shared Metal texture for snapshots.
 const Self = @This();
 
 const objc = @import("objc");

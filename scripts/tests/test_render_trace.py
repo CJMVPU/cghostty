@@ -22,6 +22,10 @@ class RenderTraceTests(unittest.TestCase):
                 'pane_content,5,9,41,0\n'
                 'pane_content,6,9,42,0\n'
                 'shape,7,20,5,2000000\n'
+                'glyph_lock,7,100000,20,3\n'
+                'glyph_raster,7,4000000,3,0\n'
+                'content_draw,7,1,0,0\n'
+                'scroll_freeze,7,1,0,0\n'
                 'window_prepare,8,3000000,2000000,42\n')
             (root / 'render-owner.csv').write_text(
                 'displayed,1,1500000,40,0\n'
@@ -32,6 +36,11 @@ class RenderTraceTests(unittest.TestCase):
             self.assertEqual(result['input_probes_matched'], 1)
             self.assertEqual(result['input_probe_to_content_display_ms']['median'], 3)
             self.assertEqual(result['shape_miss_ratio'], 0.25)
+            self.assertEqual(result['glyph_misses'], 3)
+            self.assertEqual(result['glyph_calls'], 20)
+            self.assertEqual(result['glyph_raster_total_ms'], 4)
+            self.assertEqual(result['content_draws'], 1)
+            self.assertEqual(result['scroll_history_freezes'], 1)
             self.assertEqual(result['window_slowest_pane_ms']['max'], 2)
 
     def test_compositor_coalescing_counts_duplicates_within_each_pane(self):

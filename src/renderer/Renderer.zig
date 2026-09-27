@@ -114,6 +114,7 @@ cells_revision: u64 = 0,
 /// Render-thread-owned; reflects whether blink phase changes pixels.
 cursor_blink_needed: bool = false,
 trace: Trace = .{},
+glyph_metrics: font.SharedGrid.GlyphMetrics = .{},
 shape_lookups: u64 = 0,
 shape_misses: u64 = 0,
 shape_ns: u64 = 0,
@@ -122,6 +123,9 @@ output_revision: u64 = 0,
 /// The current GPU uniform values.
 uniforms: shaderpkg.Uniforms,
 scroll: ScrollScene.Scene = .{},
+scroll_presented_uniforms: ?shaderpkg.Uniforms = null,
+compositor_region: ?RenderPass.Region = null,
+content_submissions: u64 = 0,
 scroll_shared: ?*renderer.State = null,
 scroll_snapshot: struct {
     journal: @import("../terminal/ScrollState.zig") = .{},
@@ -283,6 +287,7 @@ const FrameState = struct {
     background_upload: @import("RowUpload.zig") = .{},
     uniforms: UniformBuffer,
     content_uniforms: UniformBuffer,
+    history_uniforms: UniformBuffer,
     cells: CellTextBuffer,
     cells_bg: CellBgBuffer,
     image_instances: Buffer(shaderpkg.Image),
@@ -321,6 +326,8 @@ const FrameState = struct {
         errdefer uniforms.deinit();
         var content_uniforms = try UniformBuffer.init(api.uniformBufferOptions(), 1);
         errdefer content_uniforms.deinit();
+        var history_uniforms = try UniformBuffer.init(api.uniformBufferOptions(), 1);
+        errdefer history_uniforms.deinit();
 
         // Create GPU buffers for our cells.
         //
@@ -367,6 +374,7 @@ const FrameState = struct {
         return .{
             .uniforms = uniforms,
             .content_uniforms = content_uniforms,
+            .history_uniforms = history_uniforms,
             .cells = cells,
             .cells_bg = cells_bg,
             .image_instances = image_instances,
@@ -385,6 +393,7 @@ const FrameState = struct {
         self.target.deinit();
         self.uniforms.deinit();
         self.content_uniforms.deinit();
+        self.history_uniforms.deinit();
         self.cells.deinit();
         self.cells_bg.deinit();
         self.image_instances.deinit();
@@ -866,6 +875,12 @@ pub fn updateFrame(
     state: *renderer.State,
     cursor_blink_visible: bool,
 ) Allocator.Error!void {
+    self.glyph_metrics = .{};
+    defer if (self.trace.file != null and self.glyph_metrics.calls != 0) {
+        const m = self.glyph_metrics;
+        self.trace.emit("glyph_lock", m.lock_ns, m.calls, m.misses);
+        self.trace.emit("glyph_raster", m.raster_ns, m.misses, 0);
+    };
     self.shape_lookups = 0;
     self.shape_misses = 0;
     self.shape_ns = 0;
@@ -1226,29 +1241,46 @@ pub fn compositorInfo(self: *Self) CompositorInfo {
     return .{ .width = self.size.screen.width, .height = self.size.screen.height, .pixel_format = @intCast(@intFromEnum(if (self.api.blending.isLinear()) @import("metal/api.zig").MTLPixelFormat.bgra8unorm_srgb else @import("metal/api.zig").MTLPixelFormat.bgra8unorm)), .latency = self.config.frame_latency };
 }
 
-/// Returns bit 0 when submitted, bit 1 when another frame is needed, bit 2
+/// Returns bit 0 when content is repainted, bit 4 when composed, bit 1
+/// when another frame is needed, bit 2
 /// on geometry mismatch. All pane submissions use the window's Metal 4 queue,
 /// so queue barriers order cached-texture writes and final composition reads.
-pub fn drawCompositor(self: *Self, texture: @import("objc").Object, queue: @import("objc").Object, target_time: f64, force: bool) !u32 {
+pub fn drawCompositor(self: *Self, texture: @import("objc").Object, queue: @import("objc").Object, target_time: f64, region: RenderPass.Region, readback: bool) !u32 {
     self.draw_mutex.lockUncancelable(global.io());
     defer self.draw_mutex.unlock(global.io());
+    errdefer {
+        self.scroll.failed.store(true, .release);
+        self.cells_rebuilt = true;
+        self.cursor_motion.invalidate();
+    }
     if (!self.display_realized or !self.visible) return 0;
-    const width = texture.getProperty(c_ulong, "width");
-    const height = texture.getProperty(c_ulong, "height");
-    if (width != self.size.screen.width or height != self.size.screen.height) return 6;
-    self.api.pane.compositor_target = .{ .texture = texture, .width = width, .height = height };
+    if (@abs(region.width - @as(f64, @floatFromInt(self.size.screen.width))) > 1 or
+        @abs(region.height - @as(f64, @floatFromInt(self.size.screen.height))) > 1) return 6;
+    self.api.pane.compositor_target = .{ .texture = texture, .width = self.size.screen.width, .height = self.size.screen.height };
+    self.compositor_region = region;
     self.api.pane.compositor_queue = queue;
     const now = @as(f64, @floatFromInt(Trace.clock())) / std.time.ns_per_s;
     self.api.pane.timing = FrameTiming.init(now, FrameTiming.CACurrentMediaTime(), target_time);
     defer {
         self.api.pane.compositor_target = null;
+        self.compositor_region = null;
         self.api.pane.compositor_queue = null;
         self.api.pane.timing = null;
     }
-    if (force) self.cells_rebuilt = true;
     const sequence = self.api.pane.sequence;
+    if (readback) {
+        // An explicit diagnostic snapshot reuses the last sampled animation state.
+        // It never consumes updates or publishes a display revision.
+        var snapshot: Snapshot = .{ .target = self.api.pane.compositor_target.? };
+        defer self.api.pane.sequence = sequence;
+        try self.drawFrameLocked(true, &snapshot);
+        if (!snapshot.healthy) return error.SnapshotFailed;
+        return 0;
+    }
+    const content = self.content_submissions;
     try self.drawFrameLocked(false, null);
-    return @as(u32, @intFromBool(self.api.pane.sequence != sequence)) |
+    return @as(u32, @intFromBool(self.content_submissions != content)) |
+        (if (self.api.pane.sequence != sequence) @as(u32, 16) else 0) |
         (if (self.cells_rebuilt or self.cursor_motion.isActive() or self.scroll.motion.active()) @as(u32, 2) else 0);
 }
 
@@ -1257,6 +1289,7 @@ pub fn drawCompositor(self: *Self, texture: @import("objc").Object, queue: @impo
 fn releaseScrollTextures(self: *Self) void {
     if (self.scroll_shared) |shared| shared.scroll_hit.publish(.{});
     self.scroll.reset();
+    self.scroll_presented_uniforms = null;
 }
 
 /// Encode a window pane or explicit snapshot. Caller holds draw_mutex.
@@ -1325,8 +1358,9 @@ fn drawFrameLocked(
         self.cursor_motion.isActive() or self.scroll.motion.active() or
         sync;
 
-    // The window can compose this pane's cached output without re-encoding.
-    if (!needs_redraw) return;
+    // Final composition always runs for visible window panes; only content
+    // cache regeneration depends on whether terminal pixels changed.
+    if (!needs_redraw and self.compositor_region == null) return;
     const trace_start = if (self.trace.file != null) Trace.clock() else 0;
     var copied_bytes: usize = 0;
     defer if (trace_start != 0) {
@@ -1340,7 +1374,8 @@ fn drawFrameLocked(
     const slot_start = if (self.trace.file != null) Trace.clock() else 0;
     const frame = swap_chain.nextFrame();
     if (slot_start != 0) self.trace.emit("frame_slot", Trace.clock() - slot_start, 0, 0);
-    errdefer swap_chain.releaseFrame();
+    var submitted = false;
+    errdefer if (!submitted) swap_chain.releaseFrame();
     // log.debug("drawing frame index={}", .{swap_chain.frame_index});
 
     // If we need to reinitialize our shaders, do so.
@@ -1381,9 +1416,7 @@ fn drawFrameLocked(
     }
 
     const original_target = frame.target;
-    defer if (snapshot != null) {
-        frame.target = original_target;
-    };
+    defer frame.target = original_target;
     if (snapshot) |s| {
         frame.target = s.target;
     } else if (self.api.pane.compositor_target) |target| {
@@ -1402,7 +1435,7 @@ fn drawFrameLocked(
 
     const scroll_enabled = self.config.smooth_scroll and !self.api.reduceMotion() and
         self.images.kitty_placements.items.len == self.images.kitty_text_end;
-    if (self.scroll.failed.swap(false, .acq_rel) or self.scroll.config != self.target_config_modified or size_changed or !scroll_enabled) {
+    if (self.scroll.failed.swap(false, .acq_rel) or self.scroll.config != self.target_config_modified or size_changed) {
         self.releaseScrollTextures();
         self.scroll.config = self.target_config_modified;
     }
@@ -1411,14 +1444,24 @@ fn drawFrameLocked(
         if (t.width != self.size.screen.width or t.height != self.size.screen.height) self.releaseScrollTextures();
     }
     const scroll_now = @as(f64, @floatFromInt(std.Io.Timestamp.now(global.io(), .awake).nanoseconds)) / std.time.ns_per_s;
+    const old_scene = self.scroll.scene;
+    const old_previous = self.scroll.previous;
+    const old_uniforms = self.scroll_presented_uniforms;
+    var freeze: ?usize = null;
     if (snapshot == null and self.scroll.motion.update(self.scroll_snapshot.journal, self.scrollbar.offset, self.scroll_snapshot.rows, self.scroll_snapshot.cols, self.scroll_snapshot.alternate, @floatFromInt(self.size.cell.height), scroll_now, scroll_enabled)) {
-        self.scroll.previous = self.scroll.presented;
+        if (old_scene != null) {
+            if (old_uniforms != null and old_uniforms.?.scroll_count > 0 and old_previous != null) {
+                freeze = try self.scroll.acquire(&self.api, self.size.screen.width, self.size.screen.height, &.{ old_scene, old_previous });
+                self.scroll.previous = freeze;
+            } else self.scroll.previous = old_scene;
+        }
     }
     if (snapshot == null) self.scroll.motion.sample(if (self.api.pane.timing) |timing| timing.presentation else scroll_now);
     if (self.trace.file != null and self.scroll.motion.len > 0) self.trace.emit("scroll", self.scroll.motion.len, @intFromFloat(@abs(self.scroll.motion.regions[0].shown) * 1000), @intFromFloat(@abs(self.scroll.motion.regions[0].start) * 1000));
     if (self.scroll.previous == null) self.scroll.motion.reset();
     self.uniforms.scroll_count = @intCast(self.scroll.motion.len);
-    self.uniforms.scroll_mode = if (scroll_enabled) 2 else 0;
+    self.uniforms.scroll_mode = 2;
+    self.uniforms.target_origin = if (self.compositor_region) |r| .{ @floatCast(r.x), @floatCast(r.y) } else .{ 0, 0 };
     for (self.scroll.motion.regions[0..self.scroll.motion.len], 0..) |r, i| {
         const cw: f32 = @floatFromInt(self.size.cell.width);
         const ch: f32 = @floatFromInt(self.size.cell.height);
@@ -1429,12 +1472,13 @@ fn drawFrameLocked(
     }
     const scene_key: ScrollScene.Key = .{ .content = self.cells.bg_revision, .images = self.images.placement_revision, .background = self.uniforms.bg_color };
     const scene_dirty = self.scroll.dirty(scene_key);
-    if (scroll_enabled and scene_dirty) self.scroll.scene = try self.scroll.acquire(&self.api, self.size.screen.width, self.size.screen.height, &.{ self.scroll.presented, self.scroll.previous });
+    if (scene_dirty) self.scroll.scene = try self.scroll.acquire(&self.api, self.size.screen.width, self.size.screen.height, &.{self.scroll.previous});
 
     // Uniform buffers are per in-flight frame; content and cursor passes must
     // never overwrite a buffer already referenced by an earlier pass.
     try frame.uniforms.sync(&.{self.uniforms});
     var content_uniforms = self.uniforms;
+    content_uniforms.target_origin = .{ 0, 0 };
     content_uniforms.scroll_mode = 1;
     content_uniforms.scroll_count = 0;
     try frame.content_uniforms.sync(&.{content_uniforms});
@@ -1487,15 +1531,28 @@ fn drawFrameLocked(
     // Get a frame context from the graphics API.
     var frame_ctx = try self.api.beginFrame(self, &frame.target, &frame.commands);
     defer {
+        submitted = true;
         frame_ctx.complete(sync);
         if (snapshot) |s| s.healthy = frame.commands.health == .healthy else self.cells_rebuilt = false;
         if (cursor_frame) |cursor| self.cursor_motion.recordFrame(cursor);
     }
 
-    if (!scroll_enabled or scene_dirty) {
-        const content_buffer = if (scroll_enabled) frame.content_uniforms.buffer else frame.uniforms.buffer;
+    if (freeze) |destination| {
+        var history = old_uniforms.?;
+        history.target_origin = .{ 0, 0 };
+        try frame.history_uniforms.sync(&.{history});
+        var pass = frame_ctx.renderPass(&.{.{ .target = .{ .texture = self.scroll.textures[destination].? }, .clear_color = .{ 0, 0, 0, 0 } }});
+        pass.step(.{ .pipeline = self.shaders.pipelines.scroll_compose, .uniforms = frame.history_uniforms.buffer, .textures = &.{ self.scroll.textures[old_scene.?].?, self.scroll.textures[old_previous.?].? }, .draw = .{ .type = .triangle, .vertex_count = 3 } });
+        pass.complete();
+        self.trace.emit("scroll_freeze", 1, 0, 0);
+    }
+
+    if (scene_dirty) {
+        self.content_submissions +%= 1;
+        self.trace.emit("content_draw", 1, 0, 0);
+        const content_buffer = frame.content_uniforms.buffer;
         var pass = frame_ctx.renderPass(&.{.{
-            .target = if (scroll_enabled) .{ .texture = self.scroll.textures[self.scroll.scene.?].? } else .{ .target = frame.target },
+            .target = .{ .texture = self.scroll.textures[self.scroll.scene.?].? },
             .clear_color = .{ 0.0, 0.0, 0.0, 0.0 },
         }});
         defer pass.complete();
@@ -1511,18 +1568,7 @@ fn drawFrameLocked(
         //       CPU-side. In the future when we have utilities for
         //       that we should remove this step and use clear_color.
 
-        if (self.bg_image) |img| {
-            if (!scroll_enabled) switch (img) {
-                .ready => |texture| pass.step(.{
-                    .pipeline = self.shaders.pipelines.bg_image,
-                    .uniforms = content_buffer,
-                    .buffers = &.{frame.bg_image_buffer.buffer},
-                    .textures = &.{texture},
-                    .draw = .{ .type = .triangle, .vertex_count = 3 },
-                }),
-                else => {},
-            };
-        } else {
+        if (self.bg_image == null) {
             pass.step(.{
                 .pipeline = self.shaders.pipelines.bg_color,
                 .uniforms = content_buffer,
@@ -1556,12 +1602,6 @@ fn drawFrameLocked(
             .kitty_below_text,
         );
 
-        if (!scroll_enabled and self.uniforms.smooth_effect > 0 and self.uniforms.smooth_block != 0) pass.step(.{
-            .pipeline = self.shaders.pipelines.smooth_cursor,
-            .uniforms = content_buffer,
-            .draw = .{ .type = .triangle, .vertex_count = 3 },
-        });
-
         // Text.
         pass.step(.{
             .pipeline = self.shaders.pipelines.cell_text,
@@ -1580,40 +1620,12 @@ fn drawFrameLocked(
                 .instance_count = fg_count,
             },
         });
-
-        // Bar and underline cursors overlay text, matching the native
-        // cursor order without recoloring the underlying glyphs.
-        if (!scroll_enabled and self.uniforms.smooth_effect > 0 and self.uniforms.smooth_block == 0) pass.step(.{
-            .pipeline = self.shaders.pipelines.smooth_cursor,
-            .uniforms = content_buffer,
-            .draw = .{ .type = .triangle, .vertex_count = 3 },
-        });
-
-        // Kitty images in front of text.
-        self.images.draw(
-            frame.image_instances,
-            self.shaders.pipelines.image,
-            &pass,
-            .kitty_above_text,
-        );
     }
 
-    if (scroll_enabled) {
+    {
         self.scroll.key = scene_key;
-        var displayed = self.scroll.scene.?;
-        if (self.scroll.motion.len > 0) {
-            displayed = try self.scroll.acquire(&self.api, self.size.screen.width, self.size.screen.height, &.{ self.scroll.scene, self.scroll.previous });
-            var pass = frame_ctx.renderPass(&.{.{ .target = .{ .texture = self.scroll.textures[displayed].? }, .clear_color = .{ 0, 0, 0, 0 } }});
-            pass.step(.{
-                .pipeline = self.shaders.pipelines.scroll_compose,
-                .uniforms = frame.uniforms.buffer,
-                .textures = &.{ self.scroll.textures[self.scroll.scene.?].?, self.scroll.textures[self.scroll.previous.?].? },
-                .draw = .{ .type = .triangle, .vertex_count = 3 },
-            });
-            pass.complete();
-        } else self.scroll.previous = null;
-
-        var pass = frame_ctx.renderPass(&.{.{ .target = .{ .target = frame.target }, .clear_color = .{ 0, 0, 0, 0 } }});
+        if (self.scroll.motion.len == 0) self.scroll.previous = null;
+        var pass = RenderPass.begin(.{ .commands = frame_ctx.commands, .region = self.compositor_region, .attachments = &.{.{ .target = .{ .target = frame.target }, .clear_color = if (snapshot != null and self.compositor_region == null) .{ 0, 0, 0, 0 } else null }} });
         defer pass.complete();
         // Wallpaper stays fixed under the independently scrolling content.
         if (self.bg_image) |img| switch (img) {
@@ -1627,8 +1639,9 @@ fn drawFrameLocked(
             else => {},
         };
         pass.step(.{
-            .pipeline = self.shaders.pipelines.scroll_copy,
-            .textures = &.{self.scroll.textures[displayed].?},
+            .pipeline = self.shaders.pipelines.scroll_present,
+            .uniforms = frame.uniforms.buffer,
+            .textures = &.{ self.scroll.textures[self.scroll.scene.?].?, self.scroll.textures[self.scroll.previous orelse self.scroll.scene.?].? },
             .draw = .{ .type = .triangle, .vertex_count = 3 },
         });
         if (self.uniforms.smooth_effect > 0 and self.uniforms.smooth_block != 0) pass.step(.{
@@ -1652,7 +1665,10 @@ fn drawFrameLocked(
             .uniforms = frame.uniforms.buffer,
             .draw = .{ .type = .triangle, .vertex_count = 3 },
         });
-        if (snapshot == null) self.scroll.presented = displayed;
+        self.images.draw(frame.image_instances, self.shaders.pipelines.image, &pass, .kitty_above_text);
+        if (snapshot == null) {
+            self.scroll_presented_uniforms = self.uniforms;
+        }
     }
 
     if (if (snapshot == null) self.scroll_shared else null) |shared| shared.scroll_hit.publish(.{
@@ -2833,6 +2849,7 @@ fn addUnderline(
             .grid_metrics = self.grid_metrics,
         },
         &self.trace,
+        &self.glyph_metrics,
     );
 
     try self.cells.add(self.alloc, .underline, .{
@@ -2865,6 +2882,7 @@ fn addOverline(
             .grid_metrics = self.grid_metrics,
         },
         &self.trace,
+        &self.glyph_metrics,
     );
 
     try self.cells.add(self.alloc, .overline, .{
@@ -2897,6 +2915,7 @@ fn addStrikethrough(
             .grid_metrics = self.grid_metrics,
         },
         &self.trace,
+        &self.glyph_metrics,
     );
 
     try self.cells.add(self.alloc, .strikethrough, .{
@@ -2956,6 +2975,7 @@ fn addGlyph(
             ),
         },
         &self.trace,
+        &self.glyph_metrics,
     );
 
     // If the glyph is 0 width or height, it will be invisible
@@ -3031,6 +3051,7 @@ fn addCursor(
                     .grid_metrics = self.grid_metrics,
                 },
                 &self.trace,
+                &self.glyph_metrics,
             ) catch |err| {
                 log.warn("error rendering cursor glyph err={}", .{err});
                 return;

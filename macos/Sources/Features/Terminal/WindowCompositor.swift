@@ -183,8 +183,6 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
         let token = UUID()
         let surface: Ghostty.Surface
         var geometry = Geometry(rect: .zero, clip: .zero, visible: false)
-        var target: (any MTLTexture)?
-        var sample: (any MTLTexture)?
         var initialized = false
     }
     /// Encoding owns the slot until commit; completion clears its drawable
@@ -193,17 +191,21 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
         let available = DispatchSemaphore(value: 1)
         let allocator: any MTL4CommandAllocator
         let buffer: any MTL4CommandBuffer
+        let clearBuffer: any MTL4CommandBuffer
         let residency: any MTLResidencySet
         var drawableTexture: (any MTLTexture)?
-        var tables: [any MTL4ArgumentTable] = []
-        var textures: [any MTLTexture] = []
         var surfaces: [Ghostty.Surface] = []
+        let retirement: any MTLSharedEvent
+        var retirementValue: UInt64 = 0
         init(device: any MTLDevice) throws {
-            guard let allocator = device.makeCommandAllocator(), let buffer = device.makeCommandBuffer() else {
+            guard let allocator = device.makeCommandAllocator(), let buffer = device.makeCommandBuffer(),
+                  let clearBuffer = device.makeCommandBuffer(), let retirement = device.makeSharedEvent() else {
                 throw Failure.resource
             }
             self.allocator = allocator
             self.buffer = buffer
+            self.clearBuffer = clearBuffer
+            self.retirement = retirement
             residency = try device.makeResidencySet(descriptor: MTLResidencySetDescriptor())
         }
     }
@@ -212,7 +214,6 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
     let signal = WindowCompositorSignal()
     private let device: any MTLDevice
     private let queue: any MTL4CommandQueue
-    private let pipeline: any MTLRenderPipelineState
     private let slots: [Slot]
     private let latency: Float
     private let lock = NSLock()
@@ -269,19 +270,6 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
         self.device = device
         self.queue = queue
         self.latency = latency
-        let library = try device.makeLibrary(source: Self.shader, options: nil)
-        let descriptor = MTL4RenderPipelineDescriptor()
-        let vertex = MTL4LibraryFunctionDescriptor()
-        vertex.library = library
-        vertex.name = "window_vertex"
-        let fragment = MTL4LibraryFunctionDescriptor()
-        fragment.library = library
-        fragment.name = "window_fragment"
-        descriptor.vertexFunctionDescriptor = vertex
-        descriptor.fragmentFunctionDescriptor = fragment
-        descriptor.colorAttachments[0].pixelFormat = .bgra8Unorm
-        let compiler = try device.makeCompiler(descriptor: MTL4CompilerDescriptor())
-        pipeline = try compiler.makeRenderPipelineState(descriptor: descriptor)
         slots = try (0..<3).map { _ in try Slot(device: device) }
         super.init()
         layer.device = device
@@ -396,8 +384,6 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
             retirePending()
             for slot in slots {
                 slot.surfaces.removeAll()
-                slot.textures.removeAll()
-                slot.tables.removeAll()
             }
             queue.removeResidencySet(layer.residencySet)
         }
@@ -438,10 +424,26 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
             surface.traceCompositor(stage: 1, sequence: sequence, time: callbackTime)
         }
         var committed = false
-        defer { if !committed { slot.available.signal() } }
+        var queued = false
+        defer {
+            if !committed {
+                if queued {
+                    // A failed final encoder must not recycle allocations still
+                    // referenced by the clear or already submitted pane passes.
+                    drain(slot)
+                }
+                slot.surfaces.removeAll()
+                slot.available.signal()
+            }
+        }
         do {
             var more = false
             var draws = 0
+            slot.surfaces = framePanes.values.map(\.surface)
+            queue.waitForDrawable(update.drawable)
+            try encodeBoundary(slot: slot, target: update.drawable.texture, clear: true)
+            queue.commit([slot.clearBuffer])
+            queued = true
             let prepareStart = CACurrentMediaTime()
             var slowestPane: Double = 0
             for id in framePanes.keys.sorted(by: { $0.uuidString < $1.uuidString }) {
@@ -450,28 +452,22 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
                 let rendered = try pane.surface.withCompositor(signal) {
                     let info = pane.surface.compositorInfo
                     guard info.width > 0, info.height > 0 else { return UInt32(0) }
-                    if pane.target?.width != Int(info.width) || pane.target?.height != Int(info.height) ||
-                        pane.target?.pixelFormat.rawValue != UInt(info.pixel_format) {
-                        let desc = MTLTextureDescriptor.texture2DDescriptor(
-                            pixelFormat: MTLPixelFormat(rawValue: UInt(info.pixel_format))!,
-                            width: Int(info.width), height: Int(info.height), mipmapped: false)
-                        desc.storageMode = .private
-                        desc.usage = [.renderTarget, .shaderRead, .pixelFormatView]
-                        guard let target = device.makeTexture(descriptor: desc),
-                              let sample = target.makeTextureView(pixelFormat: .bgra8Unorm) else { throw Failure.resource }
-                        pane.target = target
-                        pane.sample = sample
-                        pane.initialized = false
-                    }
-                    return pane.surface.renderCompositor(texture: pane.target!, queue: queue,
-                        targetTime: update.targetPresentationTimestamp, force: !pane.initialized, sequence: sequence)
+                    let rect = pane.geometry.rect
+                    let clip = pane.geometry.clip.intersection(CGRect(x: 0, y: 0,
+                        width: update.drawable.texture.width, height: update.drawable.texture.height))
+                    guard !clip.isEmpty, !clip.isNull else { return UInt32(0) }
+                    let format = MTLPixelFormat(rawValue: UInt(info.pixel_format))!
+                    guard let target = update.drawable.texture.makeTextureView(pixelFormat: format) else { throw Failure.resource }
+                    return pane.surface.renderCompositor(texture: target, queue: queue,
+                        targetTime: update.targetPresentationTimestamp, rect: rect, clip: clip, sequence: sequence)
                 }
                 slowestPane = max(slowestPane, CACurrentMediaTime() - paneStart)
                 guard let result = rendered else {
                     if pane.surface.ownsCompositor(signal) { more = true }
                     continue
                 }
-                if result & 1 != 0 { pane.initialized = true; draws += 1 }
+                if result & 1 != 0 { draws += 1 }
+                if result & 16 != 0 { pane.initialized = true }
                 if result & 2 != 0 { more = true }
                 if result & 8 != 0 { statsLock.withLock { stats.failed += 1 } }
                 framePanes[id] = pane
@@ -479,18 +475,15 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
             for surface in participants {
                 surface.traceCompositor(stage: 4, sequence: sequence, time: CACurrentMediaTime() - prepareStart, prediction: slowestPane)
             }
-            // Publish only resources; newer layout or membership wins.
+            // Publish initialization only; newer layout or membership wins.
             lock.withLock {
                 for (id, pane) in framePanes where panes[id]?.token == pane.token {
-                    panes[id]?.target = pane.target
-                    panes[id]?.sample = pane.sample
                     panes[id]?.initialized = pane.initialized
                 }
                 framePanes = framePanes.filter { panes[$0.key]?.token == $0.value.token }
             }
             framePanes = framePanes.filter { $0.value.surface.ownsCompositor(signal) }
-            try encode(slot: slot, target: update.drawable.texture, panes: framePanes)
-            slot.surfaces = framePanes.values.map(\.surface)
+            try encodeBoundary(slot: slot, target: update.drawable.texture, clear: false)
             let options = MTL4CommitOptions()
             inFlight.enter()
             slot.drawableTexture = update.drawable.texture
@@ -525,7 +518,6 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
                 }
                 if retry { signal.requestFrame() }
             }
-            queue.waitForDrawable(update.drawable)
             queue.commit([slot.buffer], options: options)
             queue.signalDrawable(update.drawable)
             let submittedTime = CACurrentMediaTime()
@@ -554,50 +546,33 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
         lock.withLock { paused = value }
     }
 
-    private func encode(slot: Slot, target: any MTLTexture, panes: [UUID: Pane]) throws {
-        slot.allocator.reset()
-        slot.residency.removeAllAllocations()
-        slot.textures.removeAll(keepingCapacity: true)
-        slot.buffer.beginCommandBuffer(allocator: slot.allocator)
+    private func drain(_ slot: Slot) {
+        slot.retirementValue += 1
+        queue.signalEvent(slot.retirement, value: slot.retirementValue)
+        while !slot.retirement.wait(untilSignaledValue: slot.retirementValue, timeoutMS: 1000) {}
+    }
+
+    /// Clear before pane composition, then fence all pane writes before presenting.
+    /// Both command buffers use the same slot allocator until final completion.
+    private func encodeBoundary(slot: Slot, target: any MTLTexture, clear: Bool) throws {
+        if clear {
+            slot.allocator.reset()
+            slot.residency.removeAllAllocations()
+            slot.residency.addAllocation(target)
+            slot.residency.commit()
+        }
+        let buffer = clear ? slot.clearBuffer : slot.buffer
+        buffer.beginCommandBuffer(allocator: slot.allocator)
+        defer { buffer.endCommandBuffer() }
         let descriptor = MTL4RenderPassDescriptor()
         descriptor.colorAttachments[0].texture = target
-        descriptor.colorAttachments[0].loadAction = .clear
+        descriptor.colorAttachments[0].loadAction = clear ? .clear : .load
         descriptor.colorAttachments[0].storeAction = .store
         descriptor.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 0)
-        guard let encoder = slot.buffer.makeRenderCommandEncoder(descriptor: descriptor) else { throw Failure.resource }
+        guard let encoder = buffer.makeRenderCommandEncoder(descriptor: descriptor) else { throw Failure.resource }
         encoder.barrier(afterQueueStages: .all, beforeStages: [.vertex, .fragment], visibilityOptions: .device)
-        encoder.setRenderPipelineState(pipeline)
-        var tableIndex = 0
-        for id in panes.keys.sorted(by: { $0.uuidString < $1.uuidString }) {
-            guard let pane = panes[id], pane.initialized, pane.geometry.visible,
-                  let texture = pane.sample else { continue }
-            let rect = pane.geometry.rect
-            let clip = pane.geometry.clip.intersection(CGRect(origin: .zero, size: CGSize(width: target.width, height: target.height)))
-            guard rect.width > 0, rect.height > 0, !clip.isEmpty, !clip.isNull else { continue }
-            // One table per pane per in-flight slot. Reuse only after the
-            // slot's GPU completion; editing a live table would race sampling.
-            if tableIndex == slot.tables.count {
-                let arguments = MTL4ArgumentTableDescriptor()
-                arguments.maxTextureBindCount = 1
-                slot.tables.append(try device.makeArgumentTable(descriptor: arguments))
-            }
-            let table = slot.tables[tableIndex]
-            tableIndex += 1
-            table.setTexture(texture.gpuResourceID, index: 0)
-            slot.textures.append(texture)
-            slot.residency.addAllocation(texture)
-            encoder.setArgumentTable(table, stages: .fragment)
-            encoder.setViewport(MTLViewport(originX: rect.minX, originY: rect.minY, width: rect.width,
-                                            height: rect.height, znear: 0, zfar: 1))
-            encoder.setScissorRect(MTLScissorRect(x: Int(clip.minX), y: Int(clip.minY),
-                                                 width: Int(clip.width), height: Int(clip.height)))
-            encoder.drawPrimitives(primitiveType: .triangle, vertexStart: 0, vertexCount: 6)
-        }
-        if tableIndex < slot.tables.count { slot.tables.removeLast(slot.tables.count - tableIndex) }
         encoder.endEncoding()
-        slot.residency.commit()
-        slot.buffer.useResidencySet(slot.residency)
-        slot.buffer.endCommandBuffer()
+        buffer.useResidencySet(slot.residency)
     }
 
     #if CGHOSTTY_TESTING
@@ -622,13 +597,24 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
         let desc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm,
             width: Int(size.width), height: Int(size.height), mipmapped: false)
         desc.storageMode = .shared
-        desc.usage = .renderTarget
+        desc.usage = [.renderTarget, .pixelFormatView]
         guard let texture = device.makeTexture(descriptor: desc) else { throw Failure.resource }
         let slot = try Slot(device: device)
-        try encode(slot: slot, target: texture, panes: panes)
-        // encode already committed its residency; include the offscreen target.
-        slot.residency.addAllocation(texture)
-        slot.residency.commit()
+        try encodeBoundary(slot: slot, target: texture, clear: true)
+        queue.commit([slot.clearBuffer])
+        var completedGPU = false
+        defer { if !completedGPU { drain(slot) } }
+        for pane in panes.values where pane.initialized && pane.geometry.visible {
+            let rect = pane.geometry.rect
+            let clip = pane.geometry.clip.intersection(CGRect(x: 0, y: 0, width: texture.width, height: texture.height))
+            guard !clip.isEmpty, !clip.isNull else { continue }
+            _ = try pane.surface.withCompositor(signal) {
+                let info = pane.surface.compositorInfo
+                guard let target = texture.makeTextureView(pixelFormat: MTLPixelFormat(rawValue: UInt(info.pixel_format))!) else { throw Failure.resource }
+                return pane.surface.renderCompositor(texture: target, queue: queue, targetTime: CACurrentMediaTime(), rect: rect, clip: clip, sequence: 0, snapshot: true)
+            }
+        }
+        try encodeBoundary(slot: slot, target: texture, clear: false)
         let completed = DispatchSemaphore(value: 0)
         let options = MTL4CommitOptions()
         let healthy = Mutex(false)
@@ -638,6 +624,7 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
         }
         queue.commit([slot.buffer], options: options)
         completed.wait()
+        completedGPU = true
         guard healthy.withLock({ $0 }) else { throw Failure.resource }
         var pixels = [UInt8](repeating: 0, count: texture.width * texture.height * 4)
         pixels.withUnsafeMutableBytes { buffer in
@@ -648,17 +635,4 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
     }
     #endif
 
-    private static let shader = """
-    #include <metal_stdlib>
-    using namespace metal;
-    struct WindowVertex { float4 position [[position]]; float2 uv; };
-    vertex WindowVertex window_vertex(uint id [[vertex_id]]) {
-        constexpr float2 uv[] = { {0,0}, {0,1}, {1,0}, {1,0}, {0,1}, {1,1} };
-        return {float4(uv[id].x * 2 - 1, 1 - uv[id].y * 2, 0, 1), uv[id]};
-    }
-    fragment float4 window_fragment(WindowVertex in [[stage_in]], texture2d<float> pane [[texture(0)]]) {
-        constexpr sampler nearest(coord::normalized, address::clamp_to_edge, filter::nearest);
-        return pane.sample(nearest, in.uv);
-    }
-    """
 }

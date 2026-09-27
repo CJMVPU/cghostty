@@ -17,7 +17,6 @@ fn Pool(comptime Texture: type) type {
         textures: [3]?Texture = @splat(null),
         scene: ?usize = null,
         previous: ?usize = null,
-        presented: ?usize = null,
         key: ?Key = null,
         config: usize = 0,
         motion: ScrollMotion = .{},
@@ -30,7 +29,6 @@ fn Pool(comptime Texture: type) type {
             }
             self.scene = null;
             self.previous = null;
-            self.presented = null;
             self.key = null;
             self.motion = .{};
         }
@@ -45,7 +43,7 @@ fn Pool(comptime Texture: type) type {
                 if (texture.* == null) texture.* = try api.initContentTexture(width, height);
                 return i;
             }
-            unreachable; // Three slots: scene, history, composed destination.
+            unreachable; // Three slots: scene, history, and a freeze destination at scroll interruption.
         }
     };
 }
@@ -76,8 +74,7 @@ test "ScrollScene excludes live history retries allocation and resets ownership"
     scene.scene = try scene.acquire(&api, 100, 100, &.{});
     scene.key = key;
     try t.expect(!scene.dirty(key));
-    scene.presented = scene.scene;
-    scene.previous = scene.presented;
+    scene.previous = scene.scene;
     api.fail = true;
     try t.expectError(error.OutOfMemory, scene.acquire(&api, 100, 100, &.{scene.previous}));
     try t.expectEqual(@as(usize, 1), api.live);

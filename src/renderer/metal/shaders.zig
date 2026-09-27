@@ -17,9 +17,9 @@ const pipeline_descs: []const struct { [:0]const u8, PipelineDescription } =
             .fragment_fn = "bg_color_fragment",
             .blending_enabled = false,
         } },
-        .{ "scroll_copy", .{
+        .{ "scroll_present", .{
             .vertex_fn = "full_screen_vertex",
-            .fragment_fn = "scroll_copy_fragment",
+            .fragment_fn = "scroll_compose_fragment",
             .blending_enabled = true,
         } },
         .{ "scroll_compose", .{
@@ -179,6 +179,7 @@ pub const Uniforms = extern struct {
 
     /// Size of the screen (render target) in pixels.
     screen_size: [2]f32 align(8),
+    target_origin: [2]f32 align(8) = .{ 0, 0 },
 
     /// Size of a single cell in pixels, unscaled.
     cell_size: [2]f32 align(8),

@@ -1,0 +1,926 @@
+{
+  "0-metal-opaque-plain-2-1": {
+    "arguments": [
+      "metal",
+      "opaque",
+      "plain",
+      "2",
+      "1"
+    ],
+    "device": "Apple M5 Pro",
+    "screen": "Built-in Retina Display",
+    "os": "Version 27.0 (Build 26A428)",
+    "screen_max_fps": 120,
+    "error": "",
+    "samples": 220,
+    "displayed": 220,
+    "not_displayed": 0,
+    "all_foreground": true,
+    "callback_to_submit_ms": {
+      "count": 220,
+      "median": 0.0885,
+      "p95": 0.1373,
+      "p99": 0.1501,
+      "max": 0.1615
+    },
+    "submit_to_display_ms": {
+      "count": 220,
+      "median": 41.467,
+      "p95": 41.5331,
+      "p99": 41.6022,
+      "max": 46.5218
+    },
+    "callback_to_display_ms": {
+      "count": 220,
+      "median": 41.558,
+      "p95": 41.59,
+      "p99": 41.6149,
+      "max": 46.5615
+    },
+    "display_interval_ms": {
+      "count": 219,
+      "median": 8.3333,
+      "p95": 8.3334,
+      "p99": 8.3335,
+      "max": 25.0
+    },
+    "drawable_acquire_ms": {
+      "count": 220,
+      "median": 0.0,
+      "p95": 0,
+      "p99": 0,
+      "max": 0
+    },
+    "deadline_to_prediction_ms": {
+      "count": 220,
+      "median": 33.3333,
+      "p95": 33.3333,
+      "p99": 33.3333,
+      "max": 33.3333
+    }
+  },
+  "0-metal-opaque-plain-3-1": {
+    "arguments": [
+      "metal",
+      "opaque",
+      "plain",
+      "3",
+      "1"
+    ],
+    "device": "Apple M5 Pro",
+    "screen": "Built-in Retina Display",
+    "os": "Version 27.0 (Build 26A428)",
+    "screen_max_fps": 120,
+    "error": "",
+    "samples": 220,
+    "displayed": 219,
+    "not_displayed": 1,
+    "all_foreground": true,
+    "callback_to_submit_ms": {
+      "count": 219,
+      "median": 0.0777,
+      "p95": 0.1301,
+      "p99": 0.1529,
+      "max": 0.157
+    },
+    "submit_to_display_ms": {
+      "count": 219,
+      "median": 41.4903,
+      "p95": 41.5462,
+      "p99": 41.5604,
+      "max": 41.5872
+    },
+    "callback_to_display_ms": {
+      "count": 219,
+      "median": 41.5687,
+      "p95": 41.598,
+      "p99": 41.6098,
+      "max": 41.6152
+    },
+    "display_interval_ms": {
+      "count": 218,
+      "median": 8.3333,
+      "p95": 8.3334,
+      "p99": 8.3335,
+      "max": 33.3335
+    },
+    "drawable_acquire_ms": {
+      "count": 219,
+      "median": 0,
+      "p95": 0,
+      "p99": 0,
+      "max": 0
+    },
+    "deadline_to_prediction_ms": {
+      "count": 219,
+      "median": 33.3333,
+      "p95": 33.3333,
+      "p99": 33.3333,
+      "max": 33.3333
+    }
+  },
+  "0-metal-opaque-plain-3-2": {
+    "arguments": [
+      "metal",
+      "opaque",
+      "plain",
+      "3",
+      "2"
+    ],
+    "device": "Apple M5 Pro",
+    "screen": "Built-in Retina Display",
+    "os": "Version 27.0 (Build 26A428)",
+    "screen_max_fps": 120,
+    "error": "",
+    "samples": 220,
+    "displayed": 220,
+    "not_displayed": 0,
+    "all_foreground": true,
+    "callback_to_submit_ms": {
+      "count": 220,
+      "median": 0.0887,
+      "p95": 0.1417,
+      "p99": 0.1613,
+      "max": 0.1645
+    },
+    "submit_to_display_ms": {
+      "count": 220,
+      "median": 41.4715,
+      "p95": 41.5497,
+      "p99": 41.5906,
+      "max": 44.639
+    },
+    "callback_to_display_ms": {
+      "count": 220,
+      "median": 41.5604,
+      "p95": 41.5976,
+      "p99": 41.6098,
+      "max": 44.6775
+    },
+    "display_interval_ms": {
+      "count": 219,
+      "median": 8.3333,
+      "p95": 8.3334,
+      "p99": 8.3335,
+      "max": 33.3334
+    },
+    "drawable_acquire_ms": {
+      "count": 220,
+      "median": 0.0,
+      "p95": 0,
+      "p99": 0,
+      "max": 0
+    },
+    "deadline_to_prediction_ms": {
+      "count": 220,
+      "median": 33.3333,
+      "p95": 33.3333,
+      "p99": 33.3333,
+      "max": 33.3333
+    }
+  },
+  "0-metal-transparent-glass-3-1": {
+    "arguments": [
+      "metal",
+      "transparent",
+      "glass",
+      "3",
+      "1"
+    ],
+    "device": "Apple M5 Pro",
+    "screen": "Built-in Retina Display",
+    "os": "Version 27.0 (Build 26A428)",
+    "screen_max_fps": 120,
+    "error": "",
+    "samples": 220,
+    "displayed": 219,
+    "not_displayed": 1,
+    "all_foreground": true,
+    "callback_to_submit_ms": {
+      "count": 219,
+      "median": 0.0894,
+      "p95": 0.1463,
+      "p99": 0.1599,
+      "max": 0.1639
+    },
+    "submit_to_display_ms": {
+      "count": 219,
+      "median": 41.4637,
+      "p95": 41.5493,
+      "p99": 41.5577,
+      "max": 41.6058
+    },
+    "callback_to_display_ms": {
+      "count": 219,
+      "median": 41.5538,
+      "p95": 41.5938,
+      "p99": 41.6033,
+      "max": 41.6219
+    },
+    "display_interval_ms": {
+      "count": 218,
+      "median": 8.3333,
+      "p95": 8.3334,
+      "p99": 8.3335,
+      "max": 25.0001
+    },
+    "drawable_acquire_ms": {
+      "count": 219,
+      "median": 0,
+      "p95": 0,
+      "p99": 0,
+      "max": 0
+    },
+    "deadline_to_prediction_ms": {
+      "count": 219,
+      "median": 33.3333,
+      "p95": 33.3333,
+      "p99": 33.3333,
+      "max": 33.3333
+    }
+  },
+  "0-metal-transparent-plain-3-1": {
+    "arguments": [
+      "metal",
+      "transparent",
+      "plain",
+      "3",
+      "1"
+    ],
+    "device": "Apple M5 Pro",
+    "screen": "Built-in Retina Display",
+    "os": "Version 27.0 (Build 26A428)",
+    "screen_max_fps": 120,
+    "error": "",
+    "samples": 220,
+    "displayed": 220,
+    "not_displayed": 0,
+    "all_foreground": true,
+    "callback_to_submit_ms": {
+      "count": 220,
+      "median": 0.0849,
+      "p95": 0.1403,
+      "p99": 0.1693,
+      "max": 0.1896
+    },
+    "submit_to_display_ms": {
+      "count": 220,
+      "median": 41.4709,
+      "p95": 41.5291,
+      "p99": 41.584,
+      "max": 46.8962
+    },
+    "callback_to_display_ms": {
+      "count": 220,
+      "median": 41.5572,
+      "p95": 41.5864,
+      "p99": 41.613,
+      "max": 46.9254
+    },
+    "display_interval_ms": {
+      "count": 219,
+      "median": 8.3334,
+      "p95": 8.3334,
+      "p99": 8.3335,
+      "max": 33.3333
+    },
+    "drawable_acquire_ms": {
+      "count": 220,
+      "median": 0.0,
+      "p95": 0,
+      "p99": 0,
+      "max": 0
+    },
+    "deadline_to_prediction_ms": {
+      "count": 220,
+      "median": 33.3333,
+      "p95": 33.3333,
+      "p99": 33.3333,
+      "max": 33.3333
+    }
+  },
+  "0-view-opaque-plain-2-1": {
+    "arguments": [
+      "view",
+      "opaque",
+      "plain",
+      "2",
+      "1"
+    ],
+    "device": "Apple M5 Pro",
+    "screen": "Built-in Retina Display",
+    "os": "Version 27.0 (Build 26A428)",
+    "screen_max_fps": 120,
+    "error": "",
+    "samples": 220,
+    "displayed": 220,
+    "not_displayed": 0,
+    "all_foreground": true,
+    "callback_to_submit_ms": {
+      "count": 220,
+      "median": 1.7194,
+      "p95": 2.3895,
+      "p99": 2.6379,
+      "max": 4.1004
+    },
+    "submit_to_display_ms": {
+      "count": 220,
+      "median": 23.7343,
+      "p95": 24.0605,
+      "p99": 24.1341,
+      "max": 25.1746
+    },
+    "callback_to_display_ms": {
+      "count": 220,
+      "median": 25.4802,
+      "p95": 25.503,
+      "p99": 25.507,
+      "max": 27.9187
+    },
+    "display_interval_ms": {
+      "count": 219,
+      "median": 8.3333,
+      "p95": 8.3334,
+      "p99": 8.3335,
+      "max": 33.3334
+    },
+    "drawable_acquire_ms": {
+      "count": 220,
+      "median": 1.6292,
+      "p95": 2.2903,
+      "p99": 2.5239,
+      "max": 4.0697
+    },
+    "deadline_to_prediction_ms": null
+  },
+  "0-view-opaque-plain-3-1": {
+    "arguments": [
+      "view",
+      "opaque",
+      "plain",
+      "3",
+      "1"
+    ],
+    "device": "Apple M5 Pro",
+    "screen": "Built-in Retina Display",
+    "os": "Version 27.0 (Build 26A428)",
+    "screen_max_fps": 120,
+    "error": "",
+    "samples": 220,
+    "displayed": 220,
+    "not_displayed": 0,
+    "all_foreground": true,
+    "callback_to_submit_ms": {
+      "count": 220,
+      "median": 0.1348,
+      "p95": 0.2132,
+      "p99": 0.2318,
+      "max": 0.321
+    },
+    "submit_to_display_ms": {
+      "count": 220,
+      "median": 25.2111,
+      "p95": 25.3631,
+      "p99": 25.399,
+      "max": 29.4612
+    },
+    "callback_to_display_ms": {
+      "count": 220,
+      "median": 25.4166,
+      "p95": 25.4555,
+      "p99": 25.4643,
+      "max": 29.6416
+    },
+    "display_interval_ms": {
+      "count": 219,
+      "median": 8.3333,
+      "p95": 8.3334,
+      "p99": 8.3347,
+      "max": 16.6667
+    },
+    "drawable_acquire_ms": {
+      "count": 220,
+      "median": 0.0582,
+      "p95": 0.0868,
+      "p99": 0.0962,
+      "max": 0.1149
+    },
+    "deadline_to_prediction_ms": null
+  },
+  "0-view-transparent-glass-3-1": {
+    "arguments": [
+      "view",
+      "transparent",
+      "glass",
+      "3",
+      "1"
+    ],
+    "device": "Apple M5 Pro",
+    "screen": "Built-in Retina Display",
+    "os": "Version 27.0 (Build 26A428)",
+    "screen_max_fps": 120,
+    "error": "",
+    "samples": 220,
+    "displayed": 220,
+    "not_displayed": 0,
+    "all_foreground": true,
+    "callback_to_submit_ms": {
+      "count": 220,
+      "median": 0.1754,
+      "p95": 0.2873,
+      "p99": 1.5053,
+      "max": 1.5395
+    },
+    "submit_to_display_ms": {
+      "count": 220,
+      "median": 25.3012,
+      "p95": 25.4525,
+      "p99": 32.3799,
+      "max": 32.4233
+    },
+    "callback_to_display_ms": {
+      "count": 220,
+      "median": 25.4949,
+      "p95": 25.5317,
+      "p99": 33.8547,
+      "max": 33.8576
+    },
+    "display_interval_ms": {
+      "count": 219,
+      "median": 8.3333,
+      "p95": 8.3334,
+      "p99": 8.3336,
+      "max": 16.6667
+    },
+    "drawable_acquire_ms": {
+      "count": 220,
+      "median": 0.0721,
+      "p95": 0.1235,
+      "p99": 1.4804,
+      "max": 1.5179
+    },
+    "deadline_to_prediction_ms": null
+  },
+  "1-metal-opaque-plain-2-1": {
+    "arguments": [
+      "metal",
+      "opaque",
+      "plain",
+      "2",
+      "1"
+    ],
+    "device": "Apple M5 Pro",
+    "screen": "Built-in Retina Display",
+    "os": "Version 27.0 (Build 26A428)",
+    "screen_max_fps": 120,
+    "error": "",
+    "samples": 220,
+    "displayed": 220,
+    "not_displayed": 0,
+    "all_foreground": true,
+    "callback_to_submit_ms": {
+      "count": 220,
+      "median": 0.0831,
+      "p95": 0.1368,
+      "p99": 0.1656,
+      "max": 0.1869
+    },
+    "submit_to_display_ms": {
+      "count": 220,
+      "median": 41.4783,
+      "p95": 41.5492,
+      "p99": 41.6138,
+      "max": 44.2471
+    },
+    "callback_to_display_ms": {
+      "count": 220,
+      "median": 41.5621,
+      "p95": 41.5986,
+      "p99": 41.6295,
+      "max": 44.3015
+    },
+    "display_interval_ms": {
+      "count": 219,
+      "median": 8.3333,
+      "p95": 8.3334,
+      "p99": 8.3335,
+      "max": 33.3334
+    },
+    "drawable_acquire_ms": {
+      "count": 220,
+      "median": 0.0,
+      "p95": 0,
+      "p99": 0,
+      "max": 0
+    },
+    "deadline_to_prediction_ms": {
+      "count": 220,
+      "median": 33.3333,
+      "p95": 33.3333,
+      "p99": 33.3333,
+      "max": 33.3333
+    }
+  },
+  "1-metal-opaque-plain-3-1": {
+    "arguments": [
+      "metal",
+      "opaque",
+      "plain",
+      "3",
+      "1"
+    ],
+    "device": "Apple M5 Pro",
+    "screen": "Built-in Retina Display",
+    "os": "Version 27.0 (Build 26A428)",
+    "screen_max_fps": 120,
+    "error": "",
+    "samples": 220,
+    "displayed": 220,
+    "not_displayed": 0,
+    "all_foreground": true,
+    "callback_to_submit_ms": {
+      "count": 220,
+      "median": 0.0778,
+      "p95": 0.1193,
+      "p99": 0.153,
+      "max": 0.1629
+    },
+    "submit_to_display_ms": {
+      "count": 220,
+      "median": 41.4894,
+      "p95": 41.5434,
+      "p99": 41.5987,
+      "max": 47.2645
+    },
+    "callback_to_display_ms": {
+      "count": 220,
+      "median": 41.5683,
+      "p95": 41.6031,
+      "p99": 41.619,
+      "max": 47.3197
+    },
+    "display_interval_ms": {
+      "count": 219,
+      "median": 8.3333,
+      "p95": 8.3334,
+      "p99": 8.3335,
+      "max": 25.0
+    },
+    "drawable_acquire_ms": {
+      "count": 220,
+      "median": 0.0,
+      "p95": 0,
+      "p99": 0,
+      "max": 0
+    },
+    "deadline_to_prediction_ms": {
+      "count": 220,
+      "median": 33.3333,
+      "p95": 33.3333,
+      "p99": 33.3333,
+      "max": 33.3333
+    }
+  },
+  "1-metal-opaque-plain-3-2": {
+    "arguments": [
+      "metal",
+      "opaque",
+      "plain",
+      "3",
+      "2"
+    ],
+    "device": "Apple M5 Pro",
+    "screen": "Built-in Retina Display",
+    "os": "Version 27.0 (Build 26A428)",
+    "screen_max_fps": 120,
+    "error": "",
+    "samples": 220,
+    "displayed": 220,
+    "not_displayed": 0,
+    "all_foreground": true,
+    "callback_to_submit_ms": {
+      "count": 220,
+      "median": 0.0788,
+      "p95": 0.1252,
+      "p99": 0.1469,
+      "max": 0.181
+    },
+    "submit_to_display_ms": {
+      "count": 220,
+      "median": 41.4915,
+      "p95": 41.5576,
+      "p99": 41.5956,
+      "max": 42.21
+    },
+    "callback_to_display_ms": {
+      "count": 220,
+      "median": 41.5677,
+      "p95": 41.6027,
+      "p99": 41.6143,
+      "max": 42.264
+    },
+    "display_interval_ms": {
+      "count": 219,
+      "median": 8.3333,
+      "p95": 8.3334,
+      "p99": 8.3335,
+      "max": 33.3334
+    },
+    "drawable_acquire_ms": {
+      "count": 220,
+      "median": 0.0,
+      "p95": 0,
+      "p99": 0,
+      "max": 0
+    },
+    "deadline_to_prediction_ms": {
+      "count": 220,
+      "median": 33.3333,
+      "p95": 33.3333,
+      "p99": 33.3333,
+      "max": 33.3333
+    }
+  },
+  "1-metal-transparent-glass-3-1": {
+    "arguments": [
+      "metal",
+      "transparent",
+      "glass",
+      "3",
+      "1"
+    ],
+    "device": "Apple M5 Pro",
+    "screen": "Built-in Retina Display",
+    "os": "Version 27.0 (Build 26A428)",
+    "screen_max_fps": 120,
+    "error": "",
+    "samples": 220,
+    "displayed": 219,
+    "not_displayed": 1,
+    "all_foreground": true,
+    "callback_to_submit_ms": {
+      "count": 219,
+      "median": 0.0926,
+      "p95": 0.154,
+      "p99": 0.1733,
+      "max": 0.1764
+    },
+    "submit_to_display_ms": {
+      "count": 219,
+      "median": 41.4672,
+      "p95": 41.5438,
+      "p99": 41.5747,
+      "max": 41.5968
+    },
+    "callback_to_display_ms": {
+      "count": 219,
+      "median": 41.5619,
+      "p95": 41.5991,
+      "p99": 41.6124,
+      "max": 41.6174
+    },
+    "display_interval_ms": {
+      "count": 218,
+      "median": 8.3333,
+      "p95": 8.3334,
+      "p99": 8.3336,
+      "max": 33.3335
+    },
+    "drawable_acquire_ms": {
+      "count": 219,
+      "median": 0,
+      "p95": 0,
+      "p99": 0,
+      "max": 0
+    },
+    "deadline_to_prediction_ms": {
+      "count": 219,
+      "median": 33.3333,
+      "p95": 33.3333,
+      "p99": 33.3333,
+      "max": 33.3333
+    }
+  },
+  "1-metal-transparent-plain-3-1": {
+    "arguments": [
+      "metal",
+      "transparent",
+      "plain",
+      "3",
+      "1"
+    ],
+    "device": "Apple M5 Pro",
+    "screen": "Built-in Retina Display",
+    "os": "Version 27.0 (Build 26A428)",
+    "screen_max_fps": 120,
+    "error": "",
+    "samples": 220,
+    "displayed": 220,
+    "not_displayed": 0,
+    "all_foreground": true,
+    "callback_to_submit_ms": {
+      "count": 220,
+      "median": 0.0881,
+      "p95": 0.1408,
+      "p99": 0.168,
+      "max": 0.1711
+    },
+    "submit_to_display_ms": {
+      "count": 220,
+      "median": 41.4665,
+      "p95": 41.5502,
+      "p99": 41.5898,
+      "max": 42.5195
+    },
+    "callback_to_display_ms": {
+      "count": 220,
+      "median": 41.5555,
+      "p95": 41.6,
+      "p99": 41.613,
+      "max": 42.5528
+    },
+    "display_interval_ms": {
+      "count": 219,
+      "median": 8.3333,
+      "p95": 8.3334,
+      "p99": 8.3335,
+      "max": 33.3335
+    },
+    "drawable_acquire_ms": {
+      "count": 220,
+      "median": 0.0,
+      "p95": 0,
+      "p99": 0,
+      "max": 0
+    },
+    "deadline_to_prediction_ms": {
+      "count": 220,
+      "median": 33.3333,
+      "p95": 33.3333,
+      "p99": 33.3333,
+      "max": 33.3333
+    }
+  },
+  "1-view-opaque-plain-2-1": {
+    "arguments": [
+      "view",
+      "opaque",
+      "plain",
+      "2",
+      "1"
+    ],
+    "device": "Apple M5 Pro",
+    "screen": "Built-in Retina Display",
+    "os": "Version 27.0 (Build 26A428)",
+    "screen_max_fps": 120,
+    "error": "",
+    "samples": 220,
+    "displayed": 220,
+    "not_displayed": 0,
+    "all_foreground": true,
+    "callback_to_submit_ms": {
+      "count": 220,
+      "median": 0.141,
+      "p95": 0.975,
+      "p99": 1.1903,
+      "max": 5.1125
+    },
+    "submit_to_display_ms": {
+      "count": 220,
+      "median": 17.0875,
+      "p95": 23.9761,
+      "p99": 24.0369,
+      "max": 24.0934
+    },
+    "callback_to_display_ms": {
+      "count": 220,
+      "median": 17.2186,
+      "p95": 24.9128,
+      "p99": 24.9303,
+      "max": 28.9475
+    },
+    "display_interval_ms": {
+      "count": 219,
+      "median": 8.3334,
+      "p95": 8.3334,
+      "p99": 8.3335,
+      "max": 33.3333
+    },
+    "drawable_acquire_ms": {
+      "count": 220,
+      "median": 0.0586,
+      "p95": 0.8546,
+      "p99": 1.068,
+      "max": 5.0827
+    },
+    "deadline_to_prediction_ms": null
+  },
+  "1-view-opaque-plain-3-1": {
+    "arguments": [
+      "view",
+      "opaque",
+      "plain",
+      "3",
+      "1"
+    ],
+    "device": "Apple M5 Pro",
+    "screen": "Built-in Retina Display",
+    "os": "Version 27.0 (Build 26A428)",
+    "screen_max_fps": 120,
+    "error": "",
+    "samples": 220,
+    "displayed": 220,
+    "not_displayed": 0,
+    "all_foreground": true,
+    "callback_to_submit_ms": {
+      "count": 220,
+      "median": 0.1289,
+      "p95": 0.1891,
+      "p99": 0.227,
+      "max": 0.2881
+    },
+    "submit_to_display_ms": {
+      "count": 220,
+      "median": 25.3969,
+      "p95": 25.5149,
+      "p99": 25.5365,
+      "max": 28.8795
+    },
+    "callback_to_display_ms": {
+      "count": 220,
+      "median": 25.5735,
+      "p95": 25.6085,
+      "p99": 25.614,
+      "max": 29.0518
+    },
+    "display_interval_ms": {
+      "count": 219,
+      "median": 8.3334,
+      "p95": 8.3334,
+      "p99": 8.3335,
+      "max": 25.0
+    },
+    "drawable_acquire_ms": {
+      "count": 220,
+      "median": 0.0539,
+      "p95": 0.0802,
+      "p99": 0.0915,
+      "max": 0.0925
+    },
+    "deadline_to_prediction_ms": null
+  },
+  "1-view-transparent-glass-3-1": {
+    "arguments": [
+      "view",
+      "transparent",
+      "glass",
+      "3",
+      "1"
+    ],
+    "device": "Apple M5 Pro",
+    "screen": "Built-in Retina Display",
+    "os": "Version 27.0 (Build 26A428)",
+    "screen_max_fps": 120,
+    "error": "",
+    "samples": 220,
+    "displayed": 220,
+    "not_displayed": 0,
+    "all_foreground": true,
+    "callback_to_submit_ms": {
+      "count": 220,
+      "median": 0.176,
+      "p95": 0.2609,
+      "p99": 0.2951,
+      "max": 1.9058
+    },
+    "submit_to_display_ms": {
+      "count": 220,
+      "median": 25.3152,
+      "p95": 25.4225,
+      "p99": 25.4704,
+      "max": 25.5058
+    },
+    "callback_to_display_ms": {
+      "count": 220,
+      "median": 25.5051,
+      "p95": 25.5359,
+      "p99": 25.5458,
+      "max": 25.5476
+    },
+    "display_interval_ms": {
+      "count": 219,
+      "median": 8.3333,
+      "p95": 8.3334,
+      "p99": 8.3335,
+      "max": 16.6667
+    },
+    "drawable_acquire_ms": {
+      "count": 220,
+      "median": 0.0729,
+      "p95": 0.1018,
+      "p99": 0.1243,
+      "max": 1.7955
+    },
+    "deadline_to_prediction_ms": null
+  }
+}

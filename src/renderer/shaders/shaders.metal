@@ -12,6 +12,7 @@ enum Padding : uint8_t {
 struct Uniforms {
   float4x4 projection_matrix;
   float2 screen_size;
+  float2 target_origin;
   float2 cell_size;
   ushort2 grid_size;
   float4 grid_padding;
@@ -242,12 +243,6 @@ vertex FullScreenVertexOut full_screen_vertex(
 bool scroll_contains(float2 p, float4 rect) {
   return all(p >= rect.xy) && all(p < rect.zw);
 }
-fragment float4 scroll_copy_fragment(
-  FullScreenVertexOut in [[stage_in]],
-  texture2d<float> content [[texture(0)]]
-) {
-  return content.read(uint2(in.position.xy));
-}
 fragment float4 scroll_compose_fragment(
   FullScreenVertexOut in [[stage_in]],
   constant Uniforms& u [[buffer(1)]],
@@ -255,7 +250,7 @@ fragment float4 scroll_compose_fragment(
   texture2d<float> previous [[texture(1)]]
 ) {
   constexpr sampler pixels(coord::pixel, address::clamp_to_edge, filter::linear);
-  float2 p = in.position.xy;
+  float2 p = in.position.xy - u.target_origin;
   for (uint i = 0; i < u.scroll_count; i++) {
     float4 rect = u.scroll_rects[i];
     if (!scroll_contains(p, rect)) continue;
@@ -459,7 +454,7 @@ fragment float4 bg_image_fragment(
   // dest rect origin, and scaled by the ratio between the dest rect size
   // and the original texture size, which effectively scales the original
   // size of the texture to the dest rect size.
-  float2 tex_coord = (in.position.xy - in.offset) * in.scale;
+  float2 tex_coord = (in.position.xy - uniforms.target_origin - in.offset) * in.scale;
 
   // If we need to repeat the texture, wrap the coordinates.
   if (in.repeat) {
@@ -501,7 +496,7 @@ fragment float4 cell_bg_fragment(
   constant Uniforms& uniforms [[buffer(1)]],
   constant uchar4 *cells [[buffer(2)]]
 ) {
-  int2 grid_pos = int2(floor((in.position.xy - uniforms.grid_padding.wx) / uniforms.cell_size));
+  int2 grid_pos = int2(floor((in.position.xy - uniforms.target_origin - uniforms.grid_padding.wx) / uniforms.cell_size));
 
   float4 bg = float4(0.0);
 
@@ -641,7 +636,7 @@ vertex SmoothCursorVertexOut smooth_cursor_vertex(uint vid [[vertex_id]], consta
 fragment float4 smooth_cursor_fragment(SmoothCursorVertexOut in [[stage_in]], constant Uniforms& u [[buffer(1)]]) {
   float4 color = load_color(u.smooth_color, u.use_display_p3, true);
   if (!u.use_linear_blending) color = unlinearize(color);
-  return color * smooth_cursor_coverage(in.position.xy, u);
+  return color * smooth_cursor_coverage(in.position.xy - u.target_origin, u);
 }
 
 struct CellTextVertexOut {
@@ -802,9 +797,9 @@ fragment float4 cell_text_fragment(
   constant Uniforms& uniforms [[buffer(1)]]
 ) {
   if (uniforms.scroll_mode == 2 && !in.cursor_glyph) {
-    if (!scroll_contains(in.position.xy, in.scroll_clip)) discard_fragment();
+    if (!scroll_contains(in.position.xy - uniforms.target_origin, in.scroll_clip)) discard_fragment();
     if (uniforms.smooth_effect > 0) {
-      if (uniforms.smooth_block == 0 || smooth_cursor_coverage(in.position.xy, uniforms) == 0)
+      if (uniforms.smooth_block == 0 || smooth_cursor_coverage(in.position.xy - uniforms.target_origin, uniforms) == 0)
         discard_fragment();
     } else if (!in.cursor_cell) discard_fragment();
   }
@@ -820,7 +815,7 @@ fragment float4 cell_text_fragment(
       // Our input color is always linear.
       float4 color = in.color;
       if (uniforms.scroll_mode != 1 && uniforms.smooth_effect > 0 && uniforms.smooth_block != 0) {
-        float coverage = smooth_cursor_coverage(in.position.xy, uniforms);
+        float coverage = smooth_cursor_coverage(in.position.xy - uniforms.target_origin, uniforms);
         float4 cursor_text = load_color(uniforms.cursor_color, uniforms.use_display_p3, true);
         color = mix(color, cursor_text, coverage * uniforms.smooth_block);
       }

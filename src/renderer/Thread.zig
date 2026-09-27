@@ -476,7 +476,7 @@ fn renderCallback(
 /// Called once per visible pane by the window frame clock. Surface ownership
 /// keeps this worker/state alive; the gate protects state formerly worker-only.
 /// Updates arriving after this call remain pending and wake the next frame.
-pub fn renderCompositor(self: *Thread, texture: @import("objc").Object, queue: @import("objc").Object, target_time: f64, force: bool, sequence: u64) !u32 {
+pub fn renderCompositor(self: *Thread, texture: @import("objc").Object, queue: @import("objc").Object, target_time: f64, region: @import("metal/RenderPass.zig").Region, sequence: u64, snapshot: bool) !u32 {
     const wait_start = if (self.renderer.trace.file != null) @import("Trace.zig").clock() else 0;
     self.update_mutex.lockUncancelable(global.io());
     if (wait_start != 0) self.renderer.trace.emit("update_lock", @import("Trace.zig").clock() - wait_start, sequence, 0);
@@ -487,7 +487,7 @@ pub fn renderCompositor(self: *Thread, texture: @import("objc").Object, queue: @
         defer self.renderer.draw_mutex.unlock(global.io());
         if (!self.renderer.display_realized) return 0;
     }
-    if (self.compositor_updates != 0) {
+    if (!snapshot and self.compositor_updates != 0) {
         const requests = self.compositor_updates;
         const start = if (self.renderer.trace.file != null) @import("Trace.zig").clock() else 0;
         // Clear only after success; allocation failure must not lose the update.
@@ -496,8 +496,8 @@ pub fn renderCompositor(self: *Thread, texture: @import("objc").Object, queue: @
         self.renderer.trace.emit("compositor_update", requests, sequence, if (start != 0) @import("Trace.zig").clock() - start else 0);
         self.frame_ready.notify() catch {};
     }
-    const result = try self.renderer.drawCompositor(texture, queue, target_time, force);
-    if (result & 1 != 0) self.renderer.trace.emit("pane_content", self.renderer.output_revision, sequence, 0);
+    const result = try self.renderer.drawCompositor(texture, queue, target_time, region, snapshot);
+    if (result & 16 != 0) self.renderer.trace.emit("pane_content", self.renderer.output_revision, sequence, 0);
     return result;
 }
 

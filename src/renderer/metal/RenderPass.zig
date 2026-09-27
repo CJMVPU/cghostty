@@ -14,9 +14,21 @@ const Frame = @import("Frame.zig");
 
 const log = std.log.scoped(.metal);
 
+pub const Region = extern struct {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    clip_x: usize,
+    clip_y: usize,
+    clip_width: usize,
+    clip_height: usize,
+};
+
 /// Options for beginning a render pass.
 pub const Options = struct {
     commands: *Frame.Commands,
+    region: ?Region = null,
     /// Color attachments for this render pass.
     attachments: []const Attachment,
 
@@ -58,6 +70,7 @@ pub const Step = struct {
 encoder: objc.Object,
 commands: *Frame.Commands,
 full_scissor: @import("../CursorOverlay.zig").Scissor,
+region: ?Region,
 
 /// Begin a render pass.
 pub fn begin(
@@ -124,14 +137,32 @@ pub fn begin(
     const dimensions = switch (opts.attachments[0].target) {
         inline else => |t| .{ t.width, t.height },
     };
-    return .{ .encoder = encoder, .commands = opts.commands, .full_scissor = .{ .x = 0, .y = 0, .width = dimensions[0], .height = dimensions[1] } };
+    var result: Self = .{ .encoder = encoder, .commands = opts.commands, .full_scissor = .{ .x = 0, .y = 0, .width = dimensions[0], .height = dimensions[1] }, .region = opts.region };
+    if (opts.region) |r| {
+        const Viewport = extern struct { x: f64, y: f64, width: f64, height: f64, near: f64 = 0, far: f64 = 1 };
+        encoder.msgSend(void, "setViewport:", .{Viewport{ .x = r.x, .y = r.y, .width = r.width, .height = r.height }});
+        result.full_scissor = .{ .x = r.clip_x, .y = r.clip_y, .width = r.clip_width, .height = r.clip_height };
+        encoder.msgSend(void, "setScissorRect:", .{result.full_scissor});
+    }
+    return result;
 }
 
 /// Add a step to this render pass.
 pub fn step(self: *const Self, s: Step) void {
     if (s.draw.instance_count == 0) return;
 
-    if (s.scissor) |rect| self.encoder.msgSend(void, "setScissorRect:", .{rect});
+    if (s.scissor) |local| {
+        var rect = local;
+        if (self.region) |r| {
+            const x0 = @max(@as(i64, @intFromFloat(r.x)) + @as(i64, @intCast(local.x)), @as(i64, @intCast(r.clip_x)));
+            const y0 = @max(@as(i64, @intFromFloat(r.y)) + @as(i64, @intCast(local.y)), @as(i64, @intCast(r.clip_y)));
+            const x1 = @min(@as(i64, @intFromFloat(r.x)) + @as(i64, @intCast(local.x + local.width)), @as(i64, @intCast(r.clip_x + r.clip_width)));
+            const y1 = @min(@as(i64, @intFromFloat(r.y)) + @as(i64, @intCast(local.y + local.height)), @as(i64, @intCast(r.clip_y + r.clip_height)));
+            if (x1 <= x0 or y1 <= y0) return;
+            rect = .{ .x = @intCast(x0), .y = @intCast(y0), .width = @intCast(x1 - x0), .height = @intCast(y1 - y0) };
+        }
+        self.encoder.msgSend(void, "setScissorRect:", .{rect});
+    }
     defer if (s.scissor != null) self.encoder.msgSend(void, "setScissorRect:", .{self.full_scissor});
 
     // Set pipeline state

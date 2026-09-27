@@ -450,6 +450,79 @@ import Synchronization
         try await wait { first == nil }
     }
 
+    @Test(arguments: ["cursor", "scroll"], ["native", "linear", "linear-corrected"])
+    func finalCompositionAnimatesWithoutRepaintingContent(animation: String, blending: String) async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("cghostty-final-\(animation)-\(blending)-\(UUID().uuidString)")
+        print("Final composition trace: \(directory.path)")
+        let config = try TemporaryConfig("""
+        cursor-style-blink = false
+        cursor-effect = true
+        smooth-scroll = true
+        alpha-blending = \(blending)
+        shell-integration = none
+        render-trace = true
+        render-trace-directory = \(directory.path)
+        """)
+        let app = Ghostty.App(configPath: config.temporaryFile.path)
+        let left = makeView(app: app, color: "0;255;0", marker: "left-static")
+        let right = makeView(app: app, color: "255;0;0", marker: "right-ready")
+        let surface = try #require(right.surfaceModel)
+        let window = makeWindow()
+        defer { window.close() }
+        let content = try #require(window.contentView)
+        left.frame = CGRect(x: 0, y: 0, width: 240, height: 240)
+        right.frame = CGRect(x: 240, y: 0, width: 240, height: 240)
+        content.addSubview(left)
+        content.addSubview(right)
+        window.orderFront(nil)
+        for view in [left, right] {
+            view.sizeDidChange(view.bounds.size)
+            view.surfaceModel?.setVisible(true)
+        }
+        surface.setFocus(animation == "cursor")
+        let owner = try #require(right.windowCompositor)
+        owner.updateGeometry()
+        try await wait { surface.readContents(viewport: false).contains("right-ready") && owner.worker.isIdle }
+        // Distinct rows make scroll motion visible; the neighboring pane must
+        // remain pixel-identical throughout final-pass viewport/scissor changes.
+        #expect(surface.sendKeyEvent(.init(keyCode: 0, action: .press,
+            text: "\u{1b}[?1049h\u{1b}[2J\u{1b}[Hone\r\ntwo\r\nthree\r\nfour\r\nfive\r\nsix")))
+        try await wait { surface.readContents(viewport: false).contains("six") && owner.worker.isIdle }
+        let baseline = try owner.worker.readback()
+        let before = owner.worker.statistics.submitted
+        let initialContent = owner.worker.statistics.paneDraws
+        let command = animation == "cursor" ? "\u{1b}[2;12H" : "\u{1b}[2;6r\u{1b}[6;1H\n"
+        #expect(surface.sendKeyEvent(.init(keyCode: 0, action: .press, text: command)))
+        if animation == "scroll" {
+            try await wait { owner.worker.statistics.paneDraws > initialContent }
+            owner.worker.pauseUpdatesForTesting(true)
+            try await wait { owner.worker.isIdle }
+        } else {
+            try await wait { owner.worker.statistics.submitted >= before + 3 }
+        }
+        let during = try owner.worker.readback()
+        #expect(during.pixels != baseline.pixels)
+        for y in 0..<baseline.height {
+            let offset = y * baseline.width * 4
+            #expect(during.pixels[offset..<(offset + baseline.width * 2)] == baseline.pixels[offset..<(offset + baseline.width * 2)])
+        }
+        if animation == "scroll" {
+            // Reverse while in flight: freeze the preceding composed contents
+            // only at this interruption, never on each animation tick.
+            #expect(surface.sendKeyEvent(.init(keyCode: 0, action: .press, text: "\u{1b}[1T\u{1b}[6;1Hreversed")))
+            try await wait { surface.readContents(viewport: false).contains("reversed") }
+            owner.worker.pauseUpdatesForTesting(false)
+            let reversed = owner.worker.statistics.submitted
+            try await wait { owner.worker.statistics.submitted >= reversed + 3 }
+        }
+        let contentDraws = owner.worker.statistics.paneDraws
+        let frames = owner.worker.statistics.submitted
+        try await wait { owner.worker.isIdle }
+        #expect(owner.worker.statistics.submitted > frames)
+        #expect(owner.worker.statistics.paneDraws == contentDraws)
+        #expect(owner.worker.statistics.failed == 0)
+    }
+
     private func centerIsRed(_ worker: WindowCompositorWorker) throws -> Bool {
         let image = try worker.readback()
         let pixel = (image.height / 2 * image.width + image.width / 2) * 4

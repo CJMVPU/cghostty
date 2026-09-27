@@ -143,6 +143,10 @@ pub fn clock() u64 {
 /// Update_lock: renderer update gate wait ns / window sequence / unused.
 /// Cf_release_enqueue: deferred release enqueue wall ns / unused / unused.
 /// Shape: run cache lookups / misses / total miss shaping ns in this update.
+/// Glyph_lock: summed read/write lock waits ns / calls / misses in this update.
+/// Glyph_raster: summed miss generation ns / misses / unused. Includes bitmap
+/// allocation, CoreText drawing, atlas writes/growth; excludes lock acquisition.
+/// Content_draw, scroll_freeze: pass count / unused / unused.
 /// Atlas_upload: upload ns / bytes / 0 grayscale, 1 color.
 /// Atlas_grow: CPU resize ns / new width / presentation enum.
 /// Atlas_resize: old GPU texture width / new width / 0 grayscale, 1 color.

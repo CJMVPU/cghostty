@@ -1,6 +1,8 @@
 # 渲染优化实测（2026-09-21）
 
-窗口合成器的当前锁边界、测量字段和后续优化取舍见[窗口响应性验证](docs/validation/2026-09-27-window-responsiveness.md)。以下为历史 VSync 实验，不能直接外推到当前架构。
+最终合成、冷字形计时和前台帧时钟对照见[最终合成验证](docs/validation/2026-09-27-final-composition.md)。
+
+窗口合成器的锁边界、测量字段和后续优化取舍见[窗口响应性验证](docs/validation/2026-09-27-window-responsiveness.md)。以下为历史 VSync 实验，不能直接外推到当前架构。
 
 本次实测使用主体上限 220ms、形变 12%、长距离尾部窗口 60ms。
 同一台 Apple Silicon Mac、ReleaseLocal/ReleaseFast、同一受控 PTY 负载。

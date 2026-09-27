@@ -1,0 +1,22 @@
+{
+  "full_native": {
+    "result": "Passed",
+    "totalTestCount": 362,
+    "passedTests": 361,
+    "failedTests": 0,
+    "skippedTests": 1,
+    "testFailures": [],
+    "startTime": 1790507718.632,
+    "finishTime": 1790507784.659
+  },
+  "final_window_regression": {
+    "result": "Passed",
+    "totalTestCount": 9,
+    "passedTests": 9,
+    "failedTests": 0,
+    "skippedTests": 0,
+    "testFailures": [],
+    "startTime": 1790508127.267,
+    "finishTime": 1790508169.622
+  }
+}
