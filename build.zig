@@ -3,8 +3,6 @@ const buildpkg = @import("src/build/main.zig");
 const translate_c = @import("translate_c");
 const zon = @import("build.zig.zon");
 
-
-
 comptime {
     buildpkg.requireZig(zon.minimum_zig_version);
 }
