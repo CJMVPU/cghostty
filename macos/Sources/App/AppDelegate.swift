@@ -148,7 +148,7 @@ class AppDelegate: NSObject,
     @MainActor private lazy var menuShortcutManager = Ghostty.MenuShortcutManager()
 
     override init() {
-#if DEBUG || CGHOSTTY_TESTING
+#if DEBUG || CGHOSTTY_TESTING || CGHOSTTY_CLOCK_EXPERIMENT
         ghostty = Ghostty.App(configPath: ProcessInfo.processInfo.environment["CGHOSTTY_CONFIG_PATH"])
 #else
         ghostty = Ghostty.App()
@@ -187,6 +187,12 @@ class AppDelegate: NSObject,
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        #if CGHOSTTY_CLOCK_EXPERIMENT
+        if let output = ProcessInfo.processInfo.environment["CGHOSTTY_CLOCK_OUTPUT"] {
+            Task { await WindowClockExperiment.run(app: ghostty, output: URL(fileURLWithPath: output)) }
+            return
+        }
+        #endif
         // System settings overrides
         UserDefaults.ghostty.register(defaults: [
             // Disable this so that repeated key events make it through to our terminal views.
@@ -295,6 +301,9 @@ class AppDelegate: NSObject,
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
+        #if CGHOSTTY_CLOCK_EXPERIMENT
+        if ProcessInfo.processInfo.environment["CGHOSTTY_CLOCK_OUTPUT"] != nil { return }
+        #endif
         // If we're back manually then clear the hidden state because macOS handles it.
         self.hiddenState = nil
 
@@ -319,6 +328,9 @@ class AppDelegate: NSObject,
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        #if CGHOSTTY_CLOCK_EXPERIMENT
+        if ProcessInfo.processInfo.environment["CGHOSTTY_CLOCK_OUTPUT"] != nil { return .terminateNow }
+        #endif
         let windows = NSApplication.shared.windows
         if windows.isEmpty { return .terminateNow }
 
@@ -347,6 +359,9 @@ class AppDelegate: NSObject,
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        #if CGHOSTTY_CLOCK_EXPERIMENT
+        if ProcessInfo.processInfo.environment["CGHOSTTY_CLOCK_OUTPUT"] != nil { return }
+        #endif
         // We have no notifications we want to persist after death,
         // so remove them all now. In the future we may want to be
         // more selective and only remove surface-targeted notifications.
@@ -356,6 +371,9 @@ class AppDelegate: NSObject,
     /// This is called when the application is already open and someone double-clicks the icon
     /// or clicks the dock icon.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        #if CGHOSTTY_CLOCK_EXPERIMENT
+        if ProcessInfo.processInfo.environment["CGHOSTTY_CLOCK_OUTPUT"] != nil { return true }
+        #endif
         // If we have visible windows then we allow macOS to do its default behavior
         // of focusing one of them.
         guard !flag else { return true }

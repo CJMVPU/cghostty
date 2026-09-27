@@ -94,11 +94,15 @@ extension Ghostty {
 
         nonisolated var compositorInfo: ghostty_compositor_info_s { ghostty_surface_compositor_info(surface) }
 
-        nonisolated func renderCompositor(texture: AnyObject, queue: AnyObject, targetTime: Double, rect: CGRect, clip: CGRect, sequence: UInt64, snapshot: Bool = false) -> UInt32 {
+        nonisolated func prepareCompositor(sequence: UInt64) -> Bool {
+            ghostty_surface_prepare_compositor(surface, sequence)
+        }
+
+        nonisolated func renderCompositor(texture: AnyObject, queue: AnyObject, targetTime: Double, rect: CGRect, clip: CGRect, sequence: UInt64, snapshot: Bool = false, prepared: Bool = false) -> UInt32 {
             let region = ghostty_compositor_region_s(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height,
                 clip_x: UInt(clip.minX), clip_y: UInt(clip.minY), clip_width: UInt(clip.width), clip_height: UInt(clip.height))
             return ghostty_surface_render_compositor(surface, Unmanaged.passUnretained(texture).toOpaque(),
-                                             Unmanaged.passUnretained(queue).toOpaque(), targetTime, region, sequence, snapshot)
+                                             Unmanaged.passUnretained(queue).toOpaque(), targetTime, region, sequence, snapshot, prepared)
         }
 
         nonisolated func traceCompositor(stage: UInt32, sequence: UInt64, time: Double, prediction: Double = 0) {

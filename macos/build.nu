@@ -11,6 +11,7 @@ def main [
     --skip-core
     --ui-tests
     --only-testing: string = ""
+    --clock-experiment: string = ""
 ] {
     if (^uname -s | str trim) != "Darwin" or (^uname -m | str trim) != "arm64" {
         error make {msg: "cghostty builds require an Apple Silicon Mac (arm64)."}
@@ -30,13 +31,19 @@ def main [
     if ($ui_tests or $only_testing != "") and $action != "test" {
         error make {msg: "--ui-tests and --only-testing require --action test."}
     }
+    if $clock_experiment not-in ["" metal view view-late view-corrected] {
+        error make {msg: "Unknown clock experiment variant."}
+    }
+    if $clock_experiment != "" and $configuration != "ReleaseLocal" {
+        error make {msg: "Clock experiments require ReleaseLocal."}
+    }
     let root = ($env.FILE_PWD | path dirname)
     # The parent owns the checkout lock for both core and Xcode operations.
     # Keep direct invocations of this entrypoint on the same managed path.
     if ($env.CGHOSTTY_BUILD_LOCK_ROOT? | default "") != $root {
         let forwarded = [--configuration $configuration --action $action
             --version $version --result-bundle $result_bundle --build-dir $build_dir
-            --only-testing $only_testing]
+            --only-testing $only_testing --clock-experiment $clock_experiment]
         let flags = ([
             (if $skip_core { "--skip-core" } else { null })
             (if $ui_tests { "--ui-tests" } else { null })
@@ -81,9 +88,17 @@ def main [
     let test_selection = if $only_testing == "" { [] } else { [-only-testing $only_testing] }
     # ReleaseLocal benchmarks still build the unit-test target, whose imports
     # require testability. This only affects test actions, never release builds.
-    let test_settings = if $action == "test" {
-        ["ENABLE_TESTABILITY=YES" "SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) CGHOSTTY_TESTING"]
-    } else { [] }
+    let conditions = ([
+        (if $action == "test" { "CGHOSTTY_TESTING" } else { null })
+        (if $clock_experiment != "" { "CGHOSTTY_CLOCK_EXPERIMENT" } else { null })
+        (if $clock_experiment in [view view-late view-corrected] { "CGHOSTTY_VIEW_CLOCK" } else { null })
+        (if $clock_experiment == "view-late" { "CGHOSTTY_LATE_DRAWABLE" } else { null })
+        (if $clock_experiment == "view-corrected" { "CGHOSTTY_CORRECTED_CLOCK" } else { null })
+    ] | compact | str join " ")
+    let test_settings = ([
+        (if $action == "test" { "ENABLE_TESTABILITY=YES" } else { null })
+        (if $conditions != "" { ("SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) " + $conditions) } else { null })
+    ] | compact)
     let result_args = if $result_bundle == "" { [] } else {
         [-resultBundlePath ($result_bundle | path expand)]
     }

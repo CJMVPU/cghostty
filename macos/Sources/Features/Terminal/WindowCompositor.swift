@@ -61,6 +61,9 @@ final class WindowCompositor {
                 MainActor.assumeIsolated { self?.updateGeometry() }
             })
         }
+        #if CGHOSTTY_VIEW_CLOCK
+        worker.installViewClock(host)
+        #endif
         worker.start()
     }
 
@@ -86,6 +89,8 @@ final class WindowCompositor {
             geometry[id] = .init(rect: Self.pixels(rect, scale: scale), clip: Self.pixels(clip, scale: scale),
                                  visible: !view.isHiddenOrHasHiddenAncestor && window.occlusionState.contains(.visible))
         }
+        worker.updateRefreshRate(Float(window.screen?.maximumFramesPerSecond ?? 60),
+                                 screen: (window.screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0)
         worker.update(size: size, geometry: geometry)
     }
 
@@ -226,7 +231,41 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
     private var stopping = false
     private var started = false
     private var loop: CFRunLoop?
+    #if CGHOSTTY_VIEW_CLOCK
+    private var link: CADisplayLink?
+    @MainActor func installViewClock(_ view: NSView) {
+        link = view.displayLink(target: self, selector: #selector(viewDisplayLink(_:)))
+        link?.isPaused = true
+    }
+    #else
     private var link: CAMetalDisplayLink?
+    #endif
+    private var requestedRate: Float = 120
+    private static let windowIDs = Mutex<UInt64>(0)
+    private let windowID = windowIDs.withLock { $0 &+= 1; return $0 }
+
+    #if CGHOSTTY_CORRECTED_CLOCK
+    private let presentationEstimate = Mutex(WindowPresentationEstimate())
+    #endif
+    private var requestedScreen: UInt32 = 0
+
+    func updateRefreshRate(_ rate: Float, screen: UInt32) {
+        let changed = lock.withLock {
+            let changed = requestedRate != max(1, rate) || requestedScreen != screen
+            requestedRate = max(1, rate)
+            requestedScreen = screen
+            return changed
+        }
+        #if CGHOSTTY_CORRECTED_CLOCK
+        if changed { presentationEstimate.withLock { $0.reset() } }
+        #else
+        _ = changed
+        #endif
+    }
+
+    private func traceOwner() -> Ghostty.Surface? {
+        lock.withLock { panes.keys.sorted { $0.uuidString < $1.uuidString }.first.flatMap { panes[$0]?.surface } }
+    }
     private var index = 0
     private let inFlight = DispatchGroup()
     private static let sequences = Mutex<UInt64>(0)
@@ -277,6 +316,10 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
         layer.colorspace = CGColorSpace(name: CGColorSpace.displayP3)
         layer.isOpaque = false
         layer.framebufferOnly = true
+        #if CGHOSTTY_CLOCK_EXPERIMENT
+        let count = Int(ProcessInfo.processInfo.environment["CGHOSTTY_CLOCK_DRAWABLES"] ?? "3") ?? 3
+        layer.maximumDrawableCount = min(3, max(2, count))
+        #endif
         layer.presentsWithTransaction = false
         queue.addResidencySet(layer.residencySet)
     }
@@ -357,9 +400,13 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
     private func run() {
         autoreleasepool {
             let runLoop = CFRunLoopGetCurrent()!
+            #if CGHOSTTY_VIEW_CLOCK
+            guard let displayLink = link else { return }
+            #else
             let displayLink = CAMetalDisplayLink(metalLayer: layer)
             displayLink.delegate = self
             displayLink.preferredFrameLatency = latency
+            #endif
             displayLink.isPaused = true
             displayLink.add(to: .current, forMode: .default)
             lock.withLock { link = displayLink }
@@ -370,7 +417,12 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
             signal.install(runLoop: runLoop) { [weak self] in
                 guard let self else { return }
                 retirePending()
-                lock.withLock { link?.isPaused = false; paused = false }
+                traceOwner()?.traceCompositor(stage: 15, sequence: windowID, time: CACurrentMediaTime())
+                #if CGHOSTTY_CLOCK_EXPERIMENT
+                let rate = lock.withLock { requestedRate }
+                link?.preferredFrameRateRange = CAFrameRateRange(minimum: rate, maximum: rate, preferred: rate)
+                #endif
+                setPaused(false)
             }
             signal.requestFrame()
             while !lock.withLock({ stopping }) {
@@ -390,29 +442,53 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
     }
 
     func metalDisplayLink(_ link: CAMetalDisplayLink, needsUpdate update: CAMetalDisplayLink.Update) {
-        let callbackTime = CACurrentMediaTime()
-        autoreleasepool { draw(link, update: update, callbackTime: callbackTime) }
+        autoreleasepool {
+            draw(provided: update.drawable, deadline: update.targetTimestamp,
+                 prediction: update.targetPresentationTimestamp, callbackTime: CACurrentMediaTime())
+        }
     }
 
-    private func draw(_ link: CAMetalDisplayLink, update: CAMetalDisplayLink.Update, callbackTime: Double) {
+    #if CGHOSTTY_VIEW_CLOCK
+    @objc private func viewDisplayLink(_ link: CADisplayLink) {
+        autoreleasepool {
+            draw(provided: nil, deadline: link.targetTimestamp,
+                 prediction: link.targetTimestamp, callbackTime: CACurrentMediaTime())
+        }
+    }
+    #endif
+
+    private func draw(provided: (any CAMetalDrawable)?, deadline: Double, prediction rawPrediction: Double, callbackTime: Double) {
+        #if CGHOSTTY_CORRECTED_CLOCK
+        let estimate = presentationEstimate.withLock { ($0.offset, $0.generation) }
+        let prediction = rawPrediction + estimate.0
+        #else
+        let prediction = rawPrediction
+        #endif
+        let sequence = Self.sequences.withLock { $0 &+= 1; return $0 }
+        let owner = traceOwner()
+        owner?.traceCompositor(stage: 8, sequence: sequence, time: callbackTime, prediction: Double(windowID))
+        owner?.traceCompositor(stage: 12, sequence: sequence, time: deadline,
+                              prediction: 1 / Double(lock.withLock { requestedRate }))
         encodingLock.lock()
         defer { encodingLock.unlock() }
         let snapshot = lock.withLock { (panes, size, stopping) }
         var framePanes = snapshot.0
         let size = snapshot.1
         #if CGHOSTTY_TESTING
-        if lock.withLock({ testUpdatesPaused }) { setPaused(true, link: link); return }
+        if lock.withLock({ testUpdatesPaused }) { setPaused(true); return }
         #endif
-        guard !snapshot.2, size.width > 0, size.height > 0 else { setPaused(true, link: link); return }
+        guard !snapshot.2, size.width > 0, size.height > 0 else { setPaused(true); return }
         if layer.drawableSize != size { layer.drawableSize = size; return }
         #if CGHOSTTY_TESTING
         let beforePrepare = lock.withLock { let value = testBeforePrepare; testBeforePrepare = nil; return value }
         beforePrepare?()
         #endif
         let slot = slots[index]
-        guard slot.available.wait(timeout: .now()) == .success else { return }
+        guard slot.available.wait(timeout: .now()) == .success else {
+            owner?.traceCompositor(stage: 11, sequence: sequence, time: CACurrentMediaTime(), prediction: 1)
+            return
+        }
         index = (index + 1) % slots.count
-        let sequence = Self.sequences.withLock { $0 &+= 1; return $0 }
         // One trace owner per window frame avoids multiplying presentation
         // samples by pane count. Process-wide IDs survive owner/window changes.
         let participants = framePanes.keys.sorted(by: { $0.uuidString < $1.uuidString }).compactMap { id -> Ghostty.Surface? in
@@ -420,7 +496,7 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
             return pane.surface
         }.prefix(1)
         for surface in participants {
-            surface.traceCompositor(stage: 0, sequence: sequence, time: update.targetTimestamp, prediction: update.targetPresentationTimestamp)
+            surface.traceCompositor(stage: 0, sequence: sequence, time: deadline, prediction: prediction)
             surface.traceCompositor(stage: 1, sequence: sequence, time: callbackTime)
         }
         var committed = false
@@ -438,30 +514,56 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
         }
         do {
             var more = false
+            var earlyPrepareTime: Double = 0
+            var earlyPaneTimes: [UUID: Double] = [:]
+            #if CGHOSTTY_LATE_DRAWABLE
+            let earlyStart = CACurrentMediaTime()
+            for id in framePanes.keys.sorted(by: { $0.uuidString < $1.uuidString }) {
+                guard let pane = framePanes[id], pane.geometry.visible, !pane.geometry.clip.isEmpty else { continue }
+                let paneStart = CACurrentMediaTime()
+                let prepared = pane.surface.withCompositor(signal) { pane.surface.prepareCompositor(sequence: sequence) }
+                if prepared == false { throw Failure.resource }
+                guard prepared == true else { more = true; continue }
+                earlyPaneTimes[id] = CACurrentMediaTime() - paneStart
+            }
+            earlyPrepareTime = CACurrentMediaTime() - earlyStart
+            owner?.traceCompositor(stage: 16, sequence: sequence, time: earlyPrepareTime)
+            #endif
+            let acquireStart = CACurrentMediaTime()
+            let candidate = provided ?? layer.nextDrawable()
+            owner?.traceCompositor(stage: 10, sequence: sequence, time: provided == nil ? CACurrentMediaTime() - acquireStart : 0,
+                                   prediction: candidate == nil ? 1 : 0)
+            guard let drawable = candidate else { throw Failure.resource }
             var draws = 0
             slot.surfaces = framePanes.values.map(\.surface)
-            queue.waitForDrawable(update.drawable)
-            try encodeBoundary(slot: slot, target: update.drawable.texture, clear: true)
+            queue.waitForDrawable(drawable)
+            try encodeBoundary(slot: slot, target: drawable.texture, clear: true)
             queue.commit([slot.clearBuffer])
             queued = true
             let prepareStart = CACurrentMediaTime()
             var slowestPane: Double = 0
             for id in framePanes.keys.sorted(by: { $0.uuidString < $1.uuidString }) {
                 guard var pane = framePanes[id], pane.geometry.visible, !pane.geometry.clip.isEmpty else { continue }
+                #if CGHOSTTY_LATE_DRAWABLE
+                guard earlyPaneTimes[id] != nil else { continue }
+                let prepared = true
+                #else
+                let prepared = false
+                #endif
                 let paneStart = CACurrentMediaTime()
                 let rendered = try pane.surface.withCompositor(signal) {
                     let info = pane.surface.compositorInfo
                     guard info.width > 0, info.height > 0 else { return UInt32(0) }
                     let rect = pane.geometry.rect
                     let clip = pane.geometry.clip.intersection(CGRect(x: 0, y: 0,
-                        width: update.drawable.texture.width, height: update.drawable.texture.height))
+                        width: drawable.texture.width, height: drawable.texture.height))
                     guard !clip.isEmpty, !clip.isNull else { return UInt32(0) }
                     let format = MTLPixelFormat(rawValue: UInt(info.pixel_format))!
-                    guard let target = update.drawable.texture.makeTextureView(pixelFormat: format) else { throw Failure.resource }
+                    guard let target = drawable.texture.makeTextureView(pixelFormat: format) else { throw Failure.resource }
                     return pane.surface.renderCompositor(texture: target, queue: queue,
-                        targetTime: update.targetPresentationTimestamp, rect: rect, clip: clip, sequence: sequence)
+                        targetTime: prediction, rect: rect, clip: clip, sequence: sequence, prepared: prepared)
                 }
-                slowestPane = max(slowestPane, CACurrentMediaTime() - paneStart)
+                slowestPane = max(slowestPane, CACurrentMediaTime() - paneStart + (earlyPaneTimes[id] ?? 0))
                 guard let result = rendered else {
                     if pane.surface.ownsCompositor(signal) { more = true }
                     continue
@@ -473,7 +575,7 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
                 framePanes[id] = pane
             }
             for surface in participants {
-                surface.traceCompositor(stage: 4, sequence: sequence, time: CACurrentMediaTime() - prepareStart, prediction: slowestPane)
+                surface.traceCompositor(stage: 4, sequence: sequence, time: CACurrentMediaTime() - prepareStart + earlyPrepareTime, prediction: slowestPane)
             }
             // Publish initialization only; newer layout or membership wins.
             lock.withLock {
@@ -483,10 +585,10 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
                 framePanes = framePanes.filter { panes[$0.key]?.token == $0.value.token }
             }
             framePanes = framePanes.filter { $0.value.surface.ownsCompositor(signal) }
-            try encodeBoundary(slot: slot, target: update.drawable.texture, clear: false)
+            try encodeBoundary(slot: slot, target: drawable.texture, clear: false)
             let options = MTL4CommitOptions()
             inFlight.enter()
-            slot.drawableTexture = update.drawable.texture
+            slot.drawableTexture = drawable.texture
             options.addFeedbackHandler { [self, slot] feedback in
                 statsLock.withLock {
                     stats.completed += 1
@@ -505,9 +607,12 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
             }
             let retrySkipped = framePanes.values.contains { $0.geometry.visible && !$0.geometry.clip.isEmpty }
             let traceOwners = participants.map(TraceOwner.init)
-            update.drawable.addPresentedHandler { [weak self, traceOwners] drawable in
+            drawable.addPresentedHandler { [weak self, traceOwners] drawable in
                 for owner in traceOwners { owner.surface?.traceCompositor(stage: 3, sequence: sequence, time: drawable.presentedTime) }
                 guard let self else { return }
+                #if CGHOSTTY_CORRECTED_CLOCK
+                presentationEstimate.withLock { $0.record(target: deadline, presented: drawable.presentedTime, generation: estimate.1) }
+                #endif
                 let retry = statsLock.withLock {
                     stats.presentationCallbacks += 1
                     if drawable.presentedTime > 0 { stats.displayed += 1; skippedRetryBudget = 4 }
@@ -519,31 +624,39 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
                 if retry { signal.requestFrame() }
             }
             queue.commit([slot.buffer], options: options)
-            queue.signalDrawable(update.drawable)
+            queue.signalDrawable(drawable)
             let submittedTime = CACurrentMediaTime()
             for surface in participants { surface.traceCompositor(stage: 2, sequence: sequence, time: submittedTime) }
-            update.drawable.present()
+            drawable.present()
             committed = true
             statsLock.withLock {
                 stats.submitted += 1
                 stats.paneDraws += draws
                 if draws > 0 { skippedRetryBudget = 4 }
             }
-            if CACurrentMediaTime() >= update.targetTimestamp {
+            if CACurrentMediaTime() >= deadline {
                 statsLock.withLock { stats.missedDeadlines += 1 }
-                more = true
+                // Missing a prediction is a metric, not new visual work. In
+                // particular, a blocking nextDrawable must not sustain an
+                // idle render loop by repeatedly missing its own deadline.
             }
-            setPaused(!more, link: link)
+            setPaused(!more)
         } catch {
             Ghostty.logger.error("Window composition failed: \(error)")
             statsLock.withLock { stats.failed += 1 }
-            setPaused(true, link: link)
+            setPaused(true)
         }
     }
 
-    private func setPaused(_ value: Bool, link: CAMetalDisplayLink) {
-        link.isPaused = value
-        lock.withLock { paused = value }
+    private func setPaused(_ value: Bool) {
+        link?.isPaused = value
+        let changed = lock.withLock { let changed = paused != value; paused = value; return changed }
+        if changed {
+            #if CGHOSTTY_CORRECTED_CLOCK
+            if value { presentationEstimate.withLock { $0.reset() } }
+            #endif
+            traceOwner()?.traceCompositor(stage: 9, sequence: windowID, time: CACurrentMediaTime(), prediction: value ? 1 : 0)
+        }
     }
 
     private func drain(_ slot: Slot) {

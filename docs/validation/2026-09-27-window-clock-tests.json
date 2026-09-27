@@ -1,0 +1,22 @@
+{
+  "ordinary_full_native": {
+    "result": "Passed",
+    "totalTestCount": 365,
+    "passedTests": 364,
+    "failedTests": 0,
+    "skippedTests": 1,
+    "testFailures": [],
+    "startTime": 1790512457.006,
+    "finishTime": 1790512527.328
+  },
+  "view_late_window_native": {
+    "result": "Passed",
+    "totalTestCount": 10,
+    "passedTests": 10,
+    "failedTests": 0,
+    "skippedTests": 0,
+    "testFailures": [],
+    "startTime": 1790512592.73,
+    "finishTime": 1790512648.992
+  }
+}

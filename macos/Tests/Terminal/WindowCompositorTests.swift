@@ -549,6 +549,31 @@ import Synchronization
         #expect(green.greenComponent > 0.95 && green.redComponent < 0.05 && green.blueComponent < 0.05)
     }
 
+    @Test func missedDeadlineDoesNotCreateMoreVisualWork() async throws {
+        let config = try TemporaryConfig("cursor-style-blink = false\ncursor-effect = false\nshell-integration = none")
+        let app = Ghostty.App(configPath: config.temporaryFile.path)
+        let view = makeView(app: app, color: "0;0;0", marker: "deadline-ready")
+        let window = makeWindow()
+        defer { window.close() }
+        view.frame = window.contentView!.bounds
+        window.contentView!.addSubview(view)
+        window.orderFront(nil)
+        view.sizeDidChange(view.bounds.size)
+        view.surfaceModel?.setVisible(true)
+        let owner = try #require(view.windowCompositor)
+        owner.updateGeometry()
+        try await wait { view.surfaceModel?.readContents(viewport: false).contains("deadline-ready") == true && owner.worker.isIdle }
+        let before = owner.worker.statistics
+        // Deliberately miss the callback deadline once; this simulates slow
+        // preparation and must not schedule a second identical frame.
+        owner.worker.beforeNextPrepareForTesting { Thread.sleep(forTimeInterval: 0.05) }
+        try await wait { owner.worker.statistics.submitted > before.submitted && owner.worker.isIdle }
+        let after = owner.worker.statistics
+        #expect(after.missedDeadlines > before.missedDeadlines)
+        #expect(after.submitted == before.submitted + 1)
+        #expect(after.failed == before.failed)
+    }
+
     private func makeView(app: Ghostty.App, color: String, marker: String) -> Ghostty.SurfaceView {
         var config = Ghostty.SurfaceConfiguration()
         let output = "\u{1b}[48;2;\(color)m\u{1b}[2J\(marker)"

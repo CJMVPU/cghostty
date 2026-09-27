@@ -186,6 +186,33 @@ Metal 编译通过 `xcrun --toolchain Metal` 调用安装的工具链。缺失�
 帧缓存回归检查每个轮换槽独立更新、上传失败不提交版本和资源重建失效；
 桌面像素回归交替修改文字/背景颜色，并检查闪烁与常亮切换。
 
+### 前台完整终端帧时钟实验
+
+普通构建只编译 CAMetalDisplayLink。帧时钟实验须显式使用 ReleaseLocal 编译条件：
+
+```sh
+nu macos/build.nu --configuration ReleaseLocal --clock-experiment view \
+  --build-dir /private/tmp/cghostty-clock-build
+python3 scripts/run-window-clock-experiment.py \
+  /private/tmp/cghostty-clock-build/ReleaseLocal/cghostty.app \
+  /private/tmp/clock-view-run1 --samples 200 --drawables 3
+python3 scripts/summarize-window-clock-experiment.py /private/tmp/clock-view-run1
+```
+
+编译变体为 `metal`、`view`、`view-late`、`view-corrected`。后两者分别只改
+CPU cell 准备前后获取 drawable 的顺序、或动画取样时刻，不能将两项混在同一轮归因。
+`view-late` 的 GPU 上传/内容绘制仍在获取 drawable 之后；不是完整离屏预渲染。
+校正采用最近 31 帧的 `presentedTime - targetTimestamp` 中位数，至少 5 个样本后启用；
+暂停、屏幕或请求帧率变化时清空，拒绝已过期回调、零呈现时间和异常值。
+这只是经验估计，不是系统保证的下一张 drawable 呈现时间。
+
+脚本创建隔离配置、偏好、工作目录和真实 PTY/nvim 会话，以正常应用进程运行前台窗口，
+不使用 XCTest 作为延迟测量宿主，也不修改用户配置。需要保持桌面解锁且实验窗口处于前台。
+`--phases echo-active,mixed` 可选择扩样本场景；完整矩阵默认包含所有场景。
+运行目录必须不存在。保存每次 `result.json`、trace 和汇总，失败轮次不得覆盖或静默忽略。
+暂停间隔不计作连续呈现掉帧；`clock_wakes` 只表示窗口信号处理次数，不是进程唤醒或能耗。
+预先约定与结果见 [窗口帧时钟验证](docs/validation/2026-09-27-window-clock-plan.md)。
+
 ### 渲染性能对比
 
 使用相同的 ReleaseLocal 配置运行优化前后负载：

@@ -2,7 +2,7 @@ import Foundation
 
 nonisolated extension UserDefaults {
     static var ghosttySuite: String? {
-        #if DEBUG || CGHOSTTY_TESTING
+        #if DEBUG || CGHOSTTY_TESTING || CGHOSTTY_CLOCK_EXPERIMENT
         ProcessInfo.processInfo.environment["GHOSTTY_USER_DEFAULTS_SUITE"]
         #else
         nil

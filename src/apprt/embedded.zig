@@ -1578,8 +1578,16 @@ pub const CAPI = struct {
         return surface.core_surface.render.renderer.compositorInfo();
     }
 
-    export fn ghostty_surface_render_compositor(surface: *Surface, texture: *anyopaque, queue: *anyopaque, target_time: f64, region: @import("../renderer/metal/RenderPass.zig").Region, sequence: u64, snapshot: bool) u32 {
-        return surface.core_surface.render.thread.renderCompositor(objc.Object.fromId(texture), objc.Object.fromId(queue), target_time, region, sequence, snapshot) catch |err| {
+    export fn ghostty_surface_prepare_compositor(surface: *Surface, sequence: u64) bool {
+        surface.core_surface.render.thread.prepareCompositor(sequence) catch |err| {
+            log.err("window pane preparation failed err={}", .{err});
+            return false;
+        };
+        return true;
+    }
+
+    export fn ghostty_surface_render_compositor(surface: *Surface, texture: *anyopaque, queue: *anyopaque, target_time: f64, region: @import("../renderer/metal/RenderPass.zig").Region, sequence: u64, snapshot: bool, prepared: bool) u32 {
+        return surface.core_surface.render.thread.renderCompositor(objc.Object.fromId(texture), objc.Object.fromId(queue), target_time, region, sequence, snapshot, prepared) catch |err| {
             log.err("window pane render failed err={}", .{err});
             return 10;
         };
@@ -1606,6 +1614,14 @@ pub const CAPI = struct {
                 state.unlockDemand(global.io());
                 trace.emit("input_ready", revision, sequence, 0);
             },
+            8 => trace.emit("clock_callback", ns(time), sequence, @intFromFloat(prediction)),
+            9 => trace.emit("clock_state", ns(time), sequence, @intFromFloat(prediction)),
+            10 => trace.emit("drawable_acquire", ns(time), sequence, @intFromFloat(prediction)),
+            11 => trace.emit("clock_skip", ns(time), sequence, @intFromFloat(prediction)),
+            12 => trace.emit("clock_target", ns(time), ns(prediction), sequence),
+            13 => trace.emit("experiment_phase", ns(time), sequence, @intFromFloat(prediction)),
+            16 => trace.emit("window_prepare_early", ns(time), sequence, 0),
+            15 => trace.emit("clock_wake", ns(time), sequence, 0),
             else => {},
         }
     }
