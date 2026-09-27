@@ -22,7 +22,7 @@ import Testing
             let guided = try String(contentsOf: source, encoding: .utf8)
             #expect(guided.hasPrefix(original))
             #expect(guided.contains("8 高级 / Advanced"))
-            #expect(guided.contains("# font-size = 14"))
+            #expect(guided.contains(" / Example: font-size = 14"))
             let config = Ghostty.Config(at: source.path)
             #expect(config.errors.isEmpty)
             #expect(config.backgroundOpacity == 0.6)

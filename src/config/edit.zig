@@ -172,7 +172,7 @@ test "opening older configuration guide appends missing options once" {
     try t.expect(std.mem.startsWith(u8, updated, old));
     const appended = updated[old.len..];
     try t.expect(std.mem.indexOf(u8, appended, "# [claude-compatibility]") != null);
-    try t.expect(std.mem.indexOf(u8, appended, "# claude-compatibility = true") != null);
+    try t.expect(std.mem.indexOf(u8, appended, " / Example: claude-compatibility = true") != null);
     try t.expect(std.mem.indexOf(u8, appended, "# [font-size]") == null);
     var config = try @import("Config.zig").default(t.allocator);
     defer config.deinit();

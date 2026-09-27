@@ -55,7 +55,7 @@ fn generateGuide(alloc: std.mem.Allocator, explicit_trace_default: bool) ![:0]co
     try writer.writeAll(
         \\# 中文说明
         \\# Settings（⌘,）打开此文件；修改后保存、退出并重新启动应用。
-        \\# 取消示例行开头的 # 启用设置，优先修改已有设置，避免重复定义。
+        \\# 将 Example: 后的 key = value 复制到单独一行启用；优先修改已有设置，避免重复定义。
         \\# 默认值不含主题或用户覆盖；完整快捷键默认值见末尾附录。
         \\# 新模板显式关闭 render-trace；其他示例及附录均为注释。
         \\# 列表和规则可能追加或合并，请保留顺序。配置无效时回退到上次成功配置或内置默认值。
@@ -63,7 +63,7 @@ fn generateGuide(alloc: std.mem.Allocator, explicit_trace_default: bool) ![:0]co
         \\#
         \\# English guide
         \\# Open with Settings (⌘,); save, quit, and restart the app to apply changes.
-        \\# Uncomment an example to enable it. Edit existing settings first to avoid duplicates.
+        \\# Copy key = value after Example: onto a separate line to enable it. Edit existing settings first to avoid duplicates.
         \\# Defaults exclude theme/user overrides; full key bindings are in the appendix.
         \\# New templates explicitly disable render-trace; other examples and appendix entries are comments.
         \\# Lists and rules may append or merge: preserve their order. Invalid settings fall back to the last good config or defaults.
@@ -133,22 +133,23 @@ fn writeEntry(alloc: std.mem.Allocator, config: *const Config, comptime entry: m
     else
         "";
 
-    try writer.print("\n# [{s}] {s} / {s}\n# 默认 / Default: ", .{ name, entry.zh, entry.en });
+    try writer.print("\n# [{s}] {s} / {s}\n# Default: ", .{ name, entry.zh, entry.en });
     if (comptime hasAppendix(entry.key)) {
         try writer.print("完整列表见附录 [{s}]。 / Full list in appendix [{s}].", .{ name, name });
     } else if (default_value.len == 0) {
         try writer.writeAll("未指定或空值，按自动／继承规则处理。 / Unset or empty; automatic/inherited rules apply.");
     } else try writer.writeAll(default_value);
     try choices(T, writer);
-    try writer.writeAll("\n# 示例 / Example:\n");
+    try writer.writeAll(" / Example: ");
+    if (entry.example) |example| {
+        try writer.print("{s} = {s}\n", .{ name, example });
+    } else if (first) |line| {
+        try writer.print("{s}\n", .{line});
+    } else return error.MissingExample;
     // New files explicitly disable tracing; supplements never change settings.
     if (entry.key == .@"render-trace" and explicit_trace_default) {
         try writer.print("{s} = {s}\n", .{ name, if (config.@"render-trace") "true" else "false" });
-    } else if (entry.example) |example| {
-        try writer.print("# {s} = {s}\n", .{ name, example });
-    } else if (first) |line| {
-        try writer.print("# {s}\n", .{line});
-    } else return error.MissingExample;
+    }
 }
 
 /// Keep enum choices discoverable without adding another line to each entry.
@@ -156,7 +157,7 @@ fn choices(comptime Original: type, writer: *std.Io.Writer) !void {
     const T = if (@typeInfo(Original) == .optional) @typeInfo(Original).optional.child else Original;
     switch (@typeInfo(T)) {
         .@"enum" => |info| {
-            try writer.writeAll("；可选 / Values: ");
+            try writer.writeAll(" / Values: ");
             inline for (info.fields, 0..) |field, i| {
                 if (i > 0) try writer.writeAll(", ");
                 try writer.writeAll(field.name);
@@ -200,27 +201,21 @@ test "configuration guide explicitly disables tracing and every example parses" 
     try testing.expectEqual(@as(usize, 0), untouched._diagnostics.items().len);
     try testing.expect(!untouched.@"render-trace");
     try testing.expectEqual(.classic, untouched.@"cursor-effect-mode");
-    try testing.expect(std.mem.indexOf(u8, data, "；可选 / Values: classic, responsive, instant") != null);
+    try testing.expect(std.mem.indexOf(u8, data, " / Values: classic, responsive, instant") != null);
     var lines = std.mem.tokenizeScalar(u8, data, '\n');
-    var example = false;
     var count: usize = 0;
     while (lines.next()) |line| {
-        if (std.mem.eql(u8, line, "render-trace = false")) {
-            try testing.expect(example);
-            count += 1;
-            example = false;
-            continue;
-        }
+        if (std.mem.eql(u8, line, "render-trace = false")) continue;
         try testing.expect(std.mem.startsWith(u8, line, "#"));
-        if (example) {
-            var config = try Config.default(testing.allocator);
-            defer config.deinit();
-            try config.loadData(testing.allocator, line[2..], "/tmp/config.ghostty");
-            if (config._diagnostics.items().len != 0) std.debug.print("Invalid guide example: {s}\n", .{line});
-            try testing.expectEqual(@as(usize, 0), config._diagnostics.items().len);
-            count += 1;
-        }
-        example = std.mem.eql(u8, line, "# 示例 / Example:");
+        if (!std.mem.startsWith(u8, line, "# Default: ")) continue;
+        const example_start = std.mem.indexOf(u8, line, " / Example: ").? + " / Example: ".len;
+        const example = line[example_start..];
+        var config = try Config.default(testing.allocator);
+        defer config.deinit();
+        try config.loadData(testing.allocator, example, "/tmp/config.ghostty");
+        if (config._diagnostics.items().len != 0) std.debug.print("Invalid guide example: {s}\n", .{example});
+        try testing.expectEqual(@as(usize, 0), config._diagnostics.items().len);
+        count += 1;
     }
     try testing.expectEqual(metadata.entries.len, count);
     const supplement = try generateSupplement(testing.allocator, "render-trace = true\n");
@@ -244,9 +239,7 @@ test "configuration guide compact entries and grouped language introduction" {
     const command_end = std.mem.indexOfPos(u8, data, body, "\n\n").?;
     try t.expectEqualStrings(
         "# [command] 新终端启动命令／Shell / Terminal shell or command\n" ++
-            "# 默认 / Default: 未指定或空值，按自动／继承规则处理。 / Unset or empty; automatic/inherited rules apply.\n" ++
-            "# 示例 / Example:\n" ++
-            "# command = /bin/zsh",
+            "# Default: 未指定或空值，按自动／继承规则处理。 / Unset or empty; automatic/inherited rules apply. / Example: command = /bin/zsh",
         data[body..command_end],
     );
     const appendix = std.mem.indexOf(u8, data, "# 附录 / Appendix").?;
@@ -256,10 +249,10 @@ test "configuration guide compact entries and grouped language introduction" {
         if (!std.mem.startsWith(u8, block, "# [")) continue;
         var lines = std.mem.tokenizeScalar(u8, block, '\n');
         _ = lines.next().?;
-        try t.expect(std.mem.startsWith(u8, lines.next().?, "# 默认 / Default:"));
-        try t.expectEqualStrings("# 示例 / Example:", lines.next().?);
-        const example = lines.next().?;
-        try t.expect(std.mem.startsWith(u8, example, "# ") or std.mem.eql(u8, example, "render-trace = false"));
+        const details = lines.next().?;
+        try t.expect(std.mem.startsWith(u8, details, "# Default:"));
+        try t.expect(std.mem.indexOf(u8, details, " / Example: ") != null);
+        if (lines.next()) |active| try t.expectEqualStrings("render-trace = false", active);
         try t.expect(lines.next() == null);
         entries += 1;
     }
