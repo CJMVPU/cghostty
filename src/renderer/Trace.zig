@@ -129,7 +129,7 @@ pub fn clock() u64 {
 }
 
 /// event,time_ns,a,b,c. Draw: wall CPU path ns / copied cell bytes / segments.
-/// GPU: execution ns / healthy / unused. Timer: update kind / vsync / unused.
+/// GPU: execution ns / healthy / unused. Timer: image update / window clock / unused.
 /// Snapshot/snapshot_gpu: offscreen wall/GPU ns, separate from displayed frames.
 /// Overlay: full foreground count / submitted instances / scissor pixels.
 /// Vsync: callback interval ns (restart excluded). Draw_lock/draw_total:

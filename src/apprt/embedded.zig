@@ -1563,14 +1563,11 @@ pub const CAPI = struct {
     }
 
     export fn ghostty_surface_copy_snapshot(surface: *Surface) ?*anyopaque {
-        return surface.core_surface.render.renderer.copySnapshot() catch |err| {
+        const texture = surface.core_surface.render.renderer.copySnapshot() catch |err| {
             log.warn("snapshot render failed err={}", .{err});
             return null;
         };
-    }
-
-    export fn ghostty_surface_uses_compositor(surface: *Surface) bool {
-        return surface.core_surface.render.renderer.api.layer.window_compositor;
+        return if (texture) |value| value.value else null;
     }
 
     export fn ghostty_surface_set_compositor(surface: *Surface, sink: ?*anyopaque) void {
@@ -2075,16 +2072,6 @@ pub const CAPI = struct {
 
     // Darwin-only C APIs.
     const Darwin = struct {
-        export fn ghostty_surface_set_display_id(ptr: *Surface, display_id: u32) void {
-            const surface = &ptr.core_surface;
-            _ = surface.render.thread.mailbox.push(
-                global.io(),
-                .{ .macos_display_id = display_id },
-                .{ .forever = {} },
-            );
-            surface.render.thread.wakeup.notify() catch {};
-        }
-
         /// This returns a CTFontRef that should be used for quicklook
         /// highlighted text. This is always the primary font in use
         /// regardless of the selected text. If coretext is not in use

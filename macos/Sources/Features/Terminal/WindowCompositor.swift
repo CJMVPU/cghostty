@@ -17,7 +17,7 @@ final class WindowCompositor {
     private struct WeakView { weak var value: Ghostty.SurfaceView? }
 
     static func attach(_ view: Ghostty.SurfaceView) -> WindowCompositor? {
-        guard let window = view.window, let surface = view.surfaceModel, surface.usesWindowCompositor,
+        guard let window = view.window, let surface = view.surfaceModel,
               let content = window.contentView else { return nil }
         do {
             let owner: WindowCompositor

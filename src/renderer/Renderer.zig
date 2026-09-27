@@ -39,8 +39,6 @@ const FileType = @import("../file_type.zig").FileType;
 
 const macos = @import("macos");
 
-const DisplayLink = *macos.video.DisplayLink;
-
 const log = std.log.scoped(.renderer);
 const Metal = @import("Metal.zig");
 
@@ -158,12 +156,6 @@ bg_image_buffer_modified: usize = 0,
 
 /// Graphics API state.
 api: Metal,
-
-/// The CVDisplayLink used to drive the rendering loop in
-/// sync with the display.
-display_link: ?DisplayLink = null,
-display_link_draw_now: ?*xev.Async = null,
-last_display_link_ns: std.atomic.Value(u64) = .init(0),
 
 /// Health of the most recently completed frame.
 health: std.atomic.Value(Health) = .{ .raw = .healthy },
@@ -446,9 +438,6 @@ pub const DerivedConfig = struct {
     bg_image_fit: configpkg.BackgroundImageFit,
     bg_image_repeat: bool,
     links: link.Set,
-    vsync: bool,
-    metal_display_link: bool,
-    window_compositor: bool,
     frame_latency: f32,
     render_trace: bool,
     render_trace_directory: []const u8,
@@ -524,9 +513,6 @@ pub const DerivedConfig = struct {
             .bg_image_fit = config.@"background-image-fit",
             .bg_image_repeat = config.@"background-image-repeat",
             .links = links,
-            .vsync = config.@"window-vsync",
-            .metal_display_link = config.@"render-presentation" == .@"metal-display-link",
-            .window_compositor = config.@"render-presentation" == .@"window-compositor",
             .frame_latency = if (config.@"render-frame-latency" == .@"1") 1 else 2,
             .render_trace = config.@"render-trace",
             .render_trace_directory = try alloc.dupe(u8, config.@"render-trace-directory"),
@@ -641,9 +627,8 @@ pub fn init(alloc: Allocator, options: renderer.Options) !Self {
 }
 
 pub fn deinit(self: *Self) void {
-    // Queued main-thread presentation callbacks must detach their borrowed
-    // trace before it closes. CVDisplayLink is stopped below before close too.
-    self.api.layer.close();
+    // Detach the native wake sink before releasing renderer state.
+    self.api.pane.close();
     if (self.frame_scratch) |*arena| arena.deinit();
     self.link_cache.deinit(self.alloc);
     // This only deinitializes and frees CPU-side state
@@ -659,11 +644,6 @@ pub fn deinit(self: *Self) void {
     self.terminal_state.deinit(self.alloc);
     if (self.search_selected_match) |*m| m.arena.deinit();
     if (self.search_matches) |*m| m.deinit();
-
-    if (self.display_link) |display_link| {
-        display_link.stop() catch {};
-        display_link.release();
-    }
 
     self.cells.deinit(self.alloc);
 
@@ -701,24 +681,6 @@ pub fn threadExit(self: *Self) void {
     }
 }
 
-/// Called by renderer.Thread when it starts the main loop.
-pub fn loopEnter(self: *Self, thr: *renderer.Thread) void {
-    self.api.loopEnter();
-    self.api.layer.start(self);
-
-    self.syncDisplayLink(null, &thr.draw_now);
-}
-
-/// Called by renderer.Thread when it exits the main loop.
-pub fn loopExit(self: *Self) void {
-    self.api.layer.stop();
-    // Stop our display link. If this fails its okay it just means
-    // that we either never started it or the view its attached to
-    // is gone which is fine.
-    const display_link = self.display_link orelse return;
-    display_link.stop() catch {};
-}
-
 /// Mark the surface ready for drawing after reinitialization.
 pub fn displayRealized(self: *Self) void {
     // Lock the draw mutex so that we can safely update state.
@@ -748,24 +710,6 @@ pub fn displayUnrealized(self: *Self) void {
     // to rebuild the swap chain or make any graphics API calls.
     // The actual GPU resource release is done by the render thread.
     self.display_realized = false;
-    self.api.layer.invalidate();
-}
-
-fn displayLinkCallback(
-    _: *macos.video.DisplayLink,
-    ud: ?*Self,
-) void {
-    const self = ud orelse return;
-    const draw_now = self.display_link_draw_now orelse return;
-    if (self.trace.file != null) {
-        const now = Trace.clock();
-        const previous = self.last_display_link_ns.swap(now, .monotonic);
-        // The first callback after a restart is not a dropped-frame interval.
-        if (previous != 0) self.trace.emit("vsync", now - previous, 0, 0);
-    }
-    draw_now.notify() catch |err| {
-        log.err("error notifying draw_now err={}", .{err});
-    };
 }
 
 /// Mark the full screen as dirty so that we redraw everything.
@@ -773,58 +717,18 @@ pub inline fn markDirty(self: *Self) void {
     self.terminal_state.dirty = .full;
 }
 
-/// Called when we get an updated display ID for our display link.
-pub fn setMacOSDisplayID(
-    self: *Self,
-    id: u32,
-    draw_now: *xev.Async,
-) void {
-    self.syncDisplayLink(id, draw_now);
-}
-
 pub const AnimationWake = FrameScheduler.Wake;
 
-/// The soonest animation wake this renderer needs, if any:
-/// Smooth cursor motion requests draw-only wakes while active. A Kitty
-/// graphics animation wants an update wake when its next
-/// frame is due. The renderer thread drives its animation
-/// timer off this, re-querying after every wake.
-///
-/// Caller must hold draw_mutex, including the native synchronous draw path.
-fn animationWakeLocked(self: *const Self) ?AnimationWake {
-    return self.animationWakeFor(false);
-}
-
+/// Only image content deadlines use a worker timer. Window frames own motion.
 pub fn animationTimerWake(self: *Self) ?AnimationWake {
     self.draw_mutex.lockUncancelable(global.io());
     defer self.draw_mutex.unlock(global.io());
-    return self.animationWakeFor(self.hasVsync());
-}
-
-fn animationWakeFor(self: *const Self, vsync_running: bool) ?AnimationWake {
     if (!self.visible) return null;
-    var now_ms: u64 = 0;
-    const deadline: ?u64 = if (self.kitty_animation_clock) |base| deadline: {
-        if (self.kitty_animation_next_ms == null) break :deadline null;
-        const now: std.Io.Timestamp = .now(global.io(), .awake);
-        now_ms = @intCast(@divTrunc(base.durationTo(now).nanoseconds, std.time.ns_per_ms));
-        break :deadline self.kitty_animation_next_ms;
-    } else null;
-    return FrameScheduler.timerWake(
-        now_ms,
-        self.cursor_motion.isActive() or self.scroll.motion.active(),
-        deadline,
-        vsync_running,
-    );
-}
-
-/// True if our renderer is using vsync. If true, the renderer or apprt
-/// is responsible for triggering draw_now calls to the render thread.
-/// That is the only way to trigger a drawFrame.
-pub fn hasVsync(self: *const Self) bool {
-    if (self.api.layer.isDirect()) return true;
-    const display_link = self.display_link orelse return false;
-    return display_link.isRunning();
+    const base = self.kitty_animation_clock orelse return null;
+    const deadline = self.kitty_animation_next_ms orelse return null;
+    const now: std.Io.Timestamp = .now(global.io(), .awake);
+    const now_ms: u64 = @intCast(@divTrunc(base.durationTo(now).nanoseconds, std.time.ns_per_ms));
+    return FrameScheduler.nextWake(now_ms, deadline);
 }
 
 /// Callback when the focus changes for the terminal this is rendering.
@@ -840,7 +744,7 @@ pub fn setFocus(self: *Self, focus: bool) !void {
         self.trace.emit("state", @intFromBool(self.focused), @intFromBool(self.visible), 0);
     }
 
-    self.syncDisplayLink(null, null);
+    self.requestFrame();
 }
 
 /// Callback when the window is visible or occluded.
@@ -853,9 +757,8 @@ pub fn setVisible(self: *Self, visible: bool) void {
         self.cursor_motion.invalidate();
         self.visible = visible;
         self.trace.emit("state", @intFromBool(self.focused), @intFromBool(self.visible), 0);
-        if (!visible) self.api.layer.invalidate();
     }
-    self.syncDisplayLink(null, null);
+    self.requestFrame();
 
     // When we're hidden, release our GPU resources.
     if (!visible) {
@@ -892,95 +795,14 @@ pub fn releaseGpuResources(self: *Self) void {
     }
 }
 
-/// Create or update the display link and match it to the current
-/// surface state.
-///
-/// Must be called on the render thread and must NOT be called
-/// while holding `draw_mutex`. Stopping a CVDisplayLink is a
-/// blocking join on CoreVideo's IO thread, and the apprt calls
-/// `drawFrame` (which takes `draw_mutex`) from the CoreAnimation
-/// layer display path on the main thread.
-pub fn syncDisplayLink(
-    self: *Self,
-    display_id: ?u32,
-    draw_now: ?*xev.Async,
-) void {
-    if (self.api.layer.window_compositor) {
-        self.draw_mutex.lockUncancelable(global.io());
-        defer self.draw_mutex.unlock(global.io());
-        if (self.api.layer.compositor_sink) |sink| sink.msgSend(void, "requestFrame", .{});
-        return;
-    }
-    if (self.api.layer.isMetal()) {
-        self.draw_mutex.lockUncancelable(global.io());
-        defer self.draw_mutex.unlock(global.io());
-        self.api.layer.setRunning(self.display_realized and FrameScheduler.needsDisplayLink(
-            self.visible,
-            self.cells_rebuilt,
-            self.animationWakeLocked(),
-        ), self.size.screen.width, self.size.screen.height);
-        return;
-    }
-    const display_link = self.display_link orelse display_link: {
-        if (!self.config.vsync) return;
-        const callback = draw_now orelse return;
-        const result = macos.video.DisplayLink.createWithActiveCGDisplays() catch |err| {
-            // A locked macOS session can temporarily have no active
-            // displays. Rendering can continue without vsync and a
-            // later display update will retry this method.
-            log.warn("error creating display link; using fallback rendering err={}", .{err});
-            return;
-        };
-        self.display_link_draw_now = callback;
-        result.setOutputCallback(
-            Self,
-            &displayLinkCallback,
-            self,
-        ) catch |err| {
-            log.warn("error configuring display link err={}", .{err});
-            result.release();
-            return;
-        };
-
-        self.display_link = result;
-        log.info("created display link", .{});
-        break :display_link result;
-    };
-
-    if (display_id) |id| {
-        log.info("updating display link display id={}", .{id});
-        display_link.setCurrentCGDisplay(id) catch |err| {
-            log.warn("error setting display link display id err={}", .{err});
-        };
-    }
-
-    const should_run = state: {
-        self.draw_mutex.lockUncancelable(global.io());
-        defer self.draw_mutex.unlock(global.io());
-        break :state FrameScheduler.needsDisplayLink(
-            self.visible,
-            self.cells_rebuilt,
-            self.animationWakeLocked(),
-        );
-    };
-
-    if (should_run) {
-        if (!display_link.isRunning()) {
-            self.last_display_link_ns.store(0, .monotonic);
-            display_link.start() catch |err| {
-                log.warn("error starting display link err={}", .{err});
-            };
-        }
-    } else {
-        if (display_link.isRunning()) display_link.stop() catch |err| {
-            log.warn("error stopping display link err={}", .{err});
-        };
-    }
+/// Queue a wake for the window compositor; never acquire its membership lock.
+pub fn requestFrame(self: *Self) void {
+    self.draw_mutex.lockUncancelable(global.io());
+    defer self.draw_mutex.unlock(global.io());
+    if (self.api.pane.compositor_sink) |sink| sink.msgSend(void, "requestFrame", .{});
 }
 
-/// Set the new font grid.
-///
-/// Must be called on the render thread.
+/// Update the font grid. Serialized with frame updates by renderer.Thread.
 pub fn setFontGrid(self: *Self, grid: *font.SharedGrid) void {
     self.draw_mutex.lockUncancelable(global.io());
     defer self.draw_mutex.unlock(global.io());
@@ -1350,63 +1172,24 @@ pub fn updateFrame(
             else => {},
         }
     }
-
-    // A window update is already inside the display callback. Scheduling here
-    // would manufacture another content wake after every consumed update.
-    if (!self.api.layer.window_compositor) self.syncDisplayLink(null, null);
-}
-
-/// Draw the frame to the screen.
-///
-/// If `sync` is true, this will synchronously block until
-/// the frame is finished drawing and has been presented.
-pub fn drawFrame(
-    self: *Self,
-    sync: bool,
-) !void {
-    // Metal drawables are valid only within the render-thread link callback.
-    // AppKit's synchronous refresh path must never acquire its own drawable.
-    if (self.api.layer.window_compositor or (self.api.layer.isMetal() and sync)) return;
-    // Everything that touches draw state happens under the draw
-    // mutex. The display link is synced only after the mutex is
-    // released; see `syncDisplayLink` for why it must never be
-    // called with the draw mutex held.
-    const start_ns = if (self.trace.file != null) Trace.clock() else 0;
-    var lock_wait_ns: u64 = 0;
-    defer if (start_ns != 0) {
-        self.trace.emit("draw_lock", lock_wait_ns, @intFromBool(sync), 0);
-        self.trace.emit("draw_total", Trace.clock() - start_ns, @intFromBool(sync), 0);
-    };
-    const sync_display_link = locked: {
-        self.draw_mutex.lockUncancelable(global.io());
-        if (start_ns != 0) lock_wait_ns = Trace.clock() - start_ns;
-        defer self.draw_mutex.unlock(global.io());
-        break :locked try self.drawFrameLocked(sync, null);
-    };
-
-    if (sync_display_link) self.syncDisplayLink(null, null);
 }
 
 const Snapshot = struct { target: Target, healthy: bool = false };
 
 /// Main-thread, on-demand offscreen rendering. Never obtains or retains a
 /// drawable, changes presentation history, or publishes a completed display.
-/// Returns an owned IOSurface; caller releases it with CFRelease.
-pub fn copySnapshot(self: *Self) !?*@import("macos").iosurface.IOSurface {
+/// Returns an owned shared Metal texture; caller releases it after readback.
+pub fn copySnapshot(self: *Self) !?@import("objc").Object {
     self.draw_mutex.lockUncancelable(global.io());
     defer self.draw_mutex.unlock(global.io());
-    if (!self.api.layer.isDirect() or !self.display_realized or !self.visible or
+    if (!self.display_realized or !self.visible or
         self.size.screen.width == 0 or self.size.screen.height == 0) return null;
-    if (self.api.layer.window_compositor) {
-        if (self.swap_chain) |*chain| chain.waitIdle();
-    }
+    if (self.swap_chain) |*chain| chain.waitIdle();
     var snapshot: Snapshot = .{ .target = try self.api.initSnapshotTarget(self.size.screen.width, self.size.screen.height) };
     errdefer snapshot.target.deinit();
-    _ = try self.drawFrameLocked(true, &snapshot);
+    try self.drawFrameLocked(true, &snapshot);
     if (!snapshot.healthy) return error.SnapshotFailed;
-    // Transfer surface ownership without Target.deinit's purgeable-empty mark.
-    snapshot.target.texture.release();
-    return snapshot.target.surface;
+    return snapshot.target.texture;
 }
 
 /// Window compositor entry points. The native owner serializes registration,
@@ -1414,10 +1197,9 @@ pub fn copySnapshot(self: *Self) !?*@import("macos").iosurface.IOSurface {
 pub fn setCompositorSink(self: *Self, sink: ?@import("objc").Object) void {
     self.draw_mutex.lockUncancelable(global.io());
     defer self.draw_mutex.unlock(global.io());
-    if (!self.api.layer.window_compositor) return;
     if (self.swap_chain) |*chain| chain.waitIdle();
-    if (self.api.layer.compositor_sink) |old| old.release();
-    self.api.layer.compositor_sink = if (sink) |value| value.retain() else null;
+    if (self.api.pane.compositor_sink) |old| old.release();
+    self.api.pane.compositor_sink = if (sink) |value| value.retain() else null;
     self.cells_rebuilt = true;
 }
 
@@ -1434,23 +1216,23 @@ pub fn compositorInfo(self: *Self) CompositorInfo {
 pub fn drawCompositor(self: *Self, texture: @import("objc").Object, queue: @import("objc").Object, target_time: f64, force: bool) !u32 {
     self.draw_mutex.lockUncancelable(global.io());
     defer self.draw_mutex.unlock(global.io());
-    if (!self.api.layer.window_compositor or !self.display_realized or !self.visible) return 0;
+    if (!self.display_realized or !self.visible) return 0;
     const width = texture.getProperty(c_ulong, "width");
     const height = texture.getProperty(c_ulong, "height");
     if (width != self.size.screen.width or height != self.size.screen.height) return 6;
-    self.api.layer.compositor_target = .{ .surface = null, .texture = texture, .width = width, .height = height };
-    self.api.layer.compositor_queue = queue;
+    self.api.pane.compositor_target = .{ .texture = texture, .width = width, .height = height };
+    self.api.pane.compositor_queue = queue;
     const now = @as(f64, @floatFromInt(Trace.clock())) / std.time.ns_per_s;
-    self.api.layer.timing = FrameTiming.init(now, FrameTiming.CACurrentMediaTime(), target_time);
+    self.api.pane.timing = FrameTiming.init(now, FrameTiming.CACurrentMediaTime(), target_time);
     defer {
-        self.api.layer.compositor_target = null;
-        self.api.layer.compositor_queue = null;
-        self.api.layer.timing = null;
+        self.api.pane.compositor_target = null;
+        self.api.pane.compositor_queue = null;
+        self.api.pane.timing = null;
     }
     if (force) self.cells_rebuilt = true;
-    const sequence = self.api.layer.sequence;
-    _ = try self.drawFrameLocked(false, null);
-    return @as(u32, @intFromBool(self.api.layer.sequence != sequence)) |
+    const sequence = self.api.pane.sequence;
+    try self.drawFrameLocked(false, null);
+    return @as(u32, @intFromBool(self.api.pane.sequence != sequence)) |
         (if (self.cells_rebuilt or self.cursor_motion.isActive() or self.scroll.motion.active()) @as(u32, 2) else 0);
 }
 
@@ -1461,18 +1243,12 @@ fn releaseScrollTextures(self: *Self) void {
     self.scroll.reset();
 }
 
-/// The body of `drawFrame`. Must be called with `draw_mutex` held.
-///
-/// Returns true if the display link should be resynced once the
-/// draw mutex is released. This is only ever true on the no-redraw
-/// path, which a sync draw never takes, so the main thread's sync
-/// draws never touch the display link and `syncDisplayLink` stays
-/// on the render thread.
+/// Encode a window pane or explicit snapshot. Caller holds draw_mutex.
 fn drawFrameLocked(
     self: *Self,
     sync: bool,
     snapshot: ?*Snapshot,
-) !bool {
+) !void {
     // After the graphics API is complete (so we defer) we want to
     // update our scrollbar state.
     defer if (self.scrollbar_dirty) {
@@ -1488,7 +1264,7 @@ fn drawFrameLocked(
     self.api.drawFrameStart();
     defer self.api.drawFrameEnd();
 
-    if (snapshot == null and self.api.layer.isDirect() and self.api.layer.drawable == null and self.api.layer.compositor_target == null) return false;
+    if (snapshot == null and self.api.pane.compositor_target == null) return;
 
     // Retrieve the most up-to-date surface size from the Graphics API
     const surface_size: Metal.SurfaceSize = if (snapshot) |s|
@@ -1498,11 +1274,11 @@ fn drawFrameLocked(
 
     // If either of our surface dimensions is zero
     // then drawing is absurd, so we just return.
-    if (surface_size.width == 0 or surface_size.height == 0) return false;
+    if (surface_size.width == 0 or surface_size.height == 0) return;
 
     // Wait until the surface is ready before rebuilding resources
     // or submitting a frame.
-    if (!self.display_realized or !self.visible) return false;
+    if (!self.display_realized or !self.visible) return;
 
     // Get our swap chain, rebuilding it if it was released
     // while we were hidden. Defer rebuilding until a frame is needed.
@@ -1530,15 +1306,11 @@ fn drawFrameLocked(
         self.scroll.failed.load(.acquire) or
         swap_chain_rebuilt or
         self.cells_rebuilt or
-        self.animationWakeLocked() != null or
+        self.cursor_motion.isActive() or self.scroll.motion.active() or
         sync;
 
-    if (!needs_redraw) {
-        // Ask our caller to resync the display link once the draw
-        // mutex is released, because we can probably pause the
-        // display link at this point.
-        return true;
-    }
+    // The window can compose this pane's cached output without re-encoding.
+    if (!needs_redraw) return;
     const trace_start = if (self.trace.file != null) Trace.clock() else 0;
     var copied_bytes: usize = 0;
     defer if (trace_start != 0) {
@@ -1596,9 +1368,9 @@ fn drawFrameLocked(
     };
     if (snapshot) |s| {
         frame.target = s.target;
-    } else if (self.api.layer.compositor_target) |target| {
+    } else if (self.api.pane.compositor_target) |target| {
         frame.target = target;
-    } else if (self.api.layer.drawable) |drawable| frame.target.bindDrawable(drawable);
+    }
 
     // Upload images to the GPU as necessary.
     if (self.images.upload_dirty) self.scroll.key = null;
@@ -1624,7 +1396,7 @@ fn drawFrameLocked(
     if (snapshot == null and self.scroll.motion.update(self.scroll_snapshot.journal, self.scrollbar.offset, self.scroll_snapshot.rows, self.scroll_snapshot.cols, self.scroll_snapshot.alternate, @floatFromInt(self.size.cell.height), scroll_now, scroll_enabled)) {
         self.scroll.previous = self.scroll.presented;
     }
-    if (snapshot == null) self.scroll.motion.sample(if (self.api.layer.timing) |timing| timing.presentation else scroll_now);
+    if (snapshot == null) self.scroll.motion.sample(if (self.api.pane.timing) |timing| timing.presentation else scroll_now);
     if (self.trace.file != null and self.scroll.motion.len > 0) self.trace.emit("scroll", self.scroll.motion.len, @intFromFloat(@abs(self.scroll.motion.regions[0].shown) * 1000), @intFromFloat(@abs(self.scroll.motion.regions[0].start) * 1000));
     if (self.scroll.previous == null) self.scroll.motion.reset();
     self.uniforms.scroll_count = @intCast(self.scroll.motion.len);
@@ -1865,7 +1637,7 @@ fn drawFrameLocked(
         .height = self.size.screen.height,
     });
 
-    return false;
+    return;
 }
 
 // Callback from the graphics API when a frame is completed.
@@ -2197,7 +1969,7 @@ fn updateSmoothCursor(self: *Self) ?CursorMotion.Frame {
         .timing_width = timing_width,
         .shape = shape,
         .mode = self.config.cursor_effect_mode,
-    }, now, if (self.api.layer.timing) |timing| timing.presentation else now) orelse return null;
+    }, now, if (self.api.pane.timing) |timing| timing.presentation else now) orelse return null;
     self.uniforms.smooth_center = frame.pose.center;
     self.uniforms.smooth_trail_count = frame.pose.trail_len;
     for (frame.pose.trail[0..frame.pose.trail_len], 0..) |point, i| {

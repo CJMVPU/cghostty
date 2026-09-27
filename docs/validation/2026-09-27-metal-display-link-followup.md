@@ -1,5 +1,7 @@
 # Metal 显示时序与快照兼容性复查
 
+> 历史验证记录：文中的后端选择与回退已移除。当前实现见[唯一窗口合成器验证](2026-09-27-compositor-only.md)。
+
 继续验证 [第一阶段](2026-09-27-metal-display-link.md)。本轮使用 ReleaseLocal，
 核心为 ReleaseFast；原生测试仍启用 testability 和 coverage，不等同于无插桩发布包。
 运行环境报告 macOS 27.0（26A428）、屏幕最高 120Hz、2× backing scale。

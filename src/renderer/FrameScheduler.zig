@@ -1,66 +1,17 @@
-//! Pure frame scheduling policy. Thread timers and DisplayLink lifecycle stay
-//! with their existing owners; this module never takes locks or reads a clock.
+//! Worker timers only advance image content. Window display callbacks own motion.
 const std = @import("std");
 
-/// Minimum delay for animation wakes (approximately 120 Hz).
-pub const draw_interval_ms: u64 = 8;
+/// Avoid a zero-delay timer loop when an image deadline is already overdue.
+pub const minimum_delay_ms: u64 = 8;
+pub const Wake = struct { delay_ms: u64 };
 
-pub const Wake = struct {
-    delay_ms: u64,
-    kind: Kind,
-
-    pub const Kind = enum {
-        /// Motion only: sample geometry and draw without rebuilding cells.
-        draw,
-        /// Animated image data must advance before drawing.
-        update,
-    };
-};
-
-/// Kitty deadlines are absolute on the caller's animation clock. Repeated
-/// cursor draws must never postpone an image's next frame.
-pub fn nextWake(now_ms: u64, cursor_active: bool, kitty_deadline_ms: ?u64) ?Wake {
-    if (kitty_deadline_ms) |deadline| {
-        const delay = @max(deadline -| now_ms, draw_interval_ms);
-        // Updating includes drawing, so it wins a tie with cursor motion.
-        if (!cursor_active or delay <= draw_interval_ms) {
-            return .{ .delay_ms = delay, .kind = .update };
-        }
-    }
-    if (cursor_active) return .{ .delay_ms = draw_interval_ms, .kind = .draw };
-    return null;
+pub fn nextWake(now_ms: u64, kitty_deadline_ms: u64) Wake {
+    return .{ .delay_ms = @max(kitty_deadline_ms -| now_ms, minimum_delay_ms) };
 }
 
-/// DisplayLink owns cursor-only draws while it is actually running. Kitty
-/// deadlines still need a timer to update image content before display.
-pub fn timerWake(now_ms: u64, cursor_active: bool, kitty_deadline_ms: ?u64, vsync_running: bool) ?Wake {
-    return nextWake(now_ms, cursor_active and !vsync_running, kitty_deadline_ms);
-}
-
-test "FrameScheduler vsync owns motion but not Kitty deadlines and fallback takes over" {
-    const t = std.testing;
-    try t.expectEqual(@as(?Wake, null), timerWake(0, true, null, true));
-    try t.expectEqual(@as(u64, 8), timerWake(0, true, null, false).?.delay_ms);
-    try t.expectEqual(@as(u64, 40), timerWake(0, true, 40, true).?.delay_ms);
-    try t.expectEqual(Wake.Kind.update, timerWake(0, true, 40, true).?.kind);
-    try t.expectEqual(Wake.Kind.draw, timerWake(0, true, 40, false).?.kind);
-    var timer: Timer = .{};
-    _ = timer.request(0, timerWake(0, true, null, false));
-    try t.expect(timer.request(1, timerWake(1, true, null, true)) == .cancel);
-    try t.expect(timer.request(2, timerWake(2, true, null, false)) == .arm);
-    try t.expect(timer.request(3, null) == .cancel);
-    try t.expect(timer.request(4, timerWake(4, true, 44, true)) == .arm);
-    try t.expectEqual(@as(u64, 44), timer.pending.?.deadline_ms);
-}
-
-pub fn needsDisplayLink(visible: bool, cells_rebuilt: bool, wake: ?Wake) bool {
-    return visible and (cells_rebuilt or wake != null);
-}
-
-/// Render-thread-owned timer policy. Frequent terminal updates must not push
-/// an already scheduled animation wake farther into the future.
+/// Frequent terminal input must not postpone an already scheduled image frame.
 pub const Timer = struct {
-    pending: ?struct { deadline_ms: u64, kind: Wake.Kind } = null,
+    pending: ?u64 = null,
     pub const Action = union(enum) { keep, cancel, arm: Wake };
 
     pub fn request(self: *Timer, now_ms: u64, wake: ?Wake) Action {
@@ -71,89 +22,38 @@ pub const Timer = struct {
         };
         const deadline = now_ms +| next.delay_ms;
         if (self.pending) |previous| {
-            if (previous.deadline_ms <= deadline) {
-                // At the same deadline, update subsumes draw without changing
-                // the timer. A later update is reconsidered after this draw.
-                if (previous.deadline_ms == deadline and next.kind == .update)
-                    self.pending.?.kind = .update;
-                return .keep;
-            }
+            if (previous <= deadline) return .keep;
         }
-        self.pending = .{ .deadline_ms = deadline, .kind = next.kind };
+        self.pending = deadline;
         return .{ .arm = next };
     }
 
-    pub fn fired(self: *Timer) ?Wake.Kind {
-        const pending = self.pending orelse return null;
+    pub fn fired(self: *Timer) bool {
+        const pending = self.pending != null;
         self.pending = null;
-        return pending.kind;
+        return pending;
     }
 };
 
-test "FrameScheduler timer keeps earlier deadlines under continuous input" {
+test "FrameScheduler continuous input preserves the image deadline" {
+    const t = std.testing;
     var timer: Timer = .{};
-    try std.testing.expect(timer.request(0, nextWake(0, true, 40)) == .arm);
-    for (1..8) |now| try std.testing.expect(timer.request(now, nextWake(now, true, 40)) == .keep);
-    try std.testing.expectEqual(@as(u64, 8), timer.pending.?.deadline_ms);
-    try std.testing.expectEqual(Wake.Kind.draw, timer.fired().?);
-    try std.testing.expect(timer.request(8, nextWake(8, false, 40)) == .arm);
-    try std.testing.expect(timer.request(16, nextWake(16, true, 40)) == .arm);
-    try std.testing.expectEqual(@as(u64, 24), timer.pending.?.deadline_ms);
-    _ = timer.fired();
-    _ = timer.request(32, nextWake(32, true, 40));
-    try std.testing.expectEqual(Wake.Kind.update, timer.fired().?);
+    try t.expect(timer.request(0, nextWake(0, 40)) == .arm);
+    for (1..32) |now| try t.expect(timer.request(now, nextWake(now, 40)) == .keep);
+    try t.expectEqual(@as(?u64, 40), timer.pending);
+    try t.expect(timer.fired());
+    try t.expect(!timer.fired());
+    try t.expectEqual(minimum_delay_ms, nextWake(100, 40).delay_ms);
 }
 
-test "FrameScheduler timer cancels idle and hidden work and upgrades ties" {
+test "FrameScheduler hidden or completed images cancel and resume" {
+    const t = std.testing;
     var timer: Timer = .{};
-    _ = timer.request(0, .{ .delay_ms = 8, .kind = .draw });
-    try std.testing.expect(timer.request(0, .{ .delay_ms = 8, .kind = .update }) == .keep);
-    try std.testing.expectEqual(Wake.Kind.update, timer.fired().?);
-    _ = timer.request(8, .{ .delay_ms = 8, .kind = .draw });
-    try std.testing.expect(timer.request(9, null) == .cancel);
-    try std.testing.expect(timer.fired() == null);
-    try std.testing.expect(timer.request(10, null) == .keep);
-    try std.testing.expect(timer.request(100, .{ .delay_ms = 8, .kind = .draw }) == .arm);
-}
-
-test "FrameScheduler idle and completed motion stop requesting frames" {
-    const testing = std.testing;
-    try testing.expectEqual(@as(?Wake, null), nextWake(100, false, null));
-    const moving = nextWake(100, true, null).?;
-    try testing.expectEqual(Wake.Kind.draw, moving.kind);
-    try testing.expectEqual(draw_interval_ms, moving.delay_ms);
-    try testing.expect(!needsDisplayLink(true, false, nextWake(108, false, null)));
-}
-
-test "FrameScheduler continuous cursor draws do not starve image updates" {
-    const testing = std.testing;
-    // A 40 ms image frame becomes due even while cursor input keeps arriving.
-    for (0..4) |frame| {
-        const wake = nextWake(frame * 8, true, 40).?;
-        try testing.expectEqual(Wake.Kind.draw, wake.kind);
-        try testing.expectEqual(draw_interval_ms, wake.delay_ms);
-    }
-    const due = nextWake(32, true, 40).?;
-    try testing.expectEqual(Wake.Kind.update, due.kind);
-    try testing.expectEqual(draw_interval_ms, due.delay_ms);
-}
-
-test "FrameScheduler image deadlines retain remaining time without motion" {
-    const testing = std.testing;
-    const first = nextWake(10, false, 80).?;
-    const later = nextWake(30, false, 80).?;
-    try testing.expectEqual(Wake.Kind.update, first.kind);
-    try testing.expectEqual(@as(u64, 70), first.delay_ms);
-    try testing.expectEqual(@as(u64, 50), later.delay_ms);
-    // No unsigned underflow or zero-delay spin for an overdue frame.
-    try testing.expectEqual(draw_interval_ms, nextWake(100, false, 80).?.delay_ms);
-}
-
-test "FrameScheduler visibility gates display link and resumes pending work" {
-    const testing = std.testing;
-    const wake = nextWake(0, true, 40);
-    try testing.expect(!needsDisplayLink(false, true, wake));
-    try testing.expect(needsDisplayLink(true, false, wake));
-    try testing.expect(needsDisplayLink(true, true, null));
-    try testing.expect(!needsDisplayLink(true, false, null));
+    _ = timer.request(0, nextWake(0, 40));
+    try t.expect(timer.request(1, null) == .cancel);
+    try t.expect(!timer.fired());
+    try t.expect(timer.request(2, null) == .keep);
+    try t.expect(timer.request(100, nextWake(100, 150)) == .arm);
+    try t.expect(timer.request(110, nextWake(110, 130)) == .arm);
+    try t.expectEqual(@as(?u64, 130), timer.pending);
 }

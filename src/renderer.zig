@@ -2,7 +2,7 @@
 //! taking the internal screen state and turning into some output format,
 //! usually for a screen.
 //!
-//! The Metal renderer presents frames through an IOSurface-backed layer
+//! The Metal renderer supplies cached pane textures to the window compositor
 //! attached to the native macOS view supplied by the application runtime.
 
 const cursor = @import("renderer/cursor.zig");
@@ -10,7 +10,6 @@ const message = @import("renderer/message.zig");
 const size = @import("renderer/size.zig");
 pub const FrameScheduler = @import("renderer/FrameScheduler.zig");
 pub const CellUpload = @import("renderer/CellUpload.zig");
-pub const Presentation = @import("renderer/Presentation.zig");
 pub const CursorMotion = @import("renderer/CursorMotion.zig");
 pub const SmoothCursor = @import("renderer/SmoothCursor.zig");
 pub const CursorTrail = @import("renderer/CursorTrail.zig");
@@ -49,7 +48,6 @@ test {
     _ = @import("renderer/ScrollMotion.zig");
     _ = @import("renderer/ScrollScene.zig");
     _ = @import("renderer/FrameTiming.zig");
-    _ = @import("renderer/MetalRunLoop.zig");
     _ = @import("renderer/CursorOverlay.zig");
     _ = @import("renderer/ScrollHit.zig");
     _ = @import("terminal/ScrollState.zig");
@@ -68,8 +66,6 @@ test {
     _ = CursorTrail;
     _ = FrameScheduler;
     _ = CellUpload;
-    _ = Presentation;
-    _ = @import("renderer/PresentationQueue.zig");
     _ = @import("renderer/Trace.zig");
     _ = size;
     _ = Thread;

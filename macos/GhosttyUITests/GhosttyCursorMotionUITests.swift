@@ -174,14 +174,14 @@ final class GhosttyCursorMotionUITests: GhosttyCustomConfigCase {
     }
 
     @MainActor func testStableBodyAndTailThroughMetal() throws {
-        try runMotion(vsync: true)
+        try runMotion(padded: true)
     }
 
-    @MainActor func testStableBodyAndTailWithoutVsync() throws {
-        try runMotion(vsync: false)
+    @MainActor func testStableBodyAndTailWithoutPadding() throws {
+        try runMotion(padded: false)
     }
 
-    @MainActor private func runMotion(vsync: Bool) throws {
+    @MainActor private func runMotion(padded: Bool) throws {
         try XCTSkipIf(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, "Motion is disabled by system accessibility settings")
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -236,9 +236,8 @@ final class GhosttyCursorMotionUITests: GhosttyCustomConfigCase {
         background = #000000
         foreground = #ffffff
         font-size = 16
-        window-vsync = \(vsync)
-        window-padding-x = \(vsync ? 12 : 0)
-        window-padding-y = \(vsync ? 8 : 0)
+        window-padding-x = \(padded ? 12 : 0)
+        window-padding-y = \(padded ? 8 : 0)
         """)
         let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         app.launchEnvironment["MTL_DEBUG_LAYER"] = "1"

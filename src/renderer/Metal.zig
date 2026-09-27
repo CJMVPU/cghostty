@@ -6,7 +6,6 @@ const assert = @import("../quirks.zig").inlineAssert;
 const Allocator = std.mem.Allocator;
 const objc = @import("objc");
 const macos = @import("macos");
-const graphics = macos.graphics;
 const apprt = @import("../apprt.zig");
 const font = @import("../font/main.zig");
 const configpkg = @import("../config.zig");
@@ -14,7 +13,7 @@ const rendererpkg = @import("../renderer.zig");
 const Renderer = rendererpkg.Renderer;
 
 const mtl = @import("metal/api.zig");
-const PresentationLayer = @import("metal/PresentationLayer.zig");
+const CompositorPane = @import("metal/CompositorPane.zig");
 
 pub const Target = @import("metal/Target.zig");
 pub const Frame = @import("metal/Frame.zig");
@@ -32,14 +31,12 @@ pub const swap_chain_count = 3;
 
 const log = std.log.scoped(.metal);
 
-layer: PresentationLayer,
+pane: CompositorPane,
 
 /// MTLDevice
 device: objc.Object,
 /// MTL4CommandQueue
 queue: objc.Object,
-/// Layer-owned drawable residency; never modify its allocations.
-drawable_residency: ?objc.Object = null,
 
 /// Alpha blending mode
 blending: configpkg.Config.AlphaBlending,
@@ -85,25 +82,15 @@ pub fn init(alloc: Allocator, opts: rendererpkg.Options) !Metal {
         else => @compileError("unsupported apprt for metal"),
     };
 
-    // Host either the established IOSurface path or an opt-in Metal layer.
-    var layer = try PresentationLayer.init(
-        opts.config.metal_display_link,
-        opts.config.window_compositor,
-        device,
-        @intFromEnum(if (opts.config.blending.isLinear()) mtl.MTLPixelFormat.bgra8unorm_srgb else mtl.MTLPixelFormat.bgra8unorm),
-        opts.config.frame_latency,
-    );
-    errdefer layer.release();
+    var pane = CompositorPane.init();
+    errdefer pane.release();
 
-    const residency: ?objc.Object = if (layer.isMetal()) layer.layer.getProperty(objc.Object, "residencySet").retain() else null;
-    if (residency) |set| queue.msgSend(void, "addResidencySet:", .{set});
-
-    // Add our layer to the view.
+    // Add the transparent structural layer to the input view.
     //
     // Make the NSView "layer-hosting"
     // by assigning it to the view's `layer` property BEFORE
     // setting `wantsLayer` to `true`.
-    info.view.setProperty("layer", layer.layer.value);
+    info.view.setProperty("layer", pane.layer.value);
     info.view.setProperty("wantsLayer", true);
 
     // Ensure that if our layer is oversized it
@@ -113,44 +100,21 @@ pub fn init(alloc: Allocator, opts: rendererpkg.Options) !Metal {
     // Ensure that our layer has a content scale set to
     // match the scale factor of the window. This avoids
     // magnification issues leading to blurry rendering.
-    layer.layer.setProperty("contentsScale", info.scaleFactor);
-
-    // This makes it so that our display callback will actually be called.
-    layer.layer.setProperty("needsDisplayOnBoundsChange", true);
+    pane.layer.setProperty("contentsScale", info.scaleFactor);
 
     return .{
-        .layer = layer,
+        .pane = pane,
         .device = device,
         .queue = queue,
-        .drawable_residency = residency,
         .blending = opts.config.blending,
         .max_texture_size = max_texture_size,
     };
 }
 
 pub fn deinit(self: *Metal) void {
-    if (self.drawable_residency) |set| {
-        self.queue.msgSend(void, "removeResidencySet:", .{set});
-        set.release();
-    }
     self.queue.release();
     self.device.release();
-    self.layer.release();
-}
-
-pub fn loopEnter(self: *Metal) void {
-    const renderer: *align(1) Renderer = @fieldParentPtr("api", self);
-    self.layer.setTrace(@alignCast(&renderer.trace));
-    self.layer.setDisplayCallback(
-        @ptrCast(&displayCallback),
-        @ptrCast(renderer),
-    );
-}
-
-fn displayCallback(renderer: *Renderer) align(8) void {
-    renderer.drawFrame(true) catch |err| {
-        log.warn("Error drawing frame in display callback, err={}", .{err});
-    };
+    self.pane.release();
 }
 
 /// Actions taken before doing anything in `drawFrame`.
@@ -196,42 +160,19 @@ pub fn reduceMotion(_: *const Metal) bool {
 
 pub const SurfaceSize = struct { width: u32, height: u32 };
 
-/// Get the current size of the runtime surface.
+/// Drawing requires an explicit texture supplied by the window compositor.
 pub fn surfaceSize(self: *const Metal) !SurfaceSize {
-    if (self.layer.compositor_target) |target| return .{ .width = @intCast(target.width), .height = @intCast(target.height) };
-    if (self.layer.drawable) |drawable| {
-        const texture = drawable.getProperty(objc.Object, "texture");
-        return .{ .width = @intCast(texture.getProperty(c_ulong, "width")), .height = @intCast(texture.getProperty(c_ulong, "height")) };
-    }
-    const bounds = self.layer.layer.getProperty(graphics.Rect, "bounds");
-    const scale = self.layer.layer.getProperty(f64, "contentsScale");
-
-    // We need to clamp our runtime surface size to the maximum
-    // possible texture size since we can't create a screen buffer (texture)
-    // larger than that.
-    return .{
-        .width = @min(
-            @as(u32, @intFromFloat(bounds.size.width * scale)),
-            self.max_texture_size,
-        ),
-        .height = @min(
-            @as(u32, @intFromFloat(bounds.size.height * scale)),
-            self.max_texture_size,
-        ),
-    };
+    const target = self.pane.compositor_target orelse return error.MissingCompositorTarget;
+    return .{ .width = @intCast(target.width), .height = @intCast(target.height) };
 }
 
 pub fn setBlending(self: *Metal, blending: configpkg.Config.AlphaBlending) void {
     self.blending = blending;
-    if (self.layer.isMetal()) self.layer.layer.setProperty("pixelFormat", @as(c_ulong, @intFromEnum(
-        if (blending.isLinear()) mtl.MTLPixelFormat.bgra8unorm_srgb else mtl.MTLPixelFormat.bgra8unorm,
-    )));
 }
 
 /// Initialize a new render target which can be presented by this API.
-pub fn initTarget(self: *const Metal, width: usize, height: usize) !Target {
-    if (self.layer.isDirect()) return .{ .surface = null, .texture = undefined, .width = width, .height = height };
-    return self.initSnapshotTarget(width, height);
+pub fn initTarget(_: *const Metal, width: usize, height: usize) !Target {
+    return .{ .texture = undefined, .width = width, .height = height };
 }
 
 /// Independent readable target, allocated only for an explicit snapshot.
@@ -260,15 +201,6 @@ pub fn initContentTexture(self: *const Metal, width: usize, height: usize) !Text
         .resource_options = .{ .storage_mode = .private },
         .usage = .{ .shader_read = true, .render_target = true },
     }, width, height, null);
-}
-
-/// Present the provided target.
-pub inline fn present(self: *Metal, target: Target, sync: bool, sequence: u64) !void {
-    if (sync) {
-        self.layer.setSurfaceSync(target.surface, sequence);
-    } else {
-        try self.layer.setSurface(target.surface, sequence);
-    }
 }
 
 /// Returns the options to use when constructing buffers.

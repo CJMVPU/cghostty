@@ -1,5 +1,7 @@
 # 窗口帧时钟合并更新
 
+> 历史验证记录：文中的后端选择与回退已移除。当前实现见[唯一窗口合成器验证](2026-09-27-compositor-only.md)。
+
 在检查点 `86a8a8ba7` 的每窗口合成器上继续实现。
 配置仍为 `render-presentation = window-compositor`；默认仍使用 IOSurface。
 

@@ -1,4 +1,5 @@
 import AppKit
+import GhosttyKit
 import Metal
 import QuartzCore
 import Testing
@@ -6,16 +7,16 @@ import Testing
 
 @Suite(.serialized)
 @MainActor struct WindowCompositorTests {
-    @Test(arguments: ["native", "linear", "linear-corrected"])
-    func panesShareClockCacheAndMoveWithoutLosingSession(blending: String) async throws {
+    @Test(arguments: ["native", "linear", "linear-corrected"], [1, 2])
+    func panesShareClockCacheAndMoveWithoutLosingSession(blending: String, latency: Int) async throws {
         let traceDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("cghostty-window-\(blending)-\(UUID().uuidString)")
         print("Window compositor trace: \(traceDirectory.path)")
         let config = try TemporaryConfig("""
-        render-presentation = window-compositor
         cursor-style-blink = false
         cursor-effect = false
         shell-integration = none
         alpha-blending = \(blending)
+        render-frame-latency = \(latency)
         render-trace = true
         render-trace-directory = \(traceDirectory.path)
         """)
@@ -37,6 +38,7 @@ import Testing
         right.sizeDidChange(right.bounds.size)
         leftSurface.setVisible(true)
         rightSurface.setVisible(true)
+        #expect(leftSurface.compositorInfo.latency == Float(latency))
         let owner = try #require(left.windowCompositor)
         owner.updateGeometry()
         defer {
@@ -55,6 +57,19 @@ import Testing
         // Verify both cached panes pass through the actual final Metal shader.
         try assertColors(owner.worker, split: 0.5)
         try await wait { owner.worker.isIdle }
+        // Shared-texture snapshots preserve P3 color in every blending mode.
+        for (view, red) in [(left, true), (right, false)] {
+            let png = try #require(view.thumbnailPNG())
+            let bitmap = try #require(NSBitmapImageRep(data: png))
+            #expect(bitmap.colorSpace == .sRGB)
+            // colorAt returns device RGB and can apply the display profile a
+            // second time. Check decoded samples in the PNG's declared space.
+            var pixel = [UInt](repeating: 0, count: 4)
+            bitmap.getPixel(&pixel, atX: bitmap.pixelsWide / 2, y: bitmap.pixelsHigh / 2)
+            #expect(pixel[3] > 252)
+            #expect(pixel[red ? 0 : 1] > 242)
+            #expect(pixel[red ? 1 : 0] < 13)
+        }
         let completedBeforeInput = owner.worker.statistics.completed
         #expect(leftSurface.sendKeyEvent(.init(keyCode: 0, action: .press, text: "main-blocked")))
         // This synchronous wait deliberately holds the main actor. It can only
@@ -115,7 +130,6 @@ import Testing
     @Test func closeReleasesSessionEvenWhileLayerRemainsRetained() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("cghostty-window-close-\(UUID().uuidString)")
         let config = try TemporaryConfig("""
-        render-presentation = window-compositor
         cursor-style-blink = false
         cursor-effect = false
         render-trace = true
@@ -146,7 +160,6 @@ import Testing
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("cghostty-frame-clock-\(UUID().uuidString)")
         print("Window frame clock trace: \(directory.path)")
         let config = try TemporaryConfig("""
-        render-presentation = window-compositor
         cursor-style-blink = false
         cursor-effect = false
         shell-integration = none
@@ -212,7 +225,6 @@ import Testing
     @Test(arguments: ["cursor", "kitty"])
     func animationDeadlinesKeepWorkingWithoutNewOutput(animation: String) async throws {
         let config = try TemporaryConfig("""
-        render-presentation = window-compositor
         cursor-style-blink = \(animation == "cursor")
         cursor-effect = false
         shell-integration = none
@@ -246,6 +258,43 @@ import Testing
         if animation == "cursor" { surface.setFocus(false) }
         try await wait { owner.worker.isIdle }
         #expect(owner.worker.statistics.failed == 0)
+    }
+
+    @Test func sharedTextureSnapshotPreservesAlphaAndOutlivesSession() async throws {
+        let config = try TemporaryConfig("""
+        background = #123456
+        background-opacity = 0.5
+        background-blur = false
+        cursor-style-blink = false
+        cursor-effect = false
+        shell-integration = none
+        """)
+        let app = Ghostty.App(configPath: config.temporaryFile.path)
+        var base = Ghostty.SurfaceConfiguration()
+        base.command = "/bin/sh -c 'printf snapshot-ready; exec /bin/cat'"
+        var view: Ghostty.SurfaceView? = Ghostty.SurfaceView(app, baseConfig: base)
+        weak let surface = view?.surfaceModel
+        let window = makeWindow()
+        defer { window.close() }
+        window.contentView = view
+        window.orderFront(nil)
+        view?.sizeDidChange(window.contentView!.bounds.size)
+        surface?.setVisible(true)
+        let owner = try #require(view?.windowCompositor)
+        owner.updateGeometry()
+        try await wait {
+            surface?.readContents(viewport: false).contains("snapshot-ready") == true &&
+            owner.worker.statistics.paneDraws > 0 && owner.worker.isIdle
+        }
+        let snapshot = try #require(surface?.copySnapshot())
+        window.close()
+        window.contentView = nil
+        view = nil
+        try await wait { surface == nil }
+        let bitmap = NSBitmapImageRep(cgImage: snapshot)
+        let color = try #require(bitmap.colorAt(x: bitmap.pixelsWide / 2, y: bitmap.pixelsHigh / 2))
+        #expect(abs(color.alphaComponent - 0.5) < 0.02)
+        #expect(bitmap.pixelsWide > 0 && bitmap.pixelsHigh > 0)
     }
 
     private func assertColors(_ worker: WindowCompositorWorker, split: Double) throws {

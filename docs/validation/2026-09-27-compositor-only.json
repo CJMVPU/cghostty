@@ -1,0 +1,35 @@
+{
+  "checkpoint": "c99f172b6",
+  "presentation": "window compositor only; no fallback",
+  "snapshot": "shared Metal texture -> getBytes -> Display P3 CGImage -> sRGB PNG",
+  "native_tests": {
+    "passed": 358,
+    "suites": 47
+  },
+  "zig_tests": {
+    "passed": 99,
+    "build_steps": 72
+  },
+  "trace_tests": 6,
+  "coalescing": {
+    "compositor_updates": 4,
+    "compositor_update_requests": 527,
+    "compositor_requests_per_update": {
+      "count": 4,
+      "mean": 131.75,
+      "median": 4.0,
+      "p99": 518,
+      "p95": 518,
+      "max": 518
+    },
+    "compositor_duplicate_pane_updates": 0,
+    "trace_records_dropped": 0
+  },
+  "limitations": "Controlled scheduling and correctness tests, not input-to-photon or energy measurements.",
+  "release_local": {
+    "built": true,
+    "scope_architecture_resources_signature": "passed",
+    "imports_iosurface_or_cvdisplaylink": false,
+    "installed": false
+  }
+}

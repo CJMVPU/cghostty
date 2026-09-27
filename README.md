@@ -122,34 +122,26 @@ smooth-scroll = true
 跨屏时仍更新渲染像素尺寸，显示区域不足时将窗口约束到屏幕范围。
 Quick Terminal 使用启动时的 `quick-terminal-size`，不恢复过去手动调整的尺寸。
 
-### 实验性 Metal 呈现
-
-默认继续使用 IOSurface 呈现。窗口合成器原型可在配置中显式开启，重启后生效：
-
-```ini
-render-presentation = window-compositor
-render-frame-latency = 1
-```
+### 窗口级 Metal 合成器
 
 每个窗口使用一个 CAMetalLayer、一个 CAMetalDisplayLink 和一个呈现线程。
 分屏绘制到各自的缓存纹理，再通过同一条 Metal 4 队列合成为一个 drawable；没有变化的分屏复用缓存。
-输入法、鼠标、无障碍、搜索栏和滚动条仍由原生视图负责。IO 唤醒只标记待更新，
-窗口帧回调统一读取各分屏状态，每帧每分屏最多更新一次。暂时保留每分屏的辅助线程处理消息、
-动画定时器和滚动历史压缩；光标和平滑滚动仍在分屏渲染器内绘制。
+这是唯一的呈现路径，不保留旧后端或自动回退。
 
-`render-frame-latency` 只接受 `1` 或 `2`，表示帧调度偏好，并非按键到屏幕的延迟保证。
+IO 唤醒登记待更新，窗口帧回调统一读取各分屏状态，每帧每分屏最多更新一次。
+输入法、鼠标、无障碍、搜索栏和滚动条仍由原生视图负责。每分屏的辅助线程暂时保留，
+负责消息、动画定时器和滚动历史压缩；光标和平滑滚动仍在分屏渲染器内绘制。
+
+```ini
+render-frame-latency = 1
+```
+
+该配置只接受 `1` 或 `2`，重启后生效；它表示帧调度偏好，并非按键到屏幕的延迟保证。
 动画按预计显示时刻取样，实际上屏反馈写入 render-trace；空闲暂停，刷新率由系统决定。
-`window-vsync` 仅影响原来的 IOSurface 路径。
+缩略图按需绘制到独立的共享 Metal 纹理并读回像素，不使用 IOSurface，也不占用窗口 drawable。
 
-对照实验仍可选择 `render-presentation = metal-display-link`，它为每个分屏各自创建图层和帧时钟。
-恢复原路径：将 `render-presentation` 改为 `iosurface` 并重启。
-
-窗口合成器的实现边界、验证和后续工作见
-[窗口合成器原型验证](docs/validation/2026-09-27-window-compositor.md)及
-[窗口帧时钟合并更新验证](docs/validation/2026-09-27-window-frame-clock.md)。
-当前尚未证明端到端延迟改善。第一阶段数据保留在
-[Metal display link 验证](docs/validation/2026-09-27-metal-display-link.md)和
-[ReleaseLocal 时序与快照复查](docs/validation/2026-09-27-metal-display-link-followup.md)中。
+`render-presentation` 和 `window-vsync` 已删除，旧配置中的这两项需要移除。
+验证与当前边界见[唯一窗口合成器验证](docs/validation/2026-09-27-compositor-only.md)。
 
 ### 校验与恢复
 

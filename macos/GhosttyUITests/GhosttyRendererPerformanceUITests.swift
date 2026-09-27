@@ -4,10 +4,9 @@ import XCTest
 /// Fixed-duration workloads, not performance thresholds. Compare identical
 /// ReleaseLocal runs; trace timings include instrumentation and scheduling.
 final class GhosttyRendererPerformanceUITests: GhosttyCustomConfigCase {
-    @MainActor func testVsyncWorkloads() throws { try runWorkloads(vsync: true) }
-    @MainActor func testTimerWorkloads() throws { try runWorkloads(vsync: false) }
+    @MainActor func testWindowCompositorWorkloads() throws { try runWorkloads() }
 
-    @MainActor private func runWorkloads(vsync: Bool) throws {
+    @MainActor private func runWorkloads() throws {
         try XCTSkipIf(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, "Motion disabled")
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -59,7 +58,6 @@ final class GhosttyRendererPerformanceUITests: GhosttyCustomConfigCase {
         font-size = 10
         window-width = 140
         window-height = 42
-        window-vsync = \(vsync)
         render-trace = true
         render-trace-directory = \(directory.path)
         """)
@@ -86,7 +84,7 @@ final class GhosttyRendererPerformanceUITests: GhosttyCustomConfigCase {
             for (file, lines) in ends {
                 let slice = lines.dropFirst(starts[file]?.count ?? 0).joined(separator: "\n")
                 let attachment = XCTAttachment(data: Data(slice.utf8), uniformTypeIdentifier: "public.comma-separated-values-text")
-                attachment.name = "perf-\(vsync ? "vsync" : "timer")-\(phase)-\(file)"
+                attachment.name = "perf-window-\(phase)-\(file)"
                 attachment.lifetime = .keepAlways
                 add(attachment)
             }

@@ -21,7 +21,10 @@ def check(condition, message):
 
 subprocess.run([sys.executable, str(ROOT / 'scripts/check-bridge.py')], check=True)
 
-for name in ('src/apprt/gtk', 'src/apprt/gtk.zig', 'src/main_wasm.zig',
+for name in ('src/renderer/metal/IOSurfaceLayer.zig', 'src/renderer/metal/PresentationLayer.zig',
+             'src/renderer/Presentation.zig', 'src/renderer/PresentationQueue.zig',
+             'src/renderer/MetalRunLoop.zig', 'pkg/macos/iosurface.zig', 'pkg/macos/video.zig',
+             'src/apprt/gtk', 'src/apprt/gtk.zig', 'src/main_wasm.zig',
              'src/lib_vt.zig', 'src/terminal/c', 'include/ghostty',
              'src/terminal/snapshot', 'src/terminal/stream_continuation.zig',
              'src/crc32c.zig', 'src/lib/struct.zig', 'src/lib/union.zig', 'src/lib/packed.zig',
@@ -51,6 +54,18 @@ for name in ('src/apprt/gtk', 'src/apprt/gtk.zig', 'src/main_wasm.zig',
              'macos/Sources/Features/Terminal/Window Styles/TitlebarTabsVenturaTerminalWindow.swift',
              'macos/Sources/Features/Terminal/Window Styles/TerminalTabsTitlebarVentura.xib'):
     check(not (ROOT / name).exists(), f'Out-of-scope source returned: {name}')
+
+# The window compositor is the only presentation path, including screenshots.
+config_source = (ROOT / 'src/config/Config.zig').read_text()
+for key in ('render-presentation', 'window-vsync'):
+    check(f'@"{key}":' not in config_source, f'Removed presentation option returned: {key}')
+for folder in ('src/renderer', 'pkg/macos', 'macos/Sources'):
+    for path in (ROOT / folder).rglob('*'):
+        if path.suffix not in ('.zig', '.swift'):
+            continue
+        content = path.read_text()
+        for token in ('IOSurface', 'CVDisplayLink'):
+            check(token not in content, f'Removed presentation API {token} returned: {path}')
 
 project = json.loads(subprocess.check_output([
     'plutil', '-convert', 'json', '-o', '-',
@@ -129,6 +144,8 @@ if args.app:
     keys = {line.split('=', 1)[0].strip() for line in defaults.splitlines() if '=' in line}
     check(not any(key.startswith(('gtk-', 'linux-cgroup', 'auto-update')) for key in keys),
           'Removed platform/updater configuration is still exposed')
+    check(not {'render-presentation', 'window-vsync'} & keys, 'Removed presentation selection remains')
+    check('render-frame-latency' in keys, 'Window compositor latency setting is missing')
     check('cursor-effect' in keys, 'Native cursor effect is missing')
     check(not {'custom-shader', 'custom-shader-animation'} & keys, 'GLSL configuration remains')
     check(not {'class', 'language', 'x11-instance-name'} & keys, 'GTK-only configuration remains')

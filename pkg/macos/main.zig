@@ -7,8 +7,6 @@ pub const dispatch = @import("dispatch.zig");
 pub const graphics = @import("graphics.zig");
 pub const os = @import("os.zig");
 pub const text = @import("text.zig");
-pub const video = @import("video.zig");
-pub const iosurface = @import("iosurface.zig");
 
 pub const c = @import("macos_c");
 

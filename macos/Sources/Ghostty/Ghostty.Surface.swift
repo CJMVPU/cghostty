@@ -1,6 +1,6 @@
 import Cocoa
 import GhosttyKit
-import IOSurface
+import Metal
 
 extension Ghostty {
     /// Owns one core terminal handle and exposes native terminal operations.
@@ -50,8 +50,6 @@ extension Ghostty {
                 withExtendedLifetime((app, callbackContext)) { ghostty_surface_free(surface) }
             }
         }
-
-        nonisolated var usesWindowCompositor: Bool { ghostty_surface_uses_compositor(surface) }
 
         nonisolated func setCompositor(_ sink: AnyObject?) {
             ghostty_surface_set_compositor(surface, sink.map { Unmanaged.passUnretained($0).toOpaque() })
@@ -170,7 +168,6 @@ extension Ghostty {
                         pixels: CGSize(width: Int(value.width_px), height: Int(value.height_px)),
                         cellPixels: CGSize(width: Int(value.cell_width_px), height: Int(value.cell_height_px)))
         }
-        @MainActor func setDisplayID(_ id: UInt32) { ghostty_surface_set_display_id(surface, id) }
         @MainActor func setContentScale(x: Double, y: Double) { ghostty_surface_set_content_scale(surface, x, y) }
         @MainActor func setColorScheme(dark: Bool) {
             ghostty_surface_set_color_scheme(surface, dark ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT)
@@ -242,9 +239,23 @@ extension Ghostty {
 
         @MainActor var renderRevision: UInt64 { ghostty_surface_render_revision(surface) }
 
-        @MainActor func copySnapshot() -> IOSurfaceRef? {
-            guard let value = ghostty_surface_copy_snapshot(surface) else { return nil }
-            return Unmanaged<IOSurfaceRef>.fromOpaque(value).takeRetainedValue()
+        /// Explicit readback from an independent Metal texture; no window drawable is retained.
+        @MainActor func copySnapshot() -> CGImage? {
+            guard let value = ghostty_surface_copy_snapshot(surface),
+                  let texture = Unmanaged<AnyObject>.fromOpaque(value).takeRetainedValue() as? any MTLTexture,
+                  let colorSpace = CGColorSpace(name: CGColorSpace.displayP3) else { return nil }
+            let rowBytes = texture.width * 4
+            var pixels = Data(count: rowBytes * texture.height)
+            pixels.withUnsafeMutableBytes { buffer in
+                texture.getBytes(buffer.baseAddress!, bytesPerRow: rowBytes,
+                    from: MTLRegionMake2D(0, 0, texture.width, texture.height), mipmapLevel: 0)
+            }
+            guard let provider = CGDataProvider(data: pixels as CFData) else { return nil }
+            return CGImage(width: texture.width, height: texture.height,
+                bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: rowBytes, space: colorSpace,
+                bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue)
+                    .union(.byteOrder32Little), provider: provider, decode: nil,
+                shouldInterpolate: true, intent: .relativeColorimetric)
         }
 
         @MainActor var selection: TextSnapshot? {

@@ -1,5 +1,7 @@
 # CAMetalDisplayLink 第一阶段验证（2026-09-27）
 
+> 历史验证记录：文中的后端选择与回退已移除。当前实现见[唯一窗口合成器验证](2026-09-27-compositor-only.md)。
+
 本轮实现可选的每分屏 CAMetalLayer + CAMetalDisplayLink 后端，默认仍为
 IOSurface。配置在应用启动时读取，设置 `render-presentation = metal-display-link`
 后重启生效；`render-frame-latency = 1` 或 `2` 用于实验。

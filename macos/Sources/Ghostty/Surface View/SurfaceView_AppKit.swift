@@ -784,14 +784,6 @@ extension Ghostty {
         @objc private func windowDidChangeScreen(notification: SwiftUI.Notification) {
             guard let window = self.window else { return }
             guard let object = notification.object as? NSWindow, window == object else { return }
-            guard let screen = window.screen else { return }
-            guard let surface = self.surfaceModel else { return }
-
-            // When the window changes screens, we need to update libghostty with the screen
-            // ID. If vsync is enabled, this will be used with the CVDisplayLink to ensure
-            // the proper refresh rate is going.
-            surface.setDisplayID(screen.displayID ?? 0)
-
             // We also just trigger a backing property change. Just in case the screen has
             // a different scaling factor, this ensures that we update our content scale.
             // Issue: https://github.com/ghostty-org/ghostty/issues/2731

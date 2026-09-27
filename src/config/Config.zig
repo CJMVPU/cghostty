@@ -1818,35 +1818,9 @@ keybind: Keybinds = .{},
 ///   don't look good extended.
 @"window-padding-color": WindowPaddingColor = .background,
 
-/// Synchronize rendering with the screen refresh rate. If true, this will
-/// minimize tearing and align redraws with the screen but may cause input
-/// latency. If false, this will maximize redraw frequency but may cause tearing,
-/// and under heavy load may use more CPU and power.
-///
-/// This defaults to true because out-of-sync rendering on macOS can
-/// cause kernel panics (macOS 14.4+) and performance issues for external
-/// displays over some hardware such as DisplayLink. If you want to minimize
-/// input latency, set this to false with the known aforementioned risks.
-///
-/// Configuration file changes take effect after restarting cghostty.
-/// Runtime actions such as keyboard shortcuts do not reload the file.
-///
-/// This setting is only supported currently on macOS.
-@"window-vsync": bool = true,
-
-/// Experimental presentation backend. `iosurface` retains the
-/// established renderer. `metal-display-link` uses CAMetalLayer drawables and
-/// CAMetalDisplayLink on the renderer's run loop. Restart required.
-/// The experimental backend always uses display-link pacing; window-vsync
-/// only controls the IOSurface backend. `window-compositor` uses one native
-/// Metal layer and display link per window, with cached offscreen pane textures.
-/// Content updates coalesce on the window clock; per-pane mailbox/timer
-/// workers remain in this prototype.
-@"render-presentation": enum { iosurface, @"metal-display-link", @"window-compositor" } = .iosurface,
-
-/// Preferred rendering latency for experimental Metal backends, in frames (1 or 2).
+/// Preferred window compositor latency, in frames (1 or 2).
 /// This is a scheduling preference, not a guarantee of end-to-end latency.
-/// Ignored by the IOSurface backend. Restart required.
+/// Restart required.
 @"render-frame-latency": enum { @"1", @"2" } = .@"1",
 
 /// Enable local renderer timing diagnostics. Disabled by default. Records only
@@ -9212,32 +9186,16 @@ test "command palette customization is rejected while built-in entries remain" {
     try t.expectEqual(inputpkg.command.defaults.len, cfg.@"command-palette-entry".cval().len);
 }
 
-test "config metal display link is opt-in and frame latency accepts only 1 or 2" {
+test "config compositor frame latency accepts only 1 or 2" {
     const t = std.testing;
     var config = try Config.default(t.allocator);
     defer config.deinit();
-    try t.expect(config.@"render-presentation" == .iosurface);
-    var args: TestIterator = .{ .data = &.{ "--render-presentation=metal-display-link", "--render-frame-latency=2" } };
+    var args: TestIterator = .{ .data = &.{"--render-frame-latency=2"} };
     try config.loadIter(t.allocator, &args);
     var derived = try @import("../renderer.zig").Renderer.DerivedConfig.init(t.allocator, &config);
     defer derived.deinit();
-    try t.expect(derived.metal_display_link);
     try t.expectEqual(@as(f32, 2), derived.frame_latency);
     var invalid: TestIterator = .{ .data = &.{"--render-frame-latency=3"} };
     try config.loadIter(t.allocator, &invalid);
     try t.expect(config._diagnostics.list.items.len > 0);
-}
-
-test "config window compositor keeps per-surface display links disabled" {
-    const t = std.testing;
-    var config = try Config.default(t.allocator);
-    defer config.deinit();
-    var args: TestIterator = .{ .data = &.{"--render-presentation=window-compositor"} };
-    try config.loadIter(t.allocator, &args);
-    var derived = try @import("../renderer.zig").Renderer.DerivedConfig.init(t.allocator, &config);
-    defer derived.deinit();
-    try t.expect(derived.window_compositor);
-    try t.expect(!derived.metal_display_link);
-    try t.expectEqual(@as(f32, 1), derived.frame_latency);
-    try t.expectEqual(@as(usize, 0), config._diagnostics.list.items.len);
 }

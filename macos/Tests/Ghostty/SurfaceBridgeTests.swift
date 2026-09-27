@@ -160,7 +160,7 @@ import Testing
     }
 
     @Test(.enabled(if: try Self.metal4Available(), "Requires a Metal 4 GPU"))
-    func focusVisibilityChangesAndSynchronousDisplayKeepRendering() async throws {
+    func focusVisibilityChangesAndAppKitInvalidationKeepRendering() async throws {
         let view = makeView()
         let surface = try #require(view.surfaceModel)
         let window = try show(view)
@@ -175,26 +175,24 @@ import Testing
             #expect(surface.sendKeyEvent(.init(keyCode: 0, action: .press, text: marker)))
             try await waitForText(marker, in: surface)
             try await waitForFrame(after: revision, in: view)
-            // Exercise the main-thread synchronous path while completed async
-            // presentations may still be queued. This must not wait on main.
+            // AppKit may create a backing store for the structural input layer.
+            // Invalidating it must not interrupt window rendering or snapshots.
             let layer = try #require(view.layer)
             layer.display()
-            #expect(layer.contents != nil)
+            #expect(view.windowCompositor != nil)
+            #expect(view.thumbnailPNG() != nil)
             #expect(view.healthy)
         }
     }
 
-    @Test(.enabled(if: try Self.metal4Available(), "Requires a Metal 4 GPU"),
-          arguments: ["iosurface", "metal-display-link", "window-compositor"])
-    func kittyPlacementsAndSynchronizedFramesReachNativeRenderer(backend: String) async throws {
+    @Test(.enabled(if: try Self.metal4Available(), "Requires a Metal 4 GPU"))
+    func kittyPlacementsAndSynchronizedFramesReachNativeRenderer() async throws {
         // Two placements exercise nonzero offsets in the shared instance buffer.
         let output = "\u{1b}[H\u{1b}_Ga=T,f=32,s=1,v=1,i=1,q=2,c=4,r=2;/wAA/w==\u{1b}\\" +
             "\u{1b}[1;8H\u{1b}_Ga=p,i=1,p=2,q=2,c=4,r=2\u{1b}\\" +
             "\u{1b}[4;1Hready-images\u{1b}[?2026h\u{1b}[5;1Hnext-frame\u{1b}[?2026l"
         let encoded = Data(output.utf8).base64EncodedString()
-        let config = try TemporaryConfig("render-presentation = \(backend)")
-        let view = makeView(command: "/bin/sh -c 'printf %s \(encoded) | /usr/bin/base64 -D; exec /bin/cat'",
-                            configPath: config.temporaryFile.path)
+        let view = makeView(command: "/bin/sh -c 'printf %s \(encoded) | /usr/bin/base64 -D; exec /bin/cat'")
         let surface = try #require(view.surfaceModel)
         let window = try show(view)
         defer { window.close() }

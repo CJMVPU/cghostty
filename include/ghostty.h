@@ -1223,13 +1223,12 @@ GHOSTTY_API void ghostty_surface_free_text(ghostty_surface_t, ghostty_text_s*);
 GHOSTTY_API int ghostty_surface_read_accessibility(ghostty_surface_t, uint64_t previous_revision, ghostty_accessibility_s*);
 GHOSTTY_API void ghostty_surface_free_accessibility(ghostty_accessibility_s*);
 GHOSTTY_API uint64_t ghostty_surface_render_revision(ghostty_surface_t);
-// Main-thread snapshot for either experimental Metal backend; owned IOSurfaceRef.
-// Returns NULL when unavailable. The caller must CFRelease the result.
+// Main-thread snapshot; returns an owned id<MTLTexture> in shared storage.
+// Returns NULL when unavailable. The caller releases the Objective-C object.
 GHOSTTY_API void* ghostty_surface_copy_snapshot(ghostty_surface_t);
 // Window compositor bridge: sink is a retained NSObject with thread-safe requestFrame.
 // Caller serializes render/attach/detach and keeps the surface alive for each call.
 typedef struct { uint32_t width, height, pixel_format; float latency; } ghostty_compositor_info_s;
-GHOSTTY_API bool ghostty_surface_uses_compositor(ghostty_surface_t);
 GHOSTTY_API void ghostty_surface_set_compositor(ghostty_surface_t, void* sink);
 GHOSTTY_API ghostty_compositor_info_s ghostty_surface_compositor_info(ghostty_surface_t);
 GHOSTTY_API uint32_t ghostty_surface_render_compositor(ghostty_surface_t, void* texture, void* queue, double target_time, bool force, uint64_t sequence);
@@ -1238,7 +1237,6 @@ GHOSTTY_API void ghostty_surface_compositor_trace(ghostty_surface_t, uint32_t st
 
 
 #ifdef __APPLE__
-GHOSTTY_API void ghostty_surface_set_display_id(ghostty_surface_t, uint32_t);
 GHOSTTY_API void* ghostty_surface_quicklook_font(ghostty_surface_t);
 GHOSTTY_API bool ghostty_surface_quicklook_word(ghostty_surface_t, ghostty_text_s*);
 #endif

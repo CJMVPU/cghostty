@@ -1,18 +1,11 @@
 //! Represents a render target.
 //!
-//! In this case, an IOSurface-backed MTLTexture.
+//! Borrowed pane texture, or an owned shared Metal texture for explicit snapshots.
 const Self = @This();
 
-const std = @import("std");
-const Allocator = std.mem.Allocator;
 const objc = @import("objc");
-const macos = @import("macos");
-const graphics = macos.graphics;
-const IOSurface = macos.iosurface.IOSurface;
 
 const mtl = @import("api.zig");
-
-const log = std.log.scoped(.metal);
 
 /// Options for initializing a Target
 pub const Options = struct {
@@ -30,11 +23,8 @@ pub const Options = struct {
     storage_mode: mtl.MTLResourceOptions.StorageMode,
 };
 
-/// The underlying IOSurface.
-surface: ?*IOSurface,
-
-/// Borrowed only during encoding; CAMetalDisplayLinkUpdate owns the drawable.
-drawable: ?objc.Object = null,
+/// Only explicit snapshot targets own their texture.
+owned: bool = false,
 
 /// The underlying MTLTexture.
 texture: objc.Object,
@@ -45,23 +35,6 @@ width: usize,
 height: usize,
 
 pub fn init(opts: Options) !Self {
-    // We set our surface's color space to Display P3.
-    // This allows us to have "Apple-style" alpha blending,
-    // since it seems to be the case that Apple apps like
-    // Terminal and TextEdit render text in the display's
-    // color space using converted colors, which reduces,
-    // but does not fully eliminate blending artifacts.
-    const colorspace = try graphics.ColorSpace.createNamed(.displayP3);
-    defer colorspace.release();
-
-    const surface = try IOSurface.init(.{
-        .width = @intCast(opts.width),
-        .height = @intCast(opts.height),
-        .pixel_format = .@"32BGRA",
-        .bytes_per_element = 4,
-        .colorspace = colorspace,
-    });
-
     // Create our descriptor
     const desc = init: {
         const Class = objc.getClass("MTLTextureDescriptor").?;
@@ -79,26 +52,18 @@ pub fn init(opts: Options) !Self {
     desc.setProperty(
         "resourceOptions",
         mtl.MTLResourceOptions{
-            // Indicate that the CPU writes to this resource but never reads it.
-            .cpu_cache_mode = .write_combined,
+            // Explicit snapshots are read back by the CPU.
+            .cpu_cache_mode = .default,
             .storage_mode = opts.storage_mode,
         },
     );
 
-    const id = opts.device.msgSend(
-        ?*anyopaque,
-        objc.sel("newTextureWithDescriptor:iosurface:plane:"),
-        .{
-            desc,
-            surface,
-            @as(c_ulong, 0),
-        },
-    ) orelse return error.MetalFailed;
+    const id = opts.device.msgSend(?*anyopaque, "newTextureWithDescriptor:", .{desc}) orelse return error.MetalFailed;
 
     const texture = objc.Object.fromId(id);
 
     return .{
-        .surface = surface,
+        .owned = true,
         .texture = texture,
         .width = opts.width,
         .height = opts.height,
@@ -106,18 +71,5 @@ pub fn init(opts: Options) !Self {
 }
 
 pub fn deinit(self: *Self) void {
-    if (self.surface) |surface| {
-        surface.deinit();
-        self.texture.release();
-    }
-}
-
-/// The frame slot is no longer in flight. Commands retain the texture through
-/// GPU completion, without holding drawable pool slots while the renderer idles.
-pub fn bindDrawable(self: *Self, drawable: objc.Object) void {
-    std.debug.assert(self.surface == null);
-    self.drawable = drawable;
-    self.texture = drawable.getProperty(objc.Object, "texture");
-    self.width = @intCast(self.texture.getProperty(c_ulong, "width"));
-    self.height = @intCast(self.texture.getProperty(c_ulong, "height"));
+    if (self.owned) self.texture.release();
 }

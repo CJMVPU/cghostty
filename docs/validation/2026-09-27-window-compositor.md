@@ -1,5 +1,7 @@
 # 每窗口 Metal 合成器实验原型
 
+> 历史验证记录：文中的后端选择与回退已移除。当前实现见[唯一窗口合成器验证](2026-09-27-compositor-only.md)。
+
 配置 `render-presentation = window-compositor`，重启后生效。默认仍为 `iosurface`；
 `metal-display-link` 保留为每分屏独立呈现的对照。未修改用户配置、安装应用或发布版本。
 

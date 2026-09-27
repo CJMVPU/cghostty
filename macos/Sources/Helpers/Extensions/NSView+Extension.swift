@@ -43,16 +43,14 @@ extension NSView {
             isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
         )?.retagging(with: .sRGB) else { return nil }
         bitmap.size = bounds.size
-        if let terminal = self as? Ghostty.SurfaceView,
-           layer is CAMetalLayer || terminal.surfaceModel?.usesWindowCompositor == true {
-            guard let surface = terminal.surfaceModel?.copySnapshot() else { return nil }
-            let preview = NSView(frame: bounds)
-            let previewLayer = CALayer()
-            previewLayer.contents = surface
-            previewLayer.contentsScale = layer?.contentsScale ?? 1
-            preview.layer = previewLayer
-            preview.wantsLayer = true
-            preview.cacheDisplay(in: preview.bounds, to: bitmap)
+        if let terminal = self as? Ghostty.SurfaceView {
+            guard let image = terminal.surfaceModel?.copySnapshot(),
+                  let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+                  let context = CGContext(data: bitmap.bitmapData, width: bitmap.pixelsWide,
+                    height: bitmap.pixelsHigh, bitsPerComponent: 8, bytesPerRow: bitmap.bytesPerRow,
+                    space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+            context.setRenderingIntent(.relativeColorimetric)
+            context.draw(image, in: CGRect(x: 0, y: 0, width: bitmap.pixelsWide, height: bitmap.pixelsHigh))
             return bitmap
         }
         cacheDisplay(in: bounds, to: bitmap)

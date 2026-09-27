@@ -27,3 +27,9 @@
 - 第三方依赖内的通用实现、协议中描述远端系统的内容、历史问题链接和版权归属。第三方源码能支持其他架构，并不意味着本项目会构建或交付这些目标。
 
 独立发行目前采取 ZIP + SHA-256 + 草稿 Release；Developer ID、公证和公开发布需要使用本项目维护者自己的签名凭据与发布操作。
+
+## 窗口呈现
+
+仅保留每窗口一个 CAMetalLayer/CAMetalDisplayLink 的 Metal 4 合成器。
+不提供呈现后端选择或回退；已删除分屏 display link、CVDisplayLink 和 IOSurface 呈现。
+缩略图使用独立共享 Metal 纹理读回，应用不再使用 IOSurface API。
