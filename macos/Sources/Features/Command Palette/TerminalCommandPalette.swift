@@ -77,6 +77,7 @@ struct TerminalCommandPaletteView: View {
     private var terminalOptions: [CommandOption] {
         guard let app = surfaceView.windowRegistry.owner(of: surfaceView)?.ghostty else { return [] }
         return app.config.commandPaletteEntries
+            .filter { !["toggle_fullscreen", "toggle_maximize", "reset_window_size"].contains($0.action) }
             .enumerated().map { index, c in
                 let symbols = app.config.keyboardShortcut(for: c.action)?.keyList
                 return CommandOption(

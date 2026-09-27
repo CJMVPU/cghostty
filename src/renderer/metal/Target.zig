@@ -31,7 +31,10 @@ pub const Options = struct {
 };
 
 /// The underlying IOSurface.
-surface: *IOSurface,
+surface: ?*IOSurface,
+
+/// Borrowed only during encoding; CAMetalDisplayLinkUpdate owns the drawable.
+drawable: ?objc.Object = null,
 
 /// The underlying MTLTexture.
 texture: objc.Object,
@@ -103,6 +106,18 @@ pub fn init(opts: Options) !Self {
 }
 
 pub fn deinit(self: *Self) void {
-    self.surface.deinit();
-    self.texture.release();
+    if (self.surface) |surface| {
+        surface.deinit();
+        self.texture.release();
+    }
+}
+
+/// The frame slot is no longer in flight. Commands retain the texture through
+/// GPU completion, without holding drawable pool slots while the renderer idles.
+pub fn bindDrawable(self: *Self, drawable: objc.Object) void {
+    std.debug.assert(self.surface == null);
+    self.drawable = drawable;
+    self.texture = drawable.getProperty(objc.Object, "texture");
+    self.width = @intCast(self.texture.getProperty(c_ulong, "width"));
+    self.height = @intCast(self.texture.getProperty(c_ulong, "height"));
 }

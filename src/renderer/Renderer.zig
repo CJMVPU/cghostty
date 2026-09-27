@@ -9,6 +9,7 @@ const inputpkg = @import("../input.zig");
 const os = @import("../os/main.zig");
 const terminal = @import("../terminal/main.zig");
 const renderer = @import("../renderer.zig");
+const FrameTiming = @import("FrameTiming.zig");
 const math = @import("../math.zig");
 const Surface = @import("../Surface.zig");
 const link = @import("link.zig");
@@ -243,6 +244,11 @@ const SwapChain = struct {
         return result;
     }
 
+    pub fn waitIdle(self: *SwapChain) void {
+        for (0..buf_count) |_| self.frame_sema.waitUncancelable(global.io());
+        for (0..buf_count) |_| self.frame_sema.post(global.io());
+    }
+
     pub fn deinit(self: *SwapChain) void {
         // Wait for all of our inflight draws to complete
         // so that we can cleanly deinit our GPU state.
@@ -441,6 +447,9 @@ pub const DerivedConfig = struct {
     bg_image_repeat: bool,
     links: link.Set,
     vsync: bool,
+    metal_display_link: bool,
+    window_compositor: bool,
+    frame_latency: f32,
     render_trace: bool,
     render_trace_directory: []const u8,
     colorspace: configpkg.Config.WindowColorspace,
@@ -516,6 +525,9 @@ pub const DerivedConfig = struct {
             .bg_image_repeat = config.@"background-image-repeat",
             .links = links,
             .vsync = config.@"window-vsync",
+            .metal_display_link = config.@"render-presentation" == .@"metal-display-link",
+            .window_compositor = config.@"render-presentation" == .@"window-compositor",
+            .frame_latency = if (config.@"render-frame-latency" == .@"1") 1 else 2,
             .render_trace = config.@"render-trace",
             .render_trace_directory = try alloc.dupe(u8, config.@"render-trace-directory"),
             .colorspace = config.@"window-colorspace",
@@ -692,12 +704,14 @@ pub fn threadExit(self: *Self) void {
 /// Called by renderer.Thread when it starts the main loop.
 pub fn loopEnter(self: *Self, thr: *renderer.Thread) void {
     self.api.loopEnter();
+    self.api.layer.start(self);
 
     self.syncDisplayLink(null, &thr.draw_now);
 }
 
 /// Called by renderer.Thread when it exits the main loop.
 pub fn loopExit(self: *Self) void {
+    self.api.layer.stop();
     // Stop our display link. If this fails its okay it just means
     // that we either never started it or the view its attached to
     // is gone which is fine.
@@ -808,6 +822,7 @@ fn animationWakeFor(self: *const Self, vsync_running: bool) ?AnimationWake {
 /// is responsible for triggering draw_now calls to the render thread.
 /// That is the only way to trigger a drawFrame.
 pub fn hasVsync(self: *const Self) bool {
+    if (self.api.layer.isDirect()) return true;
     const display_link = self.display_link orelse return false;
     return display_link.isRunning();
 }
@@ -885,11 +900,27 @@ pub fn releaseGpuResources(self: *Self) void {
 /// blocking join on CoreVideo's IO thread, and the apprt calls
 /// `drawFrame` (which takes `draw_mutex`) from the CoreAnimation
 /// layer display path on the main thread.
-fn syncDisplayLink(
+pub fn syncDisplayLink(
     self: *Self,
     display_id: ?u32,
     draw_now: ?*xev.Async,
 ) void {
+    if (self.api.layer.window_compositor) {
+        self.draw_mutex.lockUncancelable(global.io());
+        defer self.draw_mutex.unlock(global.io());
+        if (self.api.layer.compositor_sink) |sink| sink.msgSend(void, "requestFrame", .{});
+        return;
+    }
+    if (self.api.layer.isMetal()) {
+        self.draw_mutex.lockUncancelable(global.io());
+        defer self.draw_mutex.unlock(global.io());
+        self.api.layer.setRunning(self.display_realized and FrameScheduler.needsDisplayLink(
+            self.visible,
+            self.cells_rebuilt,
+            self.animationWakeLocked(),
+        ), self.size.screen.width, self.size.screen.height);
+        return;
+    }
     const display_link = self.display_link orelse display_link: {
         if (!self.config.vsync) return;
         const callback = draw_now orelse return;
@@ -1332,6 +1363,9 @@ pub fn drawFrame(
     self: *Self,
     sync: bool,
 ) !void {
+    // Metal drawables are valid only within the render-thread link callback.
+    // AppKit's synchronous refresh path must never acquire its own drawable.
+    if (self.api.layer.window_compositor or (self.api.layer.isMetal() and sync)) return;
     // Everything that touches draw state happens under the draw
     // mutex. The display link is synced only after the mutex is
     // released; see `syncDisplayLink` for why it must never be
@@ -1346,10 +1380,77 @@ pub fn drawFrame(
         self.draw_mutex.lockUncancelable(global.io());
         if (start_ns != 0) lock_wait_ns = Trace.clock() - start_ns;
         defer self.draw_mutex.unlock(global.io());
-        break :locked try self.drawFrameLocked(sync);
+        break :locked try self.drawFrameLocked(sync, null);
     };
 
     if (sync_display_link) self.syncDisplayLink(null, null);
+}
+
+const Snapshot = struct { target: Target, healthy: bool = false };
+
+/// Main-thread, on-demand offscreen rendering. Never obtains or retains a
+/// drawable, changes presentation history, or publishes a completed display.
+/// Returns an owned IOSurface; caller releases it with CFRelease.
+pub fn copySnapshot(self: *Self) !?*@import("macos").iosurface.IOSurface {
+    self.draw_mutex.lockUncancelable(global.io());
+    defer self.draw_mutex.unlock(global.io());
+    if (!self.api.layer.isDirect() or !self.display_realized or !self.visible or
+        self.size.screen.width == 0 or self.size.screen.height == 0) return null;
+    if (self.api.layer.window_compositor) {
+        if (self.swap_chain) |*chain| chain.waitIdle();
+    }
+    var snapshot: Snapshot = .{ .target = try self.api.initSnapshotTarget(self.size.screen.width, self.size.screen.height) };
+    errdefer snapshot.target.deinit();
+    _ = try self.drawFrameLocked(true, &snapshot);
+    if (!snapshot.healthy) return error.SnapshotFailed;
+    // Transfer surface ownership without Target.deinit's purgeable-empty mark.
+    snapshot.target.texture.release();
+    return snapshot.target.surface;
+}
+
+/// Window compositor entry points. The native owner serializes registration,
+/// drawing and detach. These methods never touch AppKit or wait on the main queue.
+pub fn setCompositorSink(self: *Self, sink: ?@import("objc").Object) void {
+    self.draw_mutex.lockUncancelable(global.io());
+    defer self.draw_mutex.unlock(global.io());
+    if (!self.api.layer.window_compositor) return;
+    if (self.swap_chain) |*chain| chain.waitIdle();
+    if (self.api.layer.compositor_sink) |old| old.release();
+    self.api.layer.compositor_sink = if (sink) |value| value.retain() else null;
+    self.cells_rebuilt = true;
+}
+
+pub const CompositorInfo = extern struct { width: u32, height: u32, pixel_format: u32, latency: f32 };
+pub fn compositorInfo(self: *Self) CompositorInfo {
+    self.draw_mutex.lockUncancelable(global.io());
+    defer self.draw_mutex.unlock(global.io());
+    return .{ .width = self.size.screen.width, .height = self.size.screen.height, .pixel_format = @intCast(@intFromEnum(if (self.api.blending.isLinear()) @import("metal/api.zig").MTLPixelFormat.bgra8unorm_srgb else @import("metal/api.zig").MTLPixelFormat.bgra8unorm)), .latency = self.config.frame_latency };
+}
+
+/// Returns bit 0 when submitted, bit 1 when another frame is needed, bit 2
+/// on geometry mismatch. All pane submissions use the window's Metal 4 queue,
+/// so queue barriers order cached-texture writes and final composition reads.
+pub fn drawCompositor(self: *Self, texture: @import("objc").Object, queue: @import("objc").Object, target_time: f64, force: bool) !u32 {
+    self.draw_mutex.lockUncancelable(global.io());
+    defer self.draw_mutex.unlock(global.io());
+    if (!self.api.layer.window_compositor or !self.display_realized or !self.visible) return 0;
+    const width = texture.getProperty(c_ulong, "width");
+    const height = texture.getProperty(c_ulong, "height");
+    if (width != self.size.screen.width or height != self.size.screen.height) return 6;
+    self.api.layer.compositor_target = .{ .surface = null, .texture = texture, .width = width, .height = height };
+    self.api.layer.compositor_queue = queue;
+    const now = @as(f64, @floatFromInt(Trace.clock())) / std.time.ns_per_s;
+    self.api.layer.timing = FrameTiming.init(now, FrameTiming.CACurrentMediaTime(), target_time);
+    defer {
+        self.api.layer.compositor_target = null;
+        self.api.layer.compositor_queue = null;
+        self.api.layer.timing = null;
+    }
+    if (force) self.cells_rebuilt = true;
+    const sequence = self.api.layer.sequence;
+    _ = try self.drawFrameLocked(false, null);
+    return @as(u32, @intFromBool(self.api.layer.sequence != sequence)) |
+        (if (self.cells_rebuilt or self.animationWakeLocked() != null) @as(u32, 2) else 0);
 }
 
 /// Release cached scenes and stop publishing their hit geometry.
@@ -1369,6 +1470,7 @@ fn releaseScrollTextures(self: *Self) void {
 fn drawFrameLocked(
     self: *Self,
     sync: bool,
+    snapshot: ?*Snapshot,
 ) !bool {
     // After the graphics API is complete (so we defer) we want to
     // update our scrollbar state.
@@ -1385,8 +1487,13 @@ fn drawFrameLocked(
     self.api.drawFrameStart();
     defer self.api.drawFrameEnd();
 
+    if (snapshot == null and self.api.layer.isDirect() and self.api.layer.drawable == null and self.api.layer.compositor_target == null) return false;
+
     // Retrieve the most up-to-date surface size from the Graphics API
-    const surface_size = try self.api.surfaceSize();
+    const surface_size: Metal.SurfaceSize = if (snapshot) |s|
+        .{ .width = @as(u32, @intCast(s.target.width)), .height = @as(u32, @intCast(s.target.height)) }
+    else
+        try self.api.surfaceSize();
 
     // If either of our surface dimensions is zero
     // then drawing is absurd, so we just return.
@@ -1433,7 +1540,12 @@ fn drawFrameLocked(
     }
     const trace_start = if (self.trace.file != null) Trace.clock() else 0;
     var copied_bytes: usize = 0;
-    defer if (trace_start != 0) self.trace.emit("draw", Trace.clock() - trace_start, copied_bytes, self.uniforms.smooth_trail_count);
+    defer if (trace_start != 0) {
+        if (snapshot != null)
+            self.trace.emit("snapshot", Trace.clock() - trace_start, copied_bytes, 0)
+        else
+            self.trace.emit("draw", Trace.clock() - trace_start, copied_bytes, self.uniforms.smooth_trail_count);
+    };
 
     // Wait for a frame to be available.
     const frame = swap_chain.nextFrame();
@@ -1477,6 +1589,16 @@ fn drawFrameLocked(
         frame.target_config_modified = self.target_config_modified;
     }
 
+    const original_target = frame.target;
+    defer if (snapshot != null) {
+        frame.target = original_target;
+    };
+    if (snapshot) |s| {
+        frame.target = s.target;
+    } else if (self.api.layer.compositor_target) |target| {
+        frame.target = target;
+    } else if (self.api.layer.drawable) |drawable| frame.target.bindDrawable(drawable);
+
     // Upload images to the GPU as necessary.
     if (self.images.upload_dirty) self.scroll.key = null;
     _ = self.images.upload(self.alloc, &self.api);
@@ -1485,7 +1607,7 @@ fn drawFrameLocked(
     // Upload the background image to the GPU as necessary.
     try self.uploadBackgroundImage();
 
-    const cursor_frame = self.updateSmoothCursor();
+    const cursor_frame = if (snapshot == null) self.updateSmoothCursor() else null;
 
     const scroll_enabled = self.config.smooth_scroll and !self.api.reduceMotion() and
         self.images.kitty_placements.items.len == self.images.kitty_text_end;
@@ -1498,10 +1620,10 @@ fn drawFrameLocked(
         if (t.width != self.size.screen.width or t.height != self.size.screen.height) self.releaseScrollTextures();
     }
     const scroll_now = @as(f64, @floatFromInt(std.Io.Timestamp.now(global.io(), .awake).nanoseconds)) / std.time.ns_per_s;
-    if (self.scroll.motion.update(self.scroll_snapshot.journal, self.scrollbar.offset, self.scroll_snapshot.rows, self.scroll_snapshot.cols, self.scroll_snapshot.alternate, @floatFromInt(self.size.cell.height), scroll_now, scroll_enabled)) {
+    if (snapshot == null and self.scroll.motion.update(self.scroll_snapshot.journal, self.scrollbar.offset, self.scroll_snapshot.rows, self.scroll_snapshot.cols, self.scroll_snapshot.alternate, @floatFromInt(self.size.cell.height), scroll_now, scroll_enabled)) {
         self.scroll.previous = self.scroll.presented;
     }
-    self.scroll.motion.sample(scroll_now);
+    if (snapshot == null) self.scroll.motion.sample(if (self.api.layer.timing) |timing| timing.presentation else scroll_now);
     if (self.trace.file != null and self.scroll.motion.len > 0) self.trace.emit("scroll", self.scroll.motion.len, @intFromFloat(@abs(self.scroll.motion.regions[0].shown) * 1000), @intFromFloat(@abs(self.scroll.motion.regions[0].start) * 1000));
     if (self.scroll.previous == null) self.scroll.motion.reset();
     self.uniforms.scroll_count = @intCast(self.scroll.motion.len);
@@ -1563,7 +1685,7 @@ fn drawFrameLocked(
     var frame_ctx = try self.api.beginFrame(self, &frame.target, &frame.commands);
     defer {
         frame_ctx.complete(sync);
-        self.cells_rebuilt = false;
+        if (snapshot) |s| s.healthy = frame.commands.health == .healthy else self.cells_rebuilt = false;
         if (cursor_frame) |cursor| self.cursor_motion.recordFrame(cursor);
     }
 
@@ -1727,10 +1849,10 @@ fn drawFrameLocked(
             .uniforms = frame.uniforms.buffer,
             .draw = .{ .type = .triangle, .vertex_count = 3 },
         });
-        self.scroll.presented = displayed;
+        if (snapshot == null) self.scroll.presented = displayed;
     }
 
-    if (self.scroll_shared) |shared| shared.scroll_hit.publish(.{
+    if (if (snapshot == null) self.scroll_shared else null) |shared| shared.scroll_hit.publish(.{
         .rects = self.uniforms.scroll_rects,
         .offsets = self.uniforms.scroll_offsets,
         .count = self.uniforms.scroll_count,
@@ -1939,7 +2061,7 @@ pub fn changeConfig(self: *Self, config: *DerivedConfig) !void {
 
     if (blending_changed) {
         // We update our API's blending mode.
-        self.api.blending = config.blending;
+        self.api.setBlending(config.blending);
         // And indicate that we need to reinitialize our shaders.
         self.reinitialize_shaders = true;
         // And indicate that our swap chain targets need to
@@ -2068,13 +2190,13 @@ fn updateSmoothCursor(self: *Self) ?CursorMotion.Frame {
     const target: SmoothCursor.Vec = .{ x + size[0] * 0.5, y + size[1] * 0.5 };
     // All shapes use cell travel, independent of cursor stroke thickness.
     const timing_width: f32 = @floatFromInt(self.size.cell.width);
-    const frame = self.cursor_motion.sample(true, .{
+    const frame = self.cursor_motion.sampleAt(true, .{
         .center = target,
         .size = size,
         .timing_width = timing_width,
         .shape = shape,
         .mode = self.config.cursor_effect_mode,
-    }, now) orelse return null;
+    }, now, if (self.api.layer.timing) |timing| timing.presentation else now) orelse return null;
     self.uniforms.smooth_center = frame.pose.center;
     self.uniforms.smooth_trail_count = frame.pose.trail_len;
     for (frame.pose.trail[0..frame.pose.trail_len], 0..) |point, i| {

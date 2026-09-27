@@ -20,7 +20,6 @@ class HiddenTitlebarTerminalWindow: TerminalWindow {
         // content in to the hidden titlebar's area
         .fullSizeContentView,
 
-        .resizable,
         .closable,
         .miniaturizable,
     ]

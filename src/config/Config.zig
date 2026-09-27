@@ -1340,36 +1340,12 @@ link: RepeatableLink = .{},
 /// Available since: 1.2.0
 @"link-previews": LinkPreviews = .true,
 
-/// Whether to start the window in a maximized state. This setting applies
-/// to new windows and does not apply to tabs, splits, etc. However, this setting
-/// will apply to all new windows, not just the first one.
-///
-/// Available since: 1.1.0
+/// Compatibility setting. cghostty uses fixed window sizes and ignores maximize.
+/// Set window-width and window-height, then restart the application instead.
 maximize: bool = false,
 
-/// Start new windows in fullscreen. This setting applies to new windows and
-/// does not apply to tabs, splits, etc. However, this setting will apply to all
-/// new windows, not just the first one.
-///
-/// Allowable values are:
-///
-///   * `false` - Don't start in fullscreen (default)
-///   * `true` - Start in native fullscreen
-///   * `non-native` - (macOS only) Start in non-native fullscreen, hiding the
-///     menu bar. This is faster than native fullscreen since it doesn't use
-///     animations.
-///   * `non-native-visible-menu` - (macOS only) Start in non-native fullscreen,
-///     keeping the menu bar visible.
-///   * `non-native-padded-notch` - (macOS only) Start in non-native fullscreen,
-///     hiding the menu bar but padding for the notch on applicable devices.
-///
-/// Important: tabs DO NOT WORK with non-native fullscreen modes. Non-native
-/// fullscreen removes the titlebar and macOS native tabs require the titlebar.
-/// If you use tabs, use `true` (native) instead.
-///
-/// On macOS, `true` (native fullscreen) does not work if `window-decoration`
-/// is set to `false`, because native fullscreen on macOS requires window
-/// decorations.
+/// Compatibility setting. Fullscreen is disabled for fixed-size terminal windows.
+/// Set window-width and window-height, then restart the application instead.
 fullscreen: Fullscreen = .false,
 
 /// The title Ghostty will use for the window. This will force the title of the
@@ -1858,6 +1834,20 @@ keybind: Keybinds = .{},
 /// This setting is only supported currently on macOS.
 @"window-vsync": bool = true,
 
+/// Experimental presentation backend. `iosurface` retains the
+/// established renderer. `metal-display-link` uses CAMetalLayer drawables and
+/// CAMetalDisplayLink on the renderer's run loop. Restart required.
+/// The experimental backend always uses display-link pacing; window-vsync
+/// only controls the IOSurface backend. `window-compositor` uses one native
+/// Metal layer and display link per window, with cached offscreen pane textures.
+/// Pane content-update threads remain independent in this prototype.
+@"render-presentation": enum { iosurface, @"metal-display-link", @"window-compositor" } = .iosurface,
+
+/// Preferred rendering latency for experimental Metal backends, in frames (1 or 2).
+/// This is a scheduling preference, not a guarantee of end-to-end latency.
+/// Ignored by the IOSurface backend. Restart required.
+@"render-frame-latency": enum { @"1", @"2" } = .@"1",
+
 /// Enable local renderer timing diagnostics. Disabled by default. Records only
 /// timing/counters, never terminal text or input. Enabling adds diagnostic
 /// overhead; producers drop records rather than wait for the background writer.
@@ -1974,25 +1964,18 @@ keybind: Keybinds = .{},
 /// This setting is currently only supported on macOS.
 @"window-colorspace": WindowColorspace = .srgb,
 
-/// The initial window size in terminal grid cells: 133 columns by 33 rows.
-/// Both effective values must be positive. Setting either value to zero
-/// leaves the initial size to the native app. An omitted value keeps its
-/// built-in default, so either dimension can be overridden independently.
+/// The fixed window size in terminal grid cells: 133 columns by 33 rows.
+/// The first surface converts the startup grid to a logical content size shared
+/// by normal windows. Font changes and split layouts do not resize the window.
+/// Edit these settings and restart the application to change window size.
+/// Saved window dimensions, maximize, and fullscreen do not override this size.
 ///
-/// Note that the window manager may put limits on the size or override the
-/// size. For example, a tiling window manager may force the window to be a
-/// certain size to fit within the grid. There is nothing Ghostty will do about
-/// this, but it will make an effort.
-///
-/// Sizes larger than the screen size will be clamped to the screen size.
-/// This can be used to create a maximized-by-default window size.
-///
-/// This will not affect new tabs, splits, or other nested terminal elements.
-/// This only affects the initial window size of any new window. Changing this
-/// value will not affect the size of the window after it has been created. This
-/// is only used for the initial size.
-///
-/// Windows smaller than 10 wide by 4 high are not allowed.
+/// Both effective values must be positive. If either is zero, normal windows use
+/// a fixed 800 by 600 point content area. Omitted values keep their defaults.
+/// Positive values smaller than 10 columns by 4 rows are clamped to that minimum.
+/// Windows larger than the available display area are constrained to fit.
+/// Moving between displays still updates the rendering resolution as needed.
+/// Quick Terminal uses quick-terminal-size instead.
 @"window-height": u32 = 33,
 @"window-width": u32 = 133,
 
@@ -9226,4 +9209,34 @@ test "command palette customization is rejected while built-in entries remain" {
     try t.expectEqual(@as(usize, 7), cfg._diagnostics.items().len);
     try t.expect(original.equal(cfg.@"command-palette-entry"));
     try t.expectEqual(inputpkg.command.defaults.len, cfg.@"command-palette-entry".cval().len);
+}
+
+test "config metal display link is opt-in and frame latency accepts only 1 or 2" {
+    const t = std.testing;
+    var config = try Config.default(t.allocator);
+    defer config.deinit();
+    try t.expect(config.@"render-presentation" == .iosurface);
+    var args: TestIterator = .{ .data = &.{ "--render-presentation=metal-display-link", "--render-frame-latency=2" } };
+    try config.loadIter(t.allocator, &args);
+    var derived = try @import("../renderer.zig").Renderer.DerivedConfig.init(t.allocator, &config);
+    defer derived.deinit();
+    try t.expect(derived.metal_display_link);
+    try t.expectEqual(@as(f32, 2), derived.frame_latency);
+    var invalid: TestIterator = .{ .data = &.{"--render-frame-latency=3"} };
+    try config.loadIter(t.allocator, &invalid);
+    try t.expect(config._diagnostics.list.items.len > 0);
+}
+
+test "config window compositor keeps per-surface display links disabled" {
+    const t = std.testing;
+    var config = try Config.default(t.allocator);
+    defer config.deinit();
+    var args: TestIterator = .{ .data = &.{"--render-presentation=window-compositor"} };
+    try config.loadIter(t.allocator, &args);
+    var derived = try @import("../renderer.zig").Renderer.DerivedConfig.init(t.allocator, &config);
+    defer derived.deinit();
+    try t.expect(derived.window_compositor);
+    try t.expect(!derived.metal_display_link);
+    try t.expectEqual(@as(f32, 1), derived.frame_latency);
+    try t.expectEqual(@as(usize, 0), config._diagnostics.list.items.len);
 }

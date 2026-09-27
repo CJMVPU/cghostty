@@ -1,0 +1,317 @@
+{
+  "cghostty-displaylink-iosurface-8F3BAB21-97F8-4743-8DE4-A273EAA8DDB7": {
+    "local": {
+      "surfaces": 1,
+      "draws": 220,
+      "copied_cell_bytes": 2146704,
+      "frames_reusing_cells": 0,
+      "overlay_reference_instances": 125693,
+      "overlay_submitted_instances": 125693,
+      "overlay_scissor_pixels": {
+        "count": 220,
+        "mean": 467432.7273,
+        "median": 460800.0,
+        "p99": 460800,
+        "p95": 460800,
+        "max": 1920000
+      },
+      "draw_wall_ms": {
+        "count": 220,
+        "mean": 0.2972,
+        "median": 0.299,
+        "p99": 0.6569,
+        "p95": 0.4165,
+        "max": 1.5749
+      },
+      "gpu_execution_ms": {
+        "count": 220,
+        "mean": 0.2561,
+        "median": 0.223,
+        "p99": 1.0704,
+        "p95": 0.4151,
+        "max": 1.5912
+      },
+      "draw_interval_ms": {
+        "count": 219,
+        "mean": 8.5553,
+        "median": 8.3224,
+        "p99": 12.7294,
+        "p95": 9.3012,
+        "max": 41.0459
+      },
+      "trail_segments": {
+        "count": 220,
+        "mean": 0.0,
+        "median": 0.0,
+        "p99": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "vsync_interval_ms": {
+        "count": 217,
+        "mean": 8.3366,
+        "median": 8.3316,
+        "p99": 9.305,
+        "p95": 9.1747,
+        "max": 9.3232
+      },
+      "draw_lock_wait_ms": {
+        "count": 222,
+        "mean": 0.0002,
+        "median": 0.0002,
+        "p99": 0.0006,
+        "p95": 0.0005,
+        "max": 0.0008
+      },
+      "draw_total_ms": {
+        "count": 222,
+        "mean": 0.3255,
+        "median": 0.3259,
+        "p99": 0.6788,
+        "p95": 0.4472,
+        "max": 2.1902
+      },
+      "swap_chain_rebuild_ms": {
+        "count": 2,
+        "mean": 0.4574,
+        "median": 0.4574,
+        "p99": 0.5546,
+        "p95": 0.5546,
+        "max": 0.5546
+      },
+      "main_queue_wait_ms": {
+        "count": 217,
+        "mean": 0.2018,
+        "median": 0.0546,
+        "p99": 0.8526,
+        "p95": 0.0924,
+        "max": 27.297
+      },
+      "trace_records_dropped": 0,
+      "layer_assignments": 218,
+      "metal_displayed_frames": 0,
+      "metal_submit_to_display_ms": null,
+      "metal_prediction_error_ms": null,
+      "synchronous_layer_assignments": 1,
+      "presentation_drops": {
+        "stale": 1,
+        "replaced": 0,
+        "size_mismatch": 0,
+        "invalidated": 0,
+        "target_reused": 0
+      },
+      "timer_draw_wakes": 0,
+      "timer_update_wakes": 0
+    }
+  },
+  "cghostty-displaylink-metal-1-41F05AF9-8EFD-4A7C-BB56-3FB7E56B64B9": {
+    "local": {
+      "surfaces": 1,
+      "draws": 224,
+      "copied_cell_bytes": 2182068,
+      "frames_reusing_cells": 0,
+      "overlay_reference_instances": 127248,
+      "overlay_submitted_instances": 127248,
+      "overlay_scissor_pixels": {
+        "count": 224,
+        "mean": 460885.7143,
+        "median": 460800.0,
+        "p99": 460800,
+        "p95": 460800,
+        "max": 480000
+      },
+      "draw_wall_ms": {
+        "count": 224,
+        "mean": 0.3953,
+        "median": 0.3929,
+        "p99": 0.9448,
+        "p95": 0.4974,
+        "max": 1.676
+      },
+      "gpu_execution_ms": {
+        "count": 224,
+        "mean": 0.2143,
+        "median": 0.222,
+        "p99": 0.3426,
+        "p95": 0.227,
+        "max": 0.3469
+      },
+      "draw_interval_ms": {
+        "count": 223,
+        "mean": 8.4319,
+        "median": 8.334,
+        "p99": 10.5799,
+        "p95": 8.7097,
+        "max": 21.8222
+      },
+      "trail_segments": {
+        "count": 224,
+        "mean": 0.0,
+        "median": 0.0,
+        "p99": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "vsync_interval_ms": null,
+      "draw_lock_wait_ms": {
+        "count": 224,
+        "mean": 0.0001,
+        "median": 0.0001,
+        "p99": 0.0003,
+        "p95": 0.0002,
+        "max": 0.0003
+      },
+      "draw_total_ms": {
+        "count": 224,
+        "mean": 0.4219,
+        "median": 0.4175,
+        "p99": 1.1708,
+        "p95": 0.526,
+        "max": 2.1216
+      },
+      "swap_chain_rebuild_ms": {
+        "count": 2,
+        "mean": 0.3096,
+        "median": 0.3096,
+        "p99": 0.4061,
+        "p95": 0.4061,
+        "max": 0.4061
+      },
+      "main_queue_wait_ms": null,
+      "trace_records_dropped": 0,
+      "layer_assignments": 0,
+      "metal_displayed_frames": 218,
+      "metal_submit_to_display_ms": {
+        "count": 218,
+        "mean": 41.0579,
+        "median": 41.1677,
+        "p99": 41.4392,
+        "p95": 41.344,
+        "max": 41.4577
+      },
+      "metal_prediction_error_ms": {
+        "count": 218,
+        "mean": -0.0136,
+        "median": 0.0022,
+        "p99": 0.0042,
+        "p95": 0.0041,
+        "max": 0.0043
+      },
+      "synchronous_layer_assignments": 0,
+      "presentation_drops": {
+        "stale": 0,
+        "replaced": 0,
+        "size_mismatch": 0,
+        "invalidated": 0,
+        "target_reused": 0
+      },
+      "timer_draw_wakes": 0,
+      "timer_update_wakes": 0
+    }
+  },
+  "cghostty-displaylink-metal-2-907EC111-08EA-477A-A4BE-9E54DB4FA1CC": {
+    "local": {
+      "surfaces": 1,
+      "draws": 224,
+      "copied_cell_bytes": 2176148,
+      "frames_reusing_cells": 0,
+      "overlay_reference_instances": 126590,
+      "overlay_submitted_instances": 126590,
+      "overlay_scissor_pixels": {
+        "count": 223,
+        "mean": 460886.0987,
+        "median": 460800.0,
+        "p99": 460800,
+        "p95": 460800,
+        "max": 480000
+      },
+      "draw_wall_ms": {
+        "count": 224,
+        "mean": 0.3774,
+        "median": 0.3702,
+        "p99": 0.8867,
+        "p95": 0.4735,
+        "max": 1.8262
+      },
+      "gpu_execution_ms": {
+        "count": 224,
+        "mean": 0.2148,
+        "median": 0.2224,
+        "p99": 0.3391,
+        "p95": 0.2286,
+        "max": 0.3503
+      },
+      "draw_interval_ms": {
+        "count": 223,
+        "mean": 8.4751,
+        "median": 8.3325,
+        "p99": 15.8793,
+        "p95": 8.7703,
+        "max": 21.7946
+      },
+      "trail_segments": {
+        "count": 224,
+        "mean": 0.0,
+        "median": 0.0,
+        "p99": 0,
+        "p95": 0,
+        "max": 0
+      },
+      "vsync_interval_ms": null,
+      "draw_lock_wait_ms": {
+        "count": 224,
+        "mean": 0.0001,
+        "median": 0.0001,
+        "p99": 0.0004,
+        "p95": 0.0002,
+        "max": 0.0005
+      },
+      "draw_total_ms": {
+        "count": 224,
+        "mean": 0.4039,
+        "median": 0.3937,
+        "p99": 1.0968,
+        "p95": 0.5167,
+        "max": 2.3769
+      },
+      "swap_chain_rebuild_ms": {
+        "count": 2,
+        "mean": 0.3503,
+        "median": 0.3503,
+        "p99": 0.5003,
+        "p95": 0.5003,
+        "max": 0.5003
+      },
+      "main_queue_wait_ms": null,
+      "trace_records_dropped": 1,
+      "layer_assignments": 0,
+      "metal_displayed_frames": 218,
+      "metal_submit_to_display_ms": {
+        "count": 218,
+        "mean": 41.081,
+        "median": 41.188,
+        "p99": 41.485,
+        "p95": 41.2958,
+        "max": 41.5134
+      },
+      "metal_prediction_error_ms": {
+        "count": 218,
+        "mean": -0.0136,
+        "median": 0.0022,
+        "p99": 0.0043,
+        "p95": 0.0041,
+        "max": 0.0043
+      },
+      "synchronous_layer_assignments": 0,
+      "presentation_drops": {
+        "stale": 0,
+        "replaced": 0,
+        "size_mismatch": 0,
+        "invalidated": 0,
+        "target_reused": 0
+      },
+      "timer_draw_wakes": 0,
+      "timer_update_wakes": 0
+    }
+  }
+}

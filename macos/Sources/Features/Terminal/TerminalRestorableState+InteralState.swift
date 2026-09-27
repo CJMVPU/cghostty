@@ -23,7 +23,7 @@ extension TerminalRestorableState.InternalState where Leaf == SurfaceSnapshot {
         self.init(
             focusedSurface: controller.focusedSurface?.id.uuidString,
             surfaceTree: TerminalLayout(controller.surfaceTree, snapshot: SurfaceSnapshot.init),
-            effectiveFullscreenMode: controller.fullscreenStyle?.fullscreenMode,
+            effectiveFullscreenMode: nil,
             tabColor: (controller.window as? TerminalWindow)?.tabColor,
             titleOverride: controller.titleOverride,
         )

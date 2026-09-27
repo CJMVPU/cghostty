@@ -1,0 +1,1746 @@
+{
+  "configuration": "ReleaseLocal, ReleaseFast core, testability and coverage enabled",
+  "operating_system": "macOS 27.0 (26A428)",
+  "screen_maximum_fps": 120,
+  "backing_scale": 2,
+  "terminal_runs": {
+    "cghostty-displaylink-iosurface-content-478C9336-5F88-4E22-8994-669DDDDE82AB": {
+      "run": "baseline",
+      "local": {
+        "surfaces": 1,
+        "draws": 220,
+        "copied_cell_bytes": 2161472,
+        "frames_reusing_cells": 0,
+        "overlay_reference_instances": 126341,
+        "overlay_submitted_instances": 126341,
+        "overlay_scissor_pixels": {
+          "count": 220,
+          "mean": 460800.0,
+          "median": 460800.0,
+          "p99": 460800,
+          "p95": 460800,
+          "max": 460800
+        },
+        "draw_wall_ms": {
+          "count": 220,
+          "mean": 0.2771,
+          "median": 0.2633,
+          "p99": 0.6115,
+          "p95": 0.3543,
+          "max": 4.7407
+        },
+        "gpu_execution_ms": {
+          "count": 219,
+          "mean": 0.2491,
+          "median": 0.2221,
+          "p99": 0.8613,
+          "p95": 0.5312,
+          "max": 1.5228
+        },
+        "draw_interval_ms": {
+          "count": 219,
+          "mean": 8.58,
+          "median": 8.3305,
+          "p99": 12.0565,
+          "p95": 9.3169,
+          "max": 33.8999
+        },
+        "trail_segments": {
+          "count": 220,
+          "mean": 0.0,
+          "median": 0.0,
+          "p99": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "vsync_interval_ms": {
+          "count": 218,
+          "mean": 8.3345,
+          "median": 8.3314,
+          "p99": 9.3139,
+          "p95": 9.2035,
+          "max": 9.3364
+        },
+        "draw_lock_wait_ms": {
+          "count": 223,
+          "mean": 0.0001,
+          "median": 0.0001,
+          "p99": 0.0003,
+          "p95": 0.0002,
+          "max": 0.0004
+        },
+        "draw_total_ms": {
+          "count": 223,
+          "mean": 0.3093,
+          "median": 0.2913,
+          "p99": 0.694,
+          "p95": 0.391,
+          "max": 5.3492
+        },
+        "swap_chain_rebuild_ms": {
+          "count": 1,
+          "mean": 0.5762,
+          "median": 0.5762,
+          "p99": 0.5762,
+          "p95": 0.5762,
+          "max": 0.5762
+        },
+        "main_queue_wait_ms": {
+          "count": 218,
+          "mean": 0.155,
+          "median": 0.0524,
+          "p99": 0.4686,
+          "p95": 0.077,
+          "max": 20.803
+        },
+        "trace_records_dropped": 0,
+        "layer_assignments": 219,
+        "metal_displayed_frames": 0,
+        "metal_submit_to_display_ms": null,
+        "metal_prediction_error_ms": null,
+        "metal_callback_to_submit_ms": null,
+        "metal_callback_to_deadline_ms": null,
+        "metal_deadline_to_prediction_ms": null,
+        "metal_submitted_after_deadline": 0,
+        "metal_resumes": 0,
+        "metal_pauses": 0,
+        "metal_preferred_frame_latencies": [],
+        "synchronous_layer_assignments": 1,
+        "presentation_drops": {
+          "stale": 0,
+          "replaced": 0,
+          "size_mismatch": 0,
+          "invalidated": 0,
+          "target_reused": 0
+        },
+        "timer_draw_wakes": 0,
+        "timer_update_wakes": 0
+      }
+    },
+    "cghostty-displaylink-iosurface-motion-94F24BD5-44C0-4FA5-8CF7-135A62DE16B2": {
+      "run": "baseline",
+      "local": {
+        "surfaces": 1,
+        "draws": 265,
+        "copied_cell_bytes": 2322080,
+        "frames_reusing_cells": 38,
+        "overlay_reference_instances": 166490,
+        "overlay_submitted_instances": 20326,
+        "overlay_scissor_pixels": {
+          "count": 265,
+          "mean": 16788.0075,
+          "median": 3195.0,
+          "p99": 460800,
+          "p95": 10246,
+          "max": 1920000
+        },
+        "draw_wall_ms": {
+          "count": 265,
+          "mean": 0.2852,
+          "median": 0.2631,
+          "p99": 1.8321,
+          "p95": 0.3682,
+          "max": 2.8136
+        },
+        "gpu_execution_ms": {
+          "count": 264,
+          "mean": 0.1958,
+          "median": 0.198,
+          "p99": 0.9032,
+          "p95": 0.2245,
+          "max": 0.9299
+        },
+        "draw_interval_ms": {
+          "count": 264,
+          "mean": 8.5126,
+          "median": 8.3112,
+          "p99": 15.7674,
+          "p95": 9.3202,
+          "max": 27.1292
+        },
+        "trail_segments": {
+          "count": 265,
+          "mean": 4.9208,
+          "median": 4.0,
+          "p99": 8,
+          "p95": 8,
+          "max": 8
+        },
+        "vsync_interval_ms": {
+          "count": 261,
+          "mean": 8.3338,
+          "median": 8.3319,
+          "p99": 9.3057,
+          "p95": 9.2304,
+          "max": 9.3394
+        },
+        "draw_lock_wait_ms": {
+          "count": 268,
+          "mean": 0.0058,
+          "median": 0.0001,
+          "p99": 0.0004,
+          "p95": 0.0003,
+          "max": 1.5332
+        },
+        "draw_total_ms": {
+          "count": 268,
+          "mean": 0.3395,
+          "median": 0.2863,
+          "p99": 2.8409,
+          "p95": 0.4103,
+          "max": 6.9823
+        },
+        "swap_chain_rebuild_ms": {
+          "count": 3,
+          "mean": 0.9027,
+          "median": 1.0005,
+          "p99": 1.138,
+          "p95": 1.138,
+          "max": 1.138
+        },
+        "main_queue_wait_ms": {
+          "count": 259,
+          "mean": 0.0594,
+          "median": 0.0523,
+          "p99": 0.2927,
+          "p95": 0.0767,
+          "max": 1.0665
+        },
+        "trace_records_dropped": 0,
+        "layer_assignments": 260,
+        "metal_displayed_frames": 0,
+        "metal_submit_to_display_ms": null,
+        "metal_prediction_error_ms": null,
+        "metal_callback_to_submit_ms": null,
+        "metal_callback_to_deadline_ms": null,
+        "metal_deadline_to_prediction_ms": null,
+        "metal_submitted_after_deadline": 0,
+        "metal_resumes": 0,
+        "metal_pauses": 0,
+        "metal_preferred_frame_latencies": [],
+        "synchronous_layer_assignments": 1,
+        "presentation_drops": {
+          "stale": 1,
+          "replaced": 3,
+          "size_mismatch": 0,
+          "invalidated": 0,
+          "target_reused": 0
+        },
+        "timer_draw_wakes": 0,
+        "timer_update_wakes": 0
+      }
+    },
+    "cghostty-displaylink-metal-1-content-00591DF3-088E-4A7D-BA80-36701488D76C": {
+      "run": "baseline",
+      "local": {
+        "surfaces": 1,
+        "draws": 224,
+        "copied_cell_bytes": 2198116,
+        "frames_reusing_cells": 0,
+        "overlay_reference_instances": 127936,
+        "overlay_submitted_instances": 127936,
+        "overlay_scissor_pixels": {
+          "count": 224,
+          "mean": 461628.5714,
+          "median": 460800.0,
+          "p99": 460800,
+          "p95": 460800,
+          "max": 627200
+        },
+        "draw_wall_ms": {
+          "count": 224,
+          "mean": 0.3469,
+          "median": 0.3325,
+          "p99": 0.905,
+          "p95": 0.4275,
+          "max": 2.3847
+        },
+        "gpu_execution_ms": {
+          "count": 223,
+          "mean": 0.2136,
+          "median": 0.2218,
+          "p99": 0.229,
+          "p95": 0.2275,
+          "max": 0.3521
+        },
+        "draw_interval_ms": {
+          "count": 223,
+          "mean": 8.4709,
+          "median": 8.3363,
+          "p99": 11.0902,
+          "p95": 8.4832,
+          "max": 26.6395
+        },
+        "trail_segments": {
+          "count": 224,
+          "mean": 0.0,
+          "median": 0.0,
+          "p99": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "vsync_interval_ms": null,
+        "draw_lock_wait_ms": {
+          "count": 223,
+          "mean": 0.0,
+          "median": 0.0,
+          "p99": 0.0002,
+          "p95": 0.0001,
+          "max": 0.0003
+        },
+        "draw_total_ms": {
+          "count": 221,
+          "mean": 0.3729,
+          "median": 0.3613,
+          "p99": 1.1313,
+          "p95": 0.4506,
+          "max": 2.966
+        },
+        "swap_chain_rebuild_ms": {
+          "count": 3,
+          "mean": 0.3581,
+          "median": 0.3541,
+          "p99": 0.5171,
+          "p95": 0.5171,
+          "max": 0.5171
+        },
+        "main_queue_wait_ms": null,
+        "trace_records_dropped": 11,
+        "layer_assignments": 0,
+        "metal_displayed_frames": 215,
+        "metal_submit_to_display_ms": {
+          "count": 213,
+          "mean": 41.1172,
+          "median": 41.2318,
+          "p99": 41.4598,
+          "p95": 41.3415,
+          "max": 41.4861
+        },
+        "metal_prediction_error_ms": {
+          "count": 215,
+          "mean": -0.0628,
+          "median": 0.0027,
+          "p99": 0.005,
+          "p95": 0.0049,
+          "max": 0.0051
+        },
+        "metal_callback_to_submit_ms": {
+          "count": 222,
+          "mean": 0.3526,
+          "median": 0.3354,
+          "p99": 1.114,
+          "p95": 0.4329,
+          "max": 2.9086
+        },
+        "metal_callback_to_deadline_ms": {
+          "count": 222,
+          "mean": 8.2665,
+          "median": 8.2331,
+          "p99": 8.2662,
+          "p95": 8.2526,
+          "max": 16.0508
+        },
+        "metal_deadline_to_prediction_ms": {
+          "count": 222,
+          "mean": 33.1831,
+          "median": 33.3332,
+          "p99": 33.3333,
+          "p95": 33.3333,
+          "max": 33.3333
+        },
+        "metal_submitted_after_deadline": 0,
+        "metal_resumes": 225,
+        "metal_pauses": 222,
+        "metal_preferred_frame_latencies": [
+          1.0
+        ],
+        "synchronous_layer_assignments": 0,
+        "presentation_drops": {
+          "stale": 0,
+          "replaced": 0,
+          "size_mismatch": 0,
+          "invalidated": 0,
+          "target_reused": 0
+        },
+        "timer_draw_wakes": 0,
+        "timer_update_wakes": 0
+      }
+    },
+    "cghostty-displaylink-metal-1-motion-FB8FD1D9-1ACF-4D14-82B6-34EA73E0A504": {
+      "run": "baseline",
+      "local": {
+        "surfaces": 1,
+        "draws": 256,
+        "copied_cell_bytes": 2308844,
+        "frames_reusing_cells": 28,
+        "overlay_reference_instances": 157107,
+        "overlay_submitted_instances": 18537,
+        "overlay_scissor_pixels": {
+          "count": 256,
+          "mean": 25696.4766,
+          "median": 20070.0,
+          "p99": 460800,
+          "p95": 43065,
+          "max": 627200
+        },
+        "draw_wall_ms": {
+          "count": 256,
+          "mean": 0.3839,
+          "median": 0.3505,
+          "p99": 1.447,
+          "p95": 0.5302,
+          "max": 8.3936
+        },
+        "gpu_execution_ms": {
+          "count": 255,
+          "mean": 0.2008,
+          "median": 0.2091,
+          "p99": 0.4292,
+          "p95": 0.2444,
+          "max": 0.7745
+        },
+        "draw_interval_ms": {
+          "count": 255,
+          "mean": 8.5311,
+          "median": 8.3303,
+          "p99": 15.6848,
+          "p95": 8.5862,
+          "max": 31.1804
+        },
+        "trail_segments": {
+          "count": 256,
+          "mean": 4.9961,
+          "median": 4.0,
+          "p99": 8,
+          "p95": 8,
+          "max": 8
+        },
+        "vsync_interval_ms": null,
+        "draw_lock_wait_ms": {
+          "count": 256,
+          "mean": 0.0,
+          "median": 0.0,
+          "p99": 0.0002,
+          "p95": 0.0001,
+          "max": 0.0004
+        },
+        "draw_total_ms": {
+          "count": 256,
+          "mean": 0.4084,
+          "median": 0.3715,
+          "p99": 1.7941,
+          "p95": 0.5516,
+          "max": 8.436
+        },
+        "swap_chain_rebuild_ms": {
+          "count": 3,
+          "mean": 0.3135,
+          "median": 0.3323,
+          "p99": 0.3545,
+          "p95": 0.3545,
+          "max": 0.3545
+        },
+        "main_queue_wait_ms": null,
+        "trace_records_dropped": 1,
+        "layer_assignments": 0,
+        "metal_displayed_frames": 237,
+        "metal_submit_to_display_ms": {
+          "count": 236,
+          "mean": 41.1622,
+          "median": 41.215,
+          "p99": 41.5078,
+          "p95": 41.4733,
+          "max": 41.5426
+        },
+        "metal_prediction_error_ms": {
+          "count": 237,
+          "mean": 0.0029,
+          "median": 0.0029,
+          "p99": 0.0057,
+          "p95": 0.0055,
+          "max": 0.0058
+        },
+        "metal_callback_to_submit_ms": {
+          "count": 255,
+          "mean": 0.3877,
+          "median": 0.3505,
+          "p99": 1.7756,
+          "p95": 0.5335,
+          "max": 8.3642
+        },
+        "metal_callback_to_deadline_ms": {
+          "count": 255,
+          "mean": 8.2375,
+          "median": 8.2258,
+          "p99": 8.2852,
+          "p95": 8.2554,
+          "max": 15.9767
+        },
+        "metal_deadline_to_prediction_ms": {
+          "count": 255,
+          "mean": 33.2025,
+          "median": 33.3332,
+          "p99": 33.3333,
+          "p95": 33.3333,
+          "max": 33.3333
+        },
+        "metal_submitted_after_deadline": 1,
+        "metal_resumes": 6,
+        "metal_pauses": 5,
+        "metal_preferred_frame_latencies": [
+          1.0
+        ],
+        "synchronous_layer_assignments": 0,
+        "presentation_drops": {
+          "stale": 0,
+          "replaced": 0,
+          "size_mismatch": 0,
+          "invalidated": 0,
+          "target_reused": 0
+        },
+        "timer_draw_wakes": 0,
+        "timer_update_wakes": 0
+      }
+    },
+    "cghostty-displaylink-metal-2-content-33EC1896-4663-4EBA-A1C7-13B4E18E15F9": {
+      "run": "baseline",
+      "local": {
+        "surfaces": 1,
+        "draws": 224,
+        "copied_cell_bytes": 2182068,
+        "frames_reusing_cells": 0,
+        "overlay_reference_instances": 127248,
+        "overlay_submitted_instances": 127248,
+        "overlay_scissor_pixels": {
+          "count": 224,
+          "mean": 460885.7143,
+          "median": 460800.0,
+          "p99": 460800,
+          "p95": 460800,
+          "max": 480000
+        },
+        "draw_wall_ms": {
+          "count": 224,
+          "mean": 0.3471,
+          "median": 0.342,
+          "p99": 0.8084,
+          "p95": 0.4586,
+          "max": 2.0176
+        },
+        "gpu_execution_ms": {
+          "count": 224,
+          "mean": 0.2158,
+          "median": 0.222,
+          "p99": 0.2311,
+          "p95": 0.2282,
+          "max": 0.3617
+        },
+        "draw_interval_ms": {
+          "count": 223,
+          "mean": 8.436,
+          "median": 8.3346,
+          "p99": 13.1737,
+          "p95": 8.4854,
+          "max": 20.2347
+        },
+        "trail_segments": {
+          "count": 224,
+          "mean": 0.0,
+          "median": 0.0,
+          "p99": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "vsync_interval_ms": null,
+        "draw_lock_wait_ms": {
+          "count": 222,
+          "mean": 0.0001,
+          "median": 0.0,
+          "p99": 0.0003,
+          "p95": 0.0002,
+          "max": 0.0003
+        },
+        "draw_total_ms": {
+          "count": 222,
+          "mean": 0.3715,
+          "median": 0.3615,
+          "p99": 0.8262,
+          "p95": 0.4807,
+          "max": 2.6016
+        },
+        "swap_chain_rebuild_ms": {
+          "count": 2,
+          "mean": 0.3773,
+          "median": 0.3773,
+          "p99": 0.5378,
+          "p95": 0.5378,
+          "max": 0.5378
+        },
+        "main_queue_wait_ms": null,
+        "trace_records_dropped": 5,
+        "layer_assignments": 0,
+        "metal_displayed_frames": 217,
+        "metal_submit_to_display_ms": {
+          "count": 217,
+          "mean": 41.1246,
+          "median": 41.2197,
+          "p99": 41.4806,
+          "p95": 41.409,
+          "max": 41.526
+        },
+        "metal_prediction_error_ms": {
+          "count": 217,
+          "mean": -0.0236,
+          "median": 0.0027,
+          "p99": 0.0052,
+          "p95": 0.005,
+          "max": 0.0052
+        },
+        "metal_callback_to_submit_ms": {
+          "count": 224,
+          "mean": 0.3502,
+          "median": 0.3407,
+          "p99": 0.8095,
+          "p95": 0.4592,
+          "max": 2.5727
+        },
+        "metal_callback_to_deadline_ms": {
+          "count": 224,
+          "mean": 8.2578,
+          "median": 8.2257,
+          "p99": 8.2852,
+          "p95": 8.2524,
+          "max": 16.0723
+        },
+        "metal_deadline_to_prediction_ms": {
+          "count": 224,
+          "mean": 33.1844,
+          "median": 33.3332,
+          "p99": 33.3332,
+          "p95": 33.3332,
+          "max": 33.3332
+        },
+        "metal_submitted_after_deadline": 0,
+        "metal_resumes": 225,
+        "metal_pauses": 224,
+        "metal_preferred_frame_latencies": [
+          2.0
+        ],
+        "synchronous_layer_assignments": 0,
+        "presentation_drops": {
+          "stale": 0,
+          "replaced": 0,
+          "size_mismatch": 0,
+          "invalidated": 0,
+          "target_reused": 0
+        },
+        "timer_draw_wakes": 0,
+        "timer_update_wakes": 0
+      }
+    },
+    "cghostty-displaylink-metal-2-motion-6DD4D1D3-1C99-4B34-8568-28938A9C1656": {
+      "run": "baseline",
+      "local": {
+        "surfaces": 1,
+        "draws": 222,
+        "copied_cell_bytes": 2120916,
+        "frames_reusing_cells": 0,
+        "overlay_reference_instances": 125857,
+        "overlay_submitted_instances": 14675,
+        "overlay_scissor_pixels": {
+          "count": 222,
+          "mean": 26598.6712,
+          "median": 20115.0,
+          "p99": 460800,
+          "p95": 43035,
+          "max": 480000
+        },
+        "draw_wall_ms": {
+          "count": 222,
+          "mean": 0.3464,
+          "median": 0.3395,
+          "p99": 1.0479,
+          "p95": 0.4468,
+          "max": 1.9994
+        },
+        "gpu_execution_ms": {
+          "count": 222,
+          "mean": 0.2066,
+          "median": 0.2087,
+          "p99": 0.2582,
+          "p95": 0.235,
+          "max": 0.6802
+        },
+        "draw_interval_ms": {
+          "count": 221,
+          "mean": 8.4072,
+          "median": 8.3351,
+          "p99": 8.5832,
+          "p95": 8.4722,
+          "max": 18.9538
+        },
+        "trail_segments": {
+          "count": 222,
+          "mean": 5.4685,
+          "median": 4.0,
+          "p99": 8,
+          "p95": 8,
+          "max": 8
+        },
+        "vsync_interval_ms": null,
+        "draw_lock_wait_ms": {
+          "count": 222,
+          "mean": 0.0,
+          "median": 0.0,
+          "p99": 0.0002,
+          "p95": 0.0001,
+          "max": 0.0003
+        },
+        "draw_total_ms": {
+          "count": 222,
+          "mean": 0.3703,
+          "median": 0.3614,
+          "p99": 1.0802,
+          "p95": 0.4682,
+          "max": 2.515
+        },
+        "swap_chain_rebuild_ms": {
+          "count": 2,
+          "mean": 0.3801,
+          "median": 0.3801,
+          "p99": 0.473,
+          "p95": 0.473,
+          "max": 0.473
+        },
+        "main_queue_wait_ms": null,
+        "trace_records_dropped": 2,
+        "layer_assignments": 0,
+        "metal_displayed_frames": 216,
+        "metal_submit_to_display_ms": {
+          "count": 216,
+          "mean": 41.1488,
+          "median": 41.2261,
+          "p99": 41.4714,
+          "p95": 41.4066,
+          "max": 41.5138
+        },
+        "metal_prediction_error_ms": {
+          "count": 216,
+          "mean": -0.0238,
+          "median": 0.0026,
+          "p99": 0.005,
+          "p95": 0.0048,
+          "max": 0.0051
+        },
+        "metal_callback_to_submit_ms": {
+          "count": 222,
+          "mean": 0.3478,
+          "median": 0.3369,
+          "p99": 1.0485,
+          "p95": 0.4483,
+          "max": 2.4808
+        },
+        "metal_callback_to_deadline_ms": {
+          "count": 222,
+          "mean": 8.2873,
+          "median": 8.2287,
+          "p99": 8.2718,
+          "p95": 8.2597,
+          "max": 15.9538
+        },
+        "metal_deadline_to_prediction_ms": {
+          "count": 222,
+          "mean": 33.1831,
+          "median": 33.3332,
+          "p99": 33.3333,
+          "p95": 33.3333,
+          "max": 33.3333
+        },
+        "metal_submitted_after_deadline": 0,
+        "metal_resumes": 4,
+        "metal_pauses": 3,
+        "metal_preferred_frame_latencies": [
+          2.0
+        ],
+        "synchronous_layer_assignments": 0,
+        "presentation_drops": {
+          "stale": 0,
+          "replaced": 0,
+          "size_mismatch": 0,
+          "invalidated": 0,
+          "target_reused": 0
+        },
+        "timer_draw_wakes": 0,
+        "timer_update_wakes": 0
+      }
+    },
+    "cghostty-displaylink-iosurface-content-7EE2E085-04AA-4D5F-9D10-E59F05B62F32": {
+      "run": "reference",
+      "local": {
+        "surfaces": 1,
+        "draws": 219,
+        "copied_cell_bytes": 2114348,
+        "frames_reusing_cells": 0,
+        "overlay_reference_instances": 125073,
+        "overlay_submitted_instances": 125073,
+        "overlay_scissor_pixels": {
+          "count": 219,
+          "mean": 460800.0,
+          "median": 460800.0,
+          "p99": 460800,
+          "p95": 460800,
+          "max": 460800
+        },
+        "draw_wall_ms": {
+          "count": 219,
+          "mean": 0.2702,
+          "median": 0.2554,
+          "p99": 0.5722,
+          "p95": 0.3679,
+          "max": 4.8098
+        },
+        "gpu_execution_ms": {
+          "count": 219,
+          "mean": 0.2589,
+          "median": 0.2223,
+          "p99": 1.1166,
+          "p95": 0.697,
+          "max": 1.6664
+        },
+        "draw_interval_ms": {
+          "count": 218,
+          "mean": 8.539,
+          "median": 8.3166,
+          "p99": 11.4192,
+          "p95": 9.0996,
+          "max": 41.8091
+        },
+        "trail_segments": {
+          "count": 219,
+          "mean": 0.0,
+          "median": 0.0,
+          "p99": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "vsync_interval_ms": {
+          "count": 218,
+          "mean": 8.3315,
+          "median": 8.3321,
+          "p99": 9.2393,
+          "p95": 9.0159,
+          "max": 9.2849
+        },
+        "draw_lock_wait_ms": {
+          "count": 221,
+          "mean": 0.0001,
+          "median": 0.0001,
+          "p99": 0.0003,
+          "p95": 0.0002,
+          "max": 0.0004
+        },
+        "draw_total_ms": {
+          "count": 221,
+          "mean": 0.2936,
+          "median": 0.2784,
+          "p99": 0.5996,
+          "p95": 0.3775,
+          "max": 5.3674
+        },
+        "swap_chain_rebuild_ms": {
+          "count": 1,
+          "mean": 0.5254,
+          "median": 0.5254,
+          "p99": 0.5254,
+          "p95": 0.5254,
+          "max": 0.5254
+        },
+        "main_queue_wait_ms": {
+          "count": 218,
+          "mean": 0.1874,
+          "median": 0.0523,
+          "p99": 0.3882,
+          "p95": 0.0781,
+          "max": 28.5847
+        },
+        "trace_records_dropped": 0,
+        "layer_assignments": 219,
+        "metal_displayed_frames": 0,
+        "metal_submit_to_display_ms": null,
+        "metal_prediction_error_ms": null,
+        "metal_callback_to_submit_ms": null,
+        "metal_callback_to_deadline_ms": null,
+        "metal_deadline_to_prediction_ms": null,
+        "metal_submitted_after_deadline": 0,
+        "metal_resumes": 0,
+        "metal_pauses": 0,
+        "metal_preferred_frame_latencies": [],
+        "synchronous_layer_assignments": 1,
+        "presentation_drops": {
+          "stale": 0,
+          "replaced": 0,
+          "size_mismatch": 0,
+          "invalidated": 0,
+          "target_reused": 0
+        },
+        "timer_draw_wakes": 0,
+        "timer_update_wakes": 0
+      }
+    },
+    "cghostty-displaylink-iosurface-motion-FF0D6E68-04D7-4BB7-BBB3-809D05DC18DF": {
+      "run": "reference",
+      "local": {
+        "surfaces": 1,
+        "draws": 266,
+        "copied_cell_bytes": 2322696,
+        "frames_reusing_cells": 36,
+        "overlay_reference_instances": 165361,
+        "overlay_submitted_instances": 21314,
+        "overlay_scissor_pixels": {
+          "count": 266,
+          "mean": 19088.1165,
+          "median": 3330.0,
+          "p99": 627200,
+          "p95": 9752,
+          "max": 1920000
+        },
+        "draw_wall_ms": {
+          "count": 266,
+          "mean": 0.2953,
+          "median": 0.2577,
+          "p99": 2.5683,
+          "p95": 0.346,
+          "max": 3.0688
+        },
+        "gpu_execution_ms": {
+          "count": 265,
+          "mean": 0.1919,
+          "median": 0.1975,
+          "p99": 0.7859,
+          "p95": 0.2232,
+          "max": 0.9442
+        },
+        "draw_interval_ms": {
+          "count": 265,
+          "mean": 8.444,
+          "median": 8.311,
+          "p99": 10.2867,
+          "p95": 9.3548,
+          "max": 30.8135
+        },
+        "trail_segments": {
+          "count": 266,
+          "mean": 4.9361,
+          "median": 4.0,
+          "p99": 8,
+          "p95": 8,
+          "max": 8
+        },
+        "vsync_interval_ms": {
+          "count": 261,
+          "mean": 8.3296,
+          "median": 8.3302,
+          "p99": 9.3377,
+          "p95": 9.2926,
+          "max": 9.3444
+        },
+        "draw_lock_wait_ms": {
+          "count": 268,
+          "mean": 0.0002,
+          "median": 0.0,
+          "p99": 0.0005,
+          "p95": 0.0003,
+          "max": 0.0411
+        },
+        "draw_total_ms": {
+          "count": 268,
+          "mean": 0.3464,
+          "median": 0.2832,
+          "p99": 4.1147,
+          "p95": 0.3779,
+          "max": 7.8007
+        },
+        "swap_chain_rebuild_ms": {
+          "count": 3,
+          "mean": 1.0769,
+          "median": 1.1419,
+          "p99": 1.4756,
+          "p95": 1.4756,
+          "max": 1.4756
+        },
+        "main_queue_wait_ms": {
+          "count": 261,
+          "mean": 0.1035,
+          "median": 0.0528,
+          "p99": 0.5025,
+          "p95": 0.081,
+          "max": 9.4196
+        },
+        "trace_records_dropped": 0,
+        "layer_assignments": 263,
+        "metal_displayed_frames": 0,
+        "metal_submit_to_display_ms": null,
+        "metal_prediction_error_ms": null,
+        "metal_callback_to_submit_ms": null,
+        "metal_callback_to_deadline_ms": null,
+        "metal_deadline_to_prediction_ms": null,
+        "metal_submitted_after_deadline": 0,
+        "metal_resumes": 0,
+        "metal_pauses": 0,
+        "metal_preferred_frame_latencies": [],
+        "synchronous_layer_assignments": 2,
+        "presentation_drops": {
+          "stale": 1,
+          "replaced": 1,
+          "size_mismatch": 0,
+          "invalidated": 0,
+          "target_reused": 0
+        },
+        "timer_draw_wakes": 0,
+        "timer_update_wakes": 0
+      }
+    },
+    "cghostty-displaylink-metal-1-content-3E2A96F9-5EA0-4D4E-9C46-B7FE24C7E684": {
+      "run": "reference",
+      "local": {
+        "surfaces": 1,
+        "draws": 225,
+        "copied_cell_bytes": 2177056,
+        "frames_reusing_cells": 0,
+        "overlay_reference_instances": 127296,
+        "overlay_submitted_instances": 127296,
+        "overlay_scissor_pixels": {
+          "count": 225,
+          "mean": 460885.3333,
+          "median": 460800.0,
+          "p99": 460800,
+          "p95": 460800,
+          "max": 480000
+        },
+        "draw_wall_ms": {
+          "count": 225,
+          "mean": 0.3526,
+          "median": 0.337,
+          "p99": 1.0439,
+          "p95": 0.443,
+          "max": 2.3504
+        },
+        "gpu_execution_ms": {
+          "count": 225,
+          "mean": 0.2147,
+          "median": 0.222,
+          "p99": 0.23,
+          "p95": 0.2278,
+          "max": 0.4156
+        },
+        "draw_interval_ms": {
+          "count": 224,
+          "mean": 8.457,
+          "median": 8.331,
+          "p99": 10.1045,
+          "p95": 8.5084,
+          "max": 25.816
+        },
+        "trail_segments": {
+          "count": 225,
+          "mean": 0.0,
+          "median": 0.0,
+          "p99": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "vsync_interval_ms": null,
+        "draw_lock_wait_ms": {
+          "count": 222,
+          "mean": 0.0,
+          "median": 0.0,
+          "p99": 0.0002,
+          "p95": 0.0001,
+          "max": 0.0003
+        },
+        "draw_total_ms": {
+          "count": 222,
+          "mean": 0.3783,
+          "median": 0.36,
+          "p99": 1.0775,
+          "p95": 0.486,
+          "max": 3.0466
+        },
+        "swap_chain_rebuild_ms": {
+          "count": 2,
+          "mean": 0.5089,
+          "median": 0.5089,
+          "p99": 0.6482,
+          "p95": 0.6482,
+          "max": 0.6482
+        },
+        "main_queue_wait_ms": null,
+        "trace_records_dropped": 6,
+        "layer_assignments": 0,
+        "metal_displayed_frames": 220,
+        "metal_submit_to_display_ms": {
+          "count": 220,
+          "mean": 41.1297,
+          "median": 41.2216,
+          "p99": 41.4386,
+          "p95": 41.3614,
+          "max": 41.4797
+        },
+        "metal_prediction_error_ms": {
+          "count": 220,
+          "mean": -0.0228,
+          "median": 0.0024,
+          "p99": 0.0046,
+          "p95": 0.0045,
+          "max": 0.0047
+        },
+        "metal_callback_to_submit_ms": {
+          "count": 225,
+          "mean": 0.357,
+          "median": 0.3391,
+          "p99": 1.0324,
+          "p95": 0.4447,
+          "max": 3.0032
+        },
+        "metal_callback_to_deadline_ms": {
+          "count": 225,
+          "mean": 8.2508,
+          "median": 8.2232,
+          "p99": 8.2761,
+          "p95": 8.2515,
+          "max": 15.758
+        },
+        "metal_deadline_to_prediction_ms": {
+          "count": 225,
+          "mean": 33.1851,
+          "median": 33.3332,
+          "p99": 33.3333,
+          "p95": 33.3333,
+          "max": 33.3333
+        },
+        "metal_submitted_after_deadline": 0,
+        "metal_resumes": 226,
+        "metal_pauses": 226,
+        "metal_preferred_frame_latencies": [
+          1.0
+        ],
+        "synchronous_layer_assignments": 0,
+        "presentation_drops": {
+          "stale": 0,
+          "replaced": 0,
+          "size_mismatch": 0,
+          "invalidated": 0,
+          "target_reused": 0
+        },
+        "timer_draw_wakes": 0,
+        "timer_update_wakes": 0
+      }
+    },
+    "cghostty-displaylink-metal-1-motion-A7CBC11A-721C-4A0F-88F0-881EF55931BB": {
+      "run": "reference",
+      "local": {
+        "surfaces": 1,
+        "draws": 249,
+        "copied_cell_bytes": 2303244,
+        "frames_reusing_cells": 21,
+        "overlay_reference_instances": 150522,
+        "overlay_submitted_instances": 18279,
+        "overlay_scissor_pixels": {
+          "count": 249,
+          "mean": 26626.751,
+          "median": 20115.0,
+          "p99": 480000,
+          "p95": 43056,
+          "max": 627200
+        },
+        "draw_wall_ms": {
+          "count": 249,
+          "mean": 0.3572,
+          "median": 0.3474,
+          "p99": 1.6586,
+          "p95": 0.4975,
+          "max": 2.3796
+        },
+        "gpu_execution_ms": {
+          "count": 248,
+          "mean": 0.1967,
+          "median": 0.2089,
+          "p99": 0.2573,
+          "p95": 0.2375,
+          "max": 0.2644
+        },
+        "draw_interval_ms": {
+          "count": 248,
+          "mean": 8.5158,
+          "median": 8.3315,
+          "p99": 17.1275,
+          "p95": 8.5436,
+          "max": 25.4454
+        },
+        "trail_segments": {
+          "count": 249,
+          "mean": 5.1165,
+          "median": 4.0,
+          "p99": 8,
+          "p95": 8,
+          "max": 8
+        },
+        "vsync_interval_ms": null,
+        "draw_lock_wait_ms": {
+          "count": 249,
+          "mean": 0.0001,
+          "median": 0.0,
+          "p99": 0.0003,
+          "p95": 0.0002,
+          "max": 0.0007
+        },
+        "draw_total_ms": {
+          "count": 249,
+          "mean": 0.3806,
+          "median": 0.3701,
+          "p99": 1.7185,
+          "p95": 0.5085,
+          "max": 2.8932
+        },
+        "swap_chain_rebuild_ms": {
+          "count": 3,
+          "mean": 0.3409,
+          "median": 0.3284,
+          "p99": 0.4702,
+          "p95": 0.4702,
+          "max": 0.4702
+        },
+        "main_queue_wait_ms": null,
+        "trace_records_dropped": 2,
+        "layer_assignments": 0,
+        "metal_displayed_frames": 235,
+        "metal_submit_to_display_ms": {
+          "count": 234,
+          "mean": 41.1865,
+          "median": 41.2191,
+          "p99": 41.5517,
+          "p95": 41.4897,
+          "max": 43.4814
+        },
+        "metal_prediction_error_ms": {
+          "count": 235,
+          "mean": 0.0204,
+          "median": 0.0027,
+          "p99": 0.0052,
+          "p95": 0.005,
+          "max": 4.167
+        },
+        "metal_callback_to_submit_ms": {
+          "count": 248,
+          "mean": 0.3591,
+          "median": 0.3473,
+          "p99": 1.6547,
+          "p95": 0.4949,
+          "max": 2.8599
+        },
+        "metal_callback_to_deadline_ms": {
+          "count": 248,
+          "mean": 8.249,
+          "median": 8.2308,
+          "p99": 11.5903,
+          "p95": 8.2727,
+          "max": 16.1862
+        },
+        "metal_deadline_to_prediction_ms": {
+          "count": 248,
+          "mean": 33.1316,
+          "median": 33.3332,
+          "p99": 33.3333,
+          "p95": 33.3333,
+          "max": 33.3333
+        },
+        "metal_submitted_after_deadline": 0,
+        "metal_resumes": 6,
+        "metal_pauses": 5,
+        "metal_preferred_frame_latencies": [
+          1.0
+        ],
+        "synchronous_layer_assignments": 0,
+        "presentation_drops": {
+          "stale": 0,
+          "replaced": 0,
+          "size_mismatch": 0,
+          "invalidated": 0,
+          "target_reused": 0
+        },
+        "timer_draw_wakes": 0,
+        "timer_update_wakes": 0
+      }
+    },
+    "cghostty-displaylink-metal-2-content-8A810FA1-264D-49E8-8CFA-143BE6E746E6": {
+      "run": "reference",
+      "local": {
+        "surfaces": 1,
+        "draws": 225,
+        "copied_cell_bytes": 2238012,
+        "frames_reusing_cells": 0,
+        "overlay_reference_instances": 128885,
+        "overlay_submitted_instances": 128885,
+        "overlay_scissor_pixels": {
+          "count": 225,
+          "mean": 462279.1111,
+          "median": 460800.0,
+          "p99": 460800,
+          "p95": 460800,
+          "max": 627200
+        },
+        "draw_wall_ms": {
+          "count": 225,
+          "mean": 0.3564,
+          "median": 0.3428,
+          "p99": 1.3705,
+          "p95": 0.4827,
+          "max": 1.495
+        },
+        "gpu_execution_ms": {
+          "count": 224,
+          "mean": 0.2163,
+          "median": 0.2221,
+          "p99": 0.2506,
+          "p95": 0.2282,
+          "max": 0.4431
+        },
+        "draw_interval_ms": {
+          "count": 224,
+          "mean": 8.5314,
+          "median": 8.3329,
+          "p99": 15.7517,
+          "p95": 8.5721,
+          "max": 24.4381
+        },
+        "trail_segments": {
+          "count": 225,
+          "mean": 0.0,
+          "median": 0.0,
+          "p99": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "vsync_interval_ms": null,
+        "draw_lock_wait_ms": {
+          "count": 223,
+          "mean": 0.0,
+          "median": 0.0,
+          "p99": 0.0002,
+          "p95": 0.0001,
+          "max": 0.0002
+        },
+        "draw_total_ms": {
+          "count": 223,
+          "mean": 0.3804,
+          "median": 0.3675,
+          "p99": 1.4734,
+          "p95": 0.5052,
+          "max": 1.8162
+        },
+        "swap_chain_rebuild_ms": {
+          "count": 2,
+          "mean": 0.3056,
+          "median": 0.3056,
+          "p99": 0.324,
+          "p95": 0.324,
+          "max": 0.324
+        },
+        "main_queue_wait_ms": null,
+        "trace_records_dropped": 5,
+        "layer_assignments": 0,
+        "metal_displayed_frames": 216,
+        "metal_submit_to_display_ms": {
+          "count": 216,
+          "mean": 41.2071,
+          "median": 41.2189,
+          "p99": 41.5014,
+          "p95": 41.3341,
+          "max": 41.5509
+        },
+        "metal_prediction_error_ms": {
+          "count": 216,
+          "mean": 0.0017,
+          "median": 0.0015,
+          "p99": 0.0037,
+          "p95": 0.0036,
+          "max": 0.0037
+        },
+        "metal_callback_to_submit_ms": {
+          "count": 225,
+          "mean": 0.3584,
+          "median": 0.3417,
+          "p99": 1.438,
+          "p95": 0.4659,
+          "max": 1.7845
+        },
+        "metal_callback_to_deadline_ms": {
+          "count": 225,
+          "mean": 8.2254,
+          "median": 8.2287,
+          "p99": 8.2766,
+          "p95": 8.2483,
+          "max": 15.8653
+        },
+        "metal_deadline_to_prediction_ms": {
+          "count": 225,
+          "mean": 33.2592,
+          "median": 33.3332,
+          "p99": 33.3333,
+          "p95": 33.3333,
+          "max": 33.3333
+        },
+        "metal_submitted_after_deadline": 0,
+        "metal_resumes": 226,
+        "metal_pauses": 225,
+        "metal_preferred_frame_latencies": [
+          2.0
+        ],
+        "synchronous_layer_assignments": 0,
+        "presentation_drops": {
+          "stale": 0,
+          "replaced": 0,
+          "size_mismatch": 0,
+          "invalidated": 0,
+          "target_reused": 0
+        },
+        "timer_draw_wakes": 0,
+        "timer_update_wakes": 0
+      }
+    },
+    "cghostty-displaylink-metal-2-motion-D0996F1A-374C-47F7-971A-59CDA76A90A7": {
+      "run": "reference",
+      "local": {
+        "surfaces": 1,
+        "draws": 249,
+        "copied_cell_bytes": 2309164,
+        "frames_reusing_cells": 21,
+        "overlay_reference_instances": 150530,
+        "overlay_submitted_instances": 18287,
+        "overlay_scissor_pixels": {
+          "count": 249,
+          "mean": 26564.6867,
+          "median": 20115.0,
+          "p99": 460800,
+          "p95": 43152,
+          "max": 627200
+        },
+        "draw_wall_ms": {
+          "count": 249,
+          "mean": 0.3552,
+          "median": 0.3412,
+          "p99": 1.1195,
+          "p95": 0.4739,
+          "max": 2.2164
+        },
+        "gpu_execution_ms": {
+          "count": 249,
+          "mean": 0.1954,
+          "median": 0.2077,
+          "p99": 0.26,
+          "p95": 0.2404,
+          "max": 0.4896
+        },
+        "draw_interval_ms": {
+          "count": 248,
+          "mean": 8.4853,
+          "median": 8.3307,
+          "p99": 16.1837,
+          "p95": 8.575,
+          "max": 24.7495
+        },
+        "trail_segments": {
+          "count": 249,
+          "mean": 5.1205,
+          "median": 4.0,
+          "p99": 8,
+          "p95": 8,
+          "max": 8
+        },
+        "vsync_interval_ms": null,
+        "draw_lock_wait_ms": {
+          "count": 249,
+          "mean": 0.0,
+          "median": 0.0,
+          "p99": 0.0002,
+          "p95": 0.0001,
+          "max": 0.0004
+        },
+        "draw_total_ms": {
+          "count": 248,
+          "mean": 0.3802,
+          "median": 0.3598,
+          "p99": 1.4065,
+          "p95": 0.5146,
+          "max": 2.8819
+        },
+        "swap_chain_rebuild_ms": {
+          "count": 3,
+          "mean": 0.417,
+          "median": 0.3568,
+          "p99": 0.6201,
+          "p95": 0.6201,
+          "max": 0.6201
+        },
+        "main_queue_wait_ms": null,
+        "trace_records_dropped": 2,
+        "layer_assignments": 0,
+        "metal_displayed_frames": 236,
+        "metal_submit_to_display_ms": {
+          "count": 236,
+          "mean": 41.126,
+          "median": 41.2222,
+          "p99": 41.4883,
+          "p95": 41.4176,
+          "max": 41.5043
+        },
+        "metal_prediction_error_ms": {
+          "count": 236,
+          "mean": -0.0207,
+          "median": 0.0027,
+          "p99": 0.0053,
+          "p95": 0.0051,
+          "max": 0.0053
+        },
+        "metal_callback_to_submit_ms": {
+          "count": 249,
+          "mean": 0.3585,
+          "median": 0.3396,
+          "p99": 1.3984,
+          "p95": 0.4684,
+          "max": 2.8512
+        },
+        "metal_callback_to_deadline_ms": {
+          "count": 249,
+          "mean": 8.236,
+          "median": 8.2305,
+          "p99": 8.2778,
+          "p95": 8.2578,
+          "max": 15.8774
+        },
+        "metal_deadline_to_prediction_ms": {
+          "count": 249,
+          "mean": 33.1994,
+          "median": 33.3332,
+          "p99": 33.3333,
+          "p95": 33.3333,
+          "max": 33.3333
+        },
+        "metal_submitted_after_deadline": 0,
+        "metal_resumes": 7,
+        "metal_pauses": 6,
+        "metal_preferred_frame_latencies": [
+          2.0
+        ],
+        "synchronous_layer_assignments": 0,
+        "presentation_drops": {
+          "stale": 0,
+          "replaced": 0,
+          "size_mismatch": 0,
+          "invalidated": 0,
+          "target_reused": 0
+        },
+        "timer_draw_wakes": 0,
+        "timer_update_wakes": 0
+      }
+    }
+  },
+  "clear_reference": {
+    "cghostty-displaylink-reference-1-default-43B75F4E-B752-46DE-8F91-017C49541DA3": {
+      "reference": {
+        "preferred_frame_latency": 1,
+        "requested_maximum_rate": false,
+        "screen_maximum_fps": 120,
+        "warmup_frames": 20,
+        "valid_samples": 219,
+        "metal_submit_to_display_ms": {
+          "count": 219,
+          "mean": 41.4681,
+          "median": 41.48,
+          "p99": 41.5547,
+          "p95": 41.5317,
+          "max": 41.5602
+        },
+        "metal_callback_to_submit_ms": {
+          "count": 219,
+          "mean": 0.0888,
+          "median": 0.0852,
+          "p99": 0.1418,
+          "p95": 0.1297,
+          "max": 0.222
+        },
+        "metal_callback_to_deadline_ms": {
+          "count": 219,
+          "mean": 8.2221,
+          "median": 8.2327,
+          "p99": 8.2761,
+          "p95": 8.2631,
+          "max": 8.2785
+        },
+        "metal_deadline_to_prediction_ms": {
+          "count": 219,
+          "mean": 33.3333,
+          "median": 33.3333,
+          "p99": 33.3333,
+          "p95": 33.3333,
+          "max": 33.3333
+        },
+        "metal_prediction_error_ms": {
+          "count": 219,
+          "mean": 0.0016,
+          "median": 0.0015,
+          "p99": 0.0029,
+          "p95": 0.0027,
+          "max": 0.0029
+        }
+      }
+    },
+    "cghostty-displaylink-reference-1-max-78DE9F40-CCC0-43B2-84EC-63E5258067CA": {
+      "reference": {
+        "preferred_frame_latency": 1,
+        "requested_maximum_rate": true,
+        "screen_maximum_fps": 120,
+        "warmup_frames": 20,
+        "valid_samples": 220,
+        "metal_submit_to_display_ms": {
+          "count": 220,
+          "mean": 41.4731,
+          "median": 41.4765,
+          "p99": 41.5211,
+          "p95": 41.5089,
+          "max": 41.5301
+        },
+        "metal_callback_to_submit_ms": {
+          "count": 220,
+          "mean": 0.0899,
+          "median": 0.088,
+          "p99": 0.1484,
+          "p95": 0.1151,
+          "max": 0.1681
+        },
+        "metal_callback_to_deadline_ms": {
+          "count": 220,
+          "mean": 8.2268,
+          "median": 8.2286,
+          "p99": 8.2545,
+          "p95": 8.2473,
+          "max": 8.2575
+        },
+        "metal_deadline_to_prediction_ms": {
+          "count": 220,
+          "mean": 33.3333,
+          "median": 33.3333,
+          "p99": 33.3333,
+          "p95": 33.3333,
+          "max": 33.3333
+        },
+        "metal_prediction_error_ms": {
+          "count": 220,
+          "mean": 0.0029,
+          "median": 0.0029,
+          "p99": 0.0051,
+          "p95": 0.0049,
+          "max": 0.0052
+        }
+      }
+    },
+    "cghostty-displaylink-reference-2-default-04FD296F-661D-4B86-8852-E6BD1CF09085": {
+      "reference": {
+        "preferred_frame_latency": 2,
+        "requested_maximum_rate": false,
+        "screen_maximum_fps": 120,
+        "warmup_frames": 20,
+        "valid_samples": 219,
+        "metal_submit_to_display_ms": {
+          "count": 219,
+          "mean": 41.4606,
+          "median": 41.4784,
+          "p99": 41.5233,
+          "p95": 41.5132,
+          "max": 41.5338
+        },
+        "metal_callback_to_submit_ms": {
+          "count": 219,
+          "mean": 0.0901,
+          "median": 0.0872,
+          "p99": 0.1481,
+          "p95": 0.1268,
+          "max": 0.1532
+        },
+        "metal_callback_to_deadline_ms": {
+          "count": 219,
+          "mean": 8.2145,
+          "median": 8.2294,
+          "p99": 8.2552,
+          "p95": 8.2485,
+          "max": 8.2594
+        },
+        "metal_deadline_to_prediction_ms": {
+          "count": 219,
+          "mean": 33.3333,
+          "median": 33.3333,
+          "p99": 33.3333,
+          "p95": 33.3333,
+          "max": 33.3333
+        },
+        "metal_prediction_error_ms": {
+          "count": 219,
+          "mean": 0.0029,
+          "median": 0.0029,
+          "p99": 0.0052,
+          "p95": 0.005,
+          "max": 0.0052
+        }
+      }
+    },
+    "cghostty-displaylink-reference-2-max-7FF530E9-3560-40FF-9A76-F7FE2DBED011": {
+      "reference": {
+        "preferred_frame_latency": 2,
+        "requested_maximum_rate": true,
+        "screen_maximum_fps": 120,
+        "warmup_frames": 20,
+        "valid_samples": 220,
+        "metal_submit_to_display_ms": {
+          "count": 220,
+          "mean": 41.4757,
+          "median": 41.48,
+          "p99": 41.5342,
+          "p95": 41.5162,
+          "max": 41.5422
+        },
+        "metal_callback_to_submit_ms": {
+          "count": 220,
+          "mean": 0.0903,
+          "median": 0.0865,
+          "p99": 0.1723,
+          "p95": 0.1169,
+          "max": 0.2182
+        },
+        "metal_callback_to_deadline_ms": {
+          "count": 220,
+          "mean": 8.2298,
+          "median": 8.2329,
+          "p99": 8.2645,
+          "p95": 8.2503,
+          "max": 8.2709
+        },
+        "metal_deadline_to_prediction_ms": {
+          "count": 220,
+          "mean": 33.3333,
+          "median": 33.3333,
+          "p99": 33.3333,
+          "p95": 33.3333,
+          "max": 33.3333
+        },
+        "metal_prediction_error_ms": {
+          "count": 220,
+          "mean": 0.0029,
+          "median": 0.0029,
+          "p99": 0.0052,
+          "p95": 0.005,
+          "max": 0.0052
+        }
+      }
+    }
+  }
+}

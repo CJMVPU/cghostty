@@ -7,7 +7,7 @@ class QuickTerminalController: BaseTerminalController {
     override func loadWindow() {
         let panel = QuickTerminalWindow(
             contentRect: NSRect(x: 196, y: 240, width: 480, height: 270),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
@@ -40,17 +40,11 @@ class QuickTerminalController: BaseTerminalController {
     // The active space when the quick terminal was last shown.
     private var previousActiveSpace: CGSSpace?
 
-    /// Cache for per-screen window state.
-    let screenStateCache: QuickTerminalScreenStateCache
-
     /// Non-nil if we have hidden dock state.
     private var hiddenDock: HiddenDock?
 
     /// The configuration derived from the Ghostty config so we don't need to rely on references.
     private var derivedConfig: DerivedConfig
-
-    /// Tracks if we're currently handling a manual resize to prevent recursion
-    private var isHandlingResize: Bool = false
 
     /// This is set to false by init if the window managed by this controller should not be restorable.
     /// For example, terminals executing custom scripts are not restorable.
@@ -71,7 +65,6 @@ class QuickTerminalController: BaseTerminalController {
         // restoration.
         restorable = (base?.command ?? "") == ""
         self.restorationState = restorationState
-        self.screenStateCache = QuickTerminalScreenStateCache(stateByDisplay: restorationState?.screenStateEntries ?? [:])
         // Important detail here: we initialize with an empty surface tree so
         // that we don't start a terminal process. This gets started when the
         // first terminal is shown in `animateIn`.
@@ -89,11 +82,7 @@ class QuickTerminalController: BaseTerminalController {
             selector: #selector(applicationDidBecomeActive),
             name: NSApplication.didBecomeActiveNotification,
             object: nil)
-        center.addObserver(
-            self,
-            selector: #selector(windowDidResize(_:)),
-            name: NSWindow.didResizeNotification,
-            object: nil)
+
     }
 
     required init?(coder: NSCoder) {
@@ -120,7 +109,7 @@ class QuickTerminalController: BaseTerminalController {
         // window close so we can animate out.
         window.delegate = self
 
-        // The quick window is restored by `screenStateCache`.
+        // Geometry always comes from the startup configuration for the target screen.
         // We disable this for better control
         window.isRestorable = false
 
@@ -210,30 +199,6 @@ class QuickTerminalController: BaseTerminalController {
                     self.previousActiveSpace = currentActiveSpace
                 }
             }
-        }
-    }
-
-    override func windowDidResize(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow,
-              window == self.window,
-              visible,
-              !isHandlingResize else { return }
-        guard let screen = window.screen ?? NSScreen.main else { return }
-
-        // Prevent recursive loops
-        isHandlingResize = true
-        defer { isHandlingResize = false }
-
-        switch position {
-        case .top, .bottom, .center:
-            // For centered positions (top, bottom, center), we need to recenter the window
-            // when it's manually resized to maintain proper positioning
-            let newOrigin = position.centeredOrigin(for: window, on: screen)
-            window.setFrameOrigin(newOrigin)
-        case .left, .right:
-            // For side positions, we may need to adjust vertical centering
-            let newOrigin = position.verticallyCenteredOrigin(for: window, on: screen)
-            window.setFrameOrigin(newOrigin)
         }
     }
 
@@ -392,22 +357,6 @@ class QuickTerminalController: BaseTerminalController {
         animateWindowOut(window: window, to: position)
     }
 
-    func saveScreenState(exitFullscreen: Bool) {
-        // If we are in fullscreen, then we exit fullscreen. We do this immediately so
-        // we have th correct window.frame for the save state below.
-        if exitFullscreen, let fullscreenStyle, fullscreenStyle.isFullscreen {
-            fullscreenStyle.exit()
-        }
-        guard let window else { return }
-        // Save the current window frame before animating out. This preserves
-        // the user's preferred window size and position for when the quick
-        // terminal is reactivated with a new surface. Without this, SwiftUI
-        // would reset the window to its minimum content size.
-        if window.frame.width > 0 && window.frame.height > 0, let screen = window.screen {
-            screenStateCache.save(frame: window.frame, for: screen)
-        }
-    }
-
     private func animateWindowIn(window: NSWindow, from position: QuickTerminalPosition) {
         guard let id = entranceID else { return }
         guard let screen = derivedConfig.quickTerminalScreen.screen else {
@@ -417,15 +366,11 @@ class QuickTerminalController: BaseTerminalController {
             return
         }
 
-        // Grab our last closed frame to use from the cache.
-        let closedFrame = screenStateCache.frame(for: screen)
-
         // Move our window off screen to the initial animation position.
         position.setInitial(
             in: window,
             on: screen,
-            terminalSize: derivedConfig.quickTerminalSize,
-            closedFrame: closedFrame)
+            terminalSize: derivedConfig.quickTerminalSize)
 
         // We need to set our window level to a high value. In testing, only
         // popUpMenu and above do what we want. This gets it above the menu bar
@@ -460,8 +405,7 @@ class QuickTerminalController: BaseTerminalController {
             position.setFinal(
                 in: window.animator(),
                 on: screen,
-                terminalSize: derivedConfig.quickTerminalSize,
-                closedFrame: closedFrame)
+                terminalSize: derivedConfig.quickTerminalSize)
         }, completionHandler: {
             // There is a very minor delay here so waiting at least an event loop tick
             // keeps us safe from the view not being on the window.
@@ -528,7 +472,6 @@ class QuickTerminalController: BaseTerminalController {
 
     private func animateWindowOut(window: NSWindow, to position: QuickTerminalPosition) {
         let id = transitionID
-        saveScreenState(exitFullscreen: true)
 
         // If we hid the dock then we unhide it.
         hiddenDock = nil

@@ -18,7 +18,6 @@ struct QuickTerminalRestorableState: @MainActor TerminalRestorable {
     let internalState: InternalState<SurfaceSnapshot>
 
     init(from controller: QuickTerminalController) {
-        controller.saveScreenState(exitFullscreen: true)
         self.internalState = .init(from: controller)
     }
 
@@ -52,7 +51,7 @@ extension QuickTerminalRestorableState.InternalState where Leaf == SurfaceSnapsh
         self.init(
             focusedSurface: controller.focusedSurface?.id.uuidString,
             surfaceTree: TerminalLayout(controller.surfaceTree, snapshot: SurfaceSnapshot.init),
-            screenStateEntries: controller.screenStateCache.stateByDisplay,
+            screenStateEntries: [:], // Decode legacy geometry, but never carry it into another launch.
         )
     }
 }

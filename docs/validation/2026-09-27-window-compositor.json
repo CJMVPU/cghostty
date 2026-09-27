@@ -1,0 +1,179 @@
+{
+  "purpose": "Functional compositor validation; not an input-to-photon or latency-comparison benchmark",
+  "native_tests": {
+    "tests": 357,
+    "suites": 48,
+    "passed": true
+  },
+  "zig_tests": {
+    "tests": 91,
+    "passed": true
+  },
+  "functional_cases": [
+    {
+      "blending": "native",
+      "first_window_counters_before_teardown": {
+        "submitted": 11,
+        "completed": 11,
+        "displayed": 7,
+        "presentationCallbacks": 10,
+        "missedDeadlines": 0,
+        "failed": 0,
+        "paneDraws": 6,
+        "lastPresentedTime": 829037.1267801252
+      }
+    },
+    {
+      "blending": "linear",
+      "first_window_counters_before_teardown": {
+        "submitted": 12,
+        "completed": 12,
+        "displayed": 8,
+        "presentationCallbacks": 11,
+        "missedDeadlines": 0,
+        "failed": 0,
+        "paneDraws": 6,
+        "lastPresentedTime": 829037.4434474586
+      }
+    },
+    {
+      "blending": "linear-corrected",
+      "first_window_counters_before_teardown": {
+        "submitted": 12,
+        "completed": 12,
+        "displayed": 8,
+        "presentationCallbacks": 11,
+        "missedDeadlines": 0,
+        "failed": 0,
+        "paneDraws": 7,
+        "lastPresentedTime": 829037.8101147918
+      }
+    }
+  ],
+  "closing_window_trace": {
+    "directory": "/var/folders/7s/q_38cgl936v73vn3v1rb0pfh0000gn/T/cghostty-window-close-C389AD91-FFCF-462B-9327-08F40F5A6E84",
+    "note": "Explicit session release flushes the partial trace batch. Two positive presentation samples only; do not infer latency percentiles or improvement.",
+    "summary": {
+      "local": {
+        "surfaces": 1,
+        "draws": 2,
+        "copied_cell_bytes": 7264,
+        "frames_reusing_cells": 0,
+        "overlay_reference_instances": 50,
+        "overlay_submitted_instances": 50,
+        "overlay_scissor_pixels": {
+          "count": 2,
+          "mean": 460800.0,
+          "median": 460800.0,
+          "p99": 460800,
+          "p95": 460800,
+          "max": 460800
+        },
+        "draw_wall_ms": {
+          "count": 2,
+          "mean": 0.5959,
+          "median": 0.5959,
+          "p99": 0.7792,
+          "p95": 0.7792,
+          "max": 0.7792
+        },
+        "gpu_execution_ms": {
+          "count": 2,
+          "mean": 0.2311,
+          "median": 0.2311,
+          "p99": 0.3089,
+          "p95": 0.3089,
+          "max": 0.3089
+        },
+        "snapshot_wall_ms": null,
+        "snapshot_gpu_ms": null,
+        "draw_interval_ms": {
+          "count": 1,
+          "mean": 15.403,
+          "median": 15.403,
+          "p99": 15.403,
+          "p95": 15.403,
+          "max": 15.403
+        },
+        "trail_segments": {
+          "count": 2,
+          "mean": 0.0,
+          "median": 0.0,
+          "p99": 0,
+          "p95": 0,
+          "max": 0
+        },
+        "vsync_interval_ms": null,
+        "draw_lock_wait_ms": null,
+        "draw_total_ms": null,
+        "swap_chain_rebuild_ms": {
+          "count": 1,
+          "mean": 0.1562,
+          "median": 0.1562,
+          "p99": 0.1562,
+          "p95": 0.1562,
+          "max": 0.1562
+        },
+        "main_queue_wait_ms": null,
+        "trace_records_dropped": 0,
+        "layer_assignments": 0,
+        "metal_displayed_frames": 2,
+        "metal_submit_to_display_ms": {
+          "count": 2,
+          "mean": 27.639,
+          "median": 27.639,
+          "p99": 40.4678,
+          "p95": 40.4678,
+          "max": 40.4678
+        },
+        "metal_prediction_error_ms": {
+          "count": 2,
+          "mean": -12.4998,
+          "median": -12.4998,
+          "p99": 0.0003,
+          "p95": 0.0003,
+          "max": 0.0003
+        },
+        "metal_callback_to_submit_ms": {
+          "count": 4,
+          "mean": 0.7155,
+          "median": 0.3319,
+          "p99": 2.1473,
+          "p95": 2.1473,
+          "max": 2.1473
+        },
+        "metal_callback_to_deadline_ms": {
+          "count": 4,
+          "mean": 7.0931,
+          "median": 7.1082,
+          "p99": 7.2175,
+          "p95": 7.2175,
+          "max": 7.2175
+        },
+        "metal_deadline_to_prediction_ms": {
+          "count": 4,
+          "mean": 33.3333,
+          "median": 33.3332,
+          "p99": 33.3333,
+          "p95": 33.3333,
+          "max": 33.3333
+        },
+        "metal_submitted_after_deadline": 0,
+        "metal_resumes": 0,
+        "metal_pauses": 0,
+        "metal_preferred_frame_latencies": [],
+        "synchronous_layer_assignments": 0,
+        "presentation_drops": {
+          "stale": 0,
+          "replaced": 0,
+          "size_mismatch": 0,
+          "invalidated": 0,
+          "target_reused": 0
+        },
+        "timer_draw_wakes": 0,
+        "timer_update_wakes": 0
+      }
+    },
+    "saved_raw_trace": "2026-09-27-window-compositor-close.csv"
+  }
+}

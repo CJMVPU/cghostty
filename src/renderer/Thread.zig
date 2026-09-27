@@ -197,6 +197,8 @@ pub fn threadMain(self: *Thread) void {
 }
 
 fn threadMain_(self: *Thread) !void {
+    const pool = @import("objc").AutoreleasePool.init();
+    defer pool.deinit();
     defer log.debug("renderer thread exited", .{});
 
     // Right now, on Darwin, `std.Thread.setName` can only name the current
@@ -230,7 +232,11 @@ fn threadMain_(self: *Thread) !void {
     // Run
     log.debug("starting renderer thread", .{});
     defer log.debug("starting renderer thread shutdown", .{});
-    _ = try self.loop.run(.until_done);
+    if (self.renderer.api.layer.isMetal()) {
+        try @import("MetalRunLoop.zig").run(&self.loop);
+    } else {
+        _ = try self.loop.run(.until_done);
+    }
 }
 
 fn setQosClass(self: *const Thread) void {

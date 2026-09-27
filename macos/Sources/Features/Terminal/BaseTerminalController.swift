@@ -556,6 +556,7 @@ class BaseTerminalController: NSWindowController,
 
     func toggleMaximize(from surfaceView: Ghostty.SurfaceView) {
         guard let window else { return }
+        guard !(window is TerminalWindow), !(window is QuickTerminalWindow) else { return }
         guard surfaceTree.contains(surfaceView) else { return }
         window.zoom(nil)
     }
@@ -714,6 +715,7 @@ class BaseTerminalController: NSWindowController,
 
     /// Toggle fullscreen for the given mode.
     func toggleFullscreen(mode: FullscreenMode) {
+        guard !(window is TerminalWindow), !(window is QuickTerminalWindow) else { return }
         // We need a window to fullscreen
         guard let window = self.window else { return }
 

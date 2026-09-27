@@ -24,7 +24,7 @@
 
 - 内置 Nerd Font 符号，Emoji 优先使用系统 Apple Color Emoji
 - 粗体、斜体和粗斜体遵循 `font-synthetic-style` 合成规则
-- 用户配置优先；窗口恢复和屏幕空间可能影响实际尺寸
+- 用户配置优先；屏幕空间不足时约束实际尺寸
 
 ## 安装
 
@@ -110,6 +110,44 @@ smooth-scroll = true
 - **运行期间**：新窗口、标签页和分屏沿用启动配置
 - **默认字体**：`font-family` 未指定时使用应用 Resources 中的 LXGW WenKai Mono Medium；粗体与斜体由渲染器合成
 - **模板注释**：无需全部启用；示例值不等于默认值
+
+### 固定窗口尺寸
+
+普通终端窗口按启动配置固定内容区域尺寸，默认 `window-width = 133` 列、`window-height = 33` 行。
+修改配置后重启应用生效；新窗口、恢复窗口和拖出分屏创建的窗口使用同一启动尺寸，历史窗口尺寸不会覆盖配置。
+任一维度设为 `0` 时使用固定的 800×600 点内容区域。
+
+窗口可以移动、最小化和关闭，不支持手动缩放、最大化、全屏或系统平铺；`maximize`、`fullscreen` 仅保留配置兼容，不再生效。
+分屏创建、关闭、移动、比例调整和字号快捷键保留，但不改变外部窗口尺寸。
+跨屏时仍更新渲染像素尺寸，显示区域不足时将窗口约束到屏幕范围。
+Quick Terminal 使用启动时的 `quick-terminal-size`，不恢复过去手动调整的尺寸。
+
+### 实验性 Metal 呈现
+
+默认继续使用 IOSurface 呈现。窗口合成器原型可在配置中显式开启，重启后生效：
+
+```ini
+render-presentation = window-compositor
+render-frame-latency = 1
+```
+
+每个窗口使用一个 CAMetalLayer、一个 CAMetalDisplayLink 和一个呈现线程。
+分屏绘制到各自的缓存纹理，再通过同一条 Metal 4 队列合成为一个 drawable；没有变化的分屏复用缓存。
+输入法、鼠标、无障碍、搜索栏和滚动条仍由原生视图负责。暂时保留每分屏的内容更新线程；
+光标和平滑滚动目前仍在分屏渲染器内绘制，cell 重建尚未统一到窗口帧时钟。
+
+`render-frame-latency` 只接受 `1` 或 `2`，表示帧调度偏好，并非按键到屏幕的延迟保证。
+动画按预计显示时刻取样，实际上屏反馈写入 render-trace；空闲暂停，刷新率由系统决定。
+`window-vsync` 仅影响原来的 IOSurface 路径。
+
+对照实验仍可选择 `render-presentation = metal-display-link`，它为每个分屏各自创建图层和帧时钟。
+恢复原路径：将 `render-presentation` 改为 `iosurface` 并重启。
+
+窗口合成器的实现边界、验证和后续工作见
+[窗口合成器原型验证](docs/validation/2026-09-27-window-compositor.md)。
+当前尚未证明端到端延迟改善。第一阶段数据保留在
+[Metal display link 验证](docs/validation/2026-09-27-metal-display-link.md)和
+[ReleaseLocal 时序与快照复查](docs/validation/2026-09-27-metal-display-link-followup.md)中。
 
 ### 校验与恢复
 

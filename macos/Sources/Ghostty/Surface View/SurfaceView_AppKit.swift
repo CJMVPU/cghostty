@@ -174,7 +174,9 @@ extension Ghostty {
         ///
         /// We track this to restore surface occlusion state
         /// after this surface is dragged to another window
-        var isWindowVisible = false
+        var isWindowVisible = false {
+            didSet { windowCompositor?.updateGeometry() }
+        }
 
         /// The configuration derived from the Ghostty config so we don't need to rely on references.
         private(set) var derivedConfig: DerivedConfig {
@@ -240,6 +242,7 @@ extension Ghostty {
 
         /// Stable session ownership; detaching AppKit presentation is not teardown.
         let lifecycle = SurfaceLifecycle()
+        private(set) weak var windowCompositor: WindowCompositor?
         var surfaceModel: Ghostty.Surface? { lifecycle.surface }
 
         /// Stable even if core surface creation fails; owns no app or views.
@@ -382,6 +385,7 @@ extension Ghostty {
         }
 
         isolated deinit {
+            windowCompositor?.detach(id: id)
             state.searchState?.stopSearching()
             // Resolve clipboard callback state while surfaceModel is still
             // alive. The request's weak SurfaceView reference is already nil
@@ -483,6 +487,7 @@ extension Ghostty {
             setSurfaceSize(width: UInt32(scaledSize.width), height: UInt32(scaledSize.height))
             // Store this size so we can reuse it when backing properties change
             contentSize = size
+            windowCompositor?.updateGeometry()
         }
 
         private weak var lastSizedSurface: Ghostty.Surface?
@@ -799,6 +804,8 @@ extension Ghostty {
 
         override func viewWillMove(toWindow newWindow: NSWindow?) {
             if window !== newWindow {
+                windowCompositor?.detach(id: id)
+                windowCompositor = nil
                 lifecycle.detach()
                 focusDidChange(false)
                 isWindowVisible = false
@@ -813,12 +820,33 @@ extension Ghostty {
                 guard let self else { return event }
                 return self.localEventHandler(event)
             }
+            windowCompositor = WindowCompositor.attach(self)
             state.windowFocused = window?.isKeyWindow ?? false
             guard let window else { return }
             isWindowVisible = window.occlusionState.contains(.visible)
             surfaceModel?.setVisible(isWindowVisible)
             windowDidChangeScreen(notification: .init(name: NSWindow.didChangeScreenNotification, object: window))
             windowRegistry.owner(of: self)?.surfaceDidAttach(self)
+        }
+
+        override func layout() {
+            super.layout()
+            windowCompositor?.updateGeometry()
+        }
+
+        override func setFrameOrigin(_ newOrigin: NSPoint) {
+            super.setFrameOrigin(newOrigin)
+            windowCompositor?.updateGeometry()
+        }
+
+        override func viewDidHide() {
+            super.viewDidHide()
+            windowCompositor?.updateGeometry()
+        }
+
+        override func viewDidUnhide() {
+            super.viewDidUnhide()
+            windowCompositor?.updateGeometry()
         }
 
         override func becomeFirstResponder() -> Bool {

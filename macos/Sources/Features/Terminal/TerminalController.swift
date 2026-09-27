@@ -22,7 +22,7 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         }
         let terminalWindow = windowType.init(
             contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
@@ -162,29 +162,6 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
             c.isBackgroundOpaque = parentController.isBackgroundOpaque
         }
 
-        if let parent, parent.styleMask.contains(.fullScreen) {
-            // If our previous window was fullscreen then we want our new window to
-            // be fullscreen. This behavior actually doesn't match the native tabbing
-            // behavior of macOS apps where new windows create tabs when in native
-            // fullscreen but this is how we've always done it. This matches iTerm2
-            // behavior.
-            c.toggleFullscreen(mode: .native)
-        } else if let fullscreenMode = ghostty.config.windowFullscreen {
-            switch fullscreenMode {
-            case .native:
-                // Native has to be done immediately so that our stylemask contains
-                // fullscreen for the logic later in this method.
-                c.toggleFullscreen(mode: .native)
-
-            case .nonNative, .nonNativeVisibleMenu, .nonNativePaddedNotch:
-                // If we're non-native then we have to do it on a later loop
-                // so that the content view is setup.
-                DispatchQueue.main.async {
-                    c.toggleFullscreen(mode: fullscreenMode)
-                }
-            }
-        }
-
         c.scheduleInitialPresentation {
             // We're dispatching this async because in some cases AppKit will tab this window,
             // although we have a check in `windowDidLoad` and it works in most cases, but not for AppIntent
@@ -241,7 +218,7 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
     }
 
     /// Create a new window with an existing split tree.
-    /// The window will be sized to match the tree's current view bounds if available.
+    /// The new window uses the startup size, independently of the moved tree.
     /// - Parameters:
     ///   - ghostty: The Ghostty app instance.
     ///   - tree: The split tree to use for the new window.
@@ -254,10 +231,6 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         confirmUndo: Bool = true,
         inheritBackgroundOpacity: Bool? = nil
     ) -> TerminalController {
-        // Calculate the target frame based on the tree's view bounds
-        // before moving into the new window
-        let treeSize: CGSize? = tree.root?.viewBounds()
-
         let c = TerminalController.init(ghostty, withSurfaceTree: tree)
         if let inheritBackgroundOpacity {
             c.isBackgroundOpaque = inheritBackgroundOpacity
@@ -269,12 +242,6 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         c.showWindowSafely(self)
         c.scheduleInitialPresentation {
             if let window = c.window {
-                // If we have a tree size, resize the window's content to match
-                if let treeSize, treeSize.width > 0, treeSize.height > 0 {
-                    window.setContentSize(treeSize)
-                    window.constrainToScreen()
-                }
-
                 if !window.styleMask.contains(.fullScreen) {
                     if let position {
                         window.setFrameTopLeftPoint(position)
@@ -815,10 +782,10 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
     convenience init(_ ghostty: Ghostty.App, with undoState: UndoState) {
         self.init(ghostty, withSurfaceTree: undoState.surfaceTree)
 
-        // Show the window and restore its frame
+        // Restore placement while keeping the configured content size
         showWindow(nil)
         if let window {
-            window.setFrame(undoState.frame, display: true)
+            window.setFrameOrigin(undoState.frame.origin)
             if let terminalWindow = window as? TerminalWindow {
                 terminalWindow.tabColor = undoState.tabColor
             }
@@ -906,23 +873,17 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
             TerminalView(ghostty: ghostty, viewModel: uiState, delegate: self)
         }
 
-        // Set the initial content size on the container so that
-        // intrinsicContentSize returns the correct value immediately,
-        // without waiting for @FocusedValue to propagate through the
-        // SwiftUI focus chain.
-        container.initialContentSize = focusedSurface?.initialSize
+        // Use the startup grid even when restoring or moving a split tree.
+        container.initialContentSize = ghostty.initialWindowContentSize ?? NSSize(width: 800, height: 600)
 
         window.contentView = container
 
-        // If we have a default size, we want to apply it.
-        if let defaultSize {
-            defaultSize.apply(to: window)
-
-            if case .contentIntrinsicSize = defaultSize {
-                if let screen = window.screen ?? NSScreen.main {
-                    let frame = self.adjustForWindowPosition(frame: window.frame, on: screen)
-                    window.setFrameOrigin(frame.origin)
-                }
+        if let terminalWindow = window as? TerminalWindow,
+           let size = container.initialContentSize {
+            terminalWindow.fixContentSize(size)
+            if let screen = window.screen ?? NSScreen.main {
+                let frame = adjustForWindowPosition(frame: window.frame, on: screen)
+                window.setFrameOrigin(frame.origin)
             }
         }
 
@@ -976,7 +937,7 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         let restored = LastWindowPosition.shared.restore(
             terminalWindow,
             origin: !originChanged,
-            size: defaultSize == nil,
+            size: false,
         )
 
         // If nothing is changed for the frame,
@@ -1037,6 +998,14 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         super.windowDidBecomeKey(notification)
         self.relabelTabs()
         self.fixTabBar()
+    }
+
+    func windowDidChangeScreen(_ notification: Notification) {
+        guard let window = notification.object as? TerminalWindow,
+              window === self.window, window.fixedContentSize != nil else { return }
+        // Reapply the screen constraint without changing the configured size.
+        window.setFrame(window.frame, display: true)
+        window.constrainToScreen()
     }
 
     override func windowDidMove(_ notification: Notification) {
@@ -1111,8 +1080,7 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
     }
 
     @IBAction func returnToDefaultSize(_ sender: Any?) {
-        guard let window, let defaultSize else { return }
-        defaultSize.apply(to: window)
+        // Kept for old keybindings; window size is controlled by startup configuration.
     }
 
     @IBAction override func closeWindow(_ sender: Any?) {
@@ -1277,7 +1245,6 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         let backgroundColor: Color
         let macosWindowButtons: Ghostty.MacOSWindowButtons
         let macosTitlebarStyle: Ghostty.Config.MacOSTitlebarStyle
-        let maximize: Bool
         let windowPositionX: Int16?
         let windowPositionY: Int16?
 
@@ -1285,7 +1252,6 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
             self.backgroundColor = Color(NSColor.windowBackgroundColor)
             self.macosWindowButtons = .visible
             self.macosTitlebarStyle = .default
-            self.maximize = false
             self.windowPositionX = nil
             self.windowPositionY = nil
         }
@@ -1294,7 +1260,6 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
             self.backgroundColor = config.backgroundColor
             self.macosWindowButtons = config.macosWindowButtons
             self.macosTitlebarStyle = config.macosTitlebarStyle
-            self.maximize = config.window.maximize
             self.windowPositionX = config.window.positionX
             self.windowPositionY = config.window.positionY
         }
@@ -1312,79 +1277,10 @@ extension TerminalController {
             return tabGroup.windows.indices.contains { $0 > currentIndex }
 
         case #selector(returnToDefaultSize):
-            guard let window else { return false }
-
-            // Native fullscreen windows can't revert to default size.
-            if window.styleMask.contains(.fullScreen) {
-                return false
-            }
-
-            // If we're fullscreen at all then we can't change size
-            if fullscreenStyle?.isFullscreen ?? false {
-                return false
-            }
-
-            // If our window is already the default size or we don't have a
-            // default size, then disable.
-            return defaultSize?.isChanged(for: window) ?? false
+            return false
 
         default:
             return super.validateMenuItem(item)
-        }
-    }
-}
-
-// MARK: Default Size
-
-extension TerminalController {
-    /// The possible default sizes for a terminal. The size can't purely be known as a
-    /// window frame because if we set `window-width/height` then it is based
-    /// on content size.
-    enum DefaultSize {
-        /// A frame, set with `window.setFrame`
-        case frame(NSRect)
-
-        /// A content size, set with `window.setContentSize`
-        case contentIntrinsicSize
-
-        func isChanged(for window: NSWindow) -> Bool {
-            switch self {
-            case .frame(let rect):
-                return window.frame != rect
-            case .contentIntrinsicSize:
-                guard let view = window.contentView else {
-                    return false
-                }
-
-                return view.frame.size != view.intrinsicContentSize
-            }
-        }
-
-        func apply(to window: NSWindow) {
-            switch self {
-            case .frame(let rect):
-                window.setFrame(rect, display: true)
-            case .contentIntrinsicSize:
-                guard let size = window.contentView?.intrinsicContentSize else {
-                    return
-                }
-
-                window.setContentSize(size)
-                window.constrainToScreen()
-            }
-        }
-    }
-
-    private var defaultSize: DefaultSize? {
-        if derivedConfig.maximize, let screen = window?.screen ?? NSScreen.main {
-            // Maximize takes priority, we take up the full screen we're on.
-            return .frame(screen.visibleFrame)
-        } else if focusedSurface?.initialSize != nil {
-            // Initial size as requested by the configuration (e.g. `window-width`)
-            // takes next priority.
-            return .contentIntrinsicSize
-        } else {
-            return nil
         }
     }
 }

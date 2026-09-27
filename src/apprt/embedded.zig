@@ -1562,6 +1562,44 @@ pub const CAPI = struct {
         return surface.core_surface.render.renderer.presented_revision.load(.acquire);
     }
 
+    export fn ghostty_surface_copy_snapshot(surface: *Surface) ?*anyopaque {
+        return surface.core_surface.render.renderer.copySnapshot() catch |err| {
+            log.warn("snapshot render failed err={}", .{err});
+            return null;
+        };
+    }
+
+    export fn ghostty_surface_uses_compositor(surface: *Surface) bool {
+        return surface.core_surface.render.renderer.api.layer.window_compositor;
+    }
+
+    export fn ghostty_surface_set_compositor(surface: *Surface, sink: ?*anyopaque) void {
+        surface.core_surface.render.renderer.setCompositorSink(if (sink) |ptr| objc.Object.fromId(ptr) else null);
+    }
+
+    export fn ghostty_surface_compositor_info(surface: *Surface) renderer.Renderer.CompositorInfo {
+        return surface.core_surface.render.renderer.compositorInfo();
+    }
+
+    export fn ghostty_surface_render_compositor(surface: *Surface, texture: *anyopaque, queue: *anyopaque, target_time: f64, force: bool) u32 {
+        return surface.core_surface.render.renderer.drawCompositor(objc.Object.fromId(texture), objc.Object.fromId(queue), target_time, force) catch |err| {
+            log.err("window pane render failed err={}", .{err});
+            return 8;
+        };
+    }
+
+    export fn ghostty_surface_compositor_trace(surface: *Surface, stage: u32, sequence: u64, time: f64, prediction: f64) void {
+        const trace = &surface.core_surface.render.renderer.trace;
+        const ns = @import("../renderer/FrameTiming.zig").nanoseconds;
+        switch (stage) {
+            0 => trace.emit("metal_tick", ns(time), ns(prediction), sequence),
+            1 => trace.emit("metal_callback", ns(time), sequence, 0),
+            2 => trace.emit("present_submit", ns(time), sequence, 0),
+            3 => trace.emit("displayed", ns(time), sequence, 0),
+            else => {},
+        }
+    }
+
     fn readTextLocked(
         surface: *Surface,
         core_sel: terminal.Selection,

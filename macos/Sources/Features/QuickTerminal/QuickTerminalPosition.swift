@@ -11,6 +11,7 @@ enum QuickTerminalPosition: String, Sendable {
     /// usually in `windowDidLoad` or in a similar callback. This is the initial state.
     func setLoaded(_ window: NSWindow, size: QuickTerminalSize) {
         guard let screen = window.screen ?? NSScreen.main else { return }
+        (window as? QuickTerminalWindow)?.configuredFrameSize = configuredFrameSize(on: screen, terminalSize: size)
         window.setFrame(.init(
             origin: window.frame.origin,
             size: size.calculate(position: self, screenDimensions: screen.visibleFrame.size)
@@ -27,6 +28,7 @@ enum QuickTerminalPosition: String, Sendable {
     ) {
         // Invisible
         window.alphaValue = 0
+        (window as? QuickTerminalWindow)?.configuredFrameSize = configuredFrameSize(on: screen, terminalSize: terminalSize)
 
         // Position depends
         window.setFrame(.init(

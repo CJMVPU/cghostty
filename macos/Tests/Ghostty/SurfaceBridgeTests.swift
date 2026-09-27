@@ -44,8 +44,8 @@ import Testing
         }
     }
 
-    private func makeView(command: String = "/bin/cat") -> Ghostty.SurfaceView {
-        let app = Ghostty.App(configPath: "/dev/null")
+    private func makeView(command: String = "/bin/cat", configPath: String = "/dev/null") -> Ghostty.SurfaceView {
+        let app = Ghostty.App(configPath: configPath)
         var config = Ghostty.SurfaceConfiguration()
         config.command = command
         config.workingDirectory = FileManager.default.temporaryDirectory.path
@@ -184,14 +184,17 @@ import Testing
         }
     }
 
-    @Test(.enabled(if: try Self.metal4Available(), "Requires a Metal 4 GPU"))
-    func kittyPlacementsAndSynchronizedFramesReachNativeRenderer() async throws {
+    @Test(.enabled(if: try Self.metal4Available(), "Requires a Metal 4 GPU"),
+          arguments: ["iosurface", "metal-display-link", "window-compositor"])
+    func kittyPlacementsAndSynchronizedFramesReachNativeRenderer(backend: String) async throws {
         // Two placements exercise nonzero offsets in the shared instance buffer.
         let output = "\u{1b}[H\u{1b}_Ga=T,f=32,s=1,v=1,i=1,q=2,c=4,r=2;/wAA/w==\u{1b}\\" +
             "\u{1b}[1;8H\u{1b}_Ga=p,i=1,p=2,q=2,c=4,r=2\u{1b}\\" +
             "\u{1b}[4;1Hready-images\u{1b}[?2026h\u{1b}[5;1Hnext-frame\u{1b}[?2026l"
         let encoded = Data(output.utf8).base64EncodedString()
-        let view = makeView(command: "/bin/sh -c 'printf %s \(encoded) | /usr/bin/base64 -D; exec /bin/cat'")
+        let config = try TemporaryConfig("render-presentation = \(backend)")
+        let view = makeView(command: "/bin/sh -c 'printf %s \(encoded) | /usr/bin/base64 -D; exec /bin/cat'",
+                            configPath: config.temporaryFile.path)
         let surface = try #require(view.surfaceModel)
         let window = try show(view)
         defer { window.close() }
@@ -201,19 +204,27 @@ import Testing
         try await waitForText("draw-check", in: surface)
         try await waitForFrame(after: revision, in: view)
         #expect(view.healthy)
-        let png = try #require(view.thumbnailPNG())
-        let bitmap = try #require(NSBitmapImageRep(data: png))
-        var redColumns = Set<Int>()
-        for y in 0..<bitmap.pixelsHigh {
-            for x in 0..<bitmap.pixelsWide {
-                if let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
-                   color.redComponent > 0.8, color.greenComponent < 0.2, color.blueComponent < 0.2 {
-                    redColumns.insert(x)
+        // More snapshots than drawable slots, then resume normal rendering.
+        // A preview must neither exhaust the pool nor mutate the image buffers.
+        for _ in 0..<4 {
+            let png = try #require(view.thumbnailPNG())
+            let bitmap = try #require(NSBitmapImageRep(data: png))
+            var redColumns = Set<Int>()
+            for y in 0..<bitmap.pixelsHigh {
+                for x in 0..<bitmap.pixelsWide {
+                    if let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                       color.redComponent > 0.8, color.greenComponent < 0.2, color.blueComponent < 0.2 {
+                        redColumns.insert(x)
+                    }
                 }
             }
+            let bands = redColumns.filter { !redColumns.contains($0 - 1) }.count
+            #expect(bands == 2, "Both red image placements must survive distinct buffer offsets")
         }
-        let bands = redColumns.filter { !redColumns.contains($0 - 1) }.count
-        #expect(bands == 2, "Both red image placements must survive distinct buffer offsets")
+        let afterSnapshots = surface.renderRevision
+        #expect(surface.sendKeyEvent(.init(keyCode: 0, action: .press, text: "after-snapshots")))
+        try await waitForText("after-snapshots", in: surface)
+        try await waitForFrame(after: afterSnapshots, in: view)
     }
 
     @Test(arguments: [false, true])

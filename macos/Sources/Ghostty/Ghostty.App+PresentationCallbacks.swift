@@ -193,6 +193,9 @@ extension Ghostty.App {
         v: ghostty_action_initial_size_s) {
         guard let surfaceView = self.surfaceView(for: target) else { return }
         surfaceView.initialSize = NSSize(width: Double(v.width), height: Double(v.height))
+        if let app = appState(from: app), app.initialWindowContentSize == nil {
+            app.initialWindowContentSize = surfaceView.initialSize
+        }
     }
 
     static func resetWindowSize(

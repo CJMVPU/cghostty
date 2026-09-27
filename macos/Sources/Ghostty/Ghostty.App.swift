@@ -28,6 +28,10 @@ extension Ghostty {
         /// configuration (i.e. font size) from the previously focused window. This would override this.
         private(set) var config: Config
 
+        /// The first core-computed startup grid size, shared by normal windows.
+        /// Later font changes and moved splits cannot change window geometry.
+        @ObservationIgnored var initialWindowContentSize: NSSize?
+
         /// Weak topology lookup, separate from loaded-window retention.
         @ObservationIgnored let windowRegistry = WindowRegistry()
         @ObservationIgnored let undoManager = ExpiringUndoManager()

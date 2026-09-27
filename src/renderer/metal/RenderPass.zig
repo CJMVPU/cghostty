@@ -96,7 +96,13 @@ pub fn begin(
                 .texture => |t| t.texture,
                 .target => |t| t.texture,
             };
-            opts.commands.retainResource(texture, true);
+            // CAMetalLayer owns drawable residency; retain its texture only
+            // through GPU completion. Offscreen targets remain app-managed.
+            const allocation = switch (at.target) {
+                .texture => true,
+                .target => |target| target.drawable == null,
+            };
+            opts.commands.retainResource(texture, allocation);
             attachment.setProperty("texture", texture.value);
             if (at.clear_color) |c| attachment.setProperty(
                 "clearColor",

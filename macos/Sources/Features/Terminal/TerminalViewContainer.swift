@@ -24,7 +24,10 @@ class TerminalViewContainer: NSView {
     }
 
     init<Root: View>(@ViewBuilder rootView: () -> Root) {
-        self.terminalView = NSHostingView(rootView: rootView())
+        let hostingView = NSHostingView(rootView: rootView())
+        // Terminal content follows the configured window, not its ideal grid size.
+        hostingView.sizingOptions = []
+        self.terminalView = hostingView
         super.init(frame: .zero)
         setup()
     }
@@ -62,6 +65,10 @@ class TerminalViewContainer: NSView {
             terminalView.bottomAnchor.constraint(equalTo: bottomAnchor),
             terminalView.trailingAnchor.constraint(equalTo: trailingAnchor),
         ])
+    }
+
+    func installCompositorHost(_ view: NSView) {
+        addSubview(view, positioned: .below, relativeTo: terminalView)
     }
 
     override func viewDidMoveToWindow() {
@@ -191,7 +198,7 @@ extension TerminalViewContainer {
             return nil
         }
         let effectView = TerminalGlassView(topOffset: -themeFrameView.safeAreaInsets.top)
-        addSubview(effectView, positioned: .below, relativeTo: terminalView)
+        addSubview(effectView, positioned: .below, relativeTo: subviews.first)
         NSLayoutConstraint.activate([
             effectView.topAnchor.constraint(equalTo: topAnchor),
             effectView.leadingAnchor.constraint(equalTo: leadingAnchor),

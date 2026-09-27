@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 
 extension NSView {
     /// Returns true if this view is currently in the responder chain
@@ -42,6 +43,18 @@ extension NSView {
             isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
         )?.retagging(with: .sRGB) else { return nil }
         bitmap.size = bounds.size
+        if let terminal = self as? Ghostty.SurfaceView,
+           layer is CAMetalLayer || terminal.surfaceModel?.usesWindowCompositor == true {
+            guard let surface = terminal.surfaceModel?.copySnapshot() else { return nil }
+            let preview = NSView(frame: bounds)
+            let previewLayer = CALayer()
+            previewLayer.contents = surface
+            previewLayer.contentsScale = layer?.contentsScale ?? 1
+            preview.layer = previewLayer
+            preview.wantsLayer = true
+            preview.cacheDisplay(in: preview.bounds, to: bitmap)
+            return bitmap
+        }
         cacheDisplay(in: bounds, to: bitmap)
         return bitmap
     }

@@ -5,13 +5,50 @@ import Observation
 /// The base class for all standalone, "normal" terminal windows. This sets the basic
 /// style and configuration of the window based on the app configuration.
 class TerminalWindow: NSWindow {
+    /// Logical content size chosen at creation. Backing pixels may still change
+    /// when moving between displays; saved frames must not replace this size.
+    private(set) var fixedContentSize: NSSize?
+
     required override init(contentRect: NSRect, styleMask: NSWindow.StyleMask, backing: NSWindow.BackingStoreType, defer flag: Bool) {
-        super.init(contentRect: contentRect, styleMask: styleMask, backing: backing, defer: flag)
+        super.init(contentRect: contentRect, styleMask: styleMask.subtracting(.resizable), backing: backing, defer: flag)
+        collectionBehavior.insert([.fullScreenNone, .fullScreenDisallowsTiling])
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) is not supported")
     }
+
+    func fixContentSize(_ size: NSSize) {
+        guard size.width > 0, size.height > 0 else { return }
+        fixedContentSize = size
+        setContentSize(size)
+        standardWindowButton(.zoomButton)?.isEnabled = false
+    }
+
+    private func fixedFrame(_ requested: NSRect) -> NSRect {
+        guard let fixedContentSize else { return requested }
+        var result = requested
+        result.size = frameRect(forContentRect: NSRect(origin: .zero, size: fixedContentSize)).size
+        // Display removal or resolution changes may require a smaller window.
+        // Keep the configured size so it can be used again on a larger display.
+        if let screen = screen ?? NSScreen.main {
+            result.size.width = min(result.width, screen.visibleFrame.width)
+            result.size.height = min(result.height, screen.visibleFrame.height)
+        }
+        return result
+    }
+
+    override func setFrame(_ frameRect: NSRect, display flag: Bool) {
+        super.setFrame(fixedFrame(frameRect), display: flag)
+    }
+
+    override func setFrame(_ frameRect: NSRect, display flag: Bool, animate animateFlag: Bool) {
+        super.setFrame(fixedFrame(frameRect), display: flag, animate: false)
+    }
+
+    override func zoom(_ sender: Any?) {}
+
+    override func toggleFullScreen(_ sender: Any?) {}
 
     /// This is the key in UserDefaults to use for the default `level` value. This is
     /// used by the manual float on top menu item feature.

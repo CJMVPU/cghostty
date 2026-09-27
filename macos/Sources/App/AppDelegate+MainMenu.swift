@@ -154,14 +154,6 @@ extension AppDelegate {
         main.addItem(withTitle: "Window", action: nil, keyEquivalent: "").submenu = windowMenu
         NSApp.windowsMenu = windowMenu
         _ = windowMenu.addItem(withTitle: "Minimize", action: NSSelectorFromString("performMiniaturize:"), keyEquivalent: "m")
-        let item45 = windowMenu.addItem(withTitle: "Zoom", action: NSSelectorFromString("performZoom:"), keyEquivalent: "")
-        item45.keyEquivalentModifierMask = []
-        windowMenu.addItem(.separator())
-        // Keep the macOS fullscreen equivalent; config bindings still work in the core.
-        // Replacing this key equivalent disables the system fullscreen shortcut.
-        let menuToggleFullScreen = windowMenu.addItem(withTitle: "Toggle Full Screen", action: NSSelectorFromString("toggleGhosttyFullScreen:"), keyEquivalent: "f")
-        self.menuToggleFullScreen = menuToggleFullScreen
-        menuToggleFullScreen.keyEquivalentModifierMask = [.control, .command]
         let menuToggleVisibility = shortcut("toggle_visibility", windowMenu.addItem(withTitle: "Show/Hide All Terminals", action: NSSelectorFromString("toggleVisibility:"), keyEquivalent: ""))
         self.menuToggleVisibility = menuToggleVisibility
         menuToggleVisibility.target = self
@@ -212,9 +204,6 @@ extension AppDelegate {
         let menuMoveSplitDividerRight = shortcut("resize_split:right,10", item56Submenu.addItem(withTitle: "Move Divider Right", action: NSSelectorFromString("moveSplitDividerRight:"), keyEquivalent: ""))
         self.menuMoveSplitDividerRight = menuMoveSplitDividerRight
         menuMoveSplitDividerRight.keyEquivalentModifierMask = []
-        windowMenu.addItem(.separator())
-        let menuReturnToDefaultSize = shortcut("reset_window_size", windowMenu.addItem(withTitle: "Return To Default Size", action: NSSelectorFromString("returnToDefaultSize:"), keyEquivalent: ""))
-        menuReturnToDefaultSize.keyEquivalentModifierMask = []
         windowMenu.addItem(.separator())
         let menuFloatOnTop = shortcut("toggle_window_float_on_top", windowMenu.addItem(withTitle: "Float on Top", action: NSSelectorFromString("floatOnTop:"), keyEquivalent: ""))
         self.menuFloatOnTop = menuFloatOnTop

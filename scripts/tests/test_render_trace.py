@@ -11,6 +11,49 @@ spec.loader.exec_module(trace)
 
 
 class RenderTraceTests(unittest.TestCase):
+    def test_reference_excludes_warmup_and_missing_presentation_time(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'samples.json').write_text(json.dumps({
+                'latency': 1, 'requestedMaximum': True, 'screenMaximumFPS': 120,
+                'samples': [
+                    {'sequence': 0, 'displayed': 100},
+                    {'sequence': 20, 'displayed': 0},
+                    {'sequence': 21, 'callback': 1, 'submit': 1.001,
+                     'deadline': 1.008, 'prediction': 1.04, 'displayed': 1.04},
+                ],
+            }))
+            result = trace.summarize(root)['reference']
+            self.assertEqual(result['valid_samples'], 1)
+            self.assertEqual(result['metal_submit_to_display_ms']['median'], 39)
+            self.assertEqual(result['metal_deadline_to_prediction_ms']['median'], 32)
+
+    def test_metal_timestamps_pair_per_surface_and_ignore_unpresented_drawables(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'render-1.csv').write_text(
+                'metal_tick,1,11000000,12000000,1\n'
+                'metal_callback,1,9000000,1,0\n'
+                'metal_state,1,0,1000,0\n'
+                'present_submit,2,10000000,1,0\n'
+                'displayed,3,14000000,1,0\n'
+                'displayed,4,0,2,0\n')
+            (root / 'render-2.csv').write_text(
+                'metal_tick,5,1000000,30000000,1\n'
+                'present_submit,6,25000000,1,0\n'
+                'displayed,7,28000000,1,0\n')
+            result = trace.summarize(root)['local']
+            self.assertEqual(result['metal_displayed_frames'], 2)
+            self.assertEqual(result['metal_submit_to_display_ms']['median'], 3.5)
+            self.assertEqual(result['metal_submit_to_display_ms']['p99'], 4)
+            self.assertEqual(result['metal_prediction_error_ms']['mean'], 0)
+            self.assertEqual(result['metal_callback_to_submit_ms']['median'], 1)
+            self.assertEqual(result['metal_callback_to_deadline_ms']['median'], 2)
+            self.assertEqual(result['metal_submitted_after_deadline'], 1)
+            self.assertEqual(result['metal_resumes'], 1)
+            self.assertEqual(result['metal_preferred_frame_latencies'], [1])
+            self.assertIsNone(result['main_queue_wait_ms'])
+
     def test_overlay_counts_distinguish_reference_work_from_submitted_work(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -35,10 +78,15 @@ class RenderTraceTests(unittest.TestCase):
                 'draw_total,7,7000000,1,0\n'
                 'vsync,8,16666667,0,0\n'
                 'rebuild,9,3000000,0,0\n'
+                'snapshot,9,11000000,0,0\n'
+                'snapshot_gpu,9,500000,1,0\n'
                 'trace_drop,10,17,0,0\n')
             result = trace.summarize(root)['local']
             self.assertEqual(result['main_queue_wait_ms']['mean'], 8)
             self.assertEqual(result['gpu_execution_ms']['mean'], 2)
+            self.assertEqual(result['gpu_execution_ms']['count'], 1)
+            self.assertEqual(result['snapshot_wall_ms']['mean'], 11)
+            self.assertEqual(result['snapshot_gpu_ms']['mean'], 0.5)
             self.assertEqual(result['draw_lock_wait_ms']['max'], 5)
             self.assertEqual(result['layer_assignments'], 2)
             self.assertEqual(result['trace_records_dropped'], 17)

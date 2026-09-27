@@ -14,7 +14,7 @@ const rendererpkg = @import("../renderer.zig");
 const Renderer = rendererpkg.Renderer;
 
 const mtl = @import("metal/api.zig");
-const IOSurfaceLayer = @import("metal/IOSurfaceLayer.zig");
+const PresentationLayer = @import("metal/PresentationLayer.zig");
 
 pub const Target = @import("metal/Target.zig");
 pub const Frame = @import("metal/Frame.zig");
@@ -32,12 +32,14 @@ pub const swap_chain_count = 3;
 
 const log = std.log.scoped(.metal);
 
-layer: IOSurfaceLayer,
+layer: PresentationLayer,
 
 /// MTLDevice
 device: objc.Object,
 /// MTL4CommandQueue
 queue: objc.Object,
+/// Layer-owned drawable residency; never modify its allocations.
+drawable_residency: ?objc.Object = null,
 
 /// Alpha blending mode
 blending: configpkg.Config.AlphaBlending,
@@ -83,11 +85,18 @@ pub fn init(alloc: Allocator, opts: rendererpkg.Options) !Metal {
         else => @compileError("unsupported apprt for metal"),
     };
 
-    // Create an IOSurfaceLayer which we can assign to the view to make
-    // it in to a "layer-hosting view", so that we can manually control
-    // the layer contents.
-    var layer = try IOSurfaceLayer.init();
+    // Host either the established IOSurface path or an opt-in Metal layer.
+    var layer = try PresentationLayer.init(
+        opts.config.metal_display_link,
+        opts.config.window_compositor,
+        device,
+        @intFromEnum(if (opts.config.blending.isLinear()) mtl.MTLPixelFormat.bgra8unorm_srgb else mtl.MTLPixelFormat.bgra8unorm),
+        opts.config.frame_latency,
+    );
     errdefer layer.release();
+
+    const residency: ?objc.Object = if (layer.isMetal()) layer.layer.getProperty(objc.Object, "residencySet").retain() else null;
+    if (residency) |set| queue.msgSend(void, "addResidencySet:", .{set});
 
     // Add our layer to the view.
     //
@@ -113,12 +122,17 @@ pub fn init(alloc: Allocator, opts: rendererpkg.Options) !Metal {
         .layer = layer,
         .device = device,
         .queue = queue,
+        .drawable_residency = residency,
         .blending = opts.config.blending,
         .max_texture_size = max_texture_size,
     };
 }
 
 pub fn deinit(self: *Metal) void {
+    if (self.drawable_residency) |set| {
+        self.queue.msgSend(void, "removeResidencySet:", .{set});
+        set.release();
+    }
     self.queue.release();
     self.device.release();
     self.layer.release();
@@ -180,8 +194,15 @@ pub fn reduceMotion(_: *const Metal) bool {
     return workspace.getProperty(bool, "accessibilityDisplayShouldReduceMotion");
 }
 
+pub const SurfaceSize = struct { width: u32, height: u32 };
+
 /// Get the current size of the runtime surface.
-pub fn surfaceSize(self: *const Metal) !struct { width: u32, height: u32 } {
+pub fn surfaceSize(self: *const Metal) !SurfaceSize {
+    if (self.layer.compositor_target) |target| return .{ .width = @intCast(target.width), .height = @intCast(target.height) };
+    if (self.layer.drawable) |drawable| {
+        const texture = drawable.getProperty(objc.Object, "texture");
+        return .{ .width = @intCast(texture.getProperty(c_ulong, "width")), .height = @intCast(texture.getProperty(c_ulong, "height")) };
+    }
     const bounds = self.layer.layer.getProperty(graphics.Rect, "bounds");
     const scale = self.layer.layer.getProperty(f64, "contentsScale");
 
@@ -200,8 +221,21 @@ pub fn surfaceSize(self: *const Metal) !struct { width: u32, height: u32 } {
     };
 }
 
+pub fn setBlending(self: *Metal, blending: configpkg.Config.AlphaBlending) void {
+    self.blending = blending;
+    if (self.layer.isMetal()) self.layer.layer.setProperty("pixelFormat", @as(c_ulong, @intFromEnum(
+        if (blending.isLinear()) mtl.MTLPixelFormat.bgra8unorm_srgb else mtl.MTLPixelFormat.bgra8unorm,
+    )));
+}
+
 /// Initialize a new render target which can be presented by this API.
 pub fn initTarget(self: *const Metal, width: usize, height: usize) !Target {
+    if (self.layer.isDirect()) return .{ .surface = null, .texture = undefined, .width = width, .height = height };
+    return self.initSnapshotTarget(width, height);
+}
+
+/// Independent readable target, allocated only for an explicit snapshot.
+pub fn initSnapshotTarget(self: *const Metal, width: usize, height: usize) !Target {
     return Target.init(.{
         .device = self.device,
         // Using an `*_srgb` pixel format makes Metal gamma encode the pixels

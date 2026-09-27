@@ -10,6 +10,7 @@ const RenderPass = @import("RenderPass.zig");
 const Health = @import("../../renderer.zig").Health;
 const Presentation = @import("../Presentation.zig");
 const log = std.log.scoped(.metal);
+const FrameTiming = @import("../FrameTiming.zig");
 
 pub fn object(class: [:0]const u8) objc.Object {
     return objc.getClass(class).?.msgSend(objc.Object, "new", .{});
@@ -76,9 +77,9 @@ pub fn begin(opts: Options, renderer: *Renderer, target: *Target) !Self {
     c.retained.msgSend(void, "removeAllObjects", .{});
     c.buffer.msgSend(void, "beginCommandBufferWithAllocator:", .{c.allocator});
     return .{
-        .queue = opts.queue,
+        .queue = renderer.api.layer.compositor_queue orelse opts.queue,
         .commands = c,
-        .block = CompletionBlock.init(.{ .renderer = renderer, .target = target, .commands = c, .sync = false, .sequence = renderer.api.layer.beginSurface(target.surface) }, &bufferCompleted),
+        .block = CompletionBlock.init(.{ .renderer = renderer, .target = target, .commands = c, .sync = false, .sequence = if (renderer.api.layer.isDirect() and target.surface != null) 0 else renderer.api.layer.beginSurface(target.surface) }, &bufferCompleted),
     };
 }
 
@@ -96,8 +97,12 @@ fn bufferCompleted(block: *const CompletionBlock.Context, feedback_id: objc.c.id
     const health: Health = if (err == null) .healthy else .unhealthy;
     if (block.renderer.trace.file != null) {
         const elapsed = feedback.getProperty(f64, "GPUEndTime") - feedback.getProperty(f64, "GPUStartTime");
-        if (std.math.isFinite(elapsed) and elapsed > 0)
-            block.renderer.trace.emit("gpu", @intFromFloat(elapsed * std.time.ns_per_s), @intFromBool(health == .healthy), 0);
+        if (std.math.isFinite(elapsed) and elapsed > 0) {
+            if (block.sync and block.renderer.api.layer.isDirect())
+                block.renderer.trace.emit("snapshot_gpu", @intFromFloat(elapsed * std.time.ns_per_s), @intFromBool(health == .healthy), 0)
+            else
+                block.renderer.trace.emit("gpu", @intFromFloat(elapsed * std.time.ns_per_s), @intFromBool(health == .healthy), 0);
+        }
     }
     if (block.sync) {
         block.commands.health = health;
@@ -109,7 +114,14 @@ fn bufferCompleted(block: *const CompletionBlock.Context, feedback_id: objc.c.id
         const message = description.msgSend([*:0]const u8, "UTF8String", .{});
         log.err("Metal 4 submission failed: {s}", .{message});
     }
-    block.renderer.frameCompleted(Presentation.finish(&block.renderer.api, block.target.*, false, health, block.sequence));
+    if (block.target.surface == null) {
+        // Return drawable texture references even when this surface goes idle.
+        block.commands.retained.msgSend(void, "removeAllObjects", .{});
+        block.commands.residency.msgSend(void, "removeAllAllocations", .{});
+        block.renderer.frameCompleted(health);
+    } else {
+        block.renderer.frameCompleted(Presentation.finish(&block.renderer.api, block.target.*, false, health, block.sequence));
+    }
 }
 
 pub fn renderPass(self: *const Self, attachments: []const RenderPass.Options.Attachment) RenderPass {
@@ -117,7 +129,8 @@ pub fn renderPass(self: *const Self, attachments: []const RenderPass.Options.Att
 }
 
 pub fn complete(self: *Self, sync: bool) void {
-    self.block.sync = sync;
+    const drawable = self.block.target.drawable;
+    self.block.sync = sync and drawable == null;
     const c = self.commands;
     c.residency.msgSend(void, "commit", .{});
     c.buffer.msgSend(void, "useResidencySet:", .{c.residency});
@@ -126,11 +139,29 @@ pub fn complete(self: *Self, sync: bool) void {
     defer options.release();
     options.msgSend(void, "addFeedbackHandler:", .{&self.block});
     const buffers = [_]objc.c.id{c.buffer.value};
+    if (drawable) |d| {
+        self.block.renderer.api.layer.observePresentation(d, self.block.sequence);
+        self.queue.msgSend(void, "waitForDrawable:", .{d});
+    }
     self.queue.msgSend(void, "commit:count:options:", .{ &buffers, @as(c_ulong, 1), options });
-    if (sync) {
+    if (drawable) |d| {
+        self.queue.msgSend(void, "signalDrawable:", .{d});
+        if (self.block.renderer.trace.file != null)
+            self.block.renderer.trace.emit("present_submit", FrameTiming.nanoseconds(FrameTiming.CACurrentMediaTime()), self.block.sequence, 0);
+        d.msgSend(void, "present", .{});
+    }
+    if (self.block.sync) {
         c.completed.waitUncancelable(global.io());
         // Core Animation's synchronous display callback must present on its
         // caller, never on the Metal feedback queue while the caller waits.
-        self.block.renderer.frameCompleted(Presentation.finish(&self.block.renderer.api, self.block.target.*, true, c.health, self.block.sequence));
+        if (self.block.renderer.api.layer.isDirect()) {
+            // Offscreen snapshot: GPU work completed, no display revision or
+            // cursor history publication. No access to the drawable pool.
+            c.retained.msgSend(void, "removeAllObjects", .{});
+            c.residency.msgSend(void, "removeAllAllocations", .{});
+            self.block.renderer.swap_chain.?.releaseFrame();
+        } else {
+            self.block.renderer.frameCompleted(Presentation.finish(&self.block.renderer.api, self.block.target.*, true, c.health, self.block.sequence));
+        }
     }
 }

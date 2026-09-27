@@ -48,6 +48,8 @@ test {
     // lazily imported helpers when a focused test filter is used.
     _ = @import("renderer/ScrollMotion.zig");
     _ = @import("renderer/ScrollScene.zig");
+    _ = @import("renderer/FrameTiming.zig");
+    _ = @import("renderer/MetalRunLoop.zig");
     _ = @import("renderer/CursorOverlay.zig");
     _ = @import("renderer/ScrollHit.zig");
     _ = @import("terminal/ScrollState.zig");

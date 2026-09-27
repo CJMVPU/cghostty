@@ -130,12 +130,20 @@ pub fn clock() u64 {
 
 /// event,time_ns,a,b,c. Draw: wall CPU path ns / copied cell bytes / segments.
 /// GPU: execution ns / healthy / unused. Timer: update kind / vsync / unused.
+/// Snapshot/snapshot_gpu: offscreen wall/GPU ns, separate from displayed frames.
 /// Overlay: full foreground count / submitted instances / scissor pixels.
 /// Vsync: callback interval ns (restart excluded). Draw_lock/draw_total:
 /// wait/total ns / synchronous / unused. Rebuild: swap-chain initialization ns.
 /// Present: main-queue wait ns / submission sequence / synchronous. This is
 /// layer assignment, NOT scanout. Present_drop: reason / sequence / unused;
 /// reasons: 0 stale, 1 replaced, 2 size mismatch, 3 invalidated, 4 target reused.
+/// Metal_tick: target deadline / predicted presentation / next sequence.
+/// Metal_callback: callback media time / next sequence / unused.
+/// Metal_state: paused / preferredFrameLatency times 1000 / unused.
+/// Present_submit: time immediately before present() / sequence / unused.
+/// Displayed: drawable.presentedTime (0 if unavailable) / sequence / unused.
+/// These display-link payload timestamps are Core Animation media-clock nanoseconds;
+/// the CSV time column remains the awake clock. Neither is input-to-photon latency.
 /// State: focused / visible / unused. Trace_drop: lost records / unused / unused.
 /// Names are comptime strings so queued records never borrow transient memory.
 pub fn emit(self: *Self, comptime event: []const u8, a: u64, b: u64, c: u64) void {

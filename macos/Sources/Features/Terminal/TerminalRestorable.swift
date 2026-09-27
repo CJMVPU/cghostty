@@ -184,13 +184,7 @@ class TerminalWindowRestoration: NSObject, NSWindowRestoration {
         }
 
         completionHandler(window, nil)
-        guard let mode = state.effectiveFullscreenMode, mode != .native else {
-            // We let AppKit handle native fullscreen
-            return
-        }
-        // Give the window to AppKit first, then adjust its frame and style
-        // to minimise any visible frame changes.
-        c.toggleFullscreen(mode: mode)
+
     }
 
 }

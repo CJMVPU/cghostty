@@ -1,5 +1,6 @@
 import Cocoa
 import GhosttyKit
+import IOSurface
 
 extension Ghostty {
     /// Owns one core terminal handle and exposes native terminal operations.
@@ -48,6 +49,23 @@ extension Ghostty {
             Task.detached { @MainActor in
                 withExtendedLifetime((app, callbackContext)) { ghostty_surface_free(surface) }
             }
+        }
+
+        nonisolated var usesWindowCompositor: Bool { ghostty_surface_uses_compositor(surface) }
+
+        nonisolated func setCompositor(_ sink: AnyObject?) {
+            ghostty_surface_set_compositor(surface, sink.map { Unmanaged.passUnretained($0).toOpaque() })
+        }
+
+        nonisolated var compositorInfo: ghostty_compositor_info_s { ghostty_surface_compositor_info(surface) }
+
+        nonisolated func renderCompositor(texture: AnyObject, queue: AnyObject, targetTime: Double, force: Bool) -> UInt32 {
+            ghostty_surface_render_compositor(surface, Unmanaged.passUnretained(texture).toOpaque(),
+                                             Unmanaged.passUnretained(queue).toOpaque(), targetTime, force)
+        }
+
+        nonisolated func traceCompositor(stage: UInt32, sequence: UInt64, time: Double, prediction: Double = 0) {
+            ghostty_surface_compositor_trace(surface, stage, sequence, time, prediction)
         }
 
         /// Stop native delivery before the view disappears, while outstanding
@@ -223,6 +241,11 @@ extension Ghostty {
         }
 
         @MainActor var renderRevision: UInt64 { ghostty_surface_render_revision(surface) }
+
+        @MainActor func copySnapshot() -> IOSurfaceRef? {
+            guard let value = ghostty_surface_copy_snapshot(surface) else { return nil }
+            return Unmanaged<IOSurfaceRef>.fromOpaque(value).takeRetainedValue()
+        }
 
         @MainActor var selection: TextSnapshot? {
             readText { ghostty_surface_read_selection(surface, $0) }

@@ -34,6 +34,11 @@ pub fn isActive(self: *const Self) bool {
 
 /// Requires the draw lock, as do reset and all geometry access.
 pub fn sample(self: *Self, enabled: bool, target: ?Target, now: f64) ?Frame {
+    return self.sampleAt(enabled, target, now, now);
+}
+
+/// Update target geometry in real time, then sample where it will be displayed.
+pub fn sampleAt(self: *Self, enabled: bool, target: ?Target, now: f64, presentation: f64) ?Frame {
     if (self.reset_pending.swap(false, .acq_rel)) self.reset();
     if (!enabled) {
         self.reset();
@@ -53,9 +58,10 @@ pub fn sample(self: *Self, enabled: bool, target: ?Target, now: f64) ?Frame {
         self.geometry.reset();
         self.geometry.mode = value.mode;
     }
-    const pose = self.geometry.update(value.center, value.size, value.timing_width, now, value.shape);
+    _ = self.geometry.update(value.center, value.size, value.timing_width, now, value.shape);
+    const pose = self.geometry.sample(presentation);
     self.active.store(self.geometry.running, .release);
-    return .{ .pose = pose, .effect = self.geometry.effect(now), .time = now };
+    return .{ .pose = pose, .effect = self.geometry.effect(presentation), .time = presentation };
 }
 
 /// Called only after successful frame encoding/submission, under draw_mutex.
@@ -200,4 +206,16 @@ test "CursorMotion presets propagate through hide disable invalidation and mode 
     target.center = .{ 0, 60 };
     _ = state.sample(true, target, 4);
     try t.expectApproxEqAbs(@as(f32, 0.200), state.geometry.duration, 0.000001);
+}
+
+test "CursorMotion presentation sampling advances motion without postponing its start" {
+    var state: Self = .{};
+    var target: Target = .{ .center = .{ 0, 0 }, .size = .{ 10, 20 }, .timing_width = 10, .shape = .block };
+    _ = state.sample(true, target, 0);
+    target.center = .{ 100, 0 };
+    const frame = state.sampleAt(true, target, 1, 1.016).?;
+    try std.testing.expectEqual(@as(f64, 1), state.geometry.began);
+    try std.testing.expect(frame.pose.center[0] > 0);
+    try std.testing.expect(frame.pose.center[0] < 100);
+    try std.testing.expectEqual(@as(f64, 1.016), frame.time);
 }
