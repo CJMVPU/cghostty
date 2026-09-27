@@ -137,6 +137,7 @@ pub fn clock() u64 {
 /// Present: main-queue wait ns / submission sequence / synchronous. This is
 /// layer assignment, NOT scanout. Present_drop: reason / sequence / unused;
 /// reasons: 0 stale, 1 replaced, 2 size mismatch, 3 invalidated, 4 target reused.
+/// Compositor_update: coalesced worker requests / window sequence / update wall ns.
 /// Metal_tick: target deadline / predicted presentation / next sequence.
 /// Metal_callback: callback media time / next sequence / unused.
 /// Metal_state: paused / preferredFrameLatency times 1000 / unused.

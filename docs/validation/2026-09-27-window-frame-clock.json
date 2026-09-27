@@ -1,0 +1,52 @@
+{
+  "checkpoint": "86a8a8ba7",
+  "backend": "window-compositor",
+  "workload": "Pause window frame clock; 200 real PTY input/output rounds with font and search changes; resume, hide and restore, close and flush.",
+  "input_rounds": 200,
+  "native_full_regression": {
+    "tests": 359,
+    "suites": 48,
+    "passed": true
+  },
+  "native_final_targeted": {
+    "tests": 4,
+    "suites": 1,
+    "passed": true
+  },
+  "zig_targeted": {
+    "passed": 109,
+    "total": 109,
+    "build_steps": 72
+  },
+  "trace_summarizer_tests": 6,
+  "trace": {
+    "draws": 6,
+    "compositor_updates": 6,
+    "compositor_update_requests": 508,
+    "compositor_requests_per_update": {
+      "count": 6,
+      "mean": 84.6667,
+      "median": 2.0,
+      "p99": 498,
+      "p95": 498,
+      "max": 498
+    },
+    "compositor_duplicate_pane_updates": 0,
+    "compositor_update_wall_ms": {
+      "count": 6,
+      "mean": 0.951,
+      "median": 0.4022,
+      "p99": 3.4119,
+      "p95": 3.4119,
+      "max": 3.4119
+    },
+    "trace_records_dropped": 0
+  },
+  "all_updates_have_window_tick": true,
+  "note": "Controlled scheduling regression; not a normal-refresh performance benchmark or input-to-photon measurement.",
+  "release_local": {
+    "built": true,
+    "scope_architecture_resources_signature": "passed",
+    "installed": false
+  }
+}

@@ -1351,8 +1351,9 @@ pub fn updateFrame(
         }
     }
 
-    // Start the display link now that the rebuilt frame is ready.
-    self.syncDisplayLink(null, null);
+    // A window update is already inside the display callback. Scheduling here
+    // would manufacture another content wake after every consumed update.
+    if (!self.api.layer.window_compositor) self.syncDisplayLink(null, null);
 }
 
 /// Draw the frame to the screen.
@@ -1450,7 +1451,7 @@ pub fn drawCompositor(self: *Self, texture: @import("objc").Object, queue: @impo
     const sequence = self.api.layer.sequence;
     _ = try self.drawFrameLocked(false, null);
     return @as(u32, @intFromBool(self.api.layer.sequence != sequence)) |
-        (if (self.cells_rebuilt or self.animationWakeLocked() != null) @as(u32, 2) else 0);
+        (if (self.cells_rebuilt or self.cursor_motion.isActive() or self.scroll.motion.active()) @as(u32, 2) else 0);
 }
 
 /// Release cached scenes and stop publishing their hit geometry.

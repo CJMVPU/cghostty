@@ -37,6 +37,18 @@ loop: xev.Loop,
 wakeup: xev.Async,
 wakeup_c: xev.Completion = .{},
 
+/// Serializes mailbox/config/font ownership with window-thread frame updates.
+/// Lock order: native window membership -> update_mutex -> terminal/draw locks.
+/// Producer callbacks never acquire native membership (requestFrame only queues).
+update_mutex: std.Io.Mutex = .init,
+compositor_ready: bool = false,
+compositor_updates: u64 = 0,
+
+/// A completed window update only refreshes worker-owned timers. It must not
+/// mark content dirty again or an idle window would render forever.
+frame_ready: xev.Async,
+frame_ready_c: xev.Completion = .{},
+
 /// This can be used to stop the renderer on the next loop iteration.
 stop: xev.Async,
 stop_c: xev.Completion = .{},
@@ -127,6 +139,9 @@ pub fn init(
     var stop_h = try xev.Async.init();
     errdefer stop_h.deinit();
 
+    var frame_ready = try xev.Async.init();
+    errdefer frame_ready.deinit();
+
     // The primary timer for rendering.
     var render_h = try xev.Timer.init();
     errdefer render_h.deinit();
@@ -148,6 +163,7 @@ pub fn init(
         .config = .init(config),
         .loop = loop,
         .wakeup = wakeup_h,
+        .frame_ready = frame_ready,
         .stop = stop_h,
         .render_h = render_h,
         .draw_now = draw_now,
@@ -172,6 +188,7 @@ pub fn init(
 pub fn deinit(self: *Thread) void {
     self.stop.deinit();
     self.wakeup.deinit();
+    self.frame_ready.deinit();
     self.render_h.deinit();
     self.draw_now.deinit();
     self.cursor_h.deinit();
@@ -210,13 +227,17 @@ fn threadMain_(self: *Thread) !void {
     self.setQosClass();
 
     self.renderer.loopEnter(self);
-    defer self.renderer.loopExit();
-
-    // Release GPU resources while the render thread is still alive.
-    defer self.renderer.threadExit();
+    defer {
+        self.update_mutex.lockUncancelable(global.io());
+        defer self.update_mutex.unlock(global.io());
+        self.compositor_ready = false;
+        self.renderer.threadExit();
+        self.renderer.loopExit();
+    }
 
     // Start the async handlers
     self.wakeup.wait(&self.loop, &self.wakeup_c, Thread, self, wakeupCallback);
+    self.frame_ready.wait(&self.loop, &self.frame_ready_c, Thread, self, frameReadyCallback);
     self.stop.wait(&self.loop, &self.stop_c, Thread, self, stopCallback);
     self.draw_now.wait(&self.loop, &self.draw_now_c, Thread, self, drawNowCallback);
 
@@ -228,6 +249,9 @@ fn threadMain_(self: *Thread) !void {
     // Arm the animation timer in case the renderer already needs
     // animation wakes (e.g. an active Kitty image).
     self.armAnimationTimer();
+    self.update_mutex.lockUncancelable(global.io());
+    self.compositor_ready = true;
+    self.update_mutex.unlock(global.io());
 
     // Run
     log.debug("starting renderer thread", .{});
@@ -268,7 +292,7 @@ fn setQosClass(self: *const Thread) void {
     }
 }
 
-/// Drain the mailbox.
+/// Drain the mailbox. Caller holds update_mutex.
 fn drainMailbox(self: *Thread) !void {
     // There's probably a more elegant way to do this...
     //
@@ -429,6 +453,8 @@ fn wakeupCallback(
     };
 
     const t = self_.?;
+    t.update_mutex.lockUncancelable(global.io());
+    defer t.update_mutex.unlock(global.io());
 
     // When we wake up, we check the mailbox. Mailbox producers should
     // wake up our thread after publishing.
@@ -475,6 +501,8 @@ fn drawNowCallback(
 
     // Draw immediately
     const t = self_.?;
+    t.update_mutex.lockUncancelable(global.io());
+    defer t.update_mutex.unlock(global.io());
     t.drawFrame(true);
     // Sampling can start or finish motion on a DisplayLink draw, independently
     // of terminal updates. Keep the timer policy in sync with that result.
@@ -519,6 +547,12 @@ fn renderCallback(
     // Kitty graphics animations pause with us and resume on visibility.
     if (!t.flags.visible) return .disarm;
 
+    if (t.renderer.api.layer.window_compositor) {
+        t.compositor_updates +|= 1;
+        t.renderer.syncDisplayLink(null, null);
+        return .disarm;
+    }
+
     // Update our frame data
     t.renderer.updateFrame(
         t.state,
@@ -534,6 +568,40 @@ fn renderCallback(
     t.armAnimationTimer();
 
     return .disarm;
+}
+
+/// Called once per visible pane by the window frame clock. Surface ownership
+/// keeps this worker/state alive; the gate protects state formerly worker-only.
+/// Updates arriving after this call remain pending and wake the next frame.
+pub fn renderCompositor(self: *Thread, texture: @import("objc").Object, queue: @import("objc").Object, target_time: f64, force: bool, sequence: u64) !u32 {
+    self.update_mutex.lockUncancelable(global.io());
+    defer self.update_mutex.unlock(global.io());
+    if (!self.compositor_ready or !self.flags.visible) return 0;
+    {
+        self.renderer.draw_mutex.lockUncancelable(global.io());
+        defer self.renderer.draw_mutex.unlock(global.io());
+        if (!self.renderer.display_realized) return 0;
+    }
+    if (self.compositor_updates != 0) {
+        const requests = self.compositor_updates;
+        const start = if (self.renderer.trace.file != null) @import("Trace.zig").clock() else 0;
+        // Clear only after success; allocation failure must not lose the update.
+        try self.renderer.updateFrame(self.state, self.flags.cursor_blink_visible);
+        self.compositor_updates = 0;
+        self.renderer.trace.emit("compositor_update", requests, sequence, if (start != 0) @import("Trace.zig").clock() - start else 0);
+        self.frame_ready.notify() catch {};
+    }
+    return self.renderer.drawCompositor(texture, queue, target_time, force);
+}
+
+fn frameReadyCallback(self_: ?*Thread, _: *xev.Loop, _: *xev.Completion, result: xev.Async.WaitError!void) xev.CallbackAction {
+    result catch return .rearm;
+    const self = self_.?;
+    self.update_mutex.lockUncancelable(global.io());
+    defer self.update_mutex.unlock(global.io());
+    self.armCursorBlinkTimer();
+    self.armAnimationTimer();
+    return .rearm;
 }
 
 /// Schedule the animation timer for the renderer's next animation
@@ -583,6 +651,9 @@ fn animationTimerCallback(
         log.warn("animation callback fired without data set", .{});
         return .disarm;
     };
+
+    t.update_mutex.lockUncancelable(global.io());
+    defer t.update_mutex.unlock(global.io());
 
     // Animations pause entirely while we're invisible; the .visible
     // mailbox message re-arms us when we can be seen again.
@@ -652,6 +723,9 @@ fn cursorTimerCallback(
         log.warn("render callback fired without data set", .{});
         return .disarm;
     };
+
+    t.update_mutex.lockUncancelable(global.io());
+    defer t.update_mutex.unlock(global.io());
 
     if (!t.flags.visible or !t.flags.focused or !t.renderer.cursor_blink_needed) {
         t.flags.cursor_blink_visible = true;

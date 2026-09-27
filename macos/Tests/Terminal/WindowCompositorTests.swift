@@ -142,6 +142,112 @@ import Testing
         #expect(files.contains { (try? String(contentsOf: $0, encoding: .utf8).contains("displayed,")) == true })
     }
 
+    @Test func contentUpdatesCoalesceUntilWindowClockResumes() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("cghostty-frame-clock-\(UUID().uuidString)")
+        print("Window frame clock trace: \(directory.path)")
+        let config = try TemporaryConfig("""
+        render-presentation = window-compositor
+        cursor-style-blink = false
+        cursor-effect = false
+        shell-integration = none
+        render-trace = true
+        render-trace-directory = \(directory.path)
+        """)
+        let app = Ghostty.App(configPath: config.temporaryFile.path)
+        var view: Ghostty.SurfaceView? = makeView(app: app, color: "255;0;0", marker: "clock-ready")
+        weak let surface = view?.surfaceModel
+        let window = makeWindow()
+        defer { window.close() }
+        window.contentView = view
+        window.orderFront(nil)
+        view?.sizeDidChange(window.contentView!.bounds.size)
+        surface?.setVisible(true)
+        let owner = try #require(view?.windowCompositor)
+        owner.updateGeometry()
+        try await wait { surface?.readContents(viewport: false).contains("clock-ready") == true && owner.worker.isIdle }
+        owner.worker.pauseUpdatesForTesting(true)
+        let before = owner.worker.statistics.paneDraws
+        // Each round waits for real PTY output. The producer can run hundreds of
+        // times while the window clock is held, without rebuilding cells.
+        for index in 0..<200 {
+            if index == 50 { #expect(surface?.changeFontSize(by: 1) == true) }
+            if index == 100 { #expect(surface?.search("burst") == true) }
+            if index == 150 {
+                #expect(surface?.perform(.resetFontSize) == true)
+                #expect(surface?.endSearch() == true)
+            }
+            let marker = "burst-\(index) "
+            #expect(surface?.sendKeyEvent(.init(keyCode: 0, action: .press, text: marker)) == true)
+            try await wait { surface?.readContents(viewport: false).contains(marker) == true }
+        }
+        #expect(owner.worker.statistics.paneDraws == before)
+        owner.worker.pauseUpdatesForTesting(false)
+        try await wait { owner.worker.statistics.paneDraws > before && owner.worker.isIdle }
+        // Hidden content catches up when it becomes visible again.
+        surface?.setVisible(false)
+        #expect(surface?.sendKeyEvent(.init(keyCode: 0, action: .press, text: "hidden-output")) == true)
+        try await wait { surface?.readContents(viewport: false).contains("hidden-output") == true }
+        surface?.setVisible(true)
+        let resumed = owner.worker.statistics.submitted
+        owner.updateGeometry()
+        try await wait { owner.worker.statistics.submitted > resumed && owner.worker.isIdle }
+        #expect(owner.worker.statistics.failed == 0)
+        window.close()
+        window.contentView = nil
+        view = nil
+        try await wait { surface == nil }
+        let files = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+        let lines = try files.flatMap { try String(contentsOf: $0, encoding: .utf8).split(separator: "\n").map(String.init) }
+        let updates = lines.filter { $0.hasPrefix("compositor_update,") }.map { $0.split(separator: ",") }
+        #expect(updates.count > 0)
+        #expect(updates.contains { UInt64($0[2])! > 1 })
+        // Frame sequence is global; a pane must never rebuild twice in one tick.
+        #expect(Set(updates.map { $0[3] }).count == updates.count)
+        #expect(!lines.contains { $0.hasPrefix("trace_drop,") })
+        let ticks = Set(lines.filter { $0.hasPrefix("metal_tick,") }.map { $0.split(separator: ",")[4] })
+        #expect(updates.allSatisfy { ticks.contains($0[3]) })
+        print("Window clock updates: \(updates.count), merged requests: \(updates.map { UInt64($0[2])! }.max() ?? 0)")
+    }
+
+    @Test(arguments: ["cursor", "kitty"])
+    func animationDeadlinesKeepWorkingWithoutNewOutput(animation: String) async throws {
+        let config = try TemporaryConfig("""
+        render-presentation = window-compositor
+        cursor-style-blink = \(animation == "cursor")
+        cursor-effect = false
+        shell-integration = none
+        """)
+        let app = Ghostty.App(configPath: config.temporaryFile.path)
+        // Two frames, 150 ms each, two complete loops, then stop. Image timers
+        // must wake an idle window without relying on fresh terminal output.
+        let kitty = "\u{1b}[H\u{1b}_Ga=T,f=32,s=1,v=1,i=1,q=2,c=4,r=2;/wAA/w==\u{1b}\\" +
+            "\u{1b}_Ga=f,i=1,f=32,s=1,v=1,z=150,q=2;AP8A/w==\u{1b}\\" +
+            "\u{1b}_Ga=a,i=1,r=1,z=150,s=3,v=3,q=2\u{1b}\\"
+        let view = makeView(app: app, color: "0;0;0", marker: "animation-ready" + (animation == "kitty" ? kitty : ""))
+        let surface = try #require(view.surfaceModel)
+        let window = makeWindow()
+        defer { window.close() }
+        window.contentView = view
+        window.orderFront(nil)
+        view.sizeDidChange(window.contentView!.bounds.size)
+        surface.setVisible(true)
+        surface.setFocus(true)
+        let owner = try #require(view.windowCompositor)
+        owner.updateGeometry()
+        try await wait {
+            surface.readContents(viewport: false).contains("animation-ready") &&
+            owner.worker.statistics.paneDraws > 0 && owner.worker.isIdle
+        }
+        // Frame counters alone could pass on duplicate startup submissions.
+        // Require the composed pixels to change and return with no new output.
+        let initialPixels = try owner.worker.readback().pixels
+        try await wait { try owner.worker.readback().pixels != initialPixels }
+        try await wait { try owner.worker.readback().pixels == initialPixels }
+        if animation == "cursor" { surface.setFocus(false) }
+        try await wait { owner.worker.isIdle }
+        #expect(owner.worker.statistics.failed == 0)
+    }
+
     private func assertColors(_ worker: WindowCompositorWorker, split: Double) throws {
         let image = try worker.readback()
         let y = image.height / 2
@@ -174,9 +280,9 @@ import Testing
         return window
     }
 
-    private func wait(_ predicate: () -> Bool) async throws {
+    private func wait(_ predicate: () throws -> Bool) async throws {
         let deadline = ContinuousClock.now + .seconds(10)
-        while !predicate() {
+        while try !predicate() {
             try #require(ContinuousClock.now < deadline, "Window compositor made no progress")
             try await Task.sleep(for: .milliseconds(5))
         }

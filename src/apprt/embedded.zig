@@ -1581,10 +1581,10 @@ pub const CAPI = struct {
         return surface.core_surface.render.renderer.compositorInfo();
     }
 
-    export fn ghostty_surface_render_compositor(surface: *Surface, texture: *anyopaque, queue: *anyopaque, target_time: f64, force: bool) u32 {
-        return surface.core_surface.render.renderer.drawCompositor(objc.Object.fromId(texture), objc.Object.fromId(queue), target_time, force) catch |err| {
+    export fn ghostty_surface_render_compositor(surface: *Surface, texture: *anyopaque, queue: *anyopaque, target_time: f64, force: bool, sequence: u64) u32 {
+        return surface.core_surface.render.thread.renderCompositor(objc.Object.fromId(texture), objc.Object.fromId(queue), target_time, force, sequence) catch |err| {
             log.err("window pane render failed err={}", .{err});
-            return 8;
+            return 10;
         };
     }
 

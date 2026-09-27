@@ -53,6 +53,12 @@ def summarize(directory):
         gpu = [row for row in rows if row[0] == "gpu"]
         timers = [row for row in rows if row[0] == "timer"]
         overlays = [row for row in rows if row[0] == "overlay"]
+        updates = [row for row in rows if row[0] == "compositor_update"]
+        duplicate_updates = sum(
+            sum(count - 1 for count in collections.Counter(
+                row[3] for row in surface if row[0] == "compositor_update"
+            ).values()) for surface in surfaces
+        )
         intervals = []
         for surface in surfaces:
             times = sorted(row[1] for row in surface if row[0] == "draw")
@@ -94,6 +100,11 @@ def summarize(directory):
         result[group] = {
             "surfaces": len(surfaces),
             "draws": len(draws),
+            "compositor_updates": len(updates),
+            "compositor_update_requests": sum(row[2] for row in updates),
+            "compositor_requests_per_update": distribution([row[2] for row in updates]),
+            "compositor_duplicate_pane_updates": duplicate_updates,
+            "compositor_update_wall_ms": distribution([row[4] / 1e6 for row in updates]),
             "copied_cell_bytes": sum(row[3] for row in draws),
             "frames_reusing_cells": sum(row[3] == 0 for row in draws),
             "overlay_reference_instances": sum(row[2] for row in overlays) if overlays else None,

@@ -133,8 +133,9 @@ render-frame-latency = 1
 
 每个窗口使用一个 CAMetalLayer、一个 CAMetalDisplayLink 和一个呈现线程。
 分屏绘制到各自的缓存纹理，再通过同一条 Metal 4 队列合成为一个 drawable；没有变化的分屏复用缓存。
-输入法、鼠标、无障碍、搜索栏和滚动条仍由原生视图负责。暂时保留每分屏的内容更新线程；
-光标和平滑滚动目前仍在分屏渲染器内绘制，cell 重建尚未统一到窗口帧时钟。
+输入法、鼠标、无障碍、搜索栏和滚动条仍由原生视图负责。IO 唤醒只标记待更新，
+窗口帧回调统一读取各分屏状态，每帧每分屏最多更新一次。暂时保留每分屏的辅助线程处理消息、
+动画定时器和滚动历史压缩；光标和平滑滚动仍在分屏渲染器内绘制。
 
 `render-frame-latency` 只接受 `1` 或 `2`，表示帧调度偏好，并非按键到屏幕的延迟保证。
 动画按预计显示时刻取样，实际上屏反馈写入 render-trace；空闲暂停，刷新率由系统决定。
@@ -144,7 +145,8 @@ render-frame-latency = 1
 恢复原路径：将 `render-presentation` 改为 `iosurface` 并重启。
 
 窗口合成器的实现边界、验证和后续工作见
-[窗口合成器原型验证](docs/validation/2026-09-27-window-compositor.md)。
+[窗口合成器原型验证](docs/validation/2026-09-27-window-compositor.md)及
+[窗口帧时钟合并更新验证](docs/validation/2026-09-27-window-frame-clock.md)。
 当前尚未证明端到端延迟改善。第一阶段数据保留在
 [Metal display link 验证](docs/validation/2026-09-27-metal-display-link.md)和
 [ReleaseLocal 时序与快照复查](docs/validation/2026-09-27-metal-display-link-followup.md)中。

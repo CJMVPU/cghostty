@@ -11,6 +11,22 @@ spec.loader.exec_module(trace)
 
 
 class RenderTraceTests(unittest.TestCase):
+    def test_compositor_coalescing_counts_duplicates_within_each_pane(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'render-1.csv').write_text(
+                'compositor_update,1,200,10,1000000\n'
+                'compositor_update,2,1,11,2000000\n'
+                'compositor_update,3,1,11,1000000\n')
+            (root / 'render-2.csv').write_text(
+                'compositor_update,1,5,10,1000000\n')
+            result = trace.summarize(root)['local']
+            self.assertEqual(result['compositor_updates'], 4)
+            self.assertEqual(result['compositor_update_requests'], 207)
+            self.assertEqual(result['compositor_requests_per_update']['max'], 200)
+            self.assertEqual(result['compositor_duplicate_pane_updates'], 1)
+            self.assertEqual(result['compositor_update_wall_ms']['mean'], 1.25)
+
     def test_reference_excludes_warmup_and_missing_presentation_time(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

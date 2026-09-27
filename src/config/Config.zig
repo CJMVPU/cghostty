@@ -1840,7 +1840,8 @@ keybind: Keybinds = .{},
 /// The experimental backend always uses display-link pacing; window-vsync
 /// only controls the IOSurface backend. `window-compositor` uses one native
 /// Metal layer and display link per window, with cached offscreen pane textures.
-/// Pane content-update threads remain independent in this prototype.
+/// Content updates coalesce on the window clock; per-pane mailbox/timer
+/// workers remain in this prototype.
 @"render-presentation": enum { iosurface, @"metal-display-link", @"window-compositor" } = .iosurface,
 
 /// Preferred rendering latency for experimental Metal backends, in frames (1 or 2).

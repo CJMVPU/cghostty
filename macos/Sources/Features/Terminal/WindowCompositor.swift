@@ -233,6 +233,13 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
     #if CGHOSTTY_TESTING
     private let completionCondition = NSCondition()
     private var testCompleted = 0
+    private var testUpdatesPaused = false
+
+    /// Simulates a delayed display clock while real PTY output keeps arriving.
+    func pauseUpdatesForTesting(_ paused: Bool) {
+        lock.withLock { testUpdatesPaused = paused }
+        if !paused { signal.requestFrame() }
+    }
     #endif
 
     var statistics: Statistics { statsLock.withLock { stats } }
@@ -372,6 +379,9 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
     private func draw(_ link: CAMetalDisplayLink, update: CAMetalDisplayLink.Update, callbackTime: Double) {
         lock.lock()
         defer { lock.unlock() }
+        #if CGHOSTTY_TESTING
+        if testUpdatesPaused { link.isPaused = true; return }
+        #endif
         guard !stopping, size.width > 0, size.height > 0 else { link.isPaused = true; return }
         if layer.drawableSize != size { layer.drawableSize = size; return }
         let slot = slots[index]
@@ -411,7 +421,7 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
                     pane.initialized = false
                 }
                 let result = pane.surface.renderCompositor(texture: pane.target!, queue: queue,
-                    targetTime: update.targetPresentationTimestamp, force: !pane.initialized)
+                    targetTime: update.targetPresentationTimestamp, force: !pane.initialized, sequence: sequence)
                 if result & 1 != 0 { pane.initialized = true; draws += 1 }
                 if result & 2 != 0 { more = true }
                 if result & 8 != 0 { statsLock.withLock { stats.failed += 1 } }

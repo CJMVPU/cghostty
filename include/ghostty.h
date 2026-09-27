@@ -1232,7 +1232,7 @@ typedef struct { uint32_t width, height, pixel_format; float latency; } ghostty_
 GHOSTTY_API bool ghostty_surface_uses_compositor(ghostty_surface_t);
 GHOSTTY_API void ghostty_surface_set_compositor(ghostty_surface_t, void* sink);
 GHOSTTY_API ghostty_compositor_info_s ghostty_surface_compositor_info(ghostty_surface_t);
-GHOSTTY_API uint32_t ghostty_surface_render_compositor(ghostty_surface_t, void* texture, void* queue, double target_time, bool force);
+GHOSTTY_API uint32_t ghostty_surface_render_compositor(ghostty_surface_t, void* texture, void* queue, double target_time, bool force, uint64_t sequence);
 // Clock events: 0=tick (deadline, prediction), 1=callback, 2=submit, 3=displayed.
 GHOSTTY_API void ghostty_surface_compositor_trace(ghostty_surface_t, uint32_t stage, uint64_t sequence, double time, double prediction);
 

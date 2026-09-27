@@ -3,6 +3,9 @@
 配置 `render-presentation = window-compositor`，重启后生效。默认仍为 `iosurface`；
 `metal-display-link` 保留为每分屏独立呈现的对照。未修改用户配置、安装应用或发布版本。
 
+> 本文记录初始原型检查点 `86a8a8ba7`。后续已将 cell 更新接入窗口帧时钟，
+> 见[合并更新验证](2026-09-27-window-frame-clock.md)。下文的“尚未统一更新”是检查点当时的状态。
+
 ## 已实现的边界
 
 - 每个窗口一个 CAMetalLayer、CAMetalDisplayLink、后台 NSRunLoop 线程和 Metal 4 呈现队列。
