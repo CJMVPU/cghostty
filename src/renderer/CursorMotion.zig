@@ -32,13 +32,9 @@ pub fn isActive(self: *const Self) bool {
     return !self.reset_pending.load(.acquire) and self.active.load(.acquire);
 }
 
-/// Requires the draw lock, as do reset and all geometry access.
-pub fn sample(self: *Self, enabled: bool, target: ?Target, now: f64) ?Frame {
-    return self.sampleAt(enabled, target, now, now);
-}
-
-/// Update target geometry in real time, then sample where it will be displayed.
-pub fn sampleAt(self: *Self, enabled: bool, target: ?Target, now: f64, presentation: f64) ?Frame {
+/// Requires the draw lock. Target changes, geometry and history share the
+/// presentation timeline: a short move must not finish before its first frame.
+pub fn sample(self: *Self, enabled: bool, target: ?Target, presentation: f64) ?Frame {
     if (self.reset_pending.swap(false, .acq_rel)) self.reset();
     if (!enabled) {
         self.reset();
@@ -58,12 +54,14 @@ pub fn sampleAt(self: *Self, enabled: bool, target: ?Target, now: f64, presentat
         self.geometry.reset();
         self.geometry.mode = value.mode;
     }
-    _ = self.geometry.update(value.center, value.size, value.timing_width, now, value.shape);
-    const pose = self.geometry.sample(presentation);
-    // Stop requesting frames once the presentation sample has completely
-    // settled; keep real-time geometry intact for subsequent input.
-    self.active.store(self.geometry.running and (presentation < self.geometry.hold_until + Geometry.recovery_duration or pose.trail_len > 0), .release);
-    return .{ .pose = pose, .effect = self.geometry.effect(presentation), .time = presentation };
+    // A changing display prediction must not rewind an already submitted pose.
+    const time = if (self.geometry.history_len > 0)
+        @max(presentation, self.geometry.history[self.geometry.history_len - 1].time)
+    else
+        presentation;
+    const pose = self.geometry.update(value.center, value.size, value.timing_width, time, value.shape);
+    self.active.store(self.geometry.running and (time < self.geometry.hold_until + Geometry.recovery_duration or pose.trail_len > 0), .release);
+    return .{ .pose = pose, .effect = self.geometry.effect(time), .time = time };
 }
 
 /// Called only after successful frame encoding/submission, under draw_mutex.
@@ -210,16 +208,19 @@ test "CursorMotion presets propagate through hide disable invalidation and mode 
     try t.expectApproxEqAbs(@as(f32, 0), state.geometry.duration, 0.000001);
 }
 
-test "CursorMotion presentation sampling advances motion without postponing its start" {
+test "CursorMotion target and geometry use the same presentation timeline" {
     var state: Self = .{};
     var target: Target = .{ .center = .{ 0, 0 }, .size = .{ 10, 20 }, .timing_width = 10, .shape = .block };
     _ = state.sample(true, target, 0);
     target.center = .{ 100, 0 };
-    const frame = state.sampleAt(true, target, 1, 1.016).?;
-    try std.testing.expectEqual(@as(f64, 1), state.geometry.began);
-    try std.testing.expect(frame.pose.center[0] > 0);
-    try std.testing.expect(frame.pose.center[0] < 100);
+    const frame = state.sample(true, target, 1.016).?;
+    try std.testing.expectEqual(@as(f64, 1.016), state.geometry.began);
+    try std.testing.expectEqual(@as(f32, 0), frame.pose.center[0]);
     try std.testing.expectEqual(@as(f64, 1.016), frame.time);
+    const next = state.sample(true, target, 1.032).?;
+    try std.testing.expect(next.pose.center[0] > 0);
+    try std.testing.expect(next.pose.center[0] < 100);
+    try std.testing.expectEqual(@as(f64, 1.016), state.geometry.began);
 }
 
 test "CursorMotion settles at presentation time without truncating a submitted trail" {
@@ -228,16 +229,87 @@ test "CursorMotion settles at presentation time without truncating a submitted t
     var target: Target = .{ .center = .{ 0, 0 }, .size = .{ 10, 20 }, .timing_width = 10, .shape = .block };
     state.recordFrame(state.sample(true, target, 0).?);
     target.center = .{ 100, 0 };
-    state.recordFrame(state.sampleAt(true, target, 1, 1.04).?);
+    state.recordFrame(state.sample(true, target, 1.04).?);
     // A late frame must drain its visible history before the clock can pause.
-    const late = state.sampleAt(true, target, 1.26, 1.30).?;
+    const late = state.sample(true, target, 1.30).?;
     try t.expect(late.pose.trail_len > 0);
     try t.expect(state.isActive());
     state.recordFrame(late);
-    const settled = state.sampleAt(true, target, 1.40, 1.45).?;
-    try t.expect(state.geometry.running);
+    const settled = state.sample(true, target, 1.45).?;
+    try t.expect(!state.geometry.running);
     try t.expectEqual(target.center, settled.pose.center);
     try t.expectEqual(@as(f32, 0), settled.effect);
     try t.expectEqual(@as(u32, 0), settled.pose.trail_len);
     try t.expect(!state.isActive());
+}
+
+test "CursorMotion short move keeps visible intermediate positions with presentation lead" {
+    const t = std.testing;
+    var state: Self = .{};
+    var target: Target = .{ .center = .{ 0, 0 }, .size = .{ 10, 20 }, .timing_width = 10, .shape = .block };
+    state.recordFrame(state.sample(true, target, 0.0415).?);
+    target.center = .{ 10, 0 };
+    const first = state.sample(true, target, 1.0415).?;
+    try t.expect(first.pose.center[0] < 10);
+    state.recordFrame(first);
+    const middle = state.sample(true, target, 1.049833).?;
+    try t.expect(middle.pose.center[0] > first.pose.center[0]);
+    try t.expect(middle.pose.center[0] < 10);
+    state.recordFrame(middle);
+    const arrived = state.sample(true, target, 1.074833).?;
+    try t.expectEqual(target.center, arrived.pose.center);
+}
+
+test "CursorMotion presentation lead does not change repeat movement at 60 and 120Hz" {
+    const t = std.testing;
+    for ([_]f64{ 60, 120 }) |hz| {
+        for ([_]f64{ 0, 0.016, 0.0415, 0.083 }) |lead| {
+            var immediate: Self = .{};
+            var delayed: Self = .{};
+            var target: Target = .{ .center = .{ 0, 0 }, .size = .{ 10, 20 }, .timing_width = 10, .shape = .block };
+            immediate.recordFrame(immediate.sample(true, target, 0).?);
+            delayed.recordFrame(delayed.sample(true, target, lead).?);
+            var previous: f32 = 0;
+            for (0..36) |i| {
+                const now = 1 + @as(f64, @floatFromInt(i)) / hz;
+                // Repeated keys, stationary frames, and a Chinese-width geometry
+                // transition all retain the same motion under a shifted clock.
+                if (i % 2 == 0) target.center[0] += 10;
+                if (i == 12) target.size[0] = 20;
+                const expected = immediate.sample(true, target, now).?;
+                const actual = delayed.sample(true, target, now + lead).?;
+                try t.expectApproxEqAbs(expected.pose.center[0], actual.pose.center[0], 0.001);
+                try t.expectApproxEqAbs(expected.pose.size[0], actual.pose.size[0], 0.001);
+                try t.expect(actual.pose.center[0] >= previous);
+                try t.expect(actual.pose.center[0] <= target.center[0]);
+                previous = actual.pose.center[0];
+                immediate.recordFrame(expected);
+                delayed.recordFrame(actual);
+                // A regressing prediction for unchanged content cannot rewind.
+                const repeated = delayed.sample(true, target, now + lead - 0.0065).?;
+                try t.expectEqual(actual.pose.center, repeated.pose.center);
+            }
+            const stopped = delayed.sample(true, target, 3).?;
+            delayed.recordFrame(stopped);
+            _ = delayed.sample(true, target, 3.5);
+            try t.expect(!delayed.isActive());
+        }
+    }
+}
+
+test "CursorMotion instant presentation remains immediate and mode switch resets history" {
+    const t = std.testing;
+    var state: Self = .{};
+    var target: Target = .{ .center = .{ 0, 0 }, .size = .{ 10, 20 }, .timing_width = 10, .shape = .block };
+    state.recordFrame(state.sample(true, target, 0.0415).?);
+    target.center = .{ 10, 0 };
+    state.recordFrame(state.sample(true, target, 1.0415).?);
+    target.mode = .instant;
+    target.center = .{ 20, 0 };
+    const switched = state.sample(true, target, 1.049833).?;
+    try t.expectEqual(target.center, switched.pose.center);
+    try t.expectEqual(@as(u32, 0), switched.pose.trail_len);
+    state.recordFrame(switched);
+    target.center = .{ 30, 0 };
+    try t.expectEqual(target.center, state.sample(true, target, 1.058166).?.pose.center);
 }

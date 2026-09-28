@@ -2024,13 +2024,13 @@ fn updateSmoothCursor(self: *Self) ?CursorMotion.Frame {
     const target: SmoothCursor.Vec = .{ x + size[0] * 0.5, y + size[1] * 0.5 };
     // All shapes use cell travel, independent of cursor stroke thickness.
     const timing_width: f32 = @floatFromInt(self.size.cell.width);
-    const frame = self.cursor_motion.sampleAt(true, .{
+    const frame = self.cursor_motion.sample(true, .{
         .center = target,
         .size = size,
         .timing_width = timing_width,
         .shape = shape,
         .mode = self.config.cursor_effect_mode,
-    }, now, if (self.api.pane.timing) |timing| timing.presentation else now) orelse return null;
+    }, if (self.api.pane.timing) |timing| timing.presentation else now) orelse return null;
     self.uniforms.smooth_center = frame.pose.center;
     self.uniforms.smooth_trail_count = frame.pose.trail_len;
     for (frame.pose.trail[0..frame.pose.trail_len], 0..) |point, i| {

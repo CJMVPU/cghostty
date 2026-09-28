@@ -1,0 +1,26 @@
+{
+  "cursor_ui": {
+    "result": "Passed",
+    "passedTests": 4,
+    "failedTests": 0,
+    "skippedTests": 0,
+    "totalTestCount": 4,
+    "startTime": 1790572371.478,
+    "finishTime": 1790572627.676,
+    "testFailures": [],
+    "expanded_passed_cases": 4,
+    "result_bundle": "/private/tmp/cghostty-042-cursor-ui.xcresult"
+  },
+  "compositor": {
+    "result": "Passed",
+    "passedTests": 10,
+    "failedTests": 0,
+    "skippedTests": 0,
+    "totalTestCount": 10,
+    "startTime": 1790572652.199,
+    "finishTime": 1790572677.937,
+    "testFailures": [],
+    "expanded_passed_cases": 23,
+    "result_bundle": "/private/tmp/cghostty-042-compositor.xcresult"
+  }
+}
