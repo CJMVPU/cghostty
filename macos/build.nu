@@ -31,7 +31,7 @@ def main [
     if ($ui_tests or $only_testing != "") and $action != "test" {
         error make {msg: "--ui-tests and --only-testing require --action test."}
     }
-    if $clock_experiment not-in ["" metal view view-late view-corrected] {
+    if $clock_experiment not-in ["" metal] {
         error make {msg: "Unknown clock experiment variant."}
     }
     if $clock_experiment != "" and $configuration != "ReleaseLocal" {
@@ -91,9 +91,6 @@ def main [
     let conditions = ([
         (if $action == "test" { "CGHOSTTY_TESTING" } else { null })
         (if $clock_experiment != "" { "CGHOSTTY_CLOCK_EXPERIMENT" } else { null })
-        (if $clock_experiment in [view view-late view-corrected] { "CGHOSTTY_VIEW_CLOCK" } else { null })
-        (if $clock_experiment == "view-late" { "CGHOSTTY_LATE_DRAWABLE" } else { null })
-        (if $clock_experiment == "view-corrected" { "CGHOSTTY_CORRECTED_CLOCK" } else { null })
     ] | compact | str join " ")
     let test_settings = ([
         (if $action == "test" { "ENABLE_TESTABILITY=YES" } else { null })

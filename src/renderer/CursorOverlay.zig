@@ -26,15 +26,22 @@ pub const Rect = struct {
         return result;
     }
 };
-pub const Draw = struct { offset: usize = 0, count: usize = 0, scissor: ?Scissor = null };
+pub const Draw = struct { offset: usize = 0, count: usize = 0, scissor: ?Scissor = null, cursor_slots: bool = false };
 
 /// A single contiguous range avoids adding one draw call per candidate row.
 /// During scroll, include both unshifted rows and all possible region offsets.
 /// This deliberately overselects around split regions instead of clipping a
 /// glyph whose center selects a different scroll region than its overhang.
 pub fn plan(rows: anytype, foreground_count: usize, u: *const shaders.Uniforms) Draw {
-    // Preserve native block/hollow/bar cursor ordering and recoloring exactly.
-    if (u.smooth_effect == 0) return .{ .count = foreground_count };
+    if (foreground_count == 0) return .{};
+    if (u.smooth_effect == 0) {
+        // Only text in the cursor row can be recolored by a static cursor.
+        // Retain the complete row so wide glyphs and combining marks survive.
+        const y = u.cursor_pos[1];
+        if (y >= rows.len) return .{ .cursor_slots = true };
+        const row = rows[y];
+        return .{ .offset = row.offset, .count = row.len, .cursor_slots = true };
+    }
     // Animated bars/underlines do not recolor text; the shader discarded all
     // these fragments and suppressed both static cursor slots anyway.
     if (u.smooth_block == 0) return .{};
@@ -101,7 +108,10 @@ test "CursorOverlay selects bounded rows and skips animated bars but preserves n
     u.smooth_block = 0;
     try t.expectEqual(@as(usize, 0), plan(&rows, 3202, &u).count);
     u.smooth_effect = 0;
-    try t.expectEqual(Draw{ .count = 3202 }, plan(&rows, 3202, &u));
+    u.cursor_pos = .{ 2, 20 };
+    try t.expectEqual(Draw{ .offset = 1601, .count = 80, .cursor_slots = true }, plan(&rows, 3202, &u));
+    u.cursor_pos[1] = 65535;
+    try t.expectEqual(Draw{ .cursor_slots = true }, plan(&rows, 3202, &u));
     u.smooth_effect = 1;
     u.smooth_block = 1;
     u.smooth_bounds_min = .{ -10, -10 };

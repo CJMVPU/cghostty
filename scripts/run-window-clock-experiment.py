@@ -14,6 +14,7 @@ p.add_argument('directory', type=Path)
 p.add_argument('--samples', type=int, default=200)
 p.add_argument('--phases', help='Comma-separated phase names; default runs the full matrix')
 p.add_argument('--drawables', type=int, choices=[2, 3], default=3)
+p.add_argument('--rate', choices=['max', 'system'], default='max', help='Request screen maximum, or use the production system-default rate policy')
 a = p.parse_args()
 if a.samples < 1:
     p.error('--samples must be positive')
@@ -29,7 +30,7 @@ confirm-close-surface = false
 quit-after-last-window-closed = false
 cursor-style-blink = false
 cursor-effect = true
-cursor-effect-mode = classic
+cursor-effect-mode = responsive
 smooth-scroll = true
 font-size = 10
 background-opacity = 1
@@ -42,7 +43,8 @@ if nvim is None:
 values = dict(CGHOSTTY_CONFIG_PATH=str(config), CGHOSTTY_CLOCK_OUTPUT=str(root / 'result.json'),
               CGHOSTTY_CLOCK_WORKLOAD=str(root / 'workload.py'),
               CGHOSTTY_CLOCK_NVIM=nvim, CGHOSTTY_CLOCK_SAMPLES=str(a.samples),
-              CGHOSTTY_CLOCK_DRAWABLES=str(a.drawables), GHOSTTY_USER_DEFAULTS_SUITE='clock-experiment-' + uuid.uuid4().hex)
+              CGHOSTTY_CLOCK_DRAWABLES=str(a.drawables), CGHOSTTY_CLOCK_RATE=a.rate,
+              GHOSTTY_USER_DEFAULTS_SUITE='clock-experiment-' + uuid.uuid4().hex)
 if a.phases:
     values['CGHOSTTY_CLOCK_PHASES'] = a.phases
 command = ['open', '-n', '-W']

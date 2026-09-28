@@ -75,7 +75,7 @@ region: ?Region,
 /// Begin a render pass.
 pub fn begin(
     opts: Options,
-) Self {
+) !Self {
     // Create a pass descriptor
     const desc = desc: {
         const desc = Frame.object("MTL4RenderPassDescriptor");
@@ -126,11 +126,11 @@ pub fn begin(
     };
 
     defer desc.release();
-    const encoder = opts.commands.buffer.msgSend(
-        objc.Object,
+    const encoder = objc.Object.fromId(opts.commands.buffer.msgSend(
+        ?*anyopaque,
         objc.sel("renderCommandEncoderWithDescriptor:"),
         .{desc.value},
-    );
+    ) orelse return error.MetalFailed);
 
     // Make earlier queue writes visible before this render pass consumes them.
     encoder.msgSend(void, "barrierAfterQueueStages:beforeStages:visibilityOptions:", .{ @as(c_ulong, 0x7fffffffffffffff), @as(c_ulong, 3), @as(c_ulong, 1) });

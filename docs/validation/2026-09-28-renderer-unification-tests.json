@@ -1,0 +1,97 @@
+{
+  "native_initial": {
+    "bundle": "/tmp/cghostty-unify-tests/DerivedData/Logs/Test/Test-Ghostty-2026.09.28_11-45-47-+0800.xcresult",
+    "bundle_present": false,
+    "result": "Passed",
+    "totalTestCount": 363,
+    "passedTests": 362,
+    "failedTests": 0,
+    "skippedTests": 1,
+    "testFailures": []
+  },
+  "cursor_ui_initial": {
+    "bundle": "/tmp/cghostty-unify-tests/DerivedData/Logs/Test/Test-Ghostty-2026.09.28_11-49-22-+0800.xcresult",
+    "bundle_present": true,
+    "result": "Failed",
+    "totalTestCount": 4,
+    "passedTests": 0,
+    "failedTests": 4,
+    "skippedTests": 0,
+    "testFailures": [
+      {
+        "failureText": "com.cjmvpu.cghostty crashed in closure #10 in WindowCompositorWorker.draw(drawable:deadline:prediction:callbackTime:)",
+        "targetName": "GhosttyUITests",
+        "testIdentifier": 1,
+        "testIdentifierString": "GhosttyCursorMotionUITests/testCellCacheRefreshAndBlinkTransitions()",
+        "testIdentifierURL": "test://com.apple.xcode/Ghostty/GhosttyUITests/GhosttyCursorMotionUITests/testCellCacheRefreshAndBlinkTransitions",
+        "testName": "testCellCacheRefreshAndBlinkTransitions()"
+      },
+      {
+        "failureText": "com.cjmvpu.cghostty crashed in closure #10 in WindowCompositorWorker.draw(drawable:deadline:prediction:callbackTime:)",
+        "targetName": "GhosttyUITests",
+        "testIdentifier": 2,
+        "testIdentifierString": "GhosttyCursorMotionUITests/testStableBodyAndTailThroughMetal()",
+        "testIdentifierURL": "test://com.apple.xcode/Ghostty/GhosttyUITests/GhosttyCursorMotionUITests/testStableBodyAndTailThroughMetal",
+        "testName": "testStableBodyAndTailThroughMetal()"
+      },
+      {
+        "failureText": "com.cjmvpu.cghostty crashed in closure #10 in WindowCompositorWorker.draw(drawable:deadline:prediction:callbackTime:)",
+        "targetName": "GhosttyUITests",
+        "testIdentifier": 3,
+        "testIdentifierString": "GhosttyCursorMotionUITests/testStableBodyAndTailWithoutPadding()",
+        "testIdentifierURL": "test://com.apple.xcode/Ghostty/GhosttyUITests/GhosttyCursorMotionUITests/testStableBodyAndTailWithoutPadding",
+        "testName": "testStableBodyAndTailWithoutPadding()"
+      },
+      {
+        "failureText": "com.cjmvpu.cghostty crashed in closure #10 in WindowCompositorWorker.draw(drawable:deadline:prediction:callbackTime:)",
+        "targetName": "GhosttyUITests",
+        "testIdentifier": 4,
+        "testIdentifierString": "GhosttyCursorMotionUITests/testWideCellsAndShapeChangesKeepConnectedMotion()",
+        "testIdentifierURL": "test://com.apple.xcode/Ghostty/GhosttyUITests/GhosttyCursorMotionUITests/testWideCellsAndShapeChangesKeepConnectedMotion",
+        "testName": "testWideCellsAndShapeChangesKeepConnectedMotion()"
+      }
+    ]
+  },
+  "cursor_ui_fixed": {
+    "bundle": "/tmp/cghostty-unify-tests/DerivedData/Logs/Test/Test-Ghostty-2026.09.28_11-51-20-+0800.xcresult",
+    "bundle_present": true,
+    "result": "Passed",
+    "totalTestCount": 4,
+    "passedTests": 4,
+    "failedTests": 0,
+    "skippedTests": 0,
+    "testFailures": []
+  },
+  "native_final": {
+    "bundle": "/private/tmp/cghostty-unify-final.xcresult",
+    "bundle_present": true,
+    "result": "Passed",
+    "totalTestCount": 363,
+    "passedTests": 362,
+    "failedTests": 0,
+    "skippedTests": 1,
+    "testFailures": []
+  },
+  "core_final": {
+    "result": "Passed",
+    "passedTests": 383,
+    "failedTests": 0,
+    "command": "python3 scripts/build.py test -Dtest-filter=renderer -Dtest-filter=config -Dtest-filter=font.Atlas --summary all"
+  },
+  "python": {
+    "result": "Passed",
+    "passedTests": 47,
+    "skippedTests": 4,
+    "failedTests": 0
+  },
+  "native_before_unused_state_cleanup": {
+    "bundle": "/tmp/cghostty-unify-tests/DerivedData/Logs/Test/Test-Ghostty-2026.09.28_11-56-59-+0800.xcresult",
+    "bundle_present": true,
+    "result": "Passed",
+    "totalTestCount": 363,
+    "passedTests": 362,
+    "failedTests": 0,
+    "skippedTests": 1,
+    "testFailures": []
+  }
+}

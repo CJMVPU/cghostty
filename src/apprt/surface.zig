@@ -5,7 +5,6 @@ const apprt = @import("../apprt.zig");
 const build_config = @import("../build_config.zig");
 const App = @import("../App.zig");
 const Surface = @import("../Surface.zig");
-const renderer = @import("../renderer.zig");
 const terminal = @import("../terminal/main.zig");
 const Config = @import("../config.zig").Config;
 const MessageData = @import("../datastruct/main.zig").MessageData;
@@ -107,9 +106,6 @@ pub const Message = union(enum) {
 
     /// Show a desktop notification.
     desktop_notification: DesktopNotification,
-
-    /// Health status change for the renderer.
-    renderer_health: renderer.Health,
 
     /// Tell the surface to present itself to the user. This may require raising
     /// a window and switching tabs.

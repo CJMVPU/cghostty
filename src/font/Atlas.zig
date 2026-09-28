@@ -66,28 +66,68 @@ fn fullRegion(self: *const Atlas) Region {
     return .{ .x = 0, .y = 0, .width = self.size, .height = self.size };
 }
 
-/// Bounding rectangle since a consumer's last successful upload. Caller holds
-/// the grid lock. First use, reset and an expired history require a full copy.
-pub fn changedRegion(self: *const Atlas, since: usize) ?Region {
+/// A bounded upload plan: combine touching regions, retain separated writes,
+/// and fall back to one bounding rectangle if fragmentation exceeds the cap.
+/// Each frame slot reads history independently while holding the grid lock.
+pub const DirtyRegions = struct {
+    regions: [8]Region = undefined,
+    len: usize = 0,
+
+    pub fn slice(self: *const DirtyRegions) []const Region {
+        return self.regions[0..self.len];
+    }
+
+    fn single(region: Region) DirtyRegions {
+        var result: DirtyRegions = .{};
+        result.regions[0] = region;
+        result.len = 1;
+        return result;
+    }
+};
+
+fn unionRegion(a: Region, b: Region) Region {
+    const x = @min(a.x, b.x);
+    const y = @min(a.y, b.y);
+    return .{ .x = x, .y = y, .width = @max(a.x + a.width, b.x + b.width) - x, .height = @max(a.y + a.height, b.y + b.height) - y };
+}
+
+pub fn changedRegions(self: *const Atlas, since: usize) DirtyRegions {
     const current = self.modified.load(.monotonic);
-    if (since == current) return null;
-    if (since == 0 or since > current or current - since > self.changes.len) return self.fullRegion();
-    var region: ?Region = null;
+    if (since == current) return .{};
+    if (since == 0 or since > current or current - since > self.changes.len) return .single(self.fullRegion());
+    var result: DirtyRegions = .{};
+    var collapsed = false;
     for (since + 1..current + 1) |version| {
         const change = self.changes[version % self.changes.len];
-        if (change.version != version) return self.fullRegion();
-        if (region) |old| {
-            const x = @min(old.x, change.region.x);
-            const y = @min(old.y, change.region.y);
-            region = .{
-                .x = x,
-                .y = y,
-                .width = @max(old.x + old.width, change.region.x + change.region.width) - x,
-                .height = @max(old.y + old.height, change.region.y + change.region.height) - y,
-            };
-        } else region = change.region;
+        if (change.version != version) return .single(self.fullRegion());
+        var region = change.region;
+        if (collapsed) {
+            result.regions[0] = unionRegion(result.regions[0], region);
+            continue;
+        }
+        var i: usize = 0;
+        while (i < result.len) {
+            const old = result.regions[i];
+            const merged = unionRegion(old, region);
+            // Merge only when it does not upload more texels than two copies.
+            // This includes adjacent glyphs, but avoids large empty L shapes.
+            if (@as(u64, merged.width) * merged.height <= @as(u64, old.width) * old.height + @as(u64, region.width) * region.height) {
+                region = merged;
+                result.len -= 1;
+                result.regions[i] = result.regions[result.len];
+                i = 0;
+            } else i += 1;
+        }
+        if (result.len == result.regions.len) {
+            for (result.slice()) |old| region = unionRegion(old, region);
+            result = .single(region);
+            collapsed = true;
+        } else {
+            result.regions[result.len] = region;
+            result.len += 1;
+        }
     }
-    return region;
+    return result;
 }
 
 pub const Format = enum(u8) {

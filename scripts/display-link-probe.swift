@@ -1,5 +1,5 @@
 // Standalone frontmost AppKit probe. Build with swiftc -O -parse-as-library.
-// Arguments: output.json metal|view opaque|transparent glass|plain 2|3 1|2
+// Arguments: output.json metal opaque|transparent glass|plain 2|3 1|2
 import AppKit
 import Metal
 import QuartzCore
@@ -10,12 +10,10 @@ import QuartzCore
     private let layer = CAMetalLayer()
     private var queue: (any MTLCommandQueue)!
     private var metalLink: CAMetalDisplayLink?
-    private var viewLink: CADisplayLink?
     private var callbacks = 0
     private var submitted = 0
     private var samples: [[String: Any]] = []
     private var output = ""
-    private var mode = "metal"
     private var timeout: Timer?
     private var finished = false
     private var started = CACurrentMediaTime()
@@ -31,16 +29,15 @@ import QuartzCore
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let args = CommandLine.arguments
-        guard args.count == 7, ["metal", "view"].contains(args[2]),
+        guard args.count == 7, args[2] == "metal",
               ["opaque", "transparent"].contains(args[3]), ["glass", "plain"].contains(args[4]),
               let drawables = Int(args[5]), [2, 3].contains(drawables),
               let latency = Float(args[6]), [1, 2].contains(latency),
               let device = MTLCreateSystemDefaultDevice(), let queue = device.makeCommandQueue() else {
-            fputs("Usage: probe output.json metal|view opaque|transparent glass|plain 2|3 1|2\n", stderr)
+            fputs("Usage: probe output.json metal opaque|transparent glass|plain 2|3 1|2\n", stderr)
             exit(2)
         }
         output = args[1]
-        mode = args[2]
         self.queue = queue
         window = NSWindow(contentRect: CGRect(x: 180, y: 180, width: 480, height: 240),
                           styleMask: [.titled, .closable], backing: .buffered, defer: false)
@@ -68,17 +65,11 @@ import QuartzCore
         let scale = window.backingScaleFactor
         layer.contentsScale = scale
         layer.drawableSize = CGSize(width: view.bounds.width * scale, height: view.bounds.height * scale)
-        if mode == "metal" {
-            let link = CAMetalDisplayLink(metalLayer: layer)
-            link.preferredFrameLatency = latency
-            link.delegate = self
-            link.add(to: .main, forMode: .common)
-            metalLink = link
-        } else {
-            let link = view.displayLink(target: self, selector: #selector(tick(_:)))
-            link.add(to: .main, forMode: .common)
-            viewLink = link
-        }
+        let link = CAMetalDisplayLink(metalLayer: layer)
+        link.preferredFrameLatency = latency
+        link.delegate = self
+        link.add(to: .main, forMode: .common)
+        metalLink = link
         started = CACurrentMediaTime()
         timeout = Timer.scheduledTimer(withTimeInterval: 20, repeats: false) { [weak self] _ in
             Task { @MainActor in self?.finish(error: "Timed out before all presentation callbacks") }
@@ -95,17 +86,8 @@ import QuartzCore
              prediction: update.targetPresentationTimestamp, acquire: 0)
     }
 
-    @objc private func tick(_ link: CADisplayLink) {
-        callbacks += 1
-        guard submitted < count else { link.isPaused = true; return }
-        let callback = CACurrentMediaTime()
-        guard let drawable = layer.nextDrawable() else { finish(error: "nextDrawable returned nil"); return }
-        draw(drawable, callback: callback, deadline: link.targetTimestamp,
-             prediction: 0, acquire: CACurrentMediaTime() - callback)
-    }
-
     private func draw(_ drawable: any CAMetalDrawable, callback: Double, deadline: Double, prediction: Double, acquire: Double) {
-        guard submitted < count else { metalLink?.isPaused = true; viewLink?.isPaused = true; return }
+        guard submitted < count else { metalLink?.isPaused = true; return }
         // Wait for actual activation, not an arbitrary delay. Record focus per sample.
         guard NSApp.isActive, window.isKeyWindow else { return }
         let pass = MTLRenderPassDescriptor()
@@ -140,7 +122,6 @@ import QuartzCore
         guard !finished else { return }
         finished = true
         metalLink?.invalidate()
-        viewLink?.invalidate()
         timeout?.invalidate()
         let screen = window.screen
         let data: [String: Any] = ["arguments": Array(CommandLine.arguments.dropFirst(2)),

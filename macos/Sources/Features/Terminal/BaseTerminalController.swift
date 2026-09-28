@@ -9,8 +9,7 @@ import Observation
 class BaseTerminalController: NSWindowController,
                               NSWindowDelegate,
                               TerminalViewDelegate,
-                              ClipboardConfirmationViewDelegate,
-                              FullscreenDelegate {
+                              ClipboardConfirmationViewDelegate {
     /// The app instance that this terminal view will represent.
     let ghostty: Ghostty.App
 
@@ -130,9 +129,6 @@ class BaseTerminalController: NSWindowController,
 
     /// The clipboard confirmation window, if shown.
     private var clipboardConfirmation: ClipboardConfirmationController?
-
-    /// Fullscreen state management.
-    private(set) var fullscreenStyle: FullscreenStyle?
 
     /// Event monitor (see individual events for why)
     private var eventMonitor: Any?
@@ -265,11 +261,6 @@ class BaseTerminalController: NSWindowController,
 
     /// Request a tab using the owning window's behavior.
     func requestNewTab(from target: Ghostty.SurfaceView, baseConfig: Ghostty.SurfaceConfiguration) {}
-
-    func requestFullscreen(from target: Ghostty.SurfaceView, mode: FullscreenMode) {
-        guard target == focusedSurface else { return }
-        toggleFullscreen(mode: mode)
-    }
 
     /// Create a new split.
     @discardableResult
@@ -506,10 +497,6 @@ class BaseTerminalController: NSWindowController,
         guard let window else { return }
         guard window.isVisible else { return }
 
-        // We ignore fullscreen windows because macOS automatically resizes
-        // those back to the fullscreen bounds.
-        guard !window.styleMask.contains(.fullScreen) else { return }
-
         guard let screen = window.screen else { return }
         let visibleFrame = screen.visibleFrame
         var newFrame = window.frame
@@ -689,8 +676,7 @@ class BaseTerminalController: NSWindowController,
         // Do nothing if config is already fully opaque
         guard ghostty.config.backgroundOpacity < 1 else { return }
 
-        // Do nothing if in fullscreen (transparency doesn't apply in fullscreen)
-        guard let window, !window.styleMask.contains(.fullScreen) else { return }
+        guard window != nil else { return }
 
         let newValue = !isBackgroundOpaque
         let controllers = ghostty.windowRegistry.windowControllers
@@ -711,82 +697,13 @@ class BaseTerminalController: NSWindowController,
         // it virtually from here.
     }
 
-    // MARK: Fullscreen
-
-    /// Toggle fullscreen for the given mode.
-    func toggleFullscreen(mode: FullscreenMode) {
-        guard !(window is TerminalWindow), !(window is QuickTerminalWindow) else { return }
-        // We need a window to fullscreen
-        guard let window = self.window else { return }
-
-        // If we have a previous fullscreen style initialized, we want to check if
-        // our mode changed. If it changed and we're in fullscreen, we exit so we can
-        // toggle it next time. If it changed and we're not in fullscreen we can just
-        // switch the handler.
-        var newStyle = mode.style(for: window)
-        newStyle?.delegate = self
-        old: if let oldStyle = self.fullscreenStyle {
-            // If we're not fullscreen, we can nil it out so we get the new style
-            if !oldStyle.isFullscreen {
-                self.fullscreenStyle = newStyle
-                break old
-            }
-
-            assert(oldStyle.isFullscreen)
-
-            // We consider our mode changed if the types change (obvious) but
-            // also if its nil (not obvious) because nil means that the style has
-            // likely changed but we don't support it.
-            if newStyle == nil || type(of: newStyle!) != type(of: oldStyle) {
-                // Our mode changed. Exit fullscreen (since we're toggling anyways)
-                // and then set the new style for future use
-                oldStyle.exit()
-                self.fullscreenStyle = newStyle
-
-                // We're done
-                return
-            }
-
-            // Style is the same.
-        } else {
-            // We have no previous style
-            self.fullscreenStyle = newStyle
-        }
-        guard let fullscreenStyle else { return }
-
-        if fullscreenStyle.isFullscreen {
-            fullscreenStyle.exit()
-        } else {
-            fullscreenStyle.enter()
-        }
-    }
-
-    func fullscreenDidChange() {
-        (window as? HiddenTitlebarTerminalWindow)?.fullscreenDidChange()
-
-        // Always resync our appearance
-        syncAppearance()
-    }
-
     // MARK: NSWindowController
 
     override func windowDidLoad() {
         super.windowDidLoad()
 
-        // Setup our undo manager.
-
-        // Everything beyond here is setting up the window
-        guard let window else { return }
+        guard window != nil else { return }
         ghostty.windowRegistry.register(self)
-
-        // We always initialize our fullscreen style to native if we can because
-        // initialization sets up some state (i.e. observers). If its set already
-        // somehow we don't do this.
-        if fullscreenStyle == nil {
-            fullscreenStyle = NativeFullscreen(window)
-            fullscreenStyle?.delegate = self
-        }
-
     }
 
     // MARK: NSWindowDelegate

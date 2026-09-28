@@ -167,6 +167,8 @@ api: Metal,
 
 /// Health of the most recently completed frame.
 health: std.atomic.Value(Health) = .{ .raw = .healthy },
+/// Coalesced GPU feedback, consumed by the app tick without a bounded mailbox.
+health_pending: std.atomic.Value(bool) = .init(false),
 
 /// True when we have a graphics context that can create GPU
 /// resources. Creating any GPU resource while this is false is invalid.
@@ -236,9 +238,11 @@ const SwapChain = struct {
     pub fn init(api: Metal) !SwapChain {
         var result: SwapChain = .{ .frames = undefined };
 
-        // Initialize all of our frame state.
+        var initialized: usize = 0;
+        errdefer for (result.frames[0..initialized]) |*frame| frame.deinit();
         for (&result.frames) |*frame| {
             frame.* = try FrameState.init(api);
+            initialized += 1;
         }
 
         return result;
@@ -1234,11 +1238,11 @@ pub fn setCompositorSink(self: *Self, sink: ?@import("objc").Object) void {
     self.cells_rebuilt = true;
 }
 
-pub const CompositorInfo = extern struct { width: u32, height: u32, pixel_format: u32, latency: f32 };
+pub const CompositorInfo = extern struct { width: u32, height: u32, pixel_format: u32, latency: f32, trace_enabled: bool };
 pub fn compositorInfo(self: *Self) CompositorInfo {
     self.draw_mutex.lockUncancelable(global.io());
     defer self.draw_mutex.unlock(global.io());
-    return .{ .width = self.size.screen.width, .height = self.size.screen.height, .pixel_format = @intCast(@intFromEnum(if (self.api.blending.isLinear()) @import("metal/api.zig").MTLPixelFormat.bgra8unorm_srgb else @import("metal/api.zig").MTLPixelFormat.bgra8unorm)), .latency = self.config.frame_latency };
+    return .{ .width = self.size.screen.width, .height = self.size.screen.height, .pixel_format = @intCast(@intFromEnum(if (self.api.blending.isLinear()) @import("metal/api.zig").MTLPixelFormat.bgra8unorm_srgb else @import("metal/api.zig").MTLPixelFormat.bgra8unorm)), .latency = self.config.frame_latency, .trace_enabled = self.trace.file != null };
 }
 
 /// Returns bit 0 when content is repainted, bit 4 when composed, bit 1
@@ -1530,18 +1534,22 @@ fn drawFrameLocked(
 
     // Get a frame context from the graphics API.
     var frame_ctx = try self.api.beginFrame(self, &frame.target, &frame.commands);
-    defer {
+    var encoded = false;
+    defer if (encoded) {
         submitted = true;
         frame_ctx.complete(sync);
         if (snapshot) |s| s.healthy = frame.commands.health == .healthy else self.cells_rebuilt = false;
         if (cursor_frame) |cursor| self.cursor_motion.recordFrame(cursor);
-    }
+    } else {
+        frame_ctx.abort();
+        self.scroll.key = null;
+    };
 
     if (freeze) |destination| {
         var history = old_uniforms.?;
         history.target_origin = .{ 0, 0 };
         try frame.history_uniforms.sync(&.{history});
-        var pass = frame_ctx.renderPass(&.{.{ .target = .{ .texture = self.scroll.textures[destination].? }, .clear_color = .{ 0, 0, 0, 0 } }});
+        var pass = try frame_ctx.renderPass(&.{.{ .target = .{ .texture = self.scroll.textures[destination].? }, .clear_color = .{ 0, 0, 0, 0 } }});
         pass.step(.{ .pipeline = self.shaders.pipelines.scroll_compose, .uniforms = frame.history_uniforms.buffer, .textures = &.{ self.scroll.textures[old_scene.?].?, self.scroll.textures[old_previous.?].? }, .draw = .{ .type = .triangle, .vertex_count = 3 } });
         pass.complete();
         self.trace.emit("scroll_freeze", 1, 0, 0);
@@ -1551,7 +1559,7 @@ fn drawFrameLocked(
         self.content_submissions +%= 1;
         self.trace.emit("content_draw", 1, 0, 0);
         const content_buffer = frame.content_uniforms.buffer;
-        var pass = frame_ctx.renderPass(&.{.{
+        var pass = try frame_ctx.renderPass(&.{.{
             .target = .{ .texture = self.scroll.textures[self.scroll.scene.?].? },
             .clear_color = .{ 0.0, 0.0, 0.0, 0.0 },
         }});
@@ -1625,7 +1633,7 @@ fn drawFrameLocked(
     {
         self.scroll.key = scene_key;
         if (self.scroll.motion.len == 0) self.scroll.previous = null;
-        var pass = RenderPass.begin(.{ .commands = frame_ctx.commands, .region = self.compositor_region, .attachments = &.{.{ .target = .{ .target = frame.target }, .clear_color = if (snapshot != null and self.compositor_region == null) .{ 0, 0, 0, 0 } else null }} });
+        var pass = try RenderPass.begin(.{ .commands = frame_ctx.commands, .region = self.compositor_region, .attachments = &.{.{ .target = .{ .target = frame.target }, .clear_color = if (snapshot != null and self.compositor_region == null) .{ 0, 0, 0, 0 } else null }} });
         defer pass.complete();
         // Wallpaper stays fixed under the independently scrolling content.
         if (self.bg_image) |img| switch (img) {
@@ -1650,16 +1658,26 @@ fn drawFrameLocked(
             .draw = .{ .type = .triangle, .vertex_count = 3 },
         });
         const overlay = frame.cell_upload.overlay(&self.uniforms);
-        if (self.trace.file != null) self.trace.emit("overlay", fg_count, overlay.count, if (overlay.count == 0) 0 else if (overlay.scissor) |r| r.width * r.height else self.size.screen.width * @as(u64, self.size.screen.height));
-        pass.step(.{
-            .pipeline = self.shaders.pipelines.cell_text,
-            .uniforms = frame.uniforms.buffer,
-            .buffers = &.{ frame.cells.buffer, frame.cells_bg.buffer },
-            .buffer_offsets = &.{ overlay.offset * @sizeOf(shaderpkg.CellText), 0 },
-            .textures = &.{ frame.grayscale, frame.color },
-            .scissor = overlay.scissor,
-            .draw = .{ .type = .triangle_strip, .vertex_count = 4, .instance_count = overlay.count },
-        });
+        const cursor_slots: usize = if (overlay.cursor_slots) 2 else 0;
+        const instances = overlay.count + cursor_slots;
+        if (self.trace.file != null) self.trace.emit("overlay", fg_count, instances, if (instances == 0) 0 else if (overlay.scissor) |r| r.width * r.height else self.size.screen.width * @as(u64, self.size.screen.height));
+        const ranges = [_]struct { offset: usize, count: usize }{
+            .{ .offset = 0, .count = cursor_slots / 2 },
+            .{ .offset = overlay.offset, .count = overlay.count },
+            .{ .offset = fg_count -| 1, .count = cursor_slots / 2 },
+        };
+        for (ranges) |range| {
+            if (range.count == 0) continue;
+            pass.step(.{
+                .pipeline = self.shaders.pipelines.cell_text,
+                .uniforms = frame.uniforms.buffer,
+                .buffers = &.{ frame.cells.buffer, frame.cells_bg.buffer },
+                .buffer_offsets = &.{ range.offset * @sizeOf(shaderpkg.CellText), 0 },
+                .textures = &.{ frame.grayscale, frame.color },
+                .scissor = overlay.scissor,
+                .draw = .{ .type = .triangle_strip, .vertex_count = 4, .instance_count = range.count },
+            });
+        }
         if (self.uniforms.smooth_effect > 0 and self.uniforms.smooth_block == 0) pass.step(.{
             .pipeline = self.shaders.pipelines.smooth_cursor,
             .uniforms = frame.uniforms.buffer,
@@ -1671,6 +1689,7 @@ fn drawFrameLocked(
         }
     }
 
+    encoded = true;
     if (if (snapshot == null) self.scroll_shared else null) |shared| shared.scroll_hit.publish(.{
         .rects = self.uniforms.scroll_rects,
         .offsets = self.uniforms.scroll_offsets,
@@ -1697,16 +1716,12 @@ pub fn frameCompleted(
         self.cursor_motion.invalidate();
         self.scroll.failed.store(true, .release);
     }
-    // If our health value hasn't changed, then we do nothing. We don't
-    // do a cmpxchg here because strict atomicity isn't important.
-    if (self.health.load(.seq_cst) != health) {
-        self.health.store(health, .seq_cst);
-
-        // Our health value changed, so we notify the surface so that it
-        // can do something about it.
-        _ = self.surface_mailbox.push(.{
-            .renderer_health = health,
-        }, .{ .forever = {} });
+    // Never wait for the main thread from GPU completion: it may itself be
+    // retiring this surface and waiting for the frame slot. App.tick consumes
+    // the latest state, so mailbox pressure cannot lose a recovery notification.
+    if (self.health.swap(health, .acq_rel) != health) {
+        self.health_pending.store(true, .release);
+        self.surface_mailbox.app.rt_app.wakeup();
     }
 
     // Always release our semaphore. The swap chain is

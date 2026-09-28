@@ -16,14 +16,12 @@ args = parser.parse_args()
 if args.repeat < 1:
     parser.error('--repeat must be positive')
 args.output_directory.mkdir(parents=True, exist_ok=True)
-cases = [('metal', 'opaque', 'plain', '3', '1'), ('view', 'opaque', 'plain', '3', '1')]
+cases = [('metal', 'opaque', 'plain', '3', '1')]
 if args.matrix:
     cases += [('metal', 'transparent', 'plain', '3', '1'),
               ('metal', 'transparent', 'glass', '3', '1'),
               ('metal', 'opaque', 'plain', '2', '1'),
-              ('view', 'opaque', 'plain', '2', '1'),
-              ('metal', 'opaque', 'plain', '3', '2'),
-              ('view', 'transparent', 'glass', '3', '1')]
+              ('metal', 'opaque', 'plain', '3', '2')]
 with tempfile.TemporaryDirectory(prefix='cghostty-display-probe-') as temporary:
     app = Path(temporary) / 'DisplayProbe.app'
     binary = app / 'Contents/MacOS/DisplayProbe'

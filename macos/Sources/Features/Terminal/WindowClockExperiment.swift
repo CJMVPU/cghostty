@@ -23,18 +23,10 @@ import QuartzCore
         let configPath = env["CGHOSTTY_CONFIG_PATH"]!
         var phaseID: UInt64 = 0
         var probeID: UInt64 = 0
-        #if CGHOSTTY_LATE_DRAWABLE
-        let variant = "view-late"
-        #elseif CGHOSTTY_CORRECTED_CLOCK
-        let variant = "view-corrected"
-        #elseif CGHOSTTY_VIEW_CLOCK
-        let variant = "view"
-        #else
         let variant = "metal"
-        #endif
         do {
             guard app.readiness == .ready else { throw Failure.resource }
-            let phases = ["idle", "echo-idle", "echo-active", "mixed", "cold", "history", "vim-classic", "vim-instant", "vim-scroll"]
+            let phases = ["idle", "echo-idle", "echo-active", "mixed", "cold", "history", "vim-responsive", "vim-instant", "vim-scroll"]
             let selected = env["CGHOSTTY_CLOCK_PHASES"]?.split(separator: ",").map(String.init) ?? phases
             guard !selected.isEmpty, selected.allSatisfy(phases.contains) else { throw Failure.progress("unknown phase") }
             for name in selected {
@@ -152,7 +144,8 @@ import QuartzCore
         do { try await wait("session retirement") { sessions.allSatisfy { $0.surface == nil } } } catch { if failure.isEmpty { failure = String(describing: error) } }
         let data: [String: Any] = ["variant": variant, "os": ProcessInfo.processInfo.operatingSystemVersionString,
             "samples": samples, "error": failure, "phases": results,
-            "drawableCount": Int(env["CGHOSTTY_CLOCK_DRAWABLES"] ?? "3") ?? 3]
+            "drawableCount": Int(env["CGHOSTTY_CLOCK_DRAWABLES"] ?? "3") ?? 3,
+            "ratePolicy": env["CGHOSTTY_CLOCK_RATE"] ?? "max"]
         do { try JSONSerialization.data(withJSONObject: data, options: [.prettyPrinted, .sortedKeys]).write(to: output) } catch { Ghostty.logger.error("Clock experiment result write failed: \(error)") }
         NSApp.terminate(nil)
     }

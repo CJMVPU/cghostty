@@ -102,9 +102,7 @@ extension NSWindow {
     func tabButtonHit(atScreenPoint screenPoint: NSPoint) -> (index: Int, tabButton: NSView)? {
         guard let tabBarView, let tabBarWindow = tabBarView.window else { return nil }
 
-        // In fullscreen, AppKit can host the titlebar and tab bar in a separate
-        // NSToolbarFullScreenWindow. Hit testing has to use that window's base
-        // coordinate space or content clicks can be misinterpreted as tab clicks.
+        // Convert from screen coordinates through the tab bar's window.
         let locationInTabBarWindow = tabBarWindow.convertPoint(fromScreen: screenPoint)
         let locationInTabBar = tabBarView.convert(locationInTabBarWindow, from: nil)
         guard tabBarView.bounds.contains(locationInTabBar) else { return nil }

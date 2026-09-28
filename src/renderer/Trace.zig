@@ -158,19 +158,19 @@ pub fn clock() u64 {
 /// Metal_tick: target deadline / predicted presentation / next sequence.
 /// Metal_callback: callback media time / next sequence / unused.
 /// Metal_state: paused / preferredFrameLatency times 1000 / unused.
-/// Window_prepare_early: CPU pane preparation ns / window sequence / unused.
-/// Included in Window_prepare totals; excludes drawable acquisition.
 /// Clock_callback: callback media time / window sequence / window ID.
 /// Clock_target: target media time / requested period ns / window sequence.
 /// Clock_state: media time / window ID / paused (1) or resumed (0).
 /// Clock_wake: media time / window ID / unused; window signal servicing only,
 /// not a process wakeup or energy measurement.
 /// Clock_skip: media time / window sequence / reason (1 frame slot busy).
-/// Drawable_acquire: nextDrawable wait ns / window sequence / nil (1).
-/// Provided Metal display-link drawables have zero acquisition wait here.
 /// Experiment_phase: media time / phase ID / start (1) or end (0).
 /// Present_submit: time immediately before present() / sequence / unused.
 /// Displayed: drawable.presentedTime (0 if unavailable) / sequence / unused.
+/// Window_enqueue: media time before first window commit / sequence / unused.
+/// Window_gpu_first/last: GPU start / GPU end media time / window sequence,
+/// from the opening clear and closing boundary commit feedback respectively.
+/// Their span includes intervening CPU/queue gaps; it is not summed GPU execution.
 /// These display-link payload timestamps are Core Animation media-clock nanoseconds;
 /// the CSV time column remains the awake clock. Neither is input-to-photon latency.
 /// State: focused / visible / unused. Trace_drop: lost records / unused / unused.

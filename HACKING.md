@@ -159,9 +159,9 @@ Metal 编译通过 `xcrun --toolchain Metal` 调用安装的工具链。缺失�
 覆盖八方向逐帧尺寸边界、整体等比例放大 12%、单格持续输入、快速改向、
 隐藏/显示、Vim 形状切换及默认 3 像素笔画。`CursorMotion` 集中失效与活动状态；
 `SmoothCursor` 维护主体、已提交绘制帧的位置历史和形变包络。
-长距离从静止逐渐加速，单格输入保持快速响应，主体最长 200ms。
+长距离从静止逐渐加速，单格输入保持快速响应，主体最长 160ms。
 连续搜索重定向同时考虑目标间距与主体剩余距离，避免把未完成的长跳压入单格时长。
-尾部使用最近 40–60ms 的历史位置，最多保留 32 个记录；不设像素长度上限。
+尾部使用最近 40ms 的历史位置，最多保留 32 个记录；不设像素长度上限。
 检查 30/60/120/240Hz 下八方向、三种光标的连续帧轨迹接回上一帧主体，
 以及快速转向、绘制中断、未提交采样不记入历史、恢复后收拢和形状切换清空。
 连续输入覆盖 8、16、33、60、100ms 间隔；每段检查整个时间序列，
@@ -191,24 +191,26 @@ Metal 编译通过 `xcrun --toolchain Metal` 调用安装的工具链。缺失�
 普通构建只编译 CAMetalDisplayLink。帧时钟实验须显式使用 ReleaseLocal 编译条件：
 
 ```sh
-nu macos/build.nu --configuration ReleaseLocal --clock-experiment view \
+nu macos/build.nu --configuration ReleaseLocal --clock-experiment metal \
   --build-dir /private/tmp/cghostty-clock-build
 python3 scripts/run-window-clock-experiment.py \
   /private/tmp/cghostty-clock-build/ReleaseLocal/cghostty.app \
-  /private/tmp/clock-view-run1 --samples 200 --drawables 3
-python3 scripts/summarize-window-clock-experiment.py /private/tmp/clock-view-run1
+  /private/tmp/clock-metal-run1 --samples 200 --drawables 3
+python3 scripts/summarize-window-clock-experiment.py /private/tmp/clock-metal-run1
 ```
 
-编译变体为 `metal`、`view`、`view-late`、`view-corrected`。后两者分别只改
-CPU cell 准备前后获取 drawable 的顺序、或动画取样时刻，不能将两项混在同一轮归因。
-`view-late` 的 GPU 上传/内容绘制仍在获取 drawable 之后；不是完整离屏预渲染。
-校正采用最近 31 帧的 `presentedTime - targetTimestamp` 中位数，至少 5 个样本后启用；
-暂停、屏幕或请求帧率变化时清空，拒绝已过期回调、零呈现时间和异常值。
-这只是经验估计，不是系统保证的下一张 drawable 呈现时间。
+正式构建和诊断构建都只使用 CAMetalDisplayLink；`metal` 编译条件只启用自动化负载入口。
+动画使用系统提供的预计呈现时间，实际呈现回调仅用于测量，不反馈校正动画时钟。
 
 脚本创建隔离配置、偏好、工作目录和真实 PTY/nvim 会话，以正常应用进程运行前台窗口，
 不使用 XCTest 作为延迟测量宿主，也不修改用户配置。需要保持桌面解锁且实验窗口处于前台。
 `--phases echo-active,mixed` 可选择扩样本场景；完整矩阵默认包含所有场景。
+`--rate system` 使用与正式构建相同的系统默认帧率策略；默认 `--rate max` 请求屏幕最高帧率。
+窗口 GPU 时间线按同一帧序号关联首次提交、开头清屏的 GPU 开始、末尾屏障的 GPU 结束和呈现时间。
+新增清屏反馈仅在 `render-trace` 已开启的 surface 上注册；关闭诊断时不增加该反馈。
+`enqueue_to_gpu_start_ms` 包含队列/drawable 等待；`gpu_window_span_ms` 包含中间 CPU 提交间隙，
+不是纯 GPU 执行时间；`gpu_end_to_display_ms` 表示 GPU 完成后到系统报告呈现的时间。
+缺失、零呈现或时间顺序异常分别计数，不补零或钳制；异步反馈按帧序号归入原阶段。
 运行目录必须不存在。保存每次 `result.json`、trace 和汇总，失败轮次不得覆盖或静默忽略。
 暂停间隔不计作连续呈现掉帧；`clock_wakes` 只表示窗口信号处理次数，不是进程唤醒或能耗。
 预先约定与结果见 [窗口帧时钟验证](docs/validation/2026-09-27-window-clock-plan.md)。

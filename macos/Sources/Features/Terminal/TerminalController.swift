@@ -171,16 +171,13 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
             // - Creating a window via `New Ghostty Window Here` service.
             c.showWindowSafely(self)
 
-            // Only cascade if we aren't fullscreen.
             if let window = c.window {
-                if !window.styleMask.contains(.fullScreen) {
-                    let hasFixedPos = c.derivedConfig.windowPositionX != nil && c.derivedConfig.windowPositionY != nil
-                    // We're dispatching this async because otherwise the lastCascadePoint doesn't
-                    // take effect after positioning in `showWindow`. Our best theory is there is
-                    // some next-event-loop-tick logic that Cocoa is doing that we need to be after.
-                    DispatchQueue.main.async {
-                        ghostty.windowRegistry.applyCascade(to: window, hasFixedPos: hasFixedPos)
-                    }
+                let hasFixedPos = c.derivedConfig.windowPositionX != nil && c.derivedConfig.windowPositionY != nil
+                // We're dispatching this async because otherwise the lastCascadePoint doesn't
+                // take effect after positioning in `showWindow`. Our best theory is there is
+                // some next-event-loop-tick logic that Cocoa is doing that we need to be after.
+                DispatchQueue.main.async {
+                    ghostty.windowRegistry.applyCascade(to: window, hasFixedPos: hasFixedPos)
                 }
             }
 
@@ -242,14 +239,12 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         c.showWindowSafely(self)
         c.scheduleInitialPresentation {
             if let window = c.window {
-                if !window.styleMask.contains(.fullScreen) {
-                    if let position {
-                        window.setFrameTopLeftPoint(position)
-                        window.constrainToScreen()
-                    } else {
-                        let hasFixedPos = c.derivedConfig.windowPositionX != nil && c.derivedConfig.windowPositionY != nil
-                        ghostty.windowRegistry.applyCascade(to: window, hasFixedPos: hasFixedPos)
-                    }
+                if let position {
+                    window.setFrameTopLeftPoint(position)
+                    window.constrainToScreen()
+                } else {
+                    let hasFixedPos = c.derivedConfig.windowPositionX != nil && c.derivedConfig.windowPositionY != nil
+                    ghostty.windowRegistry.applyCascade(to: window, hasFixedPos: hasFixedPos)
                 }
             }
         }
@@ -295,19 +290,6 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         guard let parent,
               let parentController = parent.windowController as? TerminalController else {
             return newWindow(ghostty, withBaseConfig: baseConfig, withParent: parent)
-        }
-
-        // If our parent is in non-native fullscreen, then new tabs do not work.
-        // See: https://github.com/mitchellh/ghostty/issues/392
-        if let fullscreenStyle = parentController.fullscreenStyle,
-           fullscreenStyle.isFullscreen && !fullscreenStyle.supportsTabs {
-            let alert = NSAlert()
-            alert.messageText = "Cannot Create New Tab"
-            alert.informativeText = "New tabs are unsupported while in non-native fullscreen. Exit fullscreen and try again."
-            alert.addButton(withTitle: "OK")
-            alert.alertStyle = .warning
-            alert.beginSheetModal(for: parent)
-            return nil
         }
 
         // Create a new window and add it to the parent
@@ -372,9 +354,8 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         // take effect after position in `showWindow`. Our best theory is there is some
         // next-event-loop-tick logic that Cocoa is doing that we need to be after.
         controller.scheduleInitialPresentation {
-            // Only cascade if we aren't fullscreen and are alone in the tab group.
-            if !window.styleMask.contains(.fullScreen) &&
-                window.tabGroup?.windows.count ?? 1 == 1 {
+            // Cascade only when alone in the tab group.
+            if window.tabGroup?.windows.count ?? 1 == 1 {
                 let hasFixedPos = controller.derivedConfig.windowPositionX != nil && controller.derivedConfig.windowPositionY != nil
                 ghostty.windowRegistry.applyCascade(to: window, hasFixedPos: hasFixedPos)
             }
@@ -906,8 +887,7 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         // accessing `window.tabGroup` materializes the window's tab group
         // machinery, which takes ~15-20ms and is otherwise not needed during
         // window creation.
-        if NSWindow.userTabbingPreference == .always,
-           !window.styleMask.contains(.fullScreen) {
+        if NSWindow.userTabbingPreference == .always {
             // If we have more than 1 window in our tab group we know we're a new window.
             // Since Ghostty manages tabbing manually this will never be more than one
             // at this point in the AppKit lifecycle (we add to the group after this).
@@ -1143,11 +1123,6 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
                 return
             }
         }
-    }
-
-    @IBAction func toggleGhosttyFullScreen(_ sender: Any?) {
-        guard let surface = focusedSurface?.surfaceModel else { return }
-        surface.perform(.toggleFullscreen)
     }
 
     // MARK: - TerminalViewDelegate

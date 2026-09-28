@@ -36,7 +36,6 @@ class AppDelegate: NSObject,
     var menuFindParent: NSMenuItem?
 
     var menuToggleVisibility: NSMenuItem?
-    var menuToggleFullScreen: NSMenuItem?
     var menuBringAllToFront: NSMenuItem?
     var menuZoomSplit: NSMenuItem?
     var menuPreviousSplit: NSMenuItem?
@@ -866,10 +865,7 @@ class AppDelegate: NSObject,
     @IBAction func toggleVisibility(_ sender: Any) {
         // If we have focus, then we hide all windows.
         if NSApp.isActive {
-            // Toggle visibility doesn't do anything if the focused window is native
-            // fullscreen. This is only relevant if Ghostty is active.
-            guard let keyWindow = NSApp.keyWindow,
-                  !keyWindow.styleMask.contains(.fullScreen) else { return }
+            guard NSApp.keyWindow != nil else { return }
 
             NSApp.hide(nil)
             return
@@ -934,13 +930,9 @@ class AppDelegate: NSObject,
 
             // We need to keep track of the windows that were visible because we only
             // want to bring back these windows if we remove the toggle.
-            //
-            // We also ignore fullscreen windows because they don't hide anyways.
+
             var visibleWindows = [Weak<NSWindow>]()
-            NSApp.windows.filter {
-                $0.isVisible &&
-                !$0.styleMask.contains(.fullScreen)
-            }.forEach { window in
+            NSApp.windows.filter(\.isVisible).forEach { window in
                 // We only keep track of selectedWindow if it's in a tabGroup,
                 // so we can keep its selection state when restoring
                 let windowToHide = window.tabGroup?.selectedWindow ?? window
@@ -999,7 +991,6 @@ extension AppDelegate {
         self.menuChangeTabTitle?.setImageIfDesired(systemSymbolName: "pencil.line")
         self.menuReadonly?.setImageIfDesired(systemSymbolName: "eye.fill")
         self.menuSetAsDefaultTerminal?.setImageIfDesired(systemSymbolName: "star.fill")
-        self.menuToggleFullScreen?.setImageIfDesired(systemSymbolName: "square.arrowtriangle.4.outward")
         self.menuToggleVisibility?.setImageIfDesired(systemSymbolName: "eye")
         self.menuZoomSplit?.setImageIfDesired(systemSymbolName: "arrow.up.left.and.arrow.down.right")
         self.menuPreviousSplit?.setImageIfDesired(systemSymbolName: "chevron.backward.2")

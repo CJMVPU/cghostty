@@ -116,8 +116,16 @@ fn bufferCompleted(block: *const CompletionBlock.Context, feedback_id: objc.c.id
     block.renderer.frameCompleted(health);
 }
 
-pub fn renderPass(self: *const Self, attachments: []const RenderPass.Options.Attachment) RenderPass {
+pub fn renderPass(self: *const Self, attachments: []const RenderPass.Options.Attachment) !RenderPass {
     return RenderPass.begin(.{ .attachments = attachments, .commands = self.commands });
+}
+
+/// No command in this buffer has been submitted yet. Retire local references
+/// immediately; the renderer releases the unused frame slot on its error path.
+pub fn abort(self: *Self) void {
+    self.commands.buffer.msgSend(void, "endCommandBuffer", .{});
+    self.commands.retained.msgSend(void, "removeAllObjects", .{});
+    self.commands.residency.msgSend(void, "removeAllAllocations", .{});
 }
 
 pub fn complete(self: *Self, sync: bool) void {

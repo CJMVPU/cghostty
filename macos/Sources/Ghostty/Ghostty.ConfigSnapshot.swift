@@ -23,8 +23,6 @@ extension Ghostty {
         let windowDecorations: Bool
         let windowTheme: String?
         let dragHandle: Config.DragHandle
-        let windowFullscreen: FullscreenMode?
-        let windowFullscreenMode: FullscreenMode
         let macosWindowButtons: MacOSWindowButtons
         let macosTitlebarStyle: Config.MacOSTitlebarStyle
         let macosTitlebarProxyIcon: MacOSTitlebarProxyIcon
@@ -77,8 +75,6 @@ extension Ghostty {
             windowDecorations = reader.windowDecorations
             windowTheme = reader.windowTheme
             dragHandle = reader.dragHandle
-            windowFullscreen = reader.windowFullscreen
-            windowFullscreenMode = reader.windowFullscreenMode
             macosWindowButtons = reader.macosWindowButtons
             macosTitlebarStyle = reader.macosTitlebarStyle
             macosTitlebarProxyIcon = reader.macosTitlebarProxyIcon
@@ -214,46 +210,6 @@ extension Ghostty {
                 let defaultValue = Config.DragHandle.auto
                 guard let str = string(ConfigSchema.dragHandle) else { return defaultValue }
                 return Config.DragHandle(rawValue: str) ?? defaultValue
-            }
-
-            /// Returns the fullscreen mode if fullscreen is enabled, or nil if disabled.
-            /// This parses the `fullscreen` enum config which supports both
-            /// native and non-native fullscreen modes.
-            var windowFullscreen: FullscreenMode? {
-                guard let str = string(ConfigSchema.fullscreen) else { return nil }
-                return switch str {
-                case "false":
-                    nil
-                case "true":
-                    .native
-                case "non-native":
-                    .nonNative
-                case "non-native-visible-menu":
-                    .nonNativeVisibleMenu
-                case "non-native-padded-notch":
-                    .nonNativePaddedNotch
-                default:
-                    nil
-                }
-            }
-
-            /// Returns the fullscreen mode for toggle actions (keybindings).
-            /// This is controlled by `macos-non-native-fullscreen` config.
-            var windowFullscreenMode: FullscreenMode {
-                let defaultValue: FullscreenMode = .native
-                guard let str = string(ConfigSchema.macosNonNativeFullscreen) else { return defaultValue }
-                return switch str {
-                case "false":
-                        .native
-                case "true":
-                        .nonNative
-                case "visible-menu":
-                        .nonNativeVisibleMenu
-                case "padded-notch":
-                        .nonNativePaddedNotch
-                default:
-                    defaultValue
-                }
             }
 
             var macosWindowButtons: MacOSWindowButtons {

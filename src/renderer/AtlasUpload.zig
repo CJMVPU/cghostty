@@ -6,7 +6,9 @@ const Atlas = @import("../font/Atlas.zig");
 /// Returns actual texel bytes submitted (source row padding is not uploaded).
 pub fn sync(api: anytype, atlas: *const Atlas, texture: anytype, version: *usize) !usize {
     const current = atlas.modified.load(.monotonic);
-    var region = atlas.changedRegion(version.*) orelse return 0;
+    const regions = atlas.changedRegions(version.*);
+    if (regions.len == 0) return 0;
+    var bytes: usize = 0;
     if (atlas.size > texture.width) {
         // Build and populate the replacement before releasing any live resource.
         var replacement = try api.initAtlasTexture(atlas);
@@ -14,19 +16,24 @@ pub fn sync(api: anytype, atlas: *const Atlas, texture: anytype, version: *usize
         try replacement.replaceRegionStrided(0, 0, atlas.size, atlas.size, atlas.data, @as(usize, atlas.size) * atlas.format.depth());
         texture.deinit();
         texture.* = replacement;
-        region = .{ .x = 0, .y = 0, .width = atlas.size, .height = atlas.size };
+        bytes = atlas.data.len;
     } else {
         const stride = @as(usize, atlas.size) * atlas.format.depth();
-        const offset = @as(usize, region.y) * stride + @as(usize, region.x) * atlas.format.depth();
-        try texture.replaceRegionStrided(region.x, region.y, region.width, region.height, atlas.data[offset..], stride);
+        for (regions.slice()) |region| {
+            const offset = @as(usize, region.y) * stride + @as(usize, region.x) * atlas.format.depth();
+            try texture.replaceRegionStrided(region.x, region.y, region.width, region.height, atlas.data[offset..], stride);
+            bytes += @as(usize, region.width) * region.height * atlas.format.depth();
+        }
     }
     version.* = current;
-    return @as(usize, region.width) * region.height * atlas.format.depth();
+    return bytes;
 }
 
 const FakeApi = struct {
     fail: bool = false,
     releases: usize = 0,
+    writes: usize = 0,
+    fail_write: ?usize = null,
     pub fn initAtlasTexture(self: *FakeApi, atlas: *const Atlas) !FakeTexture {
         if (self.fail) return error.MetalFailed;
         return .{ .api = self, .width = atlas.size, .bpp = atlas.format.depth() };
@@ -41,6 +48,8 @@ const FakeTexture = struct {
         self.api.releases += 1;
     }
     pub fn replaceRegionStrided(self: *FakeTexture, x: usize, y: usize, width: usize, height: usize, data: []const u8, stride: usize) !void {
+        self.api.writes += 1;
+        if (self.api.fail_write == self.api.writes) return error.MetalFailed;
         for (0..height) |row| {
             const dst = ((y + row) * self.width + x) * self.bpp;
             @memcpy(self.pixels[dst..][0 .. width * self.bpp], data[row * stride ..][0 .. width * self.bpp]);
@@ -99,4 +108,41 @@ test "atlas upload independent slots retain all changes with nonpacked source ro
         try t.expectEqual(atlas.data.len, try sync(&api, &atlas, &slots[0], &versions[0]));
         try t.expectEqualSlices(u8, atlas.data, slots[0].pixels[0..atlas.data.len]);
     }
+}
+
+test "atlas upload separated writes avoid copying empty bounding area" {
+    const t = std.testing;
+    var atlas = try Atlas.init(t.allocator, 64, .grayscale);
+    defer atlas.deinit(t.allocator);
+    var api: FakeApi = .{};
+    var tex = try api.initAtlasTexture(&atlas);
+    var version: usize = 0;
+    _ = try sync(&api, &atlas, &tex, &version);
+    atlas.set(.{ .x = 1, .y = 1, .width = 1, .height = 1 }, &.{42});
+    atlas.set(.{ .x = 60, .y = 60, .width = 1, .height = 1 }, &.{84});
+    try t.expectEqual(@as(usize, 2), try sync(&api, &atlas, &tex, &version));
+    try t.expectEqualSlices(u8, atlas.data, tex.pixels[0..atlas.data.len]);
+    for (0..12) |i| atlas.set(.{ .x = @intCast(i * 3 + 1), .y = 30, .width = 1, .height = 1 }, &.{99});
+    try t.expect(atlas.changedRegions(version).len <= 8);
+    _ = try sync(&api, &atlas, &tex, &version);
+    try t.expectEqualSlices(u8, atlas.data, tex.pixels[0..atlas.data.len]);
+}
+
+test "atlas upload partial failure retries every region without advancing the slot" {
+    const t = std.testing;
+    var atlas = try Atlas.init(t.allocator, 64, .bgra);
+    defer atlas.deinit(t.allocator);
+    var api: FakeApi = .{};
+    var tex = try api.initAtlasTexture(&atlas);
+    var version: usize = 0;
+    _ = try sync(&api, &atlas, &tex, &version);
+    const previous = version;
+    atlas.set(.{ .x = 1, .y = 1, .width = 1, .height = 1 }, &.{ 1, 2, 3, 255 });
+    atlas.set(.{ .x = 60, .y = 60, .width = 1, .height = 1 }, &.{ 4, 5, 6, 255 });
+    api.fail_write = api.writes + 2;
+    try t.expectError(error.MetalFailed, sync(&api, &atlas, &tex, &version));
+    try t.expectEqual(previous, version);
+    api.fail_write = null;
+    try t.expectEqual(@as(usize, 8), try sync(&api, &atlas, &tex, &version));
+    try t.expectEqualSlices(u8, atlas.data, tex.pixels[0..atlas.data.len]);
 }

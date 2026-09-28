@@ -74,8 +74,6 @@ extension Ghostty {
         var windowDecorations: Bool { snapshot.windowDecorations }
         var windowTheme: String? { snapshot.windowTheme }
         var dragHandle: DragHandle { snapshot.dragHandle }
-        var windowFullscreen: FullscreenMode? { snapshot.windowFullscreen }
-        var windowFullscreenMode: FullscreenMode { snapshot.windowFullscreenMode }
         var macosWindowButtons: MacOSWindowButtons { snapshot.macosWindowButtons }
         var macosTitlebarStyle: MacOSTitlebarStyle { snapshot.macosTitlebarStyle }
         var macosTitlebarProxyIcon: MacOSTitlebarProxyIcon { snapshot.macosTitlebarProxyIcon }

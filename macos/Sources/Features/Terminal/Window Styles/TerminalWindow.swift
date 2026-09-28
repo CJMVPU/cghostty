@@ -443,25 +443,7 @@ class TerminalWindow: NSWindow {
     }
 
     var titlebarContainer: NSView? {
-        // If we aren't fullscreen then the titlebar container is part of our window.
-        if !styleMask.contains(.fullScreen) {
-            return contentView?.firstViewFromRoot(withClassName: "NSTitlebarContainerView")
-        }
-
-        // If we are fullscreen, the titlebar container view is part of a separate
-        // "fullscreen window", we need to find the window and then get the view.
-        for window in NSApplication.shared.windows {
-            // This is the private window class that contains the toolbar
-            guard window.className == "NSToolbarFullScreenWindow" else { continue }
-
-            // The parent will match our window. This is used to filter the correct
-            // fullscreen window if we have multiple.
-            guard window.parent == self else { continue }
-
-            return window.contentView?.firstViewFromRoot(withClassName: "NSTitlebarContainerView")
-        }
-
-        return nil
+        contentView?.firstViewFromRoot(withClassName: "NSTitlebarContainerView")
     }
 
     // MARK: Positioning And Styling
@@ -514,14 +496,9 @@ class TerminalWindow: NSWindow {
         appearance = surfaceConfig.windowAppearance
         hasShadow = surfaceConfig.macosWindowShadow
 
-        // Window transparency only takes effect if our window is not native fullscreen.
-        // In native fullscreen we disable transparency/opacity because the background
-        // becomes gray and widgets show through.
-        //
-        // Also check if the user has overridden transparency to be fully opaque.
+        // Respect the user's temporary opacity override.
         let forceOpaque = terminalController?.isBackgroundOpaque ?? false
-        if !styleMask.contains(.fullScreen) &&
-            !forceOpaque &&
+        if !forceOpaque &&
             (surfaceConfig.backgroundOpacity < 1 || surfaceConfig.backgroundBlur.isGlassStyle) {
             isOpaque = false
 

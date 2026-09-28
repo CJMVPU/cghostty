@@ -93,7 +93,7 @@ extension Ghostty.App {
             closeWindow(app, target: target)
 
         case GHOSTTY_ACTION_TOGGLE_FULLSCREEN:
-            toggleFullscreen(app, target: target, mode: action.action.toggle_fullscreen)
+            return false // Window size is fixed for the app session.
 
         case GHOSTTY_ACTION_MOVE_TAB:
             return moveTab(app, target: target, move: action.action.move_tab)

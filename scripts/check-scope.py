@@ -64,7 +64,8 @@ for folder in ('src/renderer', 'pkg/macos', 'macos/Sources'):
         if path.suffix not in ('.zig', '.swift'):
             continue
         content = path.read_text()
-        for token in ('IOSurface', 'CVDisplayLink'):
+        for token in ('IOSurface', 'CVDisplayLink', 'CADisplayLink', 'nextDrawable',
+                      'CGHOSTTY_VIEW_CLOCK', 'CGHOSTTY_LATE_DRAWABLE', 'CGHOSTTY_CORRECTED_CLOCK'):
             check(token not in content, f'Removed presentation API {token} returned: {path}')
 
 project = json.loads(subprocess.check_output([

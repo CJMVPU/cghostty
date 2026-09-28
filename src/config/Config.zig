@@ -2561,14 +2561,13 @@ keybind: Keybinds = .{},
 
 /// Select the native cursor animation when `cursor-effect` is enabled:
 ///
-///   * `classic`: 24–200ms base movement, 40–60ms trail, 100ms recovery.
 ///   * `responsive`: 24–160ms movement, 40ms trail, 80ms recovery.
 ///   * `instant`: the body immediately follows the real cursor, retaining
 ///     the 12% expansion. Submitted positions leave a 40ms fading trail
 ///     at up to 35% opacity, with no distance cap or clearing on reversal.
 ///     Shape recovery takes 80ms.
 ///
-/// `classic` and `responsive` gradually accelerate during repeated target
+/// `responsive` gradually accelerates during repeated target
 /// updates no more than 120ms apart, reaching up to 2.5x over 300ms.
 /// Travel stays at least 24ms; trail and recovery timings are unchanged.
 /// Turns discard contrary velocity per axis, preserving useful motion on
@@ -2577,7 +2576,7 @@ keybind: Keybinds = .{},
 ///
 /// All modes retain the existing shape transition and accessibility behavior.
 /// Configuration file changes apply after restarting cghostty.
-@"cursor-effect-mode": @import("../renderer/CursorEffectMode.zig").Mode = .classic,
+@"cursor-effect-mode": @import("../renderer/CursorEffectMode.zig").Mode = .responsive,
 
 /// Animate wheel scrolling and explicit alternate-screen scroll regions.
 /// Precision trackpad input follows pixel deltas without adding inertia.
@@ -9098,8 +9097,8 @@ test "config cursor effect modes preserve boolean toggle and reject unknown pres
     const t = std.testing;
     var config = try Config.default(t.allocator);
     defer config.deinit();
-    try t.expectEqual(.classic, config.@"cursor-effect-mode");
-    inline for (.{ "classic", "responsive", "instant" }) |mode| {
+    try t.expectEqual(.responsive, config.@"cursor-effect-mode");
+    inline for (.{ "responsive", "instant" }) |mode| {
         var it: TestIterator = .{ .data = &.{ "--cursor-effect=false", "--cursor-effect-mode=" ++ mode } };
         try config.loadIter(t.allocator, &it);
         try t.expectEqualStrings(mode, @tagName(config.@"cursor-effect-mode"));
@@ -9110,7 +9109,7 @@ test "config cursor effect modes preserve boolean toggle and reject unknown pres
         try t.expect(!derived.cursor_effect);
     }
     try t.expectEqual(@as(usize, 0), config._diagnostics.list.items.len);
-    var invalid: TestIterator = .{ .data = &.{"--cursor-effect-mode=unknown"} };
+    var invalid: TestIterator = .{ .data = &.{"--cursor-effect-mode=classic"} };
     try config.loadIter(t.allocator, &invalid);
     try t.expect(config._diagnostics.list.items.len > 0);
     try t.expectEqual(.instant, config.@"cursor-effect-mode");

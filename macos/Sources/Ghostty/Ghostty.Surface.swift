@@ -17,6 +17,8 @@ extension Ghostty {
         private let app: Ghostty.App
         let callbackContext: SurfaceCallbackContext
         nonisolated let compositorLatency: Float
+        // The trace writer is created once for the lifetime of the core renderer.
+        nonisolated let compositorTracing: Bool
         private let requestedCompositor = Mutex<WindowCompositorSignal?>(nil)
         private let compositorGate = NSLock()
         nonisolated(unsafe) private var activeCompositor: WindowCompositorSignal?
@@ -30,7 +32,9 @@ extension Ghostty {
         /// Initialize from the C structure.
         init(cSurface: ghostty_surface_t, app: Ghostty.App, callbackContext: SurfaceCallbackContext) {
             self.surface = cSurface
-            compositorLatency = ghostty_surface_compositor_info(cSurface).latency
+            let info = ghostty_surface_compositor_info(cSurface)
+            compositorLatency = info.latency
+            compositorTracing = info.trace_enabled
             self.app = app
             self.callbackContext = callbackContext
             callbackContext.surface = self
@@ -94,15 +98,11 @@ extension Ghostty {
 
         nonisolated var compositorInfo: ghostty_compositor_info_s { ghostty_surface_compositor_info(surface) }
 
-        nonisolated func prepareCompositor(sequence: UInt64) -> Bool {
-            ghostty_surface_prepare_compositor(surface, sequence)
-        }
-
-        nonisolated func renderCompositor(texture: AnyObject, queue: AnyObject, targetTime: Double, rect: CGRect, clip: CGRect, sequence: UInt64, snapshot: Bool = false, prepared: Bool = false) -> UInt32 {
+        nonisolated func renderCompositor(texture: AnyObject, queue: AnyObject, targetTime: Double, rect: CGRect, clip: CGRect, sequence: UInt64, snapshot: Bool = false) -> UInt32 {
             let region = ghostty_compositor_region_s(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height,
                 clip_x: UInt(clip.minX), clip_y: UInt(clip.minY), clip_width: UInt(clip.width), clip_height: UInt(clip.height))
             return ghostty_surface_render_compositor(surface, Unmanaged.passUnretained(texture).toOpaque(),
-                                             Unmanaged.passUnretained(queue).toOpaque(), targetTime, region, sequence, snapshot, prepared)
+                                             Unmanaged.passUnretained(queue).toOpaque(), targetTime, region, sequence, snapshot)
         }
 
         nonisolated func traceCompositor(stage: UInt32, sequence: UInt64, time: Double, prediction: Double = 0) {

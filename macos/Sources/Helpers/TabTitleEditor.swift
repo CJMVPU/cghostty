@@ -82,12 +82,9 @@ final class TabTitleEditor: NSObject, NSTextFieldDelegate {
         // If we don't have a host window to look up the click, we do nothing.
         guard let hostWindow else { return false }
 
-        // In native fullscreen, AppKit can route titlebar clicks through a detached
-        // NSToolbarFullScreenWindow. Only allow clicks from the host window or its
-        // fullscreen tab bar window so rename handling stays scoped to this tab strip.
+        // Keep rename handling scoped to this window's tab strip.
         let sourceWindow = event.window ?? hostWindow
-        guard sourceWindow === hostWindow || sourceWindow === hostWindow.tabBarView?.window
-        else { return false }
+        guard sourceWindow === hostWindow else { return false }
 
         // Find the tab window that is being clicked.
         let locationInScreen = sourceWindow.convertPoint(toScreen: event.locationInWindow)

@@ -79,8 +79,12 @@ import Synchronization
         try await wait { leftSurface.readContents(viewport: false).contains("main-blocked") && owner.worker.isIdle }
         let originalDraws = owner.worker.statistics.paneDraws
         let originalFrames = owner.worker.statistics.submitted
-        // Layout-only frames must compose cached panes without redrawing content.
+        // Repeated unchanged geometry must not wake the paused frame clock.
         for _ in 0..<6 { owner.updateGeometry(); await Task.yield() }
+        #expect(owner.worker.isIdle)
+        #expect(owner.worker.statistics.submitted == originalFrames)
+        // Explicit backing/appearance refresh still composes cached panes.
+        owner.updateGeometry(forceRedraw: true)
         try await wait { owner.worker.statistics.submitted > originalFrames }
         #expect(owner.worker.statistics.paneDraws == originalDraws)
 

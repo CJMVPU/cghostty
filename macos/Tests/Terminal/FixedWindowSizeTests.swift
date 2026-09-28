@@ -41,7 +41,8 @@ import Testing
         #expect(window.frame.size == original)
         window.zoom(nil)
         window.toggleFullScreen(nil)
-        controller.toggleFullscreen(mode: .nonNative)
+        let surface = try #require(controller.focusedSurface?.surfaceModel)
+        #expect(!surface.perform(.toggleFullscreen))
         #expect(window.frame.size == original)
         #expect(!window.styleMask.contains(.fullScreen))
     }

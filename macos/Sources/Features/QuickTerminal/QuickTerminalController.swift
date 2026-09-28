@@ -182,15 +182,6 @@ class QuickTerminalController: BaseTerminalController {
                 } else {
                     // We've moved to a different space.
 
-                    // If we're fullscreen, we need to exit fullscreen because the visible
-                    // bounds may have changed causing a new behavior.
-                    if let fullscreenStyle, fullscreenStyle.isFullscreen {
-                        fullscreenStyle.exit()
-                        DispatchQueue.main.async {
-                            self.onToggleFullscreen()
-                        }
-                    }
-
                     // Make the window visible again on this space
                     DispatchQueue.main.async {
                         self.window?.makeKeyAndOrderFront(nil)
@@ -595,11 +586,6 @@ class QuickTerminalController: BaseTerminalController {
         showNoNewTabAlert()
     }
 
-    @IBAction func toggleGhosttyFullScreen(_ sender: Any) {
-        guard let surface = focusedSurface?.surfaceModel else { return }
-        surface.perform(.toggleFullscreen)
-    }
-
     // MARK: Notifications
 
     @objc private func applicationWillTerminate(_ notification: Notification) {
@@ -607,33 +593,6 @@ class QuickTerminalController: BaseTerminalController {
         // restore any global dock state. I think deinit should be called which
         // would call this anyways but I can't be sure so I will do this too.
         hiddenDock = nil
-    }
-
-    override func requestFullscreen(from target: Ghostty.SurfaceView, mode: FullscreenMode) {
-        guard target == self.focusedSurface else { return }
-        onToggleFullscreen()
-    }
-
-    private func onToggleFullscreen() {
-        // We ignore the configured fullscreen style and always use non-native
-        // because the way the quick terminal works doesn't support native.
-        let mode: FullscreenMode
-        if NSApp.isFrontmost {
-            // If we're frontmost and we have a notch then we keep padding
-            // so all lines of the terminal are visible.
-            if window?.screen?.hasNotch ?? false {
-                mode = .nonNativePaddedNotch
-            } else {
-                mode = .nonNative
-            }
-        } else {
-            // An additional detail is that if the is NOT frontmost, then our
-            // NSApp.presentationOptions will not take effect so we must always
-            // do the visible menu mode since we can't get rid of the menu.
-            mode = .nonNativeVisibleMenu
-        }
-
-        toggleFullscreen(mode: mode)
     }
 
     override func acceptConfiguration(_ config: Ghostty.Config) {

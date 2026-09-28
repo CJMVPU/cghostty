@@ -24,13 +24,7 @@ extension Ghostty {
             case .auto:
                 break
             }
-            // Handle should always be visible in non-fullscreen
-            guard let window = surfaceView.window else { return true }
-            guard window.styleMask.contains(.fullScreen) else { return true }
-
-            // If fullscreen, only show the handle if we have splits
-            guard let controller = window.windowController as? BaseTerminalController else { return false }
-            return controller.surfaceTree.isSplit
+            return true
         }
 
         private var ellipsisVisible: Bool {

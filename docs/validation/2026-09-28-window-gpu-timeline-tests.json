@@ -1,0 +1,41 @@
+{
+  "Test-Ghostty-2026.09.28_09-50-55-+0800.xcresult": {
+    "result": "Failed",
+    "totalTestCount": 10,
+    "passedTests": 9,
+    "failedTests": 1,
+    "skippedTests": 0,
+    "testFailures": [
+      {
+        "failureText": "Expectation failed: ContinuousClock.now < deadline\nContinuousClock.now \u2192 Instant(_value: 1357764.799745166 seconds)\ndeadline \u2192 Instant(_value: 1357764.7995435 seconds): Window compositor made no progress",
+        "targetName": "GhosttyTests",
+        "testIdentifier": 3,
+        "testIdentifierString": "WindowCompositorTests/contentUpdatesCoalesceUntilWindowClockResumes()",
+        "testIdentifierURL": "test://com.apple.xcode/Ghostty/GhosttyTests/WindowCompositorTests/contentUpdatesCoalesceUntilWindowClockResumes()",
+        "testName": "contentUpdatesCoalesceUntilWindowClockResumes()"
+      }
+    ],
+    "startTime": 1790560255.076,
+    "finishTime": 1790560337.421
+  },
+  "Test-Ghostty-2026.09.28_09-53-30-+0800.xcresult": {
+    "result": "Passed",
+    "totalTestCount": 1,
+    "passedTests": 1,
+    "failedTests": 0,
+    "skippedTests": 0,
+    "testFailures": [],
+    "startTime": 1790560410.115,
+    "finishTime": 1790560413.261
+  },
+  "Test-Ghostty-2026.09.28_09-54-14-+0800.xcresult": {
+    "result": "Passed",
+    "totalTestCount": 10,
+    "passedTests": 10,
+    "failedTests": 0,
+    "skippedTests": 0,
+    "testFailures": [],
+    "startTime": 1790560454.197,
+    "finishTime": 1790560480.225
+  }
+}

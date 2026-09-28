@@ -172,18 +172,6 @@ extension Ghostty.App {
         TerminalController.closeAllWindows(appState)
     }
 
-    static func toggleFullscreen(
-        _ app: ghostty_app_t,
-        target: ghostty_target_s,
-        mode raw: ghostty_action_fullscreen_e) {
-        guard let surfaceView = self.surfaceView(for: target) else { return }
-        guard let mode = FullscreenMode.from(ghostty: raw) else {
-            Ghostty.logger.warning("unknown fullscreen mode raw=\(raw.rawValue, privacy: .public)")
-            return
-        }
-        surfaceView.windowRegistry.owner(of: surfaceView)?.requestFullscreen(from: surfaceView, mode: mode)
-    }
-
     static func toggleCommandPalette(
         _ app: ghostty_app_t,
         target: ghostty_target_s) {

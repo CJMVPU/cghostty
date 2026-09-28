@@ -865,8 +865,6 @@ pub fn handleMessage(self: *Surface, msg: Message) !void {
 
         .redraw => self.redraw(),
 
-        .renderer_health => |health| self.updateRendererHealth(health),
-
         .scrollbar => |scrollbar| self.updateScrollbar(scrollbar),
 
         .present_surface => try self.presentSurface(),
@@ -1362,6 +1360,16 @@ fn mouseRefreshLinksUncached(self: *Surface, pos: apprt.CursorPos, pos_vp: termi
         );
         try self.queueRender();
         return;
+    }
+}
+
+/// App-thread delivery of coalesced GPU feedback. A completion never waits
+/// for mailbox capacity, including while the main thread closes a surface.
+pub fn flushRendererHealth(self: *Surface) void {
+    const renderer = &self.render.renderer;
+    if (!renderer.health_pending.load(.acquire)) return;
+    if (renderer.health_pending.swap(false, .acq_rel)) {
+        self.updateRendererHealth(renderer.health.load(.acquire));
     }
 }
 

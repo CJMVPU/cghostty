@@ -13,7 +13,7 @@ pub const Target = struct {
     size: Geometry.Vec,
     timing_width: f32,
     shape: Geometry.Shape,
-    mode: Geometry.Mode = .classic,
+    mode: Geometry.Mode = .responsive,
 };
 
 pub const Frame = struct {
@@ -60,7 +60,9 @@ pub fn sampleAt(self: *Self, enabled: bool, target: ?Target, now: f64, presentat
     }
     _ = self.geometry.update(value.center, value.size, value.timing_width, now, value.shape);
     const pose = self.geometry.sample(presentation);
-    self.active.store(self.geometry.running, .release);
+    // Stop requesting frames once the presentation sample has completely
+    // settled; keep real-time geometry intact for subsequent input.
+    self.active.store(self.geometry.running and (presentation < self.geometry.hold_until + Geometry.recovery_duration or pose.trail_len > 0), .release);
     return .{ .pose = pose, .effect = self.geometry.effect(presentation), .time = presentation };
 }
 
@@ -159,15 +161,15 @@ test "CursorMotion long travel starts visible and keeps rendering through follow
         try t.expectEqual(@as(Geometry.Vec, .{ 0, 0 }), start.pose.center);
         try t.expectEqual(@as(f32, 1), start.effect);
         // Long travel accelerates from rest: the first 60Hz frame travels
-        // about 2% of the total distance.
+        // about 3% of the total distance.
         const first = state.geometry.sample(1 + 1.0 / 60.0);
-        try t.expectApproxEqAbs(@as(f32, 0.019676), @reduce(.Add, first.center * step) / 1_000_000, 0.00001);
-        for (0..261) |ms| {
+        try t.expectApproxEqAbs(@as(f32, 0.030292), @reduce(.Add, first.center * step) / 1_000_000, 0.00001);
+        for (0..201) |ms| {
             const frame = state.sample(true, target, 1 + @as(f64, @floatFromInt(ms)) / 1000).?;
             try t.expectEqual(@as(f32, 1), frame.effect);
             try t.expect(state.isActive());
         }
-        const arrived = state.sample(true, target, 1.261).?;
+        const arrived = state.sample(true, target, 1.201).?;
         try t.expectEqual(step, arrived.pose.center);
         try t.expectEqual(@as(u32, 0), arrived.pose.trail_len);
         _ = state.sample(true, target, 1.5);
@@ -199,13 +201,13 @@ test "CursorMotion presets propagate through hide disable invalidation and mode 
     target.center = .{ 1000, 40 };
     _ = state.sample(true, target, 3);
     try t.expectApproxEqAbs(@as(f32, 0.160), state.geometry.duration, 0.000001);
-    target.mode = .classic;
+    target.mode = .instant;
     const changed = state.sample(true, target, 3.01).?;
     try t.expectEqual(target.center, changed.pose.center);
     try t.expectEqual(@as(u32, 0), changed.pose.trail_len);
     target.center = .{ 0, 60 };
     _ = state.sample(true, target, 4);
-    try t.expectApproxEqAbs(@as(f32, 0.200), state.geometry.duration, 0.000001);
+    try t.expectApproxEqAbs(@as(f32, 0), state.geometry.duration, 0.000001);
 }
 
 test "CursorMotion presentation sampling advances motion without postponing its start" {
@@ -218,4 +220,24 @@ test "CursorMotion presentation sampling advances motion without postponing its 
     try std.testing.expect(frame.pose.center[0] > 0);
     try std.testing.expect(frame.pose.center[0] < 100);
     try std.testing.expectEqual(@as(f64, 1.016), frame.time);
+}
+
+test "CursorMotion settles at presentation time without truncating a submitted trail" {
+    const t = std.testing;
+    var state: Self = .{};
+    var target: Target = .{ .center = .{ 0, 0 }, .size = .{ 10, 20 }, .timing_width = 10, .shape = .block };
+    state.recordFrame(state.sample(true, target, 0).?);
+    target.center = .{ 100, 0 };
+    state.recordFrame(state.sampleAt(true, target, 1, 1.04).?);
+    // A late frame must drain its visible history before the clock can pause.
+    const late = state.sampleAt(true, target, 1.26, 1.30).?;
+    try t.expect(late.pose.trail_len > 0);
+    try t.expect(state.isActive());
+    state.recordFrame(late);
+    const settled = state.sampleAt(true, target, 1.40, 1.45).?;
+    try t.expect(state.geometry.running);
+    try t.expectEqual(target.center, settled.pose.center);
+    try t.expectEqual(@as(f32, 0), settled.effect);
+    try t.expectEqual(@as(u32, 0), settled.pose.trail_len);
+    try t.expect(!state.isActive());
 }

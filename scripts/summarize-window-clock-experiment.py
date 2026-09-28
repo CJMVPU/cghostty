@@ -13,6 +13,36 @@ trace = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(trace)
 
 
+def gpu_timeline(rows):
+    enqueued = {r[3]: r[2] for r in rows if r[0] == 'window_enqueue'}
+    first = {r[4]: (r[2], r[3]) for r in rows if r[0] == 'window_gpu_first'}
+    last = {r[4]: (r[2], r[3]) for r in rows if r[0] == 'window_gpu_last'}
+    shown = {r[3]: r[2] for r in rows if r[0] == 'displayed'}
+    segments = {name: [] for name in ['enqueue_to_gpu_start_ms', 'gpu_window_span_ms',
+                                     'gpu_end_to_display_ms', 'enqueue_to_display_ms']}
+    missing = invalid = unpresented = 0
+    for seq, enqueue in enqueued.items():
+        if seq not in first or seq not in last or seq not in shown:
+            missing += 1
+            continue
+        if shown[seq] == 0:
+            unpresented += 1
+            continue
+        start, clear_end = first[seq]
+        final_start, end = last[seq]
+        # Preserve bad/zero feedback as a counted exclusion, never clamp it.
+        # Adjacent command-buffer feedback intervals can overlap slightly;
+        # validate each interval and the window envelope, not a serial sum.
+        if not (0 < enqueue <= start <= clear_end <= end <= shown[seq] and start <= final_start <= end):
+            invalid += 1
+            continue
+        for key, value in zip(segments, [start - enqueue, end - start, shown[seq] - end, shown[seq] - enqueue]):
+            segments[key].append(value / 1e6)
+    return {'enqueued': len(enqueued), 'missing_timeline': missing,
+            'invalid_timeline': invalid, 'unpresented_timeline': unpresented,
+            **{name: trace.distribution(values) for name, values in segments.items()}}
+
+
 def clock_metrics(rows):
     callbacks = {r[3]: (r[2], r[4]) for r in rows if r[0] == 'clock_callback'}
     targets = {r[4]: (r[2], r[3]) for r in rows if r[0] == 'clock_target'}
@@ -43,6 +73,7 @@ def clock_metrics(rows):
             intervals.append((shown_b - shown_a) / 1e6)
             normalized.append((shown_b - shown_a) / period)
     return {
+        'gpu_timeline': gpu_timeline(rows),
         'callbacks': len(callbacks),
         'early_prepare_ms': trace.distribution([r[2] / 1e6 for r in rows if r[0] == 'window_prepare_early']),
         'prediction_absolute_error_ms': trace.distribution([abs(shown - predictions[seq]) / 1e6
@@ -88,7 +119,14 @@ def summarize(directory):
                     Path(temporary, name).write_text(''.join(','.join(map(str, r)) + '\n' for r in selected))
             metrics = trace.summarize(Path(temporary))['local']
         phase['render'] = metrics
-        phase['clock'] = clock_metrics(subset)
+        # Feedback may be delivered after the phase marker. Associate by the
+        # process-wide frame ID, not the asynchronous callback's receipt time.
+        sequences = {r[3] for r in subset if r[0] == 'window_enqueue'}
+        timing_rows = [r for r in subset if r[0] not in ('window_gpu_first', 'window_gpu_last', 'displayed')]
+        timing_rows += [r for r in rows if
+                       (r[0] in ('window_gpu_first', 'window_gpu_last') and r[4] in sequences) or
+                       (r[0] == 'displayed' and (r[3] in sequences or lo <= r[1] <= hi))]
+        phase['clock'] = clock_metrics(timing_rows)
     return result
 
 
