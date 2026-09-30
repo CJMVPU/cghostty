@@ -71,4 +71,5 @@ test {
     _ = Thread;
     _ = State;
     _ = @import("renderer/RenderHold.zig");
+    _ = @import("renderer/SearchResults.zig");
 }

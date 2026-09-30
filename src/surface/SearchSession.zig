@@ -7,7 +7,6 @@ const ArenaAllocator = std.heap.ArenaAllocator;
 const global = @import("../global.zig");
 const terminal = @import("../terminal/main.zig");
 const renderer = @import("../renderer.zig");
-const apprt = @import("../apprt.zig");
 const Worker = terminal.search.Thread;
 const log = std.log.scoped(.search_session);
 
@@ -15,12 +14,26 @@ alloc: Allocator,
 state: Worker,
 thread: ?std.Thread = null,
 output: Output,
+ui_mutex: std.Io.Mutex = .init,
+ui: UI = .{},
+ui_pending: bool = false,
+
+pub const UI = struct { total: ?usize = null, selected: ?usize = null };
+
+pub fn takeUI(self: *Self) ?UI {
+    self.ui_mutex.lockUncancelable(global.io());
+    defer self.ui_mutex.unlock(global.io());
+    if (!self.ui_pending) return null;
+    self.ui_pending = false;
+    return self.ui;
+}
 
 /// These destinations outlive the session and are never changed by its worker.
 pub const Output = struct {
-    renderer_mailbox: *renderer.Thread.Mailbox,
+    renderer_results: *@import("../renderer/SearchResults.zig"),
     renderer_wakeup: *global.xev.Async,
-    surface_mailbox: apprt.surface.Mailbox,
+    app_wakeup: *const fn (?*anyopaque) void,
+    app_userdata: ?*anyopaque,
 };
 
 pub const Options = struct {
@@ -93,7 +106,7 @@ fn send(self: *Self, message: Worker.Message) void {
     self.state.wakeup.notify() catch {};
 }
 
-// The renderer owns these arenas after enqueue, even if its wakeup fails.
+// The result channel owns these arenas after publication, even if wakeup fails.
 fn cloneMatch(alloc: Allocator, borrowed: terminal.highlight.Flattened) !renderer.Message.SearchMatch {
     var arena: ArenaAllocator = .init(alloc);
     errdefer arena.deinit();
@@ -156,90 +169,82 @@ test "SearchSession snapshots own highlight chunks and unwind partial copies" {
     }.check, .{});
 }
 
-fn forward(
-    self: *Self,
-    event: terminal.search.Thread.Event,
-) !void {
-    // NOTE: This runs on the search thread.
-
+fn forward(self: *Self, event: terminal.search.Thread.Event) !void {
     switch (event) {
-        .viewport_matches => |matches_unowned| {
-            const payload = matches_unowned.retain();
-
-            _ = self.output.renderer_mailbox.push(
-                global.io(),
-                .{ .search_viewport_matches = payload },
-                .forever,
-            );
+        .viewport_matches => |matches| {
+            self.output.renderer_results.publishMatches(matches.retain());
             try self.output.renderer_wakeup.notify();
         },
-
-        .selected_match => |selected_| {
-            if (selected_) |sel| {
-                const payload = try cloneMatch(self.alloc, sel.highlight);
-
-                _ = self.output.renderer_mailbox.push(
-                    global.io(),
-                    .{ .search_selected_match = payload },
-                    .forever,
-                );
-
-                // Send the selected index to the surface mailbox
-                _ = self.output.surface_mailbox.push(
-                    .{ .search_selected = sel.idx },
-                    .forever,
-                );
-            } else {
-                // Reset our selected match
-                _ = self.output.renderer_mailbox.push(
-                    global.io(),
-                    .{ .search_selected_match = null },
-                    .forever,
-                );
-
-                // Reset the selected index
-                _ = self.output.surface_mailbox.push(
-                    .{ .search_selected = null },
-                    .forever,
-                );
-            }
-
+        .selected_match => |selected| {
+            const owned = if (selected) |sel| try cloneMatch(self.alloc, sel.highlight) else null;
+            self.output.renderer_results.publishSelected(owned);
+            self.ui_mutex.lockUncancelable(global.io());
+            self.ui.selected = if (selected) |sel| sel.idx else null;
+            self.ui_pending = true;
+            self.ui_mutex.unlock(global.io());
+            self.output.app_wakeup(self.output.app_userdata);
             try self.output.renderer_wakeup.notify();
         },
-
         .total_matches => |total| {
-            _ = self.output.surface_mailbox.push(
-                .{ .search_total = total },
-                .forever,
-            );
+            self.ui_mutex.lockUncancelable(global.io());
+            self.ui.total = total;
+            self.ui_pending = true;
+            self.ui_mutex.unlock(global.io());
+            self.output.app_wakeup(self.output.app_userdata);
         },
-
-        // When we quit, tell our renderer to reset any search state.
         .quit => {
-            _ = self.output.renderer_mailbox.push(
-                global.io(),
-                .{ .search_selected_match = null },
-                .forever,
-            );
-            _ = self.output.renderer_mailbox.push(
-                global.io(),
-                .{ .search_viewport_matches = .empty },
-                .forever,
-            );
+            // The main thread may be joining us. No shutdown callback waits
+            // for it or for the renderer to consume a bounded mailbox.
+            self.output.renderer_results.clear();
             try self.output.renderer_wakeup.notify();
-
-            // Reset search totals in the surface
-            _ = self.output.surface_mailbox.push(
-                .{ .search_total = null },
-                .forever,
-            );
-            _ = self.output.surface_mailbox.push(
-                .{ .search_selected = null },
-                .forever,
-            );
         },
-
-        // Unhandled, so far.
         .complete => {},
+    }
+}
+
+test "SearchSession shutdown completes with full app and renderer queues" {
+    const t = std.testing;
+    const app_queue = try @import("../App.zig").Mailbox.Queue.create(t.allocator);
+    defer app_queue.destroy(t.allocator);
+    const render_queue = try renderer.Thread.Mailbox.create(t.allocator);
+    defer render_queue.destroy(t.allocator);
+    for (0..64) |_| {
+        _ = app_queue.push(t.io, .quit, .forever);
+        _ = render_queue.push(t.io, .reset_cursor_blink, .forever);
+    }
+    var results: @import("../renderer/SearchResults.zig") = .{};
+    defer results.deinit();
+    var wake = try global.xev.Async.init();
+    defer wake.deinit();
+    var mutex: std.Io.Mutex = .init;
+    var term = try terminal.Terminal.init(t.io, t.allocator, .{ .cols = 10, .rows = 2 });
+    defer term.deinit(t.allocator);
+    const opts: Options = .{ .mutex = &mutex, .terminal = &term, .output = .{
+        .renderer_results = &results,
+        .renderer_wakeup = &wake,
+        .app_wakeup = struct {
+            fn notify(_: ?*anyopaque) void {}
+        }.notify,
+        .app_userdata = null,
+    } };
+    const ui_session = try init(t.allocator, opts, null);
+    try ui_session.forward(.{ .total_matches = 5 });
+    try ui_session.forward(.{ .selected_match = null });
+    try t.expectEqual(UI{ .total = 5, .selected = null }, ui_session.takeUI().?);
+    try t.expect(ui_session.takeUI() == null);
+    ui_session.destroy();
+    for (0..3) |_| {
+        const session = try create(t.allocator, opts, "needle");
+        // destroy must finish without either queue being drained. The actual
+        // worker executes the quit callback before the join returns.
+        session.destroy();
+        var cleared = results.take();
+        defer cleared.deinit();
+        try t.expect(cleared.selected_changed);
+        try t.expect(cleared.selected == null);
+    }
+    for (0..64) |_| {
+        try t.expect(app_queue.pop(t.io) != null);
+        try t.expect(render_queue.pop(t.io) != null);
     }
 }

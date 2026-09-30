@@ -96,6 +96,7 @@ pub fn destroy(self: *Self) void {
     // grids. Surface still owns its current grid until after this returns.
     self.renderer.deinit();
     self.thread.deinit();
+    self.state.search_results.deinit();
     if (self.state.preedit) |preedit| preedit.deinit(self.alloc);
     const alloc = self.alloc;
     alloc.destroy(self);
@@ -170,6 +171,7 @@ test "RenderSession unstarted worker releases queued configuration and search sn
     {
         session.thread = try rendererpkg.Thread.init(t.allocator, &config, undefined, &session.renderer, &session.state);
         defer session.thread.deinit();
+        defer session.state.search_results.deinit();
         _ = session.thread.mailbox.push(t.io, .{ .font_grid = .{ .grid = second_grid, .set = &grids, .old_key = first_key, .new_key = second_key } }, .forever);
         _ = session.thread.mailbox.push(t.io, .{ .font_grid = .{ .grid = current_grid, .set = &grids, .old_key = second_key, .new_key = current_key } }, .forever);
         _ = session.thread.mailbox.push(t.io, try rendererpkg.Message.initChangeConfig(t.allocator, &config), .forever);
@@ -177,10 +179,10 @@ test "RenderSession unstarted worker releases queued configuration and search sn
         defer builder.deinit();
         try builder.append(.empty);
         const viewport = try builder.finish();
-        _ = session.thread.mailbox.push(t.io, .{ .search_viewport_matches = viewport }, .forever);
+        session.state.search_results.publishMatches(viewport);
         var selected = std.heap.ArenaAllocator.init(t.allocator);
         _ = try selected.allocator().alloc(u8, 128);
-        _ = session.thread.mailbox.push(t.io, .{ .search_selected_match = .{ .arena = selected, .match = .empty } }, .forever);
+        session.state.search_results.publishSelected(.{ .arena = selected, .match = .empty });
         session.stop();
         session.stop();
         try t.expect(session.phase == .stopped and session.os_thread == null);

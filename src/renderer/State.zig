@@ -26,6 +26,7 @@ output_revision: u64 = 0,
 
 /// Independently synchronized; callers need not hold the terminal mutex.
 search_changes: terminalpkg.search.ChangeSignal = .{},
+search_results: @import("SearchResults.zig") = .{},
 
 /// Shared by normal rendering and synchronized frame capture so both use
 /// the same scroll-on-output boundary. Protected by mutex.

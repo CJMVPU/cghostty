@@ -1363,8 +1363,28 @@ fn mouseRefreshLinksUncached(self: *Surface, pos: apprt.CursorPos, pos_vp: termi
     }
 }
 
-/// App-thread delivery of coalesced GPU feedback. A completion never waits
-/// for mailbox capacity, including while the main thread closes a surface.
+/// Deliver the current session only; retired sessions cannot overwrite a restart.
+pub fn flushSearchResults(self: *Surface) void {
+    const session = self.search orelse return;
+    const ui = session.takeUI() orelse return;
+    self.handleMessage(.{ .search_total = ui.total }) catch |err| log.warn("search total delivery failed err={}", .{err});
+    self.handleMessage(.{ .search_selected = ui.selected }) catch |err| log.warn("search selection delivery failed err={}", .{err});
+}
+
+fn stopSearch(self: *Surface) !void {
+    const session = self.search orelse return;
+    self.search = null;
+    session.destroy();
+    try self.handleMessage(.{ .search_total = null });
+    try self.handleMessage(.{ .search_selected = null });
+}
+
+fn wakeSearchApp(userdata: ?*anyopaque) void {
+    const app: *apprt.App = @ptrCast(@alignCast(userdata.?));
+    app.wakeup();
+}
+
+/// App-thread delivery of coalesced GPU feedback, independent of queue capacity.
 pub fn flushRendererHealth(self: *Surface) void {
     const renderer = &self.render.renderer;
     if (!renderer.health_pending.load(.acquire)) return;
@@ -4478,10 +4498,7 @@ pub fn performBindingAction(self: *Surface, action: input.Binding.Action) !bool 
             // that GUIs can clean up stale stuff.
             const performed = self.search != null;
 
-            if (self.search) |session| {
-                self.search = null;
-                session.destroy();
-            }
+            try self.stopSearch();
 
             _ = try self.rt_app.performAction(
                 .{ .surface = self },
@@ -4494,9 +4511,8 @@ pub fn performBindingAction(self: *Surface, action: input.Binding.Action) !bool 
 
         .search => |text| {
             if (text.len == 0) {
-                const session = self.search orelse return false;
-                self.search = null;
-                session.destroy();
+                if (self.search == null) return false;
+                try self.stopSearch();
             } else if (self.search) |session| {
                 try session.setQuery(text);
             } else {
@@ -4505,9 +4521,10 @@ pub fn performBindingAction(self: *Surface, action: input.Binding.Action) !bool 
                     .terminal = self.render.state.terminal,
                     .changes = &self.render.state.search_changes,
                     .output = .{
-                        .renderer_mailbox = self.render.thread.mailbox,
+                        .renderer_results = &self.render.state.search_results,
                         .renderer_wakeup = &self.render.thread.wakeup,
-                        .surface_mailbox = self.surfaceMailbox(),
+                        .app_wakeup = wakeSearchApp,
+                        .app_userdata = self.rt_app,
                     },
                 }, text);
             }

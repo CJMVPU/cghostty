@@ -151,7 +151,10 @@ pub fn tick(self: *App, rt_app: *apprt.App) !void {
     // A failed action consumed its message, but later messages still need a tick.
     errdefer rt_app.wakeup();
     try self.drainMailbox(rt_app);
-    for (self.surfaces.items) |surface| surface.core().flushRendererHealth();
+    for (self.surfaces.items) |surface| {
+        surface.core().flushRendererHealth();
+        surface.core().flushSearchResults();
+    }
 }
 
 /// Update the configuration associated with the app. This can only be

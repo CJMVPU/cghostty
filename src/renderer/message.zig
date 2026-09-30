@@ -52,15 +52,6 @@ pub const Message = union(enum) {
         impl: *renderer.Renderer.DerivedConfig,
     },
 
-    /// Matches for the current viewport from the search thread. These happen
-    /// async so they may be off for a frame or two from the actually rendered
-    /// viewport. The renderer must handle this gracefully.
-    search_viewport_matches: SearchMatches,
-
-    /// The selected match from the search thread. May be null to indicate
-    /// no match currently.
-    search_selected_match: ?SearchMatch,
-
     pub const SearchMatches = terminal.search.Snapshot;
 
     pub const SearchMatch = struct {
@@ -96,13 +87,6 @@ pub const Message = union(enum) {
                 v.alloc.destroy(v.thread);
             },
 
-            .search_viewport_matches => |v| {
-                v.deinit();
-            },
-            .search_selected_match => |v| if (v) |match| {
-                var arena = match.arena;
-                arena.deinit();
-            },
             // Surface has already adopted new_key. Once the renderer is
             // destroyed, discarding a pending transfer releases old_key.
             .font_grid => |v| v.set.deref(v.old_key),

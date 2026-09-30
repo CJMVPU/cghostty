@@ -367,22 +367,6 @@ fn drainMailbox(self: *Thread) !void {
                 // renderer needs (smooth cursor, animation mode).
                 self.armAnimationTimer();
             },
-
-            .search_viewport_matches => |v| {
-                // Note we don't free the new value because we expect our
-                // allocators to match.
-                if (self.renderer.search_matches) |*m| m.deinit();
-                self.renderer.search_matches = v;
-                self.renderer.search_matches_dirty = true;
-            },
-
-            .search_selected_match => |v| {
-                // Note we don't free the new value because we expect our
-                // allocators to match.
-                if (self.renderer.search_selected_match) |*m| m.arena.deinit();
-                self.renderer.search_selected_match = v;
-                self.renderer.search_matches_dirty = true;
-            },
         }
     }
 }
@@ -420,6 +404,8 @@ fn wakeupCallback(
     // wake up our thread after publishing.
     t.drainMailbox() catch |err|
         log.err("error draining mailbox err={}", .{err});
+
+    t.takeSearchResults();
 
     // Mark content for the next window frame
     _ = renderCallback(t, undefined, undefined, {});
@@ -493,7 +479,28 @@ pub fn renderCompositor(self: *Thread, texture: @import("objc").Object, queue: @
     return result;
 }
 
+/// Caller holds update_mutex. A pending snapshot has one owning consumer.
+fn takeSearchResults(self: *Thread) void {
+    var pending = self.state.search_results.take();
+    defer pending.deinit();
+    if (pending.matches) |matches| {
+        if (self.renderer.search_matches) |old| old.deinit();
+        self.renderer.search_matches = matches;
+        pending.matches = null;
+        self.renderer.search_matches_dirty = true;
+        self.compositor_updates +|= 1;
+    }
+    if (pending.selected_changed) {
+        if (self.renderer.search_selected_match) |*old| old.arena.deinit();
+        self.renderer.search_selected_match = pending.selected;
+        pending.selected = null;
+        self.renderer.search_matches_dirty = true;
+        self.compositor_updates +|= 1;
+    }
+}
+
 fn updateCompositorLocked(self: *Thread, sequence: u64) !void {
+    self.takeSearchResults();
     if (self.compositor_updates != 0) {
         const requests = self.compositor_updates;
         const start = if (self.renderer.trace.file != null) @import("Trace.zig").clock() else 0;
