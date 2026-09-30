@@ -162,6 +162,40 @@ import Testing
         #expect(view.selectedRange() == snapshot.selectedRanges.first)
     }
 
+    @Test(.enabled(if: try MetalTestSupport.metal4Available(), "Requires a Metal 4 GPU"))
+    func selectionOnlyUpdateRepaintsNativeHighlight() async throws {
+        let config = FileManager.default.temporaryDirectory.appending(path: "selection-probe-\(UUID()).conf")
+        try "background = #000000\nforeground = #ffffff\nselection-background = #ff0000\nselection-foreground = #000000\n"
+            .write(to: config, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: config) }
+        let view = makeView(command: "/usr/bin/printf 'selection-ready'", configPath: config.path)
+        let surface = try #require(view.surfaceModel)
+        let window = try show(view)
+        defer { window.close() }
+        try await waitForText("selection-ready", in: surface)
+        try await waitForFrame(after: 0, in: view)
+        func redPixels(_ png: Data) throws -> Int {
+            let bitmap = try #require(NSBitmapImageRep(data: png))
+            var count = 0
+            for y in 0..<bitmap.pixelsHigh {
+                for x in 0..<bitmap.pixelsWide {
+                    if let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                       color.redComponent > 0.6, color.greenComponent < 0.1, color.blueComponent < 0.1 {
+                        count += 1
+                    }
+                }
+            }
+            return count
+        }
+        let before = try redPixels(#require(view.thumbnailPNG()))
+        let revision = surface.renderRevision
+        #expect(surface.perform(.selectAll))
+        try await waitForFrame(after: revision, in: view)
+        let selected = try redPixels(#require(view.thumbnailPNG()))
+        #expect(selected > before + 100)
+        #expect(view.healthy)
+    }
+
     @Test func accessibilitySnapshotKeepsTextAndUTF16SelectionTogether() async throws {
         var view: Ghostty.SurfaceView? = makeView()
         var surface: Ghostty.Surface? = try #require(view?.surfaceModel)

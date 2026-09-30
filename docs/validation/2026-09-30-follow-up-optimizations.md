@@ -98,3 +98,63 @@ Checks: ReleaseFast probes completed, 72/72 selected tests/build steps (includin
 import/ABI tests), exit 0; Debug core 108/108 steps; native Debug
 `SurfaceBridgeTests/inputWithoutSelectionDoesNotSerializeHistory()` passed,
 1 function/1 case, no skips; focused SwiftLint and diff check passed.
+
+## Selection invalidation (measured, bounded change)
+
+120x60 viewport with 59 rows of mixed text; 500 changes alternating a one-cell
+selection between two columns of row 2. Five batches of 100, measuring selection
+update plus RenderState.update in ReleaseFast with the same testing allocator
+and build flags as above. No renderer shaping, Metal uploads, GUI dragging or
+physical presentation is included. Dirty-row counts are actual RenderState
+outputs, not an assumed GPU speedup.
+
+| Run | Dirty rows/query | Core median | Min–max |
+| --- | --- | --- | --- |
+| Before | 60 | 1.374 microseconds | 1.328–1.541 microseconds |
+| After | 1 | 0.265 microseconds | 0.264–0.341 microseconds |
+
+The absolute core time saved is small (~1.1 microseconds in this fixture).
+The main payoff is restricting downstream cell rebuild work to one changed row
+rather than 60. No GPU upload or total-frame speedup is claimed. Selection-only
+flags no longer clear/rebuild raw text/style rows. New/old selection bounds are
+compared per row, including rows left by a moved/cleared rectangle. Other screen
+flags, resize, viewport changes and content mutation keep their prior behavior.
+
+Checks:
+- Debug related regressions: 111 passed / 1 timing-only probe skipped, 72/72
+  steps, exit 0. The new test includes a failing allocator, retained text-buffer
+  identity/search highlights, repeated identical selection, rectangle movement,
+  clear and subsequent content update.
+- ReleaseFast probes: 72/72 tests and steps, exit 0; both probes retained in source.
+- Debug core: 108/108 steps, exit 0.
+- Native selection-only repaint: real red selection pixels appeared in an
+  independently read back Metal snapshot; 1 function/1 case passed, no skips.
+
+## Final checks and limitations
+
+- Combined Debug regressions across the prior five refactors and these changes:
+  232 passed / 1 timing-only probe skipped, 72/72 steps, exit 0. The existing
+  prepended-history search fixture took ~2 minutes generating/checking pages;
+  process sampling showed active work rather than a blocked lock. It completed
+  normally, and no process was terminated.
+- Final native accessibility snapshot: 1 function/1 case passed.
+- Final native search visibility/startup refresh: 1 function/2 cases passed.
+- Final native composition-only cursor/scroll animation: 1 function/6 cases
+  passed across native/linear/linear-corrected blending. No GPU skips.
+- Across this follow-up, selected native checks passed: 8 functions/14 expanded
+  cases, plus the two scales explicitly checked inside the caret test.
+- Whole-repository SwiftLint strict/no-cache, Zig formatting, scope/config bridge,
+  app/dependency versions, Swift 6 settings and diff checks passed.
+- Python: 51 tests, 49 passed, 2 skipped for the missing fish prerequisite.
+
+The desktop execution service briefly disconnected and recovered. Sources and
+running jobs were checked after reconnect; completed work was not duplicated.
+The user's original /Applications/cghostty.app process, PID 7018, remained alive.
+No push, tag, release, deployment or running-app replacement was performed.
+The observed remote main is 377ee70431be4276df7e3578d45ce84a7ccce8c1; this report
+claims only that this task did not push, not that nobody else changed the remote.
+
+Full Zig/native suites, Release native builds, UI test target, system IME,
+dictation, real GPU fault injection/system memory pressure, contended terminal
+lock measurements and foreground presentation-latency benchmarks were not run.
+CAMetalDisplayLink, current latency settings and GPU submission order remain.

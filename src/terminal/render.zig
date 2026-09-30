@@ -381,7 +381,10 @@ pub const RenderState = struct {
             // a full screen dirty tracker.
             {
                 const Int = @typeInfo(Screen.Dirty).@"struct".backing_integer.?;
-                const v: Int = @bitCast(t.screens.active.dirty);
+                // Selection affects row bounds, not copied text and styles.
+                var dirty = t.screens.active.dirty;
+                dirty.selection = false;
+                const v: Int = @bitCast(dirty);
                 if (v > 0) break :redraw true;
             }
 
@@ -667,7 +670,7 @@ pub const RenderState = struct {
                     if (!c.selection.eql(sel.*)) break :cache_check;
 
                     // If we have no dirty rows, we can not recalculate.
-                    if (!any_dirty) break :selection;
+                    if (!any_dirty and !s.dirty.selection) break :selection;
 
                     // We have dirty rows, we can utilize the cache.
                     break :cache c;
@@ -693,12 +696,9 @@ pub const RenderState = struct {
             // The viewport is generally very small so the efficient way to
             // do this is to traverse the viewport pages and check for the
             // matching selection pages.
-            for (
-                row_pins,
-                row_sels,
-            ) |pin, *sel_bounds| {
+            for (row_pins, row_sels, row_dirties) |pin, *sel_bounds, *dirty| {
                 const p = s.pages.pointFromPin(.screen, pin).?.screen;
-                const row_sel = sel.containedRowCached(
+                const next: ?[2]size.CellCountInt = if (sel.containedRowCached(
                     s,
                     cache.tl_pin,
                     cache.br_pin,
@@ -706,13 +706,27 @@ pub const RenderState = struct {
                     tl,
                     br,
                     p,
-                ) orelse continue;
-                const start = row_sel.start();
-                const end = row_sel.end();
-                assert(start.node == end.node);
-                assert(start.x <= end.x);
-                assert(start.y == end.y);
-                sel_bounds.* = .{ start.x, end.x };
+                )) |row_sel| bounds: {
+                    const start = row_sel.start();
+                    const end = row_sel.end();
+                    assert(start.node == end.node);
+                    assert(start.x <= end.x);
+                    assert(start.y == end.y);
+                    break :bounds .{ start.x, end.x };
+                } else null;
+                if (!std.meta.eql(sel_bounds.*, next)) {
+                    sel_bounds.* = next;
+                    dirty.* = true;
+                    any_dirty = true;
+                }
+            }
+        } else {
+            self.selection_cache = null;
+            for (row_sels, row_dirties) |*bounds, *dirty| {
+                if (bounds.* == null) continue;
+                bounds.* = null;
+                dirty.* = true;
+                any_dirty = true;
             }
         }
 
@@ -2642,4 +2656,79 @@ test "scroll journal render snapshot stays at its completed boundary" {
     try t.expectEqual(@as(u64, 1), snapshot.scroll_state.serial);
     try t.expectEqual(@as(i32, -1), snapshot.scroll_state.event(0).?.rows);
     try t.expectEqual(@as(f64, -0.25), snapshot.scroll_state.viewport_fraction);
+}
+
+test "optimization probe selection viewport work" {
+    if (@import("builtin").mode == .Debug) return error.SkipZigTest;
+    const t = std.testing;
+    var term = try Terminal.init(t.io, t.allocator, .{ .cols = 120, .rows = 60 });
+    defer term.deinit(t.allocator);
+    for (0..59) |_| try term.printString("styled selection probe 中🙂 abcdefghijklmnopqrstuvwxyz\r\n");
+    var state: RenderState = .empty;
+    defer state.deinit(t.allocator);
+    try state.update(t.allocator, &term);
+    state.clean();
+    var times: [5]i128 = undefined;
+    var dirty_rows: usize = 0;
+    for (&times) |*time| {
+        const start = std.Io.Timestamp.now(t.io, .awake);
+        for (0..100) |i| {
+            const pin = term.screens.active.pages.pin(.{ .viewport = .{ .x = @intCast(i % 2), .y = 2 } }).?;
+            try term.screens.active.select(Selection.init(pin, pin, false));
+            try state.update(t.allocator, &term);
+            for (state.row_data.items(.dirty)) |dirty| if (dirty) {
+                dirty_rows += 1;
+            };
+            state.clean();
+        }
+        time.* = @divTrunc(start.durationTo(.now(t.io, .awake)).nanoseconds, 100);
+    }
+    std.mem.sort(i128, &times, {}, std.sort.asc(i128));
+    std.debug.print("\nOPTIMIZATION_METRIC selection cols=120 rows=60 queries=500 dirty_rows_per_query={d} median_ns={d} min_ns={d} max_ns={d}\n", .{ dirty_rows / 500, times[2], times[0], times[4] });
+}
+
+test "selection changes dirty only differing bounds and preserve text and highlights" {
+    const t = std.testing;
+    var term = try Terminal.init(t.io, t.allocator, .{ .cols = 10, .rows = 4 });
+    defer term.deinit(t.allocator);
+    try term.printString("a中b\nsecond\nthird");
+    var state: RenderState = .empty;
+    defer state.deinit(t.allocator);
+    try state.update(t.allocator, &term);
+    const screen = term.screens.active;
+    const pin = screen.pages.pin(.{ .viewport = .{ .x = 1, .y = 0 } }).?;
+    const end = screen.pages.pin(.{ .viewport = .{ .x = 3, .y = 0 } }).?;
+    const cells = state.row_data.items(.cells)[0].slice().items(.raw).ptr;
+    var hl: highlight.Flattened = .empty;
+    defer hl.deinit(t.allocator);
+    try hl.chunks.append(t.allocator, .{ .node = pin.node, .serial = pin.node.serial, .start = pin.y, .end = pin.y + 1 });
+    hl.top_x = 0;
+    hl.bot_x = 3;
+    try state.updateHighlightsFlattened(t.allocator, 1, &.{hl});
+    state.clean();
+    try screen.select(Selection.init(pin, end, false));
+    var failure = t.FailingAllocator.init(t.allocator, .{ .fail_index = 0 });
+    try state.update(failure.allocator(), &term);
+    try t.expectEqual(RenderState.Dirty.partial, state.dirty);
+    try t.expectEqualSlices(bool, &.{ true, false, false, false }, state.row_data.items(.dirty));
+    try t.expectEqual(cells, state.row_data.items(.cells)[0].slice().items(.raw).ptr);
+    try t.expectEqual(@as(usize, 1), state.row_data.items(.highlights)[0].items.len);
+    state.clean();
+    try screen.select(Selection.init(pin, end, false));
+    try state.update(t.allocator, &term);
+    try t.expectEqual(RenderState.Dirty.false, state.dirty);
+    const p1 = screen.pages.pin(.{ .viewport = .{ .x = 0, .y = 1 } }).?;
+    const p2 = screen.pages.pin(.{ .viewport = .{ .x = 2, .y = 2 } }).?;
+    try screen.select(Selection.init(p1, p2, true));
+    try state.update(t.allocator, &term);
+    try t.expectEqualSlices(bool, &.{ true, true, true, false }, state.row_data.items(.dirty));
+    try t.expect(state.row_data.items(.selection)[0] == null);
+    state.clean();
+    screen.clearSelection();
+    try state.update(t.allocator, &term);
+    try t.expectEqualSlices(bool, &.{ false, true, true, false }, state.row_data.items(.dirty));
+    state.clean();
+    try term.printString("Z");
+    try state.update(t.allocator, &term);
+    try t.expect(state.dirty != .false);
 }
