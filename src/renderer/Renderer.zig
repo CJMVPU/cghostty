@@ -105,6 +105,8 @@ search_matches_dirty: bool,
 /// but we keep this around so that we don't reallocate. Each set of
 /// cells goes into a separate shader.
 cells: cellpkg.Contents,
+row_transaction: cellpkg.RowTransaction = .{},
+cell_rebuild: @import("CellRebuild.zig") = .{},
 
 /// Set to true after rebuildCells is called. This can be used
 /// to determine if any possible changes have been made to the
@@ -663,6 +665,7 @@ pub fn deinit(self: *Self) void {
     if (self.search_matches) |*m| m.deinit();
 
     self.cells.deinit(self.alloc);
+    self.row_transaction.deinit(self.alloc);
 
     self.font_shaper.deinit();
     self.font_shaper_cache.deinit(self.alloc);
@@ -879,6 +882,7 @@ pub fn updateFrame(
     state: *renderer.State,
     cursor_blink_visible: bool,
 ) Allocator.Error!void {
+    self.cell_rebuild.begin();
     self.glyph_metrics = .{};
     defer if (self.trace.file != null and self.glyph_metrics.calls != 0) {
         const m = self.glyph_metrics;
@@ -1146,7 +1150,7 @@ pub fn updateFrame(
     });
 
     // Reset our dirty state after updating.
-    defer self.terminal_state.dirty = .false;
+    defer self.terminal_state.dirty = if (self.cell_rebuild.pending) .full else .false;
 
     // Acquire the draw mutex for all remaining state updates.
     {
@@ -1177,6 +1181,7 @@ pub fn updateFrame(
             // to update the cells. In this case, we continue with
             // our old buffer (frozen contents) and log it.
             comptime assert(@TypeOf(err) == error{OutOfMemory});
+            self.cell_rebuild.finish(true);
             log.warn("error rebuilding GPU cells err={}", .{err});
         };
 
@@ -1285,7 +1290,7 @@ pub fn drawCompositor(self: *Self, texture: @import("objc").Object, queue: @impo
     try self.drawFrameLocked(false, null);
     return @as(u32, @intFromBool(self.content_submissions != content)) |
         (if (self.api.pane.sequence != sequence) @as(u32, 16) else 0) |
-        (if (self.cells_rebuilt or self.cursor_motion.isActive() or self.scroll.motion.active()) @as(u32, 2) else 0);
+        (if (self.cells_rebuilt or self.cell_rebuild.needsFrame() or self.cursor_motion.isActive() or self.scroll.motion.active()) @as(u32, 2) else 0);
 }
 
 /// Release cached scenes and stop publishing their hit geometry.
@@ -2107,10 +2112,12 @@ fn rebuildCells(
         self.uniforms.grid_size = .{ new_size.columns, new_size.rows };
     }
 
-    const rebuild = state.dirty == .full or grid_size_diff;
+    const rebuild = state.dirty == .full or grid_size_diff or self.cell_rebuild.pending;
+    var failed = false;
+    defer self.cell_rebuild.finish(failed);
     if (rebuild) {
-        // If we are doing a full rebuild, then we clear the entire cell buffer.
-        self.cells.reset();
+        // Each row is committed independently; keep previous pixels until
+        // its replacement succeeds, including during a full rebuild.
 
         // We also reset our padding extension depending on the screen type
         switch (self.config.padding_color) {
@@ -2185,16 +2192,14 @@ fn rebuildCells(
     ) |y_usize, row, *cells, *dirty, selection, *highlights| {
         const y: terminal.size.CellCountInt = @intCast(y_usize);
 
-        if (!rebuild) {
-            // Only rebuild if we are doing a full rebuild or this row is dirty.
-            if (!dirty.*) continue;
-
-            // Clear the cells if the row is dirty
-            self.cells.clear(y);
-        }
-
-        // Unmark the dirty state in our render state.
-        dirty.* = false;
+        if (!rebuild and !dirty.*) continue;
+        const old_padding = self.uniforms.padding_extend;
+        self.row_transaction.begin(self.alloc, &self.cells, y) catch |err| {
+            failed = true;
+            dirty.* = true;
+            log.warn("error preparing row y={} err={}", .{ y, err });
+            continue;
+        };
 
         self.rebuildRow(
             y,
@@ -2205,13 +2210,15 @@ fn rebuildCells(
             highlights,
             links,
         ) catch |err| {
-            // This should never happen except under exceptional
-            // scenarios. In this case, we don't want to corrupt
-            // our render state so just clear this row and keep
-            // trying to finish it out.
+            failed = true;
+            dirty.* = true;
+            self.row_transaction.rollback(&self.cells, y);
+            self.uniforms.padding_extend = old_padding;
             log.warn("error building row y={} err={}", .{ y, err });
-            self.cells.clear(y);
+            continue;
         };
+        self.row_transaction.commit(&self.cells, y);
+        dirty.* = false;
     }
 
     // Setup our cursor rendering information.

@@ -72,4 +72,5 @@ test {
     _ = State;
     _ = @import("renderer/RenderHold.zig");
     _ = @import("renderer/SearchResults.zig");
+    _ = @import("renderer/CellRebuild.zig");
 }

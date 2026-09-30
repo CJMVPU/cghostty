@@ -50,7 +50,7 @@ pub const Contents = struct {
     /// Prefer accessing with `Contents.bgCell(row, col).*` instead
     /// of directly indexing in order to avoid integer size bugs.
     bg_cells: []shaderpkg.CellBg = &.{},
-    /// Each row is published by reset/clear before rebuildRow writes it.
+    /// Versions change only when row contents are committed.
     bg_versions: []u64 = &.{},
     bg_revision: u64 = 0,
 
@@ -228,6 +228,90 @@ pub const Contents = struct {
         self.fg_rows[y + 1].clearRetainingCapacity();
     }
 };
+
+/// Reusable row transaction. Reserve before changing published cells, retain
+/// the previous row on failure, and publish its version only after success.
+/// A single scratch row is reused for all dirty rows.
+pub const RowTransaction = struct {
+    foreground: CellTextRow = .empty,
+    background: std.ArrayListUnmanaged(shaderpkg.CellBg) = .empty,
+    version: u64 = 0,
+
+    pub fn deinit(self: *RowTransaction, alloc: Allocator) void {
+        self.foreground.deinit(alloc);
+        self.background.deinit(alloc);
+    }
+
+    pub fn begin(self: *RowTransaction, alloc: Allocator, contents: *Contents, y: terminal.size.CellCountInt) !void {
+        try self.background.resize(alloc, contents.size.columns);
+        try self.foreground.ensureTotalCapacity(alloc, @as(usize, contents.size.columns) * 3);
+        const bg = contents.bg_cells[@as(usize, y) * contents.size.columns ..][0..contents.size.columns];
+        @memcpy(self.background.items, bg);
+        self.version = contents.bg_versions[y];
+        std.mem.swap(CellTextRow, &self.foreground, &contents.fg_rows[y + 1]);
+        contents.fg_rows[y + 1].clearRetainingCapacity();
+        @memset(bg, .{ 0, 0, 0, 0 });
+    }
+
+    pub fn commit(self: *RowTransaction, contents: *Contents, y: terminal.size.CellCountInt) void {
+        _ = self;
+        contents.bg_revision += 1;
+        contents.bg_versions[y] = contents.bg_revision;
+    }
+
+    pub fn rollback(self: *RowTransaction, contents: *Contents, y: terminal.size.CellCountInt) void {
+        const bg = contents.bg_cells[@as(usize, y) * contents.size.columns ..][0..contents.size.columns];
+        @memcpy(bg, self.background.items);
+        std.mem.swap(CellTextRow, &self.foreground, &contents.fg_rows[y + 1]);
+        contents.bg_versions[y] = self.version;
+    }
+};
+
+test "row transaction rolls back partial writes and publishes successful rows" {
+    const t = std.testing;
+    var contents: Contents = .{};
+    defer contents.deinit(t.allocator);
+    try contents.resize(t.allocator, .{ .rows = 2, .columns = 3 });
+    var transaction: RowTransaction = .{};
+    defer transaction.deinit(t.allocator);
+    const glyph: shaderpkg.CellText = .{ .atlas = .grayscale, .grid_pos = .{ 1, 0 }, .color = .{ 1, 2, 3, 4 } };
+    try contents.add(t.allocator, .text, glyph);
+    contents.bgCell(0, 1).* = .{ 1, 2, 3, 4 };
+    const version = contents.bg_versions[0];
+    try transaction.begin(t.allocator, &contents, 0);
+    contents.bgCell(0, 1).* = .{ 9, 9, 9, 9 };
+    try contents.add(t.allocator, .text, glyph);
+    transaction.rollback(&contents, 0);
+    try t.expectEqual(glyph, contents.fg_rows[1].items[0]);
+    try t.expectEqual(@as(shaderpkg.CellBg, .{ 1, 2, 3, 4 }), contents.bgCell(0, 1).*);
+    try t.expectEqual(version, contents.bg_versions[0]);
+    try transaction.begin(t.allocator, &contents, 0);
+    contents.bgCell(0, 1).* = .{ 5, 6, 7, 8 };
+    transaction.commit(&contents, 0);
+    try t.expect(contents.bg_versions[0] != version);
+    try t.expectEqual(@as(usize, 0), contents.fg_rows[1].items.len);
+    try t.expectEqual(@as(shaderpkg.CellBg, .{ 5, 6, 7, 8 }), contents.bgCell(0, 1).*);
+}
+
+test "row transaction allocation failure leaves published row untouched" {
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, struct {
+        fn check(alloc: Allocator) !void {
+            var contents: Contents = .{};
+            defer contents.deinit(std.testing.allocator);
+            try contents.resize(std.testing.allocator, .{ .rows = 1, .columns = 3 });
+            contents.bgCell(0, 0).* = .{ 1, 2, 3, 4 };
+            const version = contents.bg_versions[0];
+            var transaction: RowTransaction = .{};
+            defer transaction.deinit(alloc);
+            transaction.begin(alloc, &contents, 0) catch |err| {
+                try std.testing.expectEqual(@as(shaderpkg.CellBg, .{ 1, 2, 3, 4 }), contents.bgCell(0, 0).*);
+                try std.testing.expectEqual(version, contents.bg_versions[0]);
+                return err;
+            };
+            transaction.rollback(&contents, 0);
+        }
+    }.check, .{});
+}
 
 /// Returns true if a codepoint for a cell is a covering character. A covering
 /// character is a character that covers the entire cell. This is used to

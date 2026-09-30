@@ -501,7 +501,8 @@ fn takeSearchResults(self: *Thread) void {
 
 fn updateCompositorLocked(self: *Thread, sequence: u64) !void {
     self.takeSearchResults();
-    if (self.compositor_updates != 0) {
+    if (self.compositor_updates != 0 or self.renderer.cell_rebuild.needsFrame()) {
+        if (self.compositor_updates != 0) self.renderer.cell_rebuild.request();
         const requests = self.compositor_updates;
         const start = if (self.renderer.trace.file != null) @import("Trace.zig").clock() else 0;
         // Clear only after success; allocation failure must not lose the update.
