@@ -1871,6 +1871,14 @@ pub const CAPI = struct {
         height.* = pos.height;
     }
 
+    export fn ghostty_surface_ime_point_for_utf16(surface: *Surface, offset: usize, x: *f64, y: *f64, width: *f64, height: *f64) void {
+        const pos = surface.core_surface.imePointForUtf16(offset);
+        x.* = pos.x;
+        y.* = pos.y;
+        width.* = pos.width;
+        height.* = pos.height;
+    }
+
     /// Request that the surface become closed. This will go through the
     /// normal trigger process that a close surface input binding would.
     export fn ghostty_surface_request_close(ptr: *Surface) void {

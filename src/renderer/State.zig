@@ -142,11 +142,14 @@ pub const Mouse = struct {
 pub const Preedit = struct {
     /// The codepoints to render as preedit text.
     codepoints: []const Codepoint = &.{},
+    /// Original AppKit document length, including ignored zero-width scalars.
+    utf16_length: usize = 0,
 
     /// A single codepoint to render as preedit text.
     pub const Codepoint = struct {
         codepoint: u21,
         wide: bool = false,
+        utf16_offset: usize = 0,
     };
 
     /// Deinit this preedit that was cre
@@ -158,6 +161,7 @@ pub const Preedit = struct {
     pub fn clone(self: *const Preedit, alloc: Allocator) !Preedit {
         return .{
             .codepoints = try alloc.dupe(Codepoint, self.codepoints),
+            .utf16_length = self.utf16_length,
         };
     }
 
@@ -169,6 +173,21 @@ pub const Preedit = struct {
         }
 
         return result;
+    }
+
+    /// Map a UTF-16 caret to the same clipped suffix and cell widths used by
+    /// rendering. Hidden prefixes clamp to the visible start; a split surrogate
+    /// clamps to its scalar's start. Unknown offsets use the ordinary IME point.
+    pub fn caret(self: *const Preedit, offset: usize, start: terminalpkg.size.CellCountInt, max: terminalpkg.size.CellCountInt) ?usize {
+        if (offset > self.utf16_length or self.codepoints.len == 0) return null;
+        const layout = self.range(start, max);
+        var x: usize = layout.start;
+        for (self.codepoints[layout.cp_offset..]) |cp| {
+            const units: usize = if (cp.codepoint > 0xffff) 2 else 1;
+            if (offset < cp.utf16_offset + units) break;
+            x += if (cp.wide) 2 else 1;
+        }
+        return @min(x, @as(usize, max) + 1);
     }
 
     /// Range returns the start and end x position of the preedit text
@@ -274,4 +293,28 @@ test "preedit range shifts left at right edge" {
     try testing.expectEqual(@as(terminalpkg.size.CellCountInt, 8), range.start);
     try testing.expectEqual(@as(terminalpkg.size.CellCountInt, 9), range.end);
     try testing.expectEqual(@as(usize, 0), range.cp_offset);
+}
+
+test "preedit caret maps UTF16 through rendered width and right edge clipping" {
+    const t = std.testing;
+    const p: Preedit = .{
+        .utf16_length = 5,
+        .codepoints = &.{
+            .{ .codepoint = '中', .wide = true, .utf16_offset = 0 },
+            .{ .codepoint = 0x1f642, .wide = true, .utf16_offset = 1 },
+            .{ .codepoint = 'e', .utf16_offset = 3 },
+            // Combining U+0301 at offset 4 is ignored by preedit rendering.
+        },
+    };
+    try t.expectEqual(@as(?usize, 2), p.caret(0, 2, 9));
+    try t.expectEqual(@as(?usize, 4), p.caret(1, 2, 9));
+    try t.expectEqual(@as(?usize, 4), p.caret(2, 2, 9));
+    try t.expectEqual(@as(?usize, 6), p.caret(3, 2, 9));
+    try t.expectEqual(@as(?usize, 7), p.caret(4, 2, 9));
+    try t.expectEqual(@as(?usize, 7), p.caret(5, 2, 9));
+    try t.expect(p.caret(6, 2, 9) == null);
+    // Renderer shifts a suffix left when the cursor is at the right edge.
+    const layout = p.range(9, 9);
+    try t.expectEqual(@as(?usize, layout.start), p.caret(0, 9, 9));
+    try t.expectEqual(@as(?usize, 10), p.caret(5, 9, 9));
 }

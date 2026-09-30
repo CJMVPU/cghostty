@@ -30,10 +30,10 @@ struct InputTextTests {
         #expect(empty.substring(proposed: NSRange(location: NSNotFound, length: 1)) == nil)
     }
     @Test func unknownAndDocumentRangesDoNotMoveTheCompositionAnchor() {
-        #expect(InputText.compositionOffset(for: NSRange(location: NSNotFound, length: 0), markedLength: 0) == 0)
-        #expect(InputText.compositionOffset(for: NSRange(location: 1000, length: 0), markedLength: 2) == 0)
-        #expect(InputText.compositionOffset(for: NSRange(location: -1, length: 0), markedLength: 2) == 0)
-        #expect(InputText.compositionOffset(for: NSRange(location: 1, length: 1), markedLength: 2) == 0)
+        #expect(InputText.compositionOffset(for: NSRange(location: NSNotFound, length: 0), markedLength: 0) == nil)
+        #expect(InputText.compositionOffset(for: NSRange(location: 1000, length: 0), markedLength: 2) == nil)
+        #expect(InputText.compositionOffset(for: NSRange(location: -1, length: 0), markedLength: 2) == nil)
+        #expect(InputText.compositionOffset(for: NSRange(location: 1, length: 1), markedLength: 2) == nil)
         #expect(InputText.compositionOffset(for: NSRange(location: 2, length: 0), markedLength: 2) == 2)
     }
 

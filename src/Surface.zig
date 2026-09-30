@@ -1816,9 +1816,18 @@ fn resolvePathForOpening(
 /// Returns the x/y coordinate of where the IME (Input Method Editor)
 /// keyboard should be rendered.
 pub fn imePoint(self: *const Surface) apprt.IMEPos {
+    return self.imePointForUtf16(null);
+}
+
+/// Shares preedit cell layout with rendering; offsets remain UTF-16 at the ABI.
+pub fn imePointForUtf16(self: *const Surface, offset: ?usize) apprt.IMEPos {
     self.render.state.mutex.lockUncancelable(global.io());
     const cursor = self.render.state.terminal.screens.active.cursor;
     const preedit_width: usize = if (self.render.state.preedit) |preedit| preedit.width() else 0;
+    const caret_x: usize = if (offset) |value| caret: {
+        const preedit = self.render.state.preedit orelse break :caret cursor.x;
+        break :caret preedit.caret(value, cursor.x, self.render.state.terminal.screens.active.pages.cols - 1) orelse cursor.x;
+    } else cursor.x;
     self.render.state.mutex.unlock(global.io());
 
     // TODO: need to handle when scrolling and the cursor is not
@@ -1829,7 +1838,7 @@ pub fn imePoint(self: *const Surface) apprt.IMEPos {
 
     const x: f64 = x: {
         // Simple x * cell width gives the top-left corner, then add padding offset
-        var x: f64 = @floatFromInt(cursor.x * self.size.cell.width + self.size.padding.left);
+        var x: f64 = @floatFromInt(caret_x * self.size.cell.width + self.size.padding.left);
 
         // We want the midpoint
         x += @as(f64, @floatFromInt(self.size.cell.width)) / 2;
@@ -2305,7 +2314,10 @@ pub fn preeditCallback(self: *Surface, preedit_: ?[]const u8) !void {
     const Codepoint = rendererpkg.State.Preedit.Codepoint;
     var codepoints: std.ArrayList(Codepoint) = .empty;
     defer codepoints.deinit(self.alloc);
+    var utf16_offset: usize = 0;
     while (it.nextCodepoint()) |cp| {
+        const cp_offset = utf16_offset;
+        utf16_offset += if (cp > 0xffff) @as(usize, 2) else 1;
         const width: usize = @intCast(unicode.table.get(cp).width);
 
         // I've never seen a preedit text with a zero-width character. In
@@ -2315,7 +2327,7 @@ pub fn preeditCallback(self: *Surface, preedit_: ?[]const u8) !void {
 
         try codepoints.append(
             self.alloc,
-            .{ .codepoint = cp, .wide = width >= 2 },
+            .{ .codepoint = cp, .wide = width >= 2, .utf16_offset = cp_offset },
         );
     }
 
@@ -2327,6 +2339,7 @@ pub fn preeditCallback(self: *Surface, preedit_: ?[]const u8) !void {
 
     self.render.state.preedit = .{
         .codepoints = try codepoints.toOwnedSlice(self.alloc),
+        .utf16_length = utf16_offset,
     };
     try self.queueRender();
 }

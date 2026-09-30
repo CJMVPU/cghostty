@@ -126,6 +126,27 @@ import Testing
         view.unmarkText()
     }
 
+    @Test func compositionCaretUsesRenderedWidthAndSurrogateBoundaries() async throws {
+        let view = makeView()
+        let surface = try #require(view.surfaceModel)
+        surface.setSize(width: 640, height: 480)
+        for scale in [1.0, 2.0] {
+            surface.setContentScale(x: scale, y: scale)
+            view.setMarkedText("中🙂e\u{301}", selectedRange: NSRange(location: 5, length: 0),
+                               replacementRange: NSRange(location: NSNotFound, length: 0))
+            let base = surface.compositionPoint(atUTF16Offset: 0)
+            let middle = surface.compositionPoint(atUTF16Offset: 1)
+            let split = surface.compositionPoint(atUTF16Offset: 2)
+            let end = surface.compositionPoint(atUTF16Offset: 5)
+            let cell = surface.size.cellPixels.width / scale
+            #expect(abs((middle.minX - base.minX) - 2 * cell) < 1)
+            #expect(split.minX == middle.minX)
+            #expect(abs((end.minX - base.minX) - 5 * cell) < 1)
+            #expect(surface.compositionPoint(atUTF16Offset: 9999) == surface.imePoint)
+            view.unmarkText()
+        }
+    }
+
     @Test func accessibilitySnapshotKeepsTextAndUTF16SelectionTogether() async throws {
         var view: Ghostty.SurfaceView? = makeView()
         var surface: Ghostty.Surface? = try #require(view?.surfaceModel)

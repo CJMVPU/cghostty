@@ -486,7 +486,9 @@ extension Ghostty.SurfaceView: NSTextInputClient {
             // My guess is that positive width doesn't make sense
             // for the dictation microphone indicator
             width = 0
-            x += cellSize.width * Double(InputText.compositionOffset(for: range, markedLength: markedText.length))
+            let point = surface.compositionPoint(atUTF16Offset:
+                InputText.compositionOffset(for: range, markedLength: markedText.length))
+            (x, y) = (point.origin.x, point.origin.y)
         }
         // Ghostty coordinates are in top-left (0, 0) so we have to convert to
         // bottom-left since that is what AppKit expects

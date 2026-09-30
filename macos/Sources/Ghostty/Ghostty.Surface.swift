@@ -232,6 +232,13 @@ extension Ghostty {
             return NSRect(x: x, y: y, width: width, height: height)
         }
 
+        @MainActor func compositionPoint(atUTF16Offset offset: Int?) -> NSRect {
+            guard let offset, offset >= 0 else { return imePoint }
+            var x = 0.0, y = 0.0, width = 0.0, height = 0.0
+            ghostty_surface_ime_point_for_utf16(surface, UInt(offset), &x, &y, &width, &height)
+            return NSRect(x: x, y: y, width: width, height: height)
+        }
+
         /// A copied value; the core allocation never crosses the bridge.
         struct TextSnapshot {
             let text: String

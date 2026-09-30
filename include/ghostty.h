@@ -1168,6 +1168,8 @@ GHOSTTY_API void ghostty_surface_mouse_scroll(ghostty_surface_t,
                                                  ghostty_input_scroll_mods_t);
 GHOSTTY_API void ghostty_surface_mouse_pressure(ghostty_surface_t, uint32_t, double);
 GHOSTTY_API void ghostty_surface_ime_point(ghostty_surface_t, double*, double*, double*, double*);
+// UTF-16 caret in the current preedit, mapped using terminal layout and scale.
+GHOSTTY_API void ghostty_surface_ime_point_for_utf16(ghostty_surface_t, uintptr_t, double*, double*, double*, double*);
 GHOSTTY_API void ghostty_surface_request_close(ghostty_surface_t);
 GHOSTTY_API void ghostty_surface_split(ghostty_surface_t, ghostty_action_split_direction_e);
 GHOSTTY_API void ghostty_surface_split_focus(ghostty_surface_t,

@@ -19,9 +19,9 @@ struct InputText {
 
     /// A caret offset belongs to marked text, never document history. Unknown
     /// AppKit ranges must keep the IME/dictation indicator at the cursor.
-    static func compositionOffset(for range: NSRange, markedLength: Int) -> Int {
+    static func compositionOffset(for range: NSRange, markedLength: Int) -> Int? {
         guard range.length == 0, range.location >= 0, range.location != NSNotFound,
-              range.location <= markedLength else { return 0 }
+              range.location <= markedLength else { return nil }
         return range.location
     }
 

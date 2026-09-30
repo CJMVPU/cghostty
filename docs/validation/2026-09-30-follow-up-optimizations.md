@@ -29,3 +29,29 @@ Checks:
 
 Real GPU allocation/encoder failure and sustained system memory pressure were
 not induced. The native regression is a normal-path scheduling check.
+
+## UTF-16 preedit anchors
+
+Preedit records each rendered scalar's source UTF-16 offset and the original
+length, including ignored zero-width scalars. The caret helper uses the same
+range/suffix clipping and wide-cell metadata as rendering. Half-surrogate
+requests clamp to the scalar start; hidden prefixes clamp to the visible start.
+The internal C API asks core for an already scaled point. Swift no longer
+multiplies UTF-16 units by cell width. Invalid/unknown offsets keep the ordinary
+IME point. This preserves the current preedit renderer's zero-width handling;
+it does not introduce a new Unicode shaping policy.
+
+Checks:
+- Debug Zig `preedit`, `cell rebuild`: 77/77 tests, 72/72 build steps, exit 0.
+  Covers Chinese, emoji/split surrogate, combining source offsets, invalid
+  offsets and the exact renderer right-edge clipping helper.
+- Pure Swift contracts: 8/8 tests, all three suites, exit 0.
+- Debug core: 108/108 steps, exit 0.
+- Native Debug: `SurfaceBridgeTests/compositionCaretUsesRenderedWidthAndSurrogateBoundaries()`
+  and `nativeTextInputUsesDocumentUTF16RangesAndSafeCompositionAnchor()` each
+  passed (2 functions/2 cases total, no skips). The first directly checks the
+  core bridge at both 1x and 2x scale; the second checks AppKit substring,
+  QuickLook fallback and unknown-range composition behavior.
+- Focused SwiftLint strict/no-cache, scope/config bridge and diff check passed.
+
+No system IME, real dictation or physical presentation-latency benchmark was run.
