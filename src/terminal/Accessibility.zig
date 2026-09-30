@@ -351,3 +351,37 @@ test "accessibility tracker survives renderer dirty resets and detects all snaps
     term.setScrollbackMaxLines(0);
     try t.expect(tracker.current(&term) > revision);
 }
+
+test "input document maps single cells to complete UTF16 graphemes" {
+    const t = std.testing;
+    const Selection = @import("Selection.zig");
+    var screen = try Screen.init(t.io, t.allocator, .{ .cols = 8, .rows = 2 });
+    defer screen.deinit();
+    try screen.testWriteString("a中🙂e\xcc\x81z");
+    const expected = [_]Range{
+        .{ .location = 0, .length = 1 }, .{ .location = 1, .length = 1 },
+        .{ .location = 1, .length = 1 }, .{ .location = 2, .length = 2 },
+        .{ .location = 2, .length = 2 }, .{ .location = 4, .length = 2 },
+        .{ .location = 6, .length = 1 },
+    };
+    for (expected, 0..) |range, x| {
+        const pin = screen.pages.pin(.{ .screen = .{ .x = @intCast(x), .y = 0 } }).?;
+        try screen.select(Selection.init(pin, pin, false));
+        const snapshot = try capture(t.allocator, &screen);
+        defer snapshot.deinit(t.allocator);
+        try t.expectEqualSlices(Range, &.{range}, snapshot.selected);
+    }
+}
+
+test "input document retains selection coordinates outside the viewport" {
+    const t = std.testing;
+    const Selection = @import("Selection.zig");
+    var screen = try Screen.init(t.io, t.allocator, .{ .cols = 8, .rows = 2, .max_scrollback_bytes = 1024 * 1024 });
+    defer screen.deinit();
+    try screen.testWriteString("old\n😀Z\nend");
+    try screen.select(Selection.init(screen.pages.pin(.{ .screen = .{ .x = 1, .y = 0 } }).?, screen.pages.pin(.{ .screen = .{ .x = 2, .y = 1 } }).?, false));
+    const snapshot = try capture(t.allocator, &screen);
+    defer snapshot.deinit(t.allocator);
+    try t.expectEqual(Range{ .location = 4, .length = 7 }, snapshot.visible);
+    try t.expectEqualSlices(Range, &.{.{ .location = 1, .length = 6 }}, snapshot.selected);
+}

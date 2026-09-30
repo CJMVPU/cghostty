@@ -95,11 +95,35 @@ import Testing
         #expect(surface!.perform(.selectAll))
         let snapshot = try #require(surface!.selection)
         #expect(snapshot.text.contains("桥接🙂snapshot"))
-        #expect(snapshot.range.length > 0)
+        #expect(snapshot.viewportCellRange.length > 0)
         #expect(surface!.perform(.reset))
         view = nil
         surface = nil
         #expect(snapshot.text.contains("桥接🙂snapshot"))
+    }
+
+    @Test func nativeTextInputUsesDocumentUTF16RangesAndSafeCompositionAnchor() async throws {
+        let view = makeView(command: "/usr/bin/printf 'A中🙂e\u{301}Z'")
+        let surface = try #require(view.surfaceModel)
+        try await waitForText("A中🙂e\u{301}Z", in: surface)
+        #expect(surface.perform(.selectAll))
+        let document = try #require(surface.readAccessibility())
+        #expect(view.selectedRange() == document.selectedRanges.first)
+        let emoji = (document.text as NSString).range(of: "🙂")
+        var actual = NSRange(location: NSNotFound, length: 0)
+        let substring = view.attributedSubstring(
+            forProposedRange: NSRange(location: emoji.location + 1, length: 1), actualRange: &actual)
+        #expect(substring?.string == "🙂")
+        #expect(actual == emoji)
+        let fallback = view.attributedSubstring(
+            forProposedRange: NSRange(location: NSNotFound, length: 1), actualRange: &actual)
+        #expect(fallback?.string == document.text)
+        #expect(actual == document.selectedRanges.first)
+        view.setMarkedText("未提交", selectedRange: NSRange(location: 3, length: 0),
+                           replacementRange: NSRange(location: NSNotFound, length: 0))
+        let rect = view.firstRect(forCharacterRange: NSRange(location: NSNotFound, length: 0), actualRange: nil)
+        #expect(abs(rect.minX) < 100_000)
+        view.unmarkText()
     }
 
     @Test func accessibilitySnapshotKeepsTextAndUTF16SelectionTogether() async throws {

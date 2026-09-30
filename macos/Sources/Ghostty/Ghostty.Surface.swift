@@ -235,7 +235,7 @@ extension Ghostty {
         /// A copied value; the core allocation never crosses the bridge.
         struct TextSnapshot {
             let text: String
-            let range: NSRange
+            let viewportCellRange: NSRange
             let topLeft: NSPoint
         }
 
@@ -248,7 +248,7 @@ extension Ghostty {
             let bytes = UnsafeRawBufferPointer(start: value.text, count: Int(value.text_len))
             return TextSnapshot(
                 text: String(bytes: bytes, encoding: .utf8) ?? "",
-                range: NSRange(location: Int(value.offset_start), length: Int(value.offset_len)),
+                viewportCellRange: NSRange(location: Int(value.offset_start), length: Int(value.offset_len)),
                 topLeft: NSPoint(x: value.tl_px_x, y: value.tl_px_y))
         }
 
@@ -278,6 +278,12 @@ extension Ghostty {
                 revision: value.revision)
             accessibilitySnapshot = snapshot
             return snapshot
+        }
+
+        /// Input uses document-relative UTF-16 ranges from the same snapshot.
+        @MainActor var inputText: InputText? {
+            guard let snapshot = readAccessibility() else { return nil }
+            return InputText(snapshot.text, selectedRanges: snapshot.selectedRanges)
         }
 
         @MainActor var renderRevision: UInt64 { ghostty_surface_render_revision(surface) }

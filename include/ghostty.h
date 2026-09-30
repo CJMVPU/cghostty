@@ -448,6 +448,8 @@ typedef struct {
 typedef struct {
   double tl_px_x;
   double tl_px_y;
+  // Flattened viewport cell range, inclusive endpoints. Not text/UTF-16 offsets.
+  // Pixel coordinates above are independent of the returned selection text.
   uint32_t offset_start;
   uint32_t offset_len;
   const char* text;

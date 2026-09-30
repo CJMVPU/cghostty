@@ -1611,16 +1611,10 @@ pub const Text = struct {
         tl_px_x: f64,
         tl_px_y: f64,
 
-        /// The linear offset of the start of the selection and the length.
-        /// This is "linear" in the sense that it is the offset in the
-        /// flattened viewport as a single array of text.
-        ///
-        /// Note: these values are currently wrong if there is a partially
-        /// visible selection in the viewport (i.e. the top-left or
-        /// bottom-right of the selection is outside the viewport). But the
-        /// apprt usecase we have right now doesn't require these to be
-        /// correct so... let's fix this later. The wrong values will always
-        /// be within the text bounds so we aren't risking an overflow.
+        /// Cell range in the flattened viewport, with inclusive endpoints.
+        /// This enclosure is clipped to the viewport and is not a byte or
+        /// UTF-16 range in `text`. Native text clients use the immutable
+        /// document snapshot for their ranges instead.
         offset_start: u32,
         offset_len: u32,
     };
@@ -1755,7 +1749,7 @@ pub fn dumpTextLocked(
             .tl_px_x = x,
             .tl_px_y = y,
             .offset_start = start,
-            .offset_len = end - start,
+            .offset_len = end - start + 1,
         };
     };
 

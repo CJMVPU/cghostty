@@ -391,13 +391,7 @@ extension Ghostty.SurfaceView: NSTextInputClient {
     }
 
     func selectedRange() -> NSRange {
-        guard let surface = self.surfaceModel else { return NSRange() }
-
-        // Get our range from the Ghostty API. There is a race condition between getting the
-        // range and actually using it since our selection may change but there isn't a good
-        // way I can think of to solve this for AppKit.
-        guard let text = surface.selection else { return NSRange() }
-        return text.range
+        surfaceModel?.inputText?.selectedRange ?? NSRange(location: NSNotFound, length: 0)
     }
 
     func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
@@ -433,19 +427,10 @@ extension Ghostty.SurfaceView: NSTextInputClient {
     }
 
     func attributedSubstring(forProposedRange range: NSRange, actualRange: NSRangePointer?) -> NSAttributedString? {
-        // Ghostty.logger.warning("pressure substring range=\(range) selectedRange=\(self.selectedRange())")
-        guard let surface = self.surfaceModel else { return nil }
-
-        // If the range is empty then we don't need to return anything
-        guard range.length > 0 else { return nil }
-
-        // I used to do a bunch of testing here that the range requested matches the
-        // selection range or contains it but a lot of macOS system behaviors request
-        // bogus ranges I truly don't understand so we just always return the
-        // attributed string containing our selection which is... weird but works?
-
-        // Get our selection text
-        guard let text = surface.selection else { return nil }
+        actualRange?.pointee = NSRange(location: NSNotFound, length: 0)
+        guard let surface = surfaceModel,
+              let substring = surface.inputText?.substring(proposed: range) else { return nil }
+        actualRange?.pointee = substring.range
 
         // If we can get a font then we use the font. This should always work
         // since we always have a primary font. The only scenario this doesn't
@@ -456,14 +441,17 @@ extension Ghostty.SurfaceView: NSTextInputClient {
             attributes[.font] = font
         }
 
-        return .init(string: text.text, attributes: attributes)
+        return .init(string: substring.text, attributes: attributes)
     }
 
     func characterIndex(for point: NSPoint) -> Int {
-        return 0
+        // No document-to-pixel map is available; zero would invent a hit at
+        // the beginning of history, regardless of the supplied point.
+        return NSNotFound
     }
 
     func firstRect(forCharacterRange range: NSRange, actualRange: NSRangePointer?) -> NSRect {
+        actualRange?.pointee = range.length > 0 ? selectedRange() : markedRange()
         guard let surface = self.surfaceModel else {
             return NSRect(x: frame.origin.x, y: frame.origin.y, width: 0, height: 0)
         }
@@ -498,7 +486,7 @@ extension Ghostty.SurfaceView: NSTextInputClient {
             // My guess is that positive width doesn't make sense
             // for the dictation microphone indicator
             width = 0
-            x += cellSize.width * Double(range.location + range.length)
+            x += cellSize.width * Double(InputText.compositionOffset(for: range, markedLength: markedText.length))
         }
         // Ghostty coordinates are in top-left (0, 0) so we have to convert to
         // bottom-left since that is what AppKit expects
