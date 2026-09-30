@@ -476,18 +476,20 @@ pub fn renderCompositor(self: *Thread, texture: @import("objc").Object, queue: @
     }
     if (snapshot) return self.renderer.drawCompositor(texture, queue, target_time, region, true);
     self.takeSearchResults();
-    if (!self.renderer.cell_rebuild.begin()) return .{ .failed = true };
-    const result = self.renderCompositorAttempt(texture, queue, target_time, region, sequence) catch |err| {
+    // Exhaustion stops preparation/self-wakes, not composition requested by
+    // another pane's window clock. Its last CPU frame must remain drawable.
+    const prepare = self.renderer.cell_rebuild.begin();
+    const result = self.renderCompositorAttempt(texture, queue, target_time, region, sequence, prepare) catch |err| {
         self.renderer.cell_rebuild.finish(true);
         log.err("window pane render failed err={}", .{err});
         return .{ .failed = true, .needs_frame = self.renderer.cell_rebuild.needsFrame() };
     };
     if (result.composed) self.renderer.trace.emit("pane_content", self.renderer.output_revision, sequence, 0);
-    return result;
+    return @import("CellRebuild.zig").frameResult(prepare, result);
 }
 
-fn renderCompositorAttempt(self: *Thread, texture: @import("objc").Object, queue: @import("objc").Object, target_time: f64, region: @import("metal/RenderPass.zig").Region, sequence: u64) !rendererpkg.CompositorResult {
-    try self.updateCompositorLocked(sequence);
+fn renderCompositorAttempt(self: *Thread, texture: @import("objc").Object, queue: @import("objc").Object, target_time: f64, region: @import("metal/RenderPass.zig").Region, sequence: u64, prepare: bool) !rendererpkg.CompositorResult {
+    if (prepare) try self.updateCompositorLocked(sequence);
     return self.renderer.drawCompositor(texture, queue, target_time, region, false);
 }
 

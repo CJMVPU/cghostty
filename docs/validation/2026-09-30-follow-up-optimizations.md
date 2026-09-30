@@ -158,3 +158,27 @@ Full Zig/native suites, Release native builds, UI test target, system IME,
 dictation, real GPU fault injection/system memory pressure, contended terminal
 lock measurements and foreground presentation-latency benchmarks were not run.
 CAMetalDisplayLink, current latency settings and GPU submission order remain.
+
+
+## Supplement: composition after retry exhaustion
+
+Final inspection found a boundary in the bounded-retry change: returning before
+pane composition when preparation is exhausted could leave its region blank
+when another pane drives the shared window clock. Exhaustion now skips CPU
+preparation but still draws the retained frame on that external tick. Its result
+cannot request another tick; only a real external update replenishes the budget.
+GPU queue ordering and the existing draw path remain unchanged.
+
+The new headless result-contract test exhausts three attempts, verifies 100
+externally driven compositions retain the composed flag without self-waking,
+and checks new-input rearming. This is not GPU allocation fault injection.
+Focused retry/row-transaction/compositor-result Zig checks passed 77/77 tests
+and 72/72 build steps; core passed 108/108 steps.
+
+The first native composition-only rerun failed one cursor/native case at the
+10-second progress guard; the other five cases passed. The first pane's trace
+showed drawing and no renderer failure log, while the second trace was empty.
+The exact timeout cause is unconfirmed. Repeating the same selector with no
+source changes passed all six cursor/scroll and blending cases in 5.144 seconds.
+This does not establish that the intermittent timeout is resolved. No timeout
+was extended and no failed result is counted as passing.

@@ -20,6 +20,14 @@ pub fn finish(self: *Self, failed: bool) void {
 pub fn needsFrame(self: Self) bool {
     return self.pending and self.remaining > 0;
 }
+/// Other panes may still drive final composition after this pane exhausts its
+/// budget. Keep its composed result, but never let it prolong the window clock.
+pub fn frameResult(prepared: bool, result: @import("CompositorResult.zig").Result) @import("CompositorResult.zig").Result {
+    var value = result;
+    if (!prepared) value.needs_frame = false;
+    return value;
+}
+
 test "cell rebuild retries are bounded and rearmed by new input" {
     const t = @import("std").testing;
     var retry: Self = .{};
@@ -86,4 +94,27 @@ test "cell rebuild early allocation failures exhaust budget and retain published
         retry.finish(false);
         try t.expect(!retry.pending);
     }
+}
+
+test "cell rebuild exhausted pane still composes without self waking" {
+    const t = @import("std").testing;
+    var retry: Self = .{};
+    retry.request();
+    for (0..3) |_| {
+        try t.expect(retry.begin());
+        retry.finish(true);
+    }
+    for (0..100) |_| {
+        const prepared = retry.begin();
+        try t.expect(!prepared);
+        const result = frameResult(prepared, .{ .composed = true, .needs_frame = true });
+        try t.expect(result.composed);
+        try t.expect(!result.needs_frame);
+        try t.expect(retry.pending);
+        try t.expectEqual(@as(u2, 0), retry.remaining);
+    }
+    retry.request();
+    const prepared = retry.begin();
+    try t.expect(prepared);
+    try t.expect(frameResult(prepared, .{ .needs_frame = true }).needs_frame);
 }
