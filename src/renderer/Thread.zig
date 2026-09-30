@@ -454,6 +454,7 @@ fn renderCallback(
     if (!t.flags.visible) return .disarm;
 
     t.compositor_updates +|= 1;
+    t.renderer.cell_rebuild.request();
     t.renderer.requestFrame();
 
     return .disarm;
@@ -473,10 +474,21 @@ pub fn renderCompositor(self: *Thread, texture: @import("objc").Object, queue: @
         defer self.renderer.draw_mutex.unlock(global.io());
         if (!self.renderer.display_realized) return .{};
     }
-    if (!snapshot) try self.updateCompositorLocked(sequence);
-    const result = try self.renderer.drawCompositor(texture, queue, target_time, region, snapshot);
+    if (snapshot) return self.renderer.drawCompositor(texture, queue, target_time, region, true);
+    self.takeSearchResults();
+    if (!self.renderer.cell_rebuild.begin()) return .{ .failed = true };
+    const result = self.renderCompositorAttempt(texture, queue, target_time, region, sequence) catch |err| {
+        self.renderer.cell_rebuild.finish(true);
+        log.err("window pane render failed err={}", .{err});
+        return .{ .failed = true, .needs_frame = self.renderer.cell_rebuild.needsFrame() };
+    };
     if (result.composed) self.renderer.trace.emit("pane_content", self.renderer.output_revision, sequence, 0);
     return result;
+}
+
+fn renderCompositorAttempt(self: *Thread, texture: @import("objc").Object, queue: @import("objc").Object, target_time: f64, region: @import("metal/RenderPass.zig").Region, sequence: u64) !rendererpkg.CompositorResult {
+    try self.updateCompositorLocked(sequence);
+    return self.renderer.drawCompositor(texture, queue, target_time, region, false);
 }
 
 /// Caller holds update_mutex. A pending snapshot has one owning consumer.
@@ -489,6 +501,7 @@ fn takeSearchResults(self: *Thread) void {
         pending.matches = null;
         self.renderer.search_matches_dirty = true;
         self.compositor_updates +|= 1;
+        self.renderer.cell_rebuild.request();
     }
     if (pending.selected_changed) {
         if (self.renderer.search_selected_match) |*old| old.arena.deinit();
@@ -496,13 +509,12 @@ fn takeSearchResults(self: *Thread) void {
         pending.selected = null;
         self.renderer.search_matches_dirty = true;
         self.compositor_updates +|= 1;
+        self.renderer.cell_rebuild.request();
     }
 }
 
 fn updateCompositorLocked(self: *Thread, sequence: u64) !void {
-    self.takeSearchResults();
-    if (self.compositor_updates != 0 or self.renderer.cell_rebuild.needsFrame()) {
-        if (self.compositor_updates != 0) self.renderer.cell_rebuild.request();
+    if (self.compositor_updates != 0 or self.renderer.cell_rebuild.pending) {
         const requests = self.compositor_updates;
         const start = if (self.renderer.trace.file != null) @import("Trace.zig").clock() else 0;
         // Clear only after success; allocation failure must not lose the update.

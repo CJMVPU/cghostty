@@ -1581,7 +1581,9 @@ pub const CAPI = struct {
     export fn ghostty_surface_render_compositor(surface: *Surface, texture: *anyopaque, queue: *anyopaque, target_time: f64, region: @import("../renderer/metal/RenderPass.zig").Region, sequence: u64, snapshot: bool) u32 {
         const result = surface.core_surface.render.thread.renderCompositor(objc.Object.fromId(texture), objc.Object.fromId(queue), target_time, region, sequence, snapshot) catch |err| {
             log.err("window pane render failed err={}", .{err});
-            return (renderer.CompositorResult{ .needs_frame = true, .failed = true }).bits();
+            // Live preparation/draw retries are handled under the thread gate.
+            // A failed diagnostic readback must not keep the window clock awake.
+            return (renderer.CompositorResult{ .failed = true }).bits();
         };
         return result.bits();
     }

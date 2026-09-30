@@ -882,7 +882,10 @@ pub fn updateFrame(
     state: *renderer.State,
     cursor_blink_visible: bool,
 ) Allocator.Error!void {
-    self.cell_rebuild.begin();
+    errdefer {
+        self.cell_rebuild.finish(true);
+        self.terminal_state.dirty = .full;
+    }
     self.glyph_metrics = .{};
     defer if (self.trace.file != null and self.glyph_metrics.calls != 0) {
         const m = self.glyph_metrics;
