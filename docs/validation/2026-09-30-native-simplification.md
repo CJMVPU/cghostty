@@ -57,3 +57,37 @@ Checks:
 
 No throughput/latency improvement is claimed; this reduces target ownership
 states and removes a placeholder lifecycle. GPU faults were not injected.
+
+## Test-only compositor state
+
+Audit confirmed Pane.initialized is read only by the CGHOSTTY_TESTING readback
+path, and encodingLock coordinates that readback with the serial window worker.
+Both fields and their production-frame operations are now guarded by the same
+testing condition. Production no longer publishes test initialization state.
+Membership tokens/filtering, requested/active compositor gates, slot semaphores,
+GPU feedback, in-flight waits and retirement/drain paths remain in production.
+
+Checks:
+- Production-branch Debug native build passed, with no CGHOSTTY_TESTING define,
+  in /tmp/cghostty-simplification-production. This bundle was not launched or
+  installed. This is a production-condition compile, not a Release build.
+- Testing-branch Debug native checks passed, each selector separately:
+  panesShareClockCacheAndMoveWithoutLosingSession: 6 expanded cases;
+  closeReleasesSessionEvenWhileLayerRemainsRetained: 1 case;
+  sharedTextureSnapshotPreservesAlphaAndOutlivesSession: 1 case;
+  membershipAndCloseDoNotWaitForFramePreparation: 1 case;
+  blendReloadAndResizeKeepActualTargetsAndSnapshotOwnership: 1 case;
+  finalCompositionAnimatesWithoutRepaintingContent: 6 expanded cases.
+- An initially mistyped handoff selector executed zero tests and is excluded
+  from counts. The correct selector above was run and passed.
+- Whole-repository SwiftLint strict/no-cache, scope/config bridge, Swift 6
+  settings (9 configurations), app/dependency versions and diff checks passed.
+
+Across the three items, 13 unique native functions / 23 expanded cases passed;
+reruns are not added to that total. No GPU capability skips occurred. Core
+validation was targeted (108 build steps, 76 upload tests), not the full Zig
+suite. Full native/Release/UI suites, system IME, real GPU fault injection,
+foreground latency and throughput benchmarks were not run. The prior isolated
+cursor/native timeout remains unexplained; this work improves diagnostics and
+passing reruns do not prove it fixed. No timing or speedup claim is made.
+No push, tag, release, deployment or running-app replacement was performed.

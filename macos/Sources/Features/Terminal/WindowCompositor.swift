@@ -185,7 +185,9 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
         let token = UUID()
         let surface: Ghostty.Surface
         var geometry = Geometry(rect: .zero, clip: .zero, visible: false)
+        #if CGHOSTTY_TESTING
         var initialized = false
+        #endif
     }
     /// Encoding owns the slot until commit; completion clears its drawable
     /// reference before signalling availability. No concurrent field access.
@@ -221,8 +223,10 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
     private let lock = NSLock()
     private var panes: [UUID: Pane] = [:]
     private var retired: [Ghostty.Surface] = []
-    // Test readback shares encoding state; production rendering stays on worker.
+    #if CGHOSTTY_TESTING
+    // Explicit test readback shares encoding state with the serial worker.
     private let encodingLock = NSLock()
+    #endif
     private var paused = true
     private var size: CGSize = .zero
     private var stopping = false
@@ -438,8 +442,10 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
         owner?.traceCompositor(stage: 8, sequence: sequence, time: callbackTime, prediction: Double(windowID))
         owner?.traceCompositor(stage: 12, sequence: sequence, time: deadline,
                               prediction: 1 / Double(lock.withLock { requestedRate }))
+        #if CGHOSTTY_TESTING
         encodingLock.lock()
         defer { encodingLock.unlock() }
+        #endif
         let snapshot = lock.withLock { (panes, size, stopping) }
         var framePanes = snapshot.0
         let size = snapshot.1
@@ -509,7 +515,7 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
             let prepareStart = CACurrentMediaTime()
             var slowestPane: Double = 0
             for id in framePanes.keys.sorted(by: { $0.uuidString < $1.uuidString }) {
-                guard var pane = framePanes[id], pane.geometry.visible, !pane.geometry.clip.isEmpty else { continue }
+                guard let pane = framePanes[id], pane.geometry.visible, !pane.geometry.clip.isEmpty else { continue }
                 let paneStart = CACurrentMediaTime()
                 let rendered = try pane.surface.withCompositor(signal) {
                     let info = pane.surface.compositorInfo
@@ -529,19 +535,22 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
                     continue
                 }
                 if result.contains(.repaint) { draws += 1 }
-                if result.contains(.composed) { pane.initialized = true }
+                #if CGHOSTTY_TESTING
+                if result.contains(.composed) { framePanes[id]?.initialized = true }
+                #endif
                 if result.contains(.needsFrame) { more = true }
                 if result.contains(.failed) { statsLock.withLock { stats.failed += 1 } }
-                framePanes[id] = pane
             }
             for surface in participants {
                 surface.traceCompositor(stage: 4, sequence: sequence, time: CACurrentMediaTime() - prepareStart, prediction: slowestPane)
             }
-            // Publish initialization only; newer layout or membership wins.
+            // Newer layout or membership wins; initialization is test-only.
             lock.withLock {
+                #if CGHOSTTY_TESTING
                 for (id, pane) in framePanes where panes[id]?.token == pane.token {
                     panes[id]?.initialized = pane.initialized
                 }
+                #endif
                 framePanes = framePanes.filter { panes[$0.key]?.token == $0.value.token }
             }
             framePanes = framePanes.filter { $0.value.surface.ownsCompositor(signal) }
