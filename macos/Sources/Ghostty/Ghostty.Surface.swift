@@ -267,6 +267,9 @@ extension Ghostty {
         }
 
         @MainActor private var accessibilitySnapshot: AccessibilitySnapshot?
+        #if CGHOSTTY_TESTING
+        @MainActor private(set) var accessibilityCaptureCount = 0
+        #endif
 
         @MainActor func readAccessibility() -> AccessibilitySnapshot? {
             var value = ghostty_accessibility_s()
@@ -284,7 +287,17 @@ extension Ghostty {
                 },
                 revision: value.revision)
             accessibilitySnapshot = snapshot
+            #if CGHOSTTY_TESTING
+            accessibilityCaptureCount += 1
+            #endif
             return snapshot
+        }
+
+        /// The normal input caret has no terminal selection. Avoid serializing
+        /// history just to report NSNotFound while output continues to change.
+        @MainActor var inputSelectedRange: NSRange {
+            guard hasSelection else { return NSRange(location: NSNotFound, length: 0) }
+            return inputText?.selectedRange ?? NSRange(location: NSNotFound, length: 0)
         }
 
         /// Input uses document-relative UTF-16 ranges from the same snapshot.

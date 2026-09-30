@@ -22,6 +22,8 @@ zig fmt --check build.zig build.zig.zon src pkg
 swiftlint lint --strict --no-cache
 # Pure input/bridge/transaction tests; no app or window is launched.
 python3 scripts/check-native-contracts.py
+# Headless optimization probes; default core tests remain Debug.
+python3 scripts/build.py test -Doptimize=ReleaseFast -Dtest-optimize=ReleaseFast -Dtest-filter='optimization probe'
 python3 scripts/check-versions.py
 python3 scripts/check-swift6.py
 # 工作流校验（brew install actionlint）

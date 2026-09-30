@@ -347,3 +347,37 @@ test "input document retains selection coordinates outside the viewport" {
     try t.expectEqual(Range{ .location = 4, .length = 7 }, snapshot.visible);
     try t.expectEqualSlices(Range, &.{.{ .location = 1, .length = 6 }}, snapshot.selected);
 }
+
+test "optimization probe full history input query" {
+    if (@import("builtin").mode == .Debug) return error.SkipZigTest;
+    const t = std.testing;
+    for ([_]usize{ 10_000, 30_000 }) |lines| {
+        var term = try @import("Terminal.zig").init(t.io, t.allocator, .{ .cols = 80, .rows = 24, .max_scrollback_bytes = 128 * 1024 * 1024 });
+        defer term.deinit(t.allocator);
+        const screen = term.screens.active;
+        for (0..lines) |_| try term.printString("row abc 中🙂 e\xcc\x81\n");
+        var times: [5]i128 = undefined;
+        var bytes: usize = 0;
+        var mutex: std.Io.Mutex = .init;
+        for (0..times.len + 1) |i| {
+            const start = std.Io.Timestamp.now(t.io, .awake);
+            mutex.lockUncancelable(t.io);
+            const snapshot = try capture(t.allocator, screen);
+            mutex.unlock(t.io);
+            const ns = start.durationTo(.now(t.io, .awake)).nanoseconds;
+            bytes = snapshot.text.len;
+            snapshot.deinit(t.allocator);
+            if (i > 0) times[i - 1] = ns;
+        }
+        std.mem.sort(i128, &times, {}, std.sort.asc(i128));
+        // Same lock and selection predicate used by Surface.hasSelection.
+        const fast_start = std.Io.Timestamp.now(t.io, .awake);
+        for (0..10_000) |_| {
+            mutex.lockUncancelable(t.io);
+            std.mem.doNotOptimizeAway(screen.selection);
+            mutex.unlock(t.io);
+        }
+        const fast_ns = fast_start.durationTo(.now(t.io, .awake)).nanoseconds;
+        std.debug.print("\nOPTIMIZATION_METRIC history lines={d} retained_rows={d} capture_bytes={d} capture_median_ns={d} min_ns={d} max_ns={d} empty_selection_predicate_ns_per_query={d}\n", .{ lines, screen.pages.total_rows, bytes, times[2], times[0], times[4], @divTrunc(fast_ns, 10_000) });
+    }
+}

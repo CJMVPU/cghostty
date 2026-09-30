@@ -10,6 +10,7 @@ comptime {
 pub fn build(b: *std.Build) !void {
     const config = try buildpkg.Config.init(b, zon.version);
     const filters = b.option([][]const u8, "test-filter", "Filter Zig unit tests") orelse &.{};
+    const test_optimize = b.option(std.builtin.OptimizeMode, "test-optimize", "Core test optimization mode (default Debug)") orelse .Debug;
     const deps = try buildpkg.SharedDeps.init(b, &config);
     // Reflection uses the same lightweight configuration as help generation;
     // this program does not initialize or link the terminal runtime.
@@ -73,7 +74,7 @@ pub fn build(b: *std.Build) !void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/main.zig"),
             .target = config.baselineTarget(b.graph.io),
-            .optimize = .Debug,
+            .optimize = test_optimize,
             .strip = false,
             .omit_frame_pointer = false,
             .unwind_tables = .sync,

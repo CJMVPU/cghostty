@@ -147,6 +147,21 @@ import Testing
         }
     }
 
+    @Test func inputWithoutSelectionDoesNotSerializeHistory() async throws {
+        let view = makeView(command: "/usr/bin/printf 'input probe 中🙂'")
+        let surface = try #require(view.surfaceModel)
+        try await waitForText("input probe 中🙂", in: surface)
+        let captures = surface.accessibilityCaptureCount
+        for _ in 0..<100 {
+            #expect(view.selectedRange() == NSRange(location: NSNotFound, length: 0))
+        }
+        #expect(surface.accessibilityCaptureCount == captures)
+        #expect(surface.perform(.selectAll))
+        #expect(view.selectedRange().location != NSNotFound)
+        let snapshot = try #require(surface.readAccessibility())
+        #expect(view.selectedRange() == snapshot.selectedRanges.first)
+    }
+
     @Test func accessibilitySnapshotKeepsTextAndUTF16SelectionTogether() async throws {
         var view: Ghostty.SurfaceView? = makeView()
         var surface: Ghostty.Surface? = try #require(view?.surfaceModel)

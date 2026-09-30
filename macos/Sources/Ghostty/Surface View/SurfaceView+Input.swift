@@ -391,7 +391,7 @@ extension Ghostty.SurfaceView: NSTextInputClient {
     }
 
     func selectedRange() -> NSRange {
-        surfaceModel?.inputText?.selectedRange ?? NSRange(location: NSNotFound, length: 0)
+        surfaceModel?.inputSelectedRange ?? NSRange(location: NSNotFound, length: 0)
     }
 
     func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {

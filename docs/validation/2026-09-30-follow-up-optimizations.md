@@ -55,3 +55,46 @@ Checks:
 - Focused SwiftLint strict/no-cache, scope/config bridge and diff check passed.
 
 No system IME, real dictation or physical presentation-latency benchmark was run.
+
+## Empty input-selection queries (measured, bounded change)
+
+Dataset: 80x24 terminal, 10,000 or 30,000 repetitions of `row abc 中🙂 é` plus
+newline, 128 MiB history allowance; retained rows 10,001/30,001. Real Terminal
+printing handles grapheme storage growth. One warmup capture and five timed
+captures; ReleaseFast test module and build options, testing allocator. No GUI,
+PTY contention, Swift conversion or presentation latency is measured. The
+capture interval includes serialization while holding an uncontended local
+terminal mutex. Its duration therefore approximates core lock-held work, not
+contended lock wait time.
+
+| History | Copied text bytes/query | Median | Min–max |
+| --- | --- | --- | --- |
+| 10,000 lines | 199,999 | 1.543 ms | 1.527–1.705 ms |
+| 30,000 lines | 599,999 | 4.261 ms | 3.967–4.369 ms |
+
+The ordinary no-selection input query now uses existing Surface.hasSelection
+and returns NSNotFound before requesting text. Native counters confirmed 100
+queries made zero captures, then a real selection returned the correct UTF-16
+range. Text copied on this path is zero. A separate 10,000-iteration headless
+mutex/selection predicate sample was ~5 ns/query; this is **not** end-to-end
+NSTextInputClient time and excludes C/Swift overhead. Selected-text queries,
+accessibility clients and substring requests still use full immutable snapshots.
+No incremental history cache or extra ownership layer was added.
+
+Reproduce the two independent headless probes:
+
+```sh
+python3 scripts/build.py test -Doptimize=ReleaseFast -Dtest-optimize=ReleaseFast \
+  -Dtest-filter='optimization probe' --summary all
+```
+
+Tests normally remain Debug. `-Doptimize` alone does not change the test module;
+`-Dtest-optimize` makes this choice explicit. Debug skips timing-only probes.
+The earlier Screen.testWriteString fixture hit its finite grapheme storage and
+was replaced with real Terminal printing; no measurements from that failure or
+the initial Debug-skipped run are included.
+
+Checks: ReleaseFast probes completed, 72/72 selected tests/build steps (including
+import/ABI tests), exit 0; Debug core 108/108 steps; native Debug
+`SurfaceBridgeTests/inputWithoutSelectionDoesNotSerializeHistory()` passed,
+1 function/1 case, no skips; focused SwiftLint and diff check passed.
