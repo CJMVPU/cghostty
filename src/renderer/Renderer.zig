@@ -912,7 +912,7 @@ pub fn updateFrame(
     // Data we extract out of the critical area.
     const Critical = struct {
         links: terminal.RenderState.CellSet,
-        link_key: terminal.accessibility.Tracker.Key,
+        link_key: terminal.SnapshotIdentity.ContentView,
         mouse: renderer.State.Mouse,
         preedit: ?renderer.State.Preedit,
         scrollbar: terminal.Scrollbar,
@@ -953,7 +953,6 @@ pub fn updateFrame(
             }
             if (held) {
                 const preedit: ?renderer.State.Preedit = if (state.preedit) |p| try p.clone(arena_alloc) else null;
-                if (self.terminal_state.dirty != .false) state.terminal.flags.search_viewport_dirty = true;
                 const links: terminal.RenderState.CellSet = osc8: {
                     const vp = state.mouse.point orelse break :osc8 .empty;
                     const captured_mouse = frame.mouse orelse break :osc8 .empty;
@@ -1009,12 +1008,6 @@ pub fn updateFrame(
             return err;
         };
         state.render_hold.syncLive(&self.terminal_state);
-
-        // If our terminal state is dirty at all we need to redo
-        // the viewport search.
-        if (self.terminal_state.dirty != .false) {
-            state.terminal.flags.search_viewport_dirty = true;
-        }
 
         // Get our scrollbar out of the terminal. We synchronize
         // the scrollbar read with frame data updates because this
@@ -1095,7 +1088,7 @@ pub fn updateFrame(
 
         break :critical .{
             .links = links,
-            .link_key = terminal.accessibility.Tracker.Key.read(state.terminal),
+            .link_key = terminal.SnapshotIdentity.ContentView.read(state.terminal),
             .mouse = state.mouse,
             .preedit = preedit,
             .scrollbar = scrollbar,

@@ -159,7 +159,7 @@ pub const Cache = struct {
     const max_text_capacity = 256 * 1024;
 
     const Key = struct {
-        content: terminal.accessibility.Tracker.Key,
+        content: terminal.SnapshotIdentity.ContentView,
         mods: inputpkg.Mods,
         mouse_present: bool,
     };
@@ -196,7 +196,7 @@ pub const Cache = struct {
         set: *const Set,
         result: *terminal.RenderState.CellSet,
         state: *const terminal.RenderState,
-        content: terminal.accessibility.Tracker.Key,
+        content: terminal.SnapshotIdentity.ContentView,
         mouse: ?point.Coordinate,
         mods: inputpkg.Mods,
     ) !void {
@@ -559,7 +559,7 @@ test "link cache matches uncached results across hover, edits, scroll, resize an
             var actual: terminal.RenderState.CellSet = .empty;
             defer actual.deinit(t.allocator);
             try set.renderCellMap(t.allocator, &expected, &state, mouse, .{});
-            try cache.render(t.allocator, t.allocator, &set, &actual, &state, terminal.accessibility.Tracker.Key.read(&term), mouse, .{});
+            try cache.render(t.allocator, t.allocator, &set, &actual, &state, terminal.SnapshotIdentity.ContentView.read(&term), mouse, .{});
             try t.expectEqual(expected.count(), actual.count());
             for (expected.keys()) |cell| try t.expect(actual.contains(cell));
         }
@@ -589,7 +589,7 @@ test "link cache reuses workspace across edits and releases old patterns on conf
         try term.printString(if (i % 2 == 0) "hello world" else "other words");
         try state.update(t.allocator, &term);
         cells.clearRetainingCapacity();
-        try cache.render(alloc, alloc, &set, &cells, &state, terminal.accessibility.Tracker.Key.read(&term), null, .{});
+        try cache.render(alloc, alloc, &set, &cells, &state, terminal.SnapshotIdentity.ContentView.read(&term), null, .{});
         if (i == 0) {
             retained_allocations = counter.allocations;
             scratch_address = @intFromPtr(cache.matchers.items[0].data);
@@ -605,6 +605,29 @@ test "link cache reuses workspace across edits and releases old patterns on conf
     set.deinit(t.allocator);
     set = try Set.fromConfig(t.allocator, &.{.{ .regex = "[0-9]+", .action = .{ .open = {} }, .highlight = .always }});
     cells.clearRetainingCapacity();
-    try cache.render(alloc, alloc, &set, &cells, &state, terminal.accessibility.Tracker.Key.read(&term), null, .{});
+    try cache.render(alloc, alloc, &set, &cells, &state, terminal.SnapshotIdentity.ContentView.read(&term), null, .{});
     try t.expectEqual(@as(u32, 0), cells.count());
+}
+
+test "link cache retains text ranges across selection-only render updates" {
+    const t = std.testing;
+    var term = try Terminal.init(t.io, t.allocator, .{ .cols = 20, .rows = 2 });
+    defer term.deinit(t.allocator);
+    try term.printString("one two");
+    var set = try Set.fromConfig(t.allocator, &.{.{ .regex = "[a-z]+", .action = .{ .open = {} }, .highlight = .always }});
+    defer set.deinit(t.allocator);
+    var cache: Cache = .{};
+    defer cache.deinit(t.allocator);
+    var state: terminal.RenderState = .empty;
+    defer state.deinit(t.allocator);
+    for (0..7) |x| {
+        const pin = term.screens.active.pages.pin(.{ .viewport = .{ .x = @intCast(x), .y = 0 } }).?;
+        try term.screens.active.select(terminal.Selection.init(pin, pin, false));
+        try state.update(t.allocator, &term);
+        var actual: terminal.RenderState.CellSet = .empty;
+        defer actual.deinit(t.allocator);
+        try cache.render(t.allocator, t.allocator, &set, &actual, &state, terminal.SnapshotIdentity.ContentView.read(&term), null, .{});
+        try t.expectEqual(@as(usize, 6), actual.count());
+        try t.expectEqual(@as(usize, 1), cache.rebuilds);
+    }
 }

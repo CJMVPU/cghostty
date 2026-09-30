@@ -11,7 +11,7 @@ const max_hits = 1024;
 
 pub const Entry = struct { regex: pcre2.Regex, action: input.Link.Action, highlight: input.Link.Highlight };
 pub const Hit = struct { action: input.Link.Action, selection: terminal.Selection };
-const Key = struct { content: terminal.accessibility.Tracker.Key, mods: ?input.Mods };
+const Key = struct { content: terminal.SnapshotIdentity.ContentView, mods: ?input.Mods };
 key: ?Key = null,
 line: ?terminal.Selection = null,
 hits: std.ArrayList(Hit) = .empty,
@@ -82,6 +82,13 @@ test "LinkHitCache reuses hits and misses but invalidates text mods viewport and
         const hit = try cache.lookup(t.allocator, &term, pin, .{}, &entries);
         try t.expect((hit != null) == (x != 3));
     }
+    try t.expectEqual(@as(usize, 1), cache.rebuilds);
+    for (0..7) |x| {
+        const selected = term.screens.active.pages.pin(.{ .viewport = .{ .x = @intCast(x), .y = 0 } }).?;
+        try term.screens.active.select(terminal.Selection.init(selected, selected, false));
+        _ = try cache.lookup(t.allocator, &term, selected, .{}, &entries);
+    }
+    term.screens.active.clearSelection();
     try t.expectEqual(@as(usize, 1), cache.rebuilds);
     const pin = term.screens.active.pages.pin(.{ .viewport = .{ .x = 0, .y = 0 } }).?;
     _ = try cache.lookup(t.allocator, &term, pin, .{ .shift = true }, &entries);

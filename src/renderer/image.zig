@@ -37,7 +37,7 @@ pub const State = struct {
     last_geometry: ?Geometry = null,
 
     const Geometry = struct {
-        content: terminal.accessibility.Tracker.Key,
+        content: terminal.SnapshotIdentity.ContentView,
         cell: CellSize,
     };
 
@@ -239,7 +239,7 @@ pub const State = struct {
         if (t.screens.active.kitty_images.dirty) return true;
         if (!self.kitty_virtual and self.kitty_placements.items.len == 0 and t.screens.active.kitty_images.placements.count() == 0) return false;
         const old = self.last_geometry orelse return true;
-        const key = terminal.accessibility.Tracker.Key.read(t);
+        const key = terminal.SnapshotIdentity.ContentView.read(t);
         if (!std.meta.eql(old.cell, cell_size)) return true;
         if (self.kitty_virtual) return !std.meta.eql(old.content, key);
         // Ordinary placements depend on viewport geometry, not cell contents.

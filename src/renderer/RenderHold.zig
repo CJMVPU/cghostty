@@ -17,7 +17,7 @@ pub const Frame = struct {
     scrollbar: terminal.Scrollbar,
     osc8: terminal.RenderState.CellSet = .empty,
     mouse: ?terminal.point.Coordinate,
-    link_key: terminal.accessibility.Tracker.Key,
+    link_key: terminal.SnapshotIdentity.ContentView,
 
     pub fn deinit(self: *Frame, alloc: Allocator) void {
         self.render.deinit(alloc);

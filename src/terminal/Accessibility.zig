@@ -35,49 +35,11 @@ pub const Tracker = struct {
         return self.revision;
     }
 
-    const Pin = @import("PageList.zig").Pin;
-    const Position = struct {
-        node: usize,
-        serial: u64,
-        x: usize,
-        y: usize,
-        fn read(pin: Pin) Position {
-            return .{ .node = @intFromPtr(pin.node), .serial = pin.node.serial, .x = pin.x, .y = pin.y };
-        }
-    };
     pub const Key = struct {
-        terminal_epoch: u64,
-        screen_epoch: u64,
-        screen_generation: usize,
-        active_key: @import("ScreenSet.zig").Key,
-        page_serial: u64,
-        cols: usize,
-        rows: usize,
-        top: Position,
-        bottom: Position,
-        viewport: Position,
-        selection_start: ?Position,
-        selection_end: ?Position,
-        rectangle: bool,
-
+        content: @import("SnapshotIdentity.zig").ContentView,
+        selection: @import("SnapshotIdentity.zig").Selection,
         pub fn read(term: *const @import("Terminal.zig")) Key {
-            const screen = term.screens.active;
-            const pages = &screen.pages;
-            return .{
-                .terminal_epoch = term.accessibility_revision,
-                .screen_epoch = screen.accessibility_revision,
-                .screen_generation = term.screens.generations.get(term.screens.active_key).?,
-                .active_key = term.screens.active_key,
-                .page_serial = pages.page_serial,
-                .cols = pages.cols,
-                .rows = pages.rows,
-                .top = .read(pages.getTopLeft(.screen)),
-                .bottom = .read(pages.getBottomRight(.screen).?),
-                .viewport = .read(pages.getTopLeft(.viewport)),
-                .selection_start = if (screen.selection) |sel| .read(sel.start()) else null,
-                .selection_end = if (screen.selection) |sel| .read(sel.end()) else null,
-                .rectangle = if (screen.selection) |sel| sel.rectangle else false,
-            };
+            return .{ .content = .read(term), .selection = .read(term.screens.active) };
         }
     };
 };

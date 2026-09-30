@@ -223,7 +223,7 @@ const Mouse = struct {
     /// only process link hover events when the mouse actually moves cells.
     link_point: ?terminal.point.Coordinate = null,
     hover_key: ?struct {
-        content: terminal.accessibility.Tracker.Key,
+        content: terminal.SnapshotIdentity.ContentView,
         pin: ?terminal.Pin,
         point: terminal.point.Coordinate,
         mods: input.Mods,

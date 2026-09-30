@@ -360,7 +360,7 @@ fn stepLinks(ptr: *anyopaque) Benchmark.Error!void {
     defer cache.deinit(alloc);
     var result: terminalpkg.RenderState.CellSet = .empty;
     defer result.deinit(alloc);
-    const key = terminalpkg.accessibility.Tracker.Key.read(&self.terminal);
+    const key = terminalpkg.SnapshotIdentity.ContentView.read(&self.terminal);
     var cells: usize = 0;
     const start: std.Io.Timestamp = .now(global.io(), .awake);
     for (0..2000 * @as(usize, self.opts.loops)) |i| {

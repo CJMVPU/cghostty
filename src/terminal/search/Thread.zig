@@ -57,7 +57,7 @@ stop_c: xev.Completion = .{},
 refresh: xev.Timer,
 refresh_c: xev.Completion = .{},
 refresh_pending: bool = false,
-last_key: ?@import("../accessibility.zig").Tracker.Key = null,
+last_key: ?@import("../SnapshotIdentity.zig").ContentView = null,
 
 /// Search state. Starts as null and is populated when a search is
 /// started (a needle is given).
@@ -234,11 +234,9 @@ fn threadMain_(self: *Thread) !void {
 fn feedLocked(self: *Thread, s: *TerminalSearch) void {
     const t = self.opts.terminal;
 
-    // See the `search_viewport_dirty` flag on the terminal to know
-    // what exactly this is for. But, if this is set, we know the renderer
-    // found the viewport/active area dirty, so the active area must be
-    // re-scanned.
-    const key = @import("../accessibility.zig").Tracker.Key.read(t);
+    // Selection changes do not invalidate text searches. Content/view epochs
+    // remain valid even after the renderer has consumed terminal dirty bits.
+    const key = @import("../SnapshotIdentity.zig").ContentView.read(t);
     const active_dirty = t.flags.search_viewport_dirty or self.last_key == null or !std.meta.eql(self.last_key.?, key);
     self.last_key = key;
     t.flags.search_viewport_dirty = false;
@@ -737,4 +735,37 @@ test "search change refresh is one shot and observes output without renderer dir
     try testing.expectEqual(2, thread.search.?.activeScreenSearch().?.matchesLen());
     try testing.expect(!thread.refresh_pending);
     try testing.expect(!changes.pending());
+}
+
+test "search selection changes do not reload completed active results" {
+    const alloc = testing.allocator;
+    var mutex: std.Io.Mutex = .init;
+    var term = try Terminal.init(testing.io, alloc, .{ .cols = 30, .rows = 3 });
+    defer term.deinit(alloc);
+    var thread = try Thread.init(alloc, .{ .mutex = &mutex, .terminal = &term });
+    defer thread.deinit();
+    try term.printString("word word");
+    try thread.changeNeedle("word");
+    var steps: usize = 0;
+    while (!thread.search.?.isComplete()) : (steps += 1) {
+        try testing.expect(steps < 100);
+        if (thread.search.?.tick() == .blocked) thread.feedLocked(&thread.search.?);
+    }
+    thread.feedLocked(&thread.search.?);
+    while (!thread.search.?.isComplete()) {
+        if (thread.search.?.tick() == .blocked) thread.feedLocked(&thread.search.?);
+    }
+    for (0..7) |x| {
+        const pin = term.screens.active.pages.pin(.{ .viewport = .{ .x = @intCast(x), .y = 0 } }).?;
+        try term.screens.active.select(@import("../Selection.zig").init(pin, pin, false));
+        var render: @import("../render.zig").RenderState = .empty;
+        defer render.deinit(alloc);
+        try render.update(alloc, &term);
+        thread.feedLocked(&thread.search.?);
+        try testing.expect(thread.search.?.activeScreenSearch().?.state == .complete);
+        try testing.expectEqual(2, thread.search.?.activeScreenSearch().?.matchesLen());
+    }
+    term.screens.active.clearSelection();
+    thread.feedLocked(&thread.search.?);
+    try testing.expect(thread.search.?.activeScreenSearch().?.state == .complete);
 }
