@@ -20,6 +20,8 @@ nu macos/build.nu --action test --ui-tests --only-testing GhosttyUITests/Ghostty
 # 与 CI 一致的格式与版本检查
 zig fmt --check build.zig build.zig.zon src pkg
 swiftlint lint --strict --no-cache
+# Pure input/bridge/transaction tests; no app or window is launched.
+python3 scripts/check-native-contracts.py
 python3 scripts/check-versions.py
 python3 scripts/check-swift6.py
 # 工作流校验（brew install actionlint）

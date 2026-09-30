@@ -8,6 +8,7 @@
 const cursor = @import("renderer/cursor.zig");
 const message = @import("renderer/message.zig");
 const size = @import("renderer/size.zig");
+pub const CompositorResult = @import("renderer/CompositorResult.zig").Result;
 pub const FrameScheduler = @import("renderer/FrameScheduler.zig");
 pub const CellUpload = @import("renderer/CellUpload.zig");
 pub const CursorMotion = @import("renderer/CursorMotion.zig");
@@ -73,4 +74,5 @@ test {
     _ = @import("renderer/RenderHold.zig");
     _ = @import("renderer/SearchResults.zig");
     _ = @import("renderer/CellRebuild.zig");
+    _ = @import("renderer/CompositorResult.zig");
 }

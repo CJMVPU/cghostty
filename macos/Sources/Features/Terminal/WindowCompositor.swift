@@ -468,17 +468,15 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
             surface.traceCompositor(stage: 0, sequence: sequence, time: deadline, prediction: prediction)
             surface.traceCompositor(stage: 1, sequence: sequence, time: callbackTime)
         }
-        var committed = false
-        var queued = false
+        var transaction = WindowFrameTransaction()
         defer {
-            if !committed {
-                if queued {
-                    // A failed final encoder must not recycle allocations still
-                    // referenced by the clear or already submitted pane passes.
-                    drain(slot)
-                }
-                slot.surfaces.removeAll()
-                slot.available.signal()
+            switch transaction.abort() {
+            case .none: break
+            case .release: release(slot)
+            case .drainAndRelease:
+                // The clear and any submitted pane passes still own resources.
+                drain(slot)
+                release(slot)
             }
         }
         do {
@@ -507,7 +505,7 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
                 }
             }
             queue.commit([slot.clearBuffer], options: clearOptions)
-            queued = true
+            transaction.didSubmit()
             let prepareStart = CACurrentMediaTime()
             var slowestPane: Double = 0
             for id in framePanes.keys.sorted(by: { $0.uuidString < $1.uuidString }) {
@@ -515,11 +513,11 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
                 let paneStart = CACurrentMediaTime()
                 let rendered = try pane.surface.withCompositor(signal) {
                     let info = pane.surface.compositorInfo
-                    guard info.width > 0, info.height > 0 else { return UInt32(0) }
+                    guard info.width > 0, info.height > 0 else { return CompositorResult(rawValue: 0) }
                     let rect = pane.geometry.rect
                     let clip = pane.geometry.clip.intersection(CGRect(x: 0, y: 0,
                         width: drawable.texture.width, height: drawable.texture.height))
-                    guard !clip.isEmpty, !clip.isNull else { return UInt32(0) }
+                    guard !clip.isEmpty, !clip.isNull else { return CompositorResult(rawValue: 0) }
                     guard let format = MTLPixelFormat(rawValue: UInt(info.pixel_format)),
                           let target = drawable.texture.makeTextureView(pixelFormat: format) else { throw Failure.resource }
                     return pane.surface.renderCompositor(texture: target, queue: queue,
@@ -530,10 +528,10 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
                     if pane.surface.ownsCompositor(signal) { more = true }
                     continue
                 }
-                if result & 1 != 0 { draws += 1 }
-                if result & 16 != 0 { pane.initialized = true }
-                if result & 2 != 0 { more = true }
-                if result & 8 != 0 { statsLock.withLock { stats.failed += 1 } }
+                if result.contains(.repaint) { draws += 1 }
+                if result.contains(.composed) { pane.initialized = true }
+                if result.contains(.needsFrame) { more = true }
+                if result.contains(.failed) { statsLock.withLock { stats.failed += 1 } }
                 framePanes[id] = pane
             }
             for surface in participants {
@@ -568,9 +566,7 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
                 completionCondition.broadcast()
                 completionCondition.unlock()
                 #endif
-                slot.drawableTexture = nil
-                slot.surfaces.removeAll()
-                slot.available.signal()
+                release(slot)
                 inFlight.leave()
             }
             let retrySkipped = framePanes.values.contains { $0.geometry.visible && !$0.geometry.clip.isEmpty }
@@ -587,12 +583,12 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
                 }
                 if retry { signal.requestFrame() }
             }
+            transaction.handoffToCompletion()
             queue.commit([slot.buffer], options: options)
             queue.signalDrawable(drawable)
             let submittedTime = CACurrentMediaTime()
             for surface in participants { surface.traceCompositor(stage: 2, sequence: sequence, time: submittedTime) }
             drawable.present()
-            committed = true
             statsLock.withLock {
                 stats.submitted += 1
                 stats.paneDraws += draws
@@ -616,6 +612,13 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
         if changed {
             traceOwner()?.traceCompositor(stage: 9, sequence: windowID, time: CACurrentMediaTime(), prediction: value ? 1 : 0)
         }
+    }
+
+    /// Shared final retirement path for abort and successful GPU feedback.
+    private func release(_ slot: Slot) {
+        slot.drawableTexture = nil
+        slot.surfaces.removeAll()
+        slot.available.signal()
     }
 
     private func drain(_ slot: Slot) {

@@ -462,20 +462,20 @@ fn renderCallback(
 /// Called once per visible pane by the window frame clock. Surface ownership
 /// keeps this worker/state alive; the gate protects state formerly worker-only.
 /// Updates arriving after this call remain pending and wake the next frame.
-pub fn renderCompositor(self: *Thread, texture: @import("objc").Object, queue: @import("objc").Object, target_time: f64, region: @import("metal/RenderPass.zig").Region, sequence: u64, snapshot: bool) !u32 {
+pub fn renderCompositor(self: *Thread, texture: @import("objc").Object, queue: @import("objc").Object, target_time: f64, region: @import("metal/RenderPass.zig").Region, sequence: u64, snapshot: bool) !rendererpkg.CompositorResult {
     const wait_start = if (self.renderer.trace.file != null) @import("Trace.zig").clock() else 0;
     self.update_mutex.lockUncancelable(global.io());
     if (wait_start != 0) self.renderer.trace.emit("update_lock", @import("Trace.zig").clock() - wait_start, sequence, 0);
     defer self.update_mutex.unlock(global.io());
-    if (!self.compositor_ready or !self.flags.visible) return 0;
+    if (!self.compositor_ready or !self.flags.visible) return .{};
     {
         self.renderer.draw_mutex.lockUncancelable(global.io());
         defer self.renderer.draw_mutex.unlock(global.io());
-        if (!self.renderer.display_realized) return 0;
+        if (!self.renderer.display_realized) return .{};
     }
     if (!snapshot) try self.updateCompositorLocked(sequence);
     const result = try self.renderer.drawCompositor(texture, queue, target_time, region, snapshot);
-    if (result & 16 != 0) self.renderer.trace.emit("pane_content", self.renderer.output_revision, sequence, 0);
+    if (result.composed) self.renderer.trace.emit("pane_content", self.renderer.output_revision, sequence, 0);
     return result;
 }
 

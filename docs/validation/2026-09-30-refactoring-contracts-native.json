@@ -1,0 +1,142 @@
+{
+  "baseline": "69731055a339e63af81e2f1c7559fd04f99ef485",
+  "platform": "macOS 27.0.1 arm64",
+  "nushell": "0.116.0 (homebrew/core)",
+  "result": "passed",
+  "function_total": 33,
+  "expanded_case_total": 56,
+  "additional_selectors": [
+    {
+      "selector": "GhosttyTests/InputTextTests",
+      "functions": 4,
+      "expanded_cases": 4
+    },
+    {
+      "selector": "GhosttyTests/SurfaceBridgeTests/nativeTextInputUsesDocumentUTF16RangesAndSafeCompositionAnchor()",
+      "functions": 1,
+      "expanded_cases": 1
+    }
+  ],
+  "selectors": [
+    {
+      "selector": "GhosttyTests/CompositorResultTests",
+      "exit_code": 0,
+      "functions": 1,
+      "expanded_cases": 1
+    },
+    {
+      "selector": "GhosttyTests/WindowFrameTransactionTests",
+      "exit_code": 0,
+      "functions": 3,
+      "expanded_cases": 5
+    },
+    {
+      "selector": "GhosttyTests/SurfaceViewAppKitTests",
+      "exit_code": 0,
+      "functions": 4,
+      "expanded_cases": 11
+    },
+    {
+      "selector": "GhosttyTests/AccessibilityTextTests",
+      "exit_code": 0,
+      "functions": 4,
+      "expanded_cases": 4
+    },
+    {
+      "selector": "GhosttyTests/SurfaceBridgeTests/selectionSnapshotOutlivesCoreMutationAndView()",
+      "exit_code": 0,
+      "functions": 1,
+      "expanded_cases": 1
+    },
+    {
+      "selector": "GhosttyTests/SurfaceBridgeTests/accessibilitySnapshotKeepsTextAndUTF16SelectionTogether()",
+      "exit_code": 0,
+      "functions": 1,
+      "expanded_cases": 1
+    },
+    {
+      "selector": "GhosttyTests/SurfaceBridgeTests/searchRefreshesFromPTYChangesAndAfterVisibilityRestoration(delayedStartup:)",
+      "exit_code": 0,
+      "functions": 1,
+      "expanded_cases": 2
+    },
+    {
+      "selector": "GhosttyTests/SurfaceBridgeTests/repeatedKeyAndPreeditBridgeReachPTY()",
+      "exit_code": 0,
+      "functions": 1,
+      "expanded_cases": 1
+    },
+    {
+      "selector": "GhosttyTests/SurfaceBridgeTests/stateCallbacksReachOnlyTheirTargetAndPreserveQueueOrder()",
+      "exit_code": 0,
+      "functions": 1,
+      "expanded_cases": 1
+    },
+    {
+      "selector": "GhosttyTests/PresentationStateTests/activeSearchReleasesWithSurfaceAfterReplacingLongQueries()",
+      "exit_code": 0,
+      "functions": 1,
+      "expanded_cases": 1
+    },
+    {
+      "selector": "GhosttyTests/PresentationStateTests/renderSessionReleasesAfterQueuedFontAndDisplayChanges()",
+      "exit_code": 0,
+      "functions": 1,
+      "expanded_cases": 1
+    },
+    {
+      "selector": "GhosttyTests/PresentationStateTests/typedSearchBridgeClearsAndEndsSearch(query:)",
+      "exit_code": 0,
+      "functions": 1,
+      "expanded_cases": 3
+    },
+    {
+      "selector": "GhosttyTests/WindowCompositorTests/panesShareClockCacheAndMoveWithoutLosingSession(blending:latency:)",
+      "exit_code": 0,
+      "functions": 1,
+      "expanded_cases": 6
+    },
+    {
+      "selector": "GhosttyTests/WindowCompositorTests/closeReleasesSessionEvenWhileLayerRemainsRetained()",
+      "exit_code": 0,
+      "functions": 1,
+      "expanded_cases": 1
+    },
+    {
+      "selector": "GhosttyTests/WindowCompositorTests/contentUpdatesCoalesceUntilWindowClockResumes()",
+      "exit_code": 0,
+      "functions": 1,
+      "expanded_cases": 1
+    },
+    {
+      "selector": "GhosttyTests/WindowCompositorTests/membershipAndCloseDoNotWaitForFramePreparation()",
+      "exit_code": 0,
+      "functions": 1,
+      "expanded_cases": 1
+    },
+    {
+      "selector": "GhosttyTests/WindowCompositorTests/sharedTextureSnapshotPreservesAlphaAndOutlivesSession()",
+      "exit_code": 0,
+      "functions": 1,
+      "expanded_cases": 1
+    },
+    {
+      "selector": "GhosttyTests/WindowCompositorTests/animationDeadlinesKeepWorkingWithoutNewOutput(animation:)",
+      "exit_code": 0,
+      "functions": 1,
+      "expanded_cases": 2
+    },
+    {
+      "selector": "GhosttyTests/WindowCompositorTests/finalCompositionAnimatesWithoutRepaintingContent(animation:blending:)",
+      "exit_code": 0,
+      "functions": 1,
+      "expanded_cases": 6
+    },
+    {
+      "selector": "GhosttyTests/WindowCompositorTests/missedDeadlineDoesNotCreateMoreVisualWork()",
+      "exit_code": 0,
+      "functions": 1,
+      "expanded_cases": 1
+    }
+  ]
+}

@@ -1234,6 +1234,14 @@ typedef struct { uint32_t width, height, pixel_format; float latency; bool trace
 GHOSTTY_API void ghostty_surface_set_compositor(ghostty_surface_t, void* sink);
 GHOSTTY_API ghostty_compositor_info_s ghostty_surface_compositor_info(ghostty_surface_t);
 typedef struct { double x, y, width, height; uintptr_t clip_x, clip_y, clip_width, clip_height; } ghostty_compositor_region_s;
+// Independent flags; reserved bits remain zero. Return storage stays uint32_t.
+typedef enum {
+  GHOSTTY_COMPOSITOR_REPAINT = 1,
+  GHOSTTY_COMPOSITOR_NEEDS_FRAME = 2,
+  GHOSTTY_COMPOSITOR_GEOMETRY_MISMATCH = 4,
+  GHOSTTY_COMPOSITOR_FAILED = 8,
+  GHOSTTY_COMPOSITOR_COMPOSED = 16,
+} ghostty_compositor_result_e;
 GHOSTTY_API uint32_t ghostty_surface_render_compositor(ghostty_surface_t, void* texture, void* queue, double target_time, ghostty_compositor_region_s region, uint64_t sequence, bool snapshot);
 // Clock events: 0=tick (deadline, prediction), 1=callback, 2=submit, 3=displayed.
 GHOSTTY_API void ghostty_surface_compositor_trace(ghostty_surface_t, uint32_t stage, uint64_t sequence, double time, double prediction);

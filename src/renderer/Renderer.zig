@@ -1247,7 +1247,7 @@ pub fn compositorInfo(self: *Self) CompositorInfo {
 /// when another frame is needed, bit 2
 /// on geometry mismatch. All pane submissions use the window's Metal 4 queue,
 /// so queue barriers order cached-texture writes and final composition reads.
-pub fn drawCompositor(self: *Self, texture: @import("objc").Object, queue: @import("objc").Object, target_time: f64, region: RenderPass.Region, readback: bool) !u32 {
+pub fn drawCompositor(self: *Self, texture: @import("objc").Object, queue: @import("objc").Object, target_time: f64, region: RenderPass.Region, readback: bool) !renderer.CompositorResult {
     self.draw_mutex.lockUncancelable(global.io());
     defer self.draw_mutex.unlock(global.io());
     errdefer {
@@ -1255,9 +1255,9 @@ pub fn drawCompositor(self: *Self, texture: @import("objc").Object, queue: @impo
         self.cells_rebuilt = true;
         self.cursor_motion.invalidate();
     }
-    if (!self.display_realized or !self.visible) return 0;
+    if (!self.display_realized or !self.visible) return .{};
     if (@abs(region.width - @as(f64, @floatFromInt(self.size.screen.width))) > 1 or
-        @abs(region.height - @as(f64, @floatFromInt(self.size.screen.height))) > 1) return 6;
+        @abs(region.height - @as(f64, @floatFromInt(self.size.screen.height))) > 1) return .{ .needs_frame = true, .geometry_mismatch = true };
     self.api.pane.compositor_target = .{ .texture = texture, .width = self.size.screen.width, .height = self.size.screen.height };
     self.compositor_region = region;
     self.api.pane.compositor_queue = queue;
@@ -1277,13 +1277,15 @@ pub fn drawCompositor(self: *Self, texture: @import("objc").Object, queue: @impo
         defer self.api.pane.sequence = sequence;
         try self.drawFrameLocked(true, &snapshot);
         if (!snapshot.healthy) return error.SnapshotFailed;
-        return 0;
+        return .{};
     }
     const content = self.content_submissions;
     try self.drawFrameLocked(false, null);
-    return @as(u32, @intFromBool(self.content_submissions != content)) |
-        (if (self.api.pane.sequence != sequence) @as(u32, 16) else 0) |
-        (if (self.cells_rebuilt or self.cell_rebuild.needsFrame() or self.cursor_motion.isActive() or self.scroll.motion.active()) @as(u32, 2) else 0);
+    return .{
+        .repaint = self.content_submissions != content,
+        .composed = self.api.pane.sequence != sequence,
+        .needs_frame = self.cells_rebuilt or self.cell_rebuild.needsFrame() or self.cursor_motion.isActive() or self.scroll.motion.active(),
+    };
 }
 
 /// Release cached scenes and stop publishing their hit geometry.
