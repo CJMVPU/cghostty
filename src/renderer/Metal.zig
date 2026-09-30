@@ -158,21 +158,8 @@ pub fn reduceMotion(_: *const Metal) bool {
     return workspace.getProperty(bool, "accessibilityDisplayShouldReduceMotion");
 }
 
-pub const SurfaceSize = struct { width: u32, height: u32 };
-
-/// Drawing requires an explicit texture supplied by the window compositor.
-pub fn surfaceSize(self: *const Metal) !SurfaceSize {
-    const target = self.pane.compositor_target orelse return error.MissingCompositorTarget;
-    return .{ .width = @intCast(target.width), .height = @intCast(target.height) };
-}
-
 pub fn setBlending(self: *Metal, blending: configpkg.Config.AlphaBlending) void {
     self.blending = blending;
-}
-
-/// Initialize a new render target which can be presented by this API.
-pub fn initTarget(_: *const Metal, width: usize, height: usize) !Target {
-    return .{ .texture = undefined, .width = width, .height = height };
 }
 
 /// Independent readable target, allocated only for an explicit snapshot.
@@ -301,8 +288,8 @@ pub inline fn beginFrame(
     /// Once the frame has been completed, the `frameCompleted` method
     /// on the renderer is called with the health status of the frame.
     renderer: *Renderer,
-    /// The target is presented via the provided renderer's API when completed.
-    target: *Target,
+    /// Actual borrowed window or owned snapshot target; never a placeholder.
+    target: Target,
     commands: *Frame.Commands,
 ) !Frame {
     return try Frame.begin(.{ .queue = self.queue, .commands = commands }, renderer, target);

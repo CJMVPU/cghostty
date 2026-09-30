@@ -31,3 +31,29 @@ selector and ran only the last (animation). The helper/text/frame tests were
 then run separately and verified in their own logs; no assumed runs are counted.
 These passing runs do not resolve the previously recorded intermittent
 cursor/native timeout. No timeout was extended and no UI latency benchmark ran.
+
+## Explicit draw targets
+
+Removed the per-slot undefined-texture Target, initTarget/surfaceSize wrappers,
+placeholder resize/deinit and temporary target replacement/restoration. Each
+caller passes the actual window or snapshot target directly into encoding.
+Per-slot upload_size/upload_config_modified stamps preserve the previous
+foreground invalidation on dimension/config changes. Snapshot allocation and
+owned-texture release, Metal retention/residency and queue order are unchanged.
+The borrowed target is no longer stored in the mutable CompositorPane context.
+
+Checks:
+- Debug core: 108/108 steps passed.
+- Debug CellUpload/RowUpload: 76/76 tests, 72/72 steps passed.
+- Native panesShareClockCacheAndMoveWithoutLosingSession: 1 function/6 cases
+  passed (three blending modes x two latency settings; includes resize, actual
+  pixel readback, snapshots, pane movement and surviving-window behavior).
+- Native sharedTextureSnapshotPreservesAlphaAndOutlivesSession: 1/1 passed.
+- New native blendReloadAndResizeKeepActualTargetsAndSnapshotOwnership: 1/1
+  passed; live linear/linear-corrected/native config changes, an intervening
+  resize, actual red-pixel readback, snapshot dimensions, and unchanged display
+  revision during snapshot creation.
+- SwiftLint, Zig formatting, scope/config bridge and diff checks passed.
+
+No throughput/latency improvement is claimed; this reduces target ownership
+states and removes a placeholder lifecycle. GPU faults were not injected.

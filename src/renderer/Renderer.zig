@@ -304,10 +304,10 @@ const FrameState = struct {
     color: Texture,
     color_modified: usize = 0,
 
-    target: Target,
     commands: Metal.Commands,
-    /// See property of same name on Renderer for explanation.
-    target_config_modified: usize = 0,
+    /// Per-slot upload invalidation; actual draw targets are supplied by callers.
+    upload_size: [2]usize = .{ 0, 0 },
+    upload_config_modified: usize = 0,
 
     /// Buffer with the vertex data for our background image.
     ///
@@ -373,10 +373,6 @@ const FrameState = struct {
         });
         errdefer color.deinit();
 
-        // Initialize the target. Just as with the other resources,
-        // start it off as small as we can since it'll be resized.
-        const target = try api.initTarget(1, 1);
-
         return .{
             .uniforms = uniforms,
             .content_uniforms = content_uniforms,
@@ -387,7 +383,6 @@ const FrameState = struct {
             .bg_image_buffer = bg_image_buffer,
             .grayscale = grayscale,
             .color = color,
-            .target = target,
             .commands = commands,
         };
     }
@@ -396,7 +391,6 @@ const FrameState = struct {
         self.cell_upload.deinit();
         self.background_upload.deinit();
         self.commands.deinit();
-        self.target.deinit();
         self.uniforms.deinit();
         self.content_uniforms.deinit();
         self.history_uniforms.deinit();
@@ -406,17 +400,6 @@ const FrameState = struct {
         self.grayscale.deinit();
         self.color.deinit();
         self.bg_image_buffer.deinit();
-    }
-
-    pub fn resize(
-        self: *FrameState,
-        api: Metal,
-        width: usize,
-        height: usize,
-    ) !void {
-        const target = try api.initTarget(width, height);
-        self.target.deinit();
-        self.target = target;
     }
 };
 
@@ -1223,7 +1206,7 @@ pub fn copySnapshot(self: *Self) !?@import("objc").Object {
     if (self.swap_chain) |*chain| chain.waitIdle();
     var snapshot: Snapshot = .{ .target = try self.api.initSnapshotTarget(self.size.screen.width, self.size.screen.height) };
     errdefer snapshot.target.deinit();
-    try self.drawFrameLocked(true, &snapshot);
+    try self.drawFrameLocked(true, snapshot.target, &snapshot);
     if (!snapshot.healthy) return error.SnapshotFailed;
     return snapshot.target.texture;
 }
@@ -1261,13 +1244,12 @@ pub fn drawCompositor(self: *Self, texture: @import("objc").Object, queue: @impo
     if (!self.display_realized or !self.visible) return .{};
     if (@abs(region.width - @as(f64, @floatFromInt(self.size.screen.width))) > 1 or
         @abs(region.height - @as(f64, @floatFromInt(self.size.screen.height))) > 1) return .{ .needs_frame = true, .geometry_mismatch = true };
-    self.api.pane.compositor_target = .{ .texture = texture, .width = self.size.screen.width, .height = self.size.screen.height };
+    const target: Target = .{ .texture = texture, .width = self.size.screen.width, .height = self.size.screen.height };
     self.compositor_region = region;
     self.api.pane.compositor_queue = queue;
     const now = @as(f64, @floatFromInt(Trace.clock())) / std.time.ns_per_s;
     self.api.pane.timing = FrameTiming.init(now, FrameTiming.CACurrentMediaTime(), target_time);
     defer {
-        self.api.pane.compositor_target = null;
         self.compositor_region = null;
         self.api.pane.compositor_queue = null;
         self.api.pane.timing = null;
@@ -1276,14 +1258,14 @@ pub fn drawCompositor(self: *Self, texture: @import("objc").Object, queue: @impo
     if (readback) {
         // An explicit diagnostic snapshot reuses the last sampled animation state.
         // It never consumes updates or publishes a display revision.
-        var snapshot: Snapshot = .{ .target = self.api.pane.compositor_target.? };
+        var snapshot: Snapshot = .{ .target = target };
         defer self.api.pane.sequence = sequence;
-        try self.drawFrameLocked(true, &snapshot);
+        try self.drawFrameLocked(true, snapshot.target, &snapshot);
         if (!snapshot.healthy) return error.SnapshotFailed;
         return .{};
     }
     const content = self.content_submissions;
-    try self.drawFrameLocked(false, null);
+    try self.drawFrameLocked(false, target, null);
     return .{
         .repaint = self.content_submissions != content,
         .composed = self.api.pane.sequence != sequence,
@@ -1303,6 +1285,7 @@ fn releaseScrollTextures(self: *Self) void {
 fn drawFrameLocked(
     self: *Self,
     sync: bool,
+    target: Target,
     snapshot: ?*Snapshot,
 ) !void {
     // After the graphics API is complete (so we defer) we want to
@@ -1320,13 +1303,8 @@ fn drawFrameLocked(
     self.api.drawFrameStart();
     defer self.api.drawFrameEnd();
 
-    if (snapshot == null and self.api.pane.compositor_target == null) return;
-
-    // Retrieve the most up-to-date surface size from the Graphics API
-    const surface_size: Metal.SurfaceSize = if (snapshot) |s|
-        .{ .width = @as(u32, @intCast(s.target.width)), .height = @as(u32, @intCast(s.target.height)) }
-    else
-        try self.api.surfaceSize();
+    // The caller supplies the actual borrowed window or owned snapshot target.
+    const surface_size = .{ .width = @as(u32, @intCast(target.width)), .height = @as(u32, @intCast(target.height)) };
 
     // If either of our surface dimensions is zero
     // then drawing is absurd, so we just return.
@@ -1406,28 +1384,14 @@ fn drawFrameLocked(
         self.updateScreenSizeUniforms();
     }
 
-    // If this frame's target isn't the correct size, or the target
-    // config has changed (such as when the blending mode changes),
-    // remove it and replace it with a new one with the right values.
-    if (frame.target.width != self.size.screen.width or
-        frame.target.height != self.size.screen.height or
-        frame.target_config_modified != self.target_config_modified)
+    // Keep dimension/config invalidation independent from texture ownership.
+    const upload_size: [2]usize = .{ surface_size.width, surface_size.height };
+    if (!std.meta.eql(frame.upload_size, upload_size) or
+        frame.upload_config_modified != self.target_config_modified)
     {
-        try frame.resize(
-            self.api,
-            self.size.screen.width,
-            self.size.screen.height,
-        );
         frame.cell_upload.invalidate();
-        frame.target_config_modified = self.target_config_modified;
-    }
-
-    const original_target = frame.target;
-    defer frame.target = original_target;
-    if (snapshot) |s| {
-        frame.target = s.target;
-    } else if (self.api.pane.compositor_target) |target| {
-        frame.target = target;
+        frame.upload_size = upload_size;
+        frame.upload_config_modified = self.target_config_modified;
     }
 
     // Upload images to the GPU as necessary.
@@ -1536,7 +1500,7 @@ fn drawFrameLocked(
     }
 
     // Get a frame context from the graphics API.
-    var frame_ctx = try self.api.beginFrame(self, &frame.target, &frame.commands);
+    var frame_ctx = try self.api.beginFrame(self, target, &frame.commands);
     var encoded = false;
     defer if (encoded) {
         submitted = true;
@@ -1636,7 +1600,7 @@ fn drawFrameLocked(
     {
         self.scroll.key = scene_key;
         if (self.scroll.motion.len == 0) self.scroll.previous = null;
-        var pass = try RenderPass.begin(.{ .commands = frame_ctx.commands, .region = self.compositor_region, .attachments = &.{.{ .target = .{ .target = frame.target }, .clear_color = if (snapshot != null and self.compositor_region == null) .{ 0, 0, 0, 0 } else null }} });
+        var pass = try RenderPass.begin(.{ .commands = frame_ctx.commands, .region = self.compositor_region, .attachments = &.{.{ .target = .{ .target = target }, .clear_color = if (snapshot != null and self.compositor_region == null) .{ 0, 0, 0, 0 } else null }} });
         defer pass.complete();
         // Wallpaper stays fixed under the independently scrolling content.
         if (self.bg_image) |img| switch (img) {
@@ -1901,8 +1865,7 @@ pub fn changeConfig(self: *Self, config: *DerivedConfig) !void {
         self.api.setBlending(config.blending);
         // And indicate that we need to reinitialize our shaders.
         self.reinitialize_shaders = true;
-        // And indicate that our swap chain targets need to
-        // be re-created to account for the new blending mode.
+        // Invalidate per-slot uploads and cached scroll scenes for blending.
         self.target_config_modified +%= 1;
     }
 }

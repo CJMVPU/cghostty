@@ -10,7 +10,6 @@ sequence: u64 = 0,
 /// Retained native wake sink, protected by renderer.draw_mutex.
 compositor_sink: ?objc.Object = null,
 /// Borrowed only during the window's render callback.
-compositor_target: ?@import("Target.zig") = null,
 compositor_queue: ?objc.Object = null,
 
 pub fn init() Self {

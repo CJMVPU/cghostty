@@ -527,6 +527,49 @@ import Synchronization
         #expect(owner.worker.statistics.failed == 0)
     }
 
+    @Test func blendReloadAndResizeKeepActualTargetsAndSnapshotOwnership() async throws {
+        let settings = "background = #ff0000\ncursor-style-blink = false\ncursor-effect = false\nshell-integration = none"
+        let config = try TemporaryConfig(settings + "\nalpha-blending = native")
+        let app = Ghostty.App(configPath: config.temporaryFile.path)
+        let view = makeView(app: app, color: "255;0;0", marker: "target-ready")
+        let surface = try #require(view.surfaceModel)
+        let window = makeWindow()
+        defer { window.close() }
+        window.contentView = view
+        window.orderFront(nil)
+        view.sizeDidChange(view.bounds.size)
+        surface.setVisible(true)
+        let owner = try #require(view.windowCompositor)
+        owner.updateGeometry()
+        try await wait("actual target fixture text and idle", worker: owner.worker,
+            diagnostics: { NativeTestWait.surfaceState(surface, view: view, expectedText: "target-ready") }, {
+            surface.readContents(viewport: false).contains("target-ready") && owner.worker.isIdle
+        })
+        for blending in ["linear", "linear-corrected", "native"] {
+            let previous = surface.renderRevision
+            try config.reload(settings + "\nalpha-blending = \(blending)")
+            surface.updateConfig(config)
+            if blending == "linear-corrected" {
+                window.setContentSize(CGSize(width: 520, height: 260))
+                view.sizeDidChange(view.bounds.size)
+                owner.updateGeometry()
+            }
+            let format: MTLPixelFormat = blending == "native" ? .bgra8Unorm : .bgra8Unorm_srgb
+            try await wait("reconfigured target frame completion and idle", worker: owner.worker,
+                diagnostics: { "blending=\(blending), expectedRevision>\(previous)\n" + NativeTestWait.surfaceState(surface, view: view) }, {
+                surface.compositorInfo.pixel_format == format.rawValue &&
+                    surface.renderRevision > previous && owner.worker.isIdle
+            })
+            #expect(try centerIsRed(owner.worker))
+            let revision = surface.renderRevision
+            let image = try #require(surface.copySnapshot())
+            #expect(image.width == Int(surface.compositorInfo.width))
+            #expect(image.height == Int(surface.compositorInfo.height))
+            #expect(surface.renderRevision == revision, "Snapshot must not publish a displayed frame")
+        }
+        #expect(owner.worker.statistics.failed == 0)
+    }
+
     private func centerIsRed(_ worker: WindowCompositorWorker) throws -> Bool {
         let image = try worker.readback()
         let pixel = (image.height / 2 * image.width + image.width / 2) * 4

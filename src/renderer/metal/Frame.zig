@@ -67,7 +67,7 @@ queue: objc.Object,
 commands: *Commands,
 block: CompletionBlock.Context,
 
-pub fn begin(opts: Options, renderer: *Renderer, target: *Target) !Self {
+pub fn begin(opts: Options, renderer: *Renderer, target: Target) !Self {
     const c = opts.commands;
     // The swap-chain semaphore guarantees this slot is no longer in flight.
     c.allocator.msgSend(void, "reset", .{});
