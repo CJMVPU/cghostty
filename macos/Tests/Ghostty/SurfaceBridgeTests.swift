@@ -21,16 +21,10 @@ import Testing
 
     private func waitForFrame(after revision: UInt64, in view: Ghostty.SurfaceView) async throws {
         let surface = try #require(view.surfaceModel)
-        let deadline = ContinuousClock.now + .seconds(5)
-        while surface.renderRevision <= revision {
-            try #require(ContinuousClock.now < deadline,
-                         """
-                         No completed terminal frame: revision=\(surface.renderRevision), expected>\(revision),
-                         healthy=\(view.healthy), bounds=\(view.bounds), core=\(surface.size),
-                         windowVisible=\(view.window?.isVisible ?? false), focused=\(view.focused)
-                         """)
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        try await NativeTestWait.until("terminal frame completion", timeout: .seconds(5), polling: .milliseconds(10),
+            diagnostics: { "expectedRevision>\(revision)\n" + NativeTestWait.surfaceState(surface, view: view) }, {
+            surface.renderRevision > revision
+        })
     }
 
     private func makeView(command: String = "/bin/cat", configPath: String = "/dev/null") -> Ghostty.SurfaceView {
@@ -42,18 +36,10 @@ import Testing
     }
 
     private func waitForText(_ text: String, in surface: Ghostty.Surface) async throws {
-        let deadline = ContinuousClock.now + .seconds(5)
-        while true {
-            let contents = surface.readContents(viewport: false)
-            if contents.contains(text) { return }
-            try #require(ContinuousClock.now < deadline,
-                         """
-                         Terminal output did not contain \(text).
-                         grid=\(surface.size.columns)x\(surface.size.rows), exited=\(surface.processExited),
-                         output=\(String(reflecting: String(contents.suffix(2048))))
-                         """)
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        try await NativeTestWait.until("terminal text readiness", timeout: .seconds(5), polling: .milliseconds(10),
+            diagnostics: { NativeTestWait.surfaceState(surface, expectedText: text) }, {
+            surface.readContents(viewport: false).contains(text)
+        })
     }
 
     @Test(arguments: [false, true])
