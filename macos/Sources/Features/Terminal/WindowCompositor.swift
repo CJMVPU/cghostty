@@ -271,6 +271,27 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
         signal.requestFrame()
     }
 
+    /// Idle can precede the first drawable; tests must check each requested pane.
+    func panesInitializedForTesting(_ ids: [UUID]) -> Bool {
+        lock.withLock {
+            !ids.isEmpty && ids.allSatisfy { id in
+                guard let pane = panes[id] else { return false }
+                return pane.initialized && pane.geometry.visible && !pane.geometry.clip.isEmpty
+            }
+        }
+    }
+
+    var stateForTesting: String {
+        let snapshot = lock.withLock { (paused, testUpdatesPaused, size, panes) }
+        let details = snapshot.3.keys.sorted { $0.uuidString < $1.uuidString }.map { id in
+            let pane = snapshot.3[id]!
+            return "pane=\(id), initialized=\(pane.initialized), visible=\(pane.geometry.visible), " +
+                "rect=\(pane.geometry.rect), clip=\(pane.geometry.clip)"
+        }.joined(separator: "\n")
+        return "paused=\(snapshot.0), testUpdatesPaused=\(snapshot.1), pending=\(signal.hasPending), " +
+            "size=\(snapshot.2)\n" + details
+    }
+
     /// Simulates a delayed display clock while real PTY output keeps arriving.
     func pauseUpdatesForTesting(_ paused: Bool) {
         lock.withLock { testUpdatesPaused = paused }

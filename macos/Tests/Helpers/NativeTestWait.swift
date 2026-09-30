@@ -43,6 +43,6 @@ import Foundation
     }
 
     static func compositorState(_ worker: WindowCompositorWorker) -> String {
-        "panes=\(worker.paneCount), idle=\(worker.isIdle), statistics=\(worker.statistics)"
+        "panes=\(worker.paneCount), idle=\(worker.isIdle), statistics=\(worker.statistics)\n" + worker.stateForTesting
     }
 }

@@ -471,6 +471,7 @@ import Synchronization
         let left = makeView(app: app, color: "0;255;0", marker: "left-static")
         let right = makeView(app: app, color: "255;0;0", marker: "right-ready")
         let surface = try #require(right.surfaceModel)
+        let leftSurface = try #require(left.surfaceModel)
         let window = makeWindow()
         defer { window.close() }
         let content = try #require(window.contentView)
@@ -486,13 +487,34 @@ import Synchronization
         surface.setFocus(animation == "cursor")
         let owner = try #require(right.windowCompositor)
         owner.updateGeometry()
-        try await wait("final composition startup text and idle", worker: owner.worker, diagnostics: { "animation=\(animation), blending=\(blending)\nleft: " + NativeTestWait.surfaceState(left.surfaceModel, view: left, expectedText: "left-static") + "\nright: " + NativeTestWait.surfaceState(surface, view: right, expectedText: "right-ready") }, { surface.readContents(viewport: false).contains("right-ready") && owner.worker.isIdle })
+        let diagnostics = {
+            "animation=\(animation), blending=\(blending)\nleft: " +
+                NativeTestWait.surfaceState(leftSurface, view: left, expectedText: "left-static") + "\nright: " +
+                NativeTestWait.surfaceState(surface, view: right, expectedText: "right-ready")
+        }
+        try await wait("final composition both panes startup and first frames", worker: owner.worker, diagnostics: diagnostics, {
+            leftSurface.readContents(viewport: false).contains("left-static") &&
+                surface.readContents(viewport: false).contains("right-ready") &&
+                owner.worker.panesInitializedForTesting([left.id, right.id]) &&
+                owner.worker.statistics.completed > 0 && owner.worker.isIdle
+        })
         // Distinct rows make scroll motion visible; the neighboring pane must
         // remain pixel-identical throughout final-pass viewport/scissor changes.
         #expect(surface.sendKeyEvent(.init(keyCode: 0, action: .press,
             text: "\u{1b}[?1049h\u{1b}[2J\u{1b}[Hone\r\ntwo\r\nthree\r\nfour\r\nfive\r\nsix")))
-        try await wait("final composition fixture text and idle", worker: owner.worker, diagnostics: { NativeTestWait.surfaceState(surface, view: right, expectedText: "six") }, { surface.readContents(viewport: false).contains("six") && owner.worker.isIdle })
-        let baseline = try owner.worker.readback()
+        var readyBaseline: (width: Int, height: Int, pixels: [UInt8])?
+        try await wait("final composition fixture text and expected pixels", worker: owner.worker,
+            diagnostics: { diagnostics() + "\n" + NativeTestWait.surfaceState(surface, view: right, expectedText: "six") }, {
+            guard leftSurface.readContents(viewport: false).contains("left-static"),
+                  surface.readContents(viewport: false).contains("six"),
+                  owner.worker.panesInitializedForTesting([left.id, right.id]),
+                  owner.worker.statistics.completed > 0, owner.worker.isIdle else { return false }
+            let image = try owner.worker.readback()
+            guard try fixtureColorsReady(image) else { return false }
+            readyBaseline = image
+            return true
+        })
+        let baseline = try #require(readyBaseline)
         let before = owner.worker.statistics.submitted
         let initialContent = owner.worker.statistics.paneDraws
         let command = animation == "cursor" ? "\u{1b}[2;12H" : "\u{1b}[2;6r\u{1b}[6;1H\n"
@@ -525,6 +547,65 @@ import Synchronization
         #expect(owner.worker.statistics.submitted > frames)
         #expect(owner.worker.statistics.paneDraws == contentDraws)
         #expect(owner.worker.statistics.failed == 0)
+    }
+
+    @Test func pausedFirstFramesCannotSatisfyBaselineReadiness() async throws {
+        let config = try TemporaryConfig("cursor-style-blink = false\ncursor-effect = false\nshell-integration = none")
+        let app = Ghostty.App(configPath: config.temporaryFile.path)
+        let left = makeView(app: app, color: "0;255;0", marker: "left-static")
+        let right = makeView(app: app, color: "255;0;0", marker: "right-ready")
+        let window = makeWindow()
+        defer { window.close() }
+        let content = try #require(window.contentView)
+        left.frame = CGRect(x: 0, y: 0, width: 240, height: 240)
+        right.frame = CGRect(x: 240, y: 0, width: 240, height: 240)
+        content.addSubview(left)
+        content.addSubview(right)
+        let owner = try #require(right.windowCompositor)
+        owner.worker.pauseUpdatesForTesting(true)
+        defer { owner.worker.pauseUpdatesForTesting(false) }
+        window.orderFront(nil)
+        for view in [left, right] {
+            view.sizeDidChange(view.bounds.size)
+            view.surfaceModel?.setVisible(true)
+        }
+        owner.updateGeometry()
+        try await wait("paused fixture text and idle", worker: owner.worker, {
+            left.surfaceModel?.readContents(viewport: false).contains("left-static") == true &&
+                right.surfaceModel?.readContents(viewport: false).contains("right-ready") == true && owner.worker.isIdle
+        })
+        #expect(!owner.worker.panesInitializedForTesting([left.id, right.id]))
+        #expect(!owner.worker.panesInitializedForTesting([]))
+        #expect(!owner.worker.panesInitializedForTesting([UUID()]))
+        let blank = try owner.worker.readback()
+        #expect(try fixtureColorsReady(blank) == false)
+        let state = NativeTestWait.compositorState(owner.worker)
+        for field in ["paused=", "pending=", "initialized=false", "visible=", "rect=", "clip=", "size="] {
+            #expect(state.contains(field), "Missing first-frame diagnostic: \(field)")
+        }
+        owner.worker.pauseUpdatesForTesting(false)
+        try await wait("resumed fixture first frames and expected pixels", worker: owner.worker, {
+            guard owner.worker.panesInitializedForTesting([left.id, right.id]),
+                  owner.worker.statistics.completed > 0, owner.worker.isIdle else { return false }
+            return try fixtureColorsReady(owner.worker.readback())
+        })
+        #expect(owner.worker.statistics.failed == 0)
+    }
+
+    /// Sample away from text so both panes must contain their fixture backgrounds.
+    private func fixtureColorsReady(_ image: (width: Int, height: Int, pixels: [UInt8])) throws -> Bool {
+        guard image.width > 0, image.height > 0 else { return false }
+        let y = image.height * 3 / 4
+        func color(_ x: Int) throws -> NSColor {
+            let offset = (y * image.width + x) * 4
+            return try #require(NSColor(displayP3Red: CGFloat(image.pixels[offset + 2]) / 255,
+                green: CGFloat(image.pixels[offset + 1]) / 255, blue: CGFloat(image.pixels[offset]) / 255,
+                alpha: CGFloat(image.pixels[offset + 3]) / 255).usingColorSpace(.sRGB))
+        }
+        let left = try color(image.width / 4)
+        let right = try color(image.width * 3 / 4)
+        return left.alphaComponent > 0.99 && left.greenComponent > 0.95 && left.redComponent < 0.05 && left.blueComponent < 0.05 &&
+            right.alphaComponent > 0.99 && right.redComponent > 0.95 && right.greenComponent < 0.05 && right.blueComponent < 0.05
     }
 
     @Test func blendReloadAndResizeKeepActualTargetsAndSnapshotOwnership() async throws {
