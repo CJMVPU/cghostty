@@ -65,7 +65,7 @@ final class SettingsRow: NSStackView, NSTextFieldDelegate {
         } else if let editor = Self.makeEditor(field, value: value, context: context, changed: changed) {
             valueEditor = editor
             if let control = editor.headingControl { heading.addArrangedSubview(control) }
-            if field.isFontStyle || field.isColor || field.isDuration || field.isLimit || field.key == "background-blur" {
+            if field.presentation.inline {
                 heading.addArrangedSubview(editor)
                 editor.widthAnchor.constraint(lessThanOrEqualToConstant: 330).isActive = true
                 editor.setContentCompressionResistancePriority(.required, for: .horizontal)
@@ -106,21 +106,9 @@ final class SettingsRow: NSStackView, NSTextFieldDelegate {
                 self.popup = popup
             }
         } else {
-            let input = NSTextField()
-            input.cell = SettingsTextCell(textCell: "")
-            input.font = SettingsTypography.font
-            input.isEditable = true
-            input.isSelectable = true
-            input.isBezeled = true
-            input.drawsBackground = true
-            input.textColor = .white
-            input.backgroundColor = NSColor(calibratedWhite: 0.16, alpha: 1)
-            input.stringValue = value
+            let input = settingsInput(value, id: "settings.\(field.key)", delegate: self)
             input.placeholderString = field.defaultValue.isEmpty ? "Auto" : field.defaultValue
-            input.delegate = self
-            input.setAccessibilityIdentifier("settings.\(field.key)")
-            input.heightAnchor.constraint(equalToConstant: 32).isActive = true
-            if let width = compactInputWidth {
+            if let width = field.presentation.width {
                 input.widthAnchor.constraint(equalToConstant: width).isActive = true
                 input.setContentCompressionResistancePriority(.required, for: .horizontal)
                 heading.addArrangedSubview(input)
@@ -137,21 +125,6 @@ final class SettingsRow: NSStackView, NSTextFieldDelegate {
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
-
-    /// Short scalar values leave enough room for the name, including at the
-    /// minimum window width. Paths, commands and other long text keep a full row.
-    private var compactInputWidth: CGFloat? {
-        if field.kind == "integer" || field.kind == "number" { return 160 }
-        if field.key.hasPrefix("adjust-") { return 160 }
-        switch field.key {
-        case "window-padding-x", "window-padding-y", "undo-timeout", "resize-overlay-duration", "notify-on-command-finish-after": return 160
-        case "background", "foreground", "cursor-color", "cursor-text",
-             "selection-foreground", "selection-background", "search-foreground", "search-background",
-             "search-selected-foreground", "search-selected-background", "split-divider-color", "bold-color", "unfocused-split-fill":
-            return 220
-        default: return nil
-        }
-    }
 
     @objc private func choiceChanged() {
         changed(popup?.selectedItem?.representedObject as? String ?? "")
@@ -177,16 +150,14 @@ final class SettingsRow: NSStackView, NSTextFieldDelegate {
 
     private static func makeEditor(_ field: SettingsField, value: String, context: [String: String],
                                    changed: @escaping (String) -> Void) -> SettingsValueEditor? {
-        if !field.flags.isEmpty { return SettingsFlagsEditor(field: field, value: value, changed: changed) }
-        if field.key == "theme" { return SettingsThemeEditor(value: value, changed: changed) }
-        if field.isFontStyle || field.isColor || field.isPath {
-            return SettingsScalarEditor(field: field, value: value, context: context, changed: changed)
+        switch field.presentation.editor {
+        case .flags: return SettingsFlagsEditor(field: field, value: value, changed: changed)
+        case .theme: return SettingsThemeEditor(value: value, changed: changed)
+        case .fontStyle, .color, .path: return SettingsScalarEditor(field: field, value: value, context: context, changed: changed)
+        case .duration, .limit, .quickSize, .blur: return SettingsMeasureEditor(field: field, value: value, changed: changed)
+        case .list: return SettingsListEditor(field: field, value: value, changed: changed)
+        case .scalar, .fontFamily: return nil
         }
-        if field.isDuration || field.isLimit || ["quick-terminal-size", "background-blur"].contains(field.key) {
-            return SettingsMeasureEditor(field: field, value: value, changed: changed)
-        }
-        if field.multiline || field.isPairList { return SettingsListEditor(field: field, value: value, changed: changed) }
-        return nil
     }
 
     func showError(_ error: String?, enabled: Bool) {

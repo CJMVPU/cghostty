@@ -15,7 +15,7 @@ final class SettingsMeasureEditor: SettingsValueEditor, NSTextFieldDelegate {
         orientation = .vertical
         alignment = .leading
         spacing = 8
-        if field.key == "quick-terminal-size" {
+        if field.presentation.editor == .quickSize {
             let parts = value.components(separatedBy: ",")
             addMeasure(parts.first ?? "", choices: ["", "%", "px", "raw"], label: "Primary")
             addMeasure(parts.count > 1 ? parts[1] : "", choices: ["", "%", "px", "raw"], label: "Secondary")
