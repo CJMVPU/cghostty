@@ -7,9 +7,11 @@ final class SettingsRow: NSStackView, NSTextFieldDelegate, NSTextViewDelegate {
     private var input: NSTextField?
     private var editor: SettingsTextView?
     private var popup: NSPopUpButton?
-    private var resetButton: SettingsButton!
+    private var segments: NSSegmentedControl?
+    private var fontPicker: SettingsFontPicker?
 
-    init(field: SettingsField, value: String, changed: @escaping (String) -> Void) {
+    init(field: SettingsField, value: String, usesFontPreset: Bool = false,
+         presetSelected: @escaping (String) -> Void, changed: @escaping (String) -> Void) {
         self.field = field
         self.changed = changed
         super.init(frame: .zero)
@@ -22,26 +24,44 @@ final class SettingsRow: NSStackView, NSTextFieldDelegate, NSTextViewDelegate {
         let spacer = NSView()
         spacer.setContentHuggingPriority(.init(1), for: .horizontal)
         heading.addArrangedSubview(spacer)
-        resetButton = SettingsButton("默认") { [weak self] in self?.setValue("") }
-        heading.addArrangedSubview(resetButton)
         addArrangedSubview(heading)
-        addArrangedSubview(settingsLabel(field.key, muted: true))
-        if !field.choices.isEmpty {
-            let popup = NSPopUpButton(frame: .zero, pullsDown: false)
-            popup.font = SettingsTypography.font
-            popup.menu?.font = SettingsTypography.font
-            popup.addItem(withTitle: "默认 / 自动")
-            for choice in field.choices {
-                popup.addItem(withTitle: field.kind == "bool" ? (choice == "true" ? "开启" : "关闭") : choice)
-                popup.lastItem?.representedObject = choice
+        if field.isFontFamily {
+            let picker = SettingsFontPicker(field: field, value: value, usesPreset: usesFontPreset,
+                                            changed: changed, presetSelected: presetSelected)
+            addArrangedSubview(picker)
+            fontPicker = picker
+        } else if !field.choices.isEmpty {
+            let values = field.choiceValues
+            let effective = value.isEmpty ? field.defaultValue : value
+            if values.count <= 4 {
+                let segments = NSSegmentedControl(labels: values.map(SettingsField.choiceTitle), trackingMode: .selectOne,
+                                                  target: self, action: #selector(segmentChanged))
+                segments.font = SettingsTypography.font
+                segments.selectedSegment = values.firstIndex(of: effective) ?? -1
+                segments.setContentCompressionResistancePriority(.required, for: .horizontal)
+                segments.setContentHuggingPriority(.required, for: .horizontal)
+                segments.setAccessibilityIdentifier("settings.\(field.key)")
+                heading.addArrangedSubview(segments)
+                self.segments = segments
+            } else {
+                let popup = NSPopUpButton(frame: .zero, pullsDown: false)
+                popup.font = SettingsTypography.font
+                popup.menu?.font = SettingsTypography.font
+                for choice in values {
+                    popup.addItem(withTitle: SettingsField.choiceTitle(choice))
+                    popup.lastItem?.representedObject = choice
+                }
+                if !values.contains(effective) {
+                    popup.addItem(withTitle: effective)
+                    popup.lastItem?.representedObject = effective
+                }
+                popup.selectItem(at: values.firstIndex(of: effective) ?? popup.numberOfItems - 1)
+                popup.target = self
+                popup.action = #selector(choiceChanged)
+                popup.setAccessibilityIdentifier("settings.\(field.key)")
+                addArrangedSubview(popup)
+                self.popup = popup
             }
-            if !value.isEmpty && !field.choices.contains(value) { popup.addItem(withTitle: value) }
-            popup.selectItem(at: value.isEmpty ? 0 : (field.choices.firstIndex(of: value).map { $0 + 1 } ?? popup.numberOfItems - 1))
-            popup.target = self
-            popup.action = #selector(choiceChanged)
-            popup.setAccessibilityIdentifier("settings.\(field.key)")
-            addArrangedSubview(popup)
-            self.popup = popup
         } else if field.multiline {
             let scroll = NSScrollView()
             scroll.hasVerticalScroller = true
@@ -63,7 +83,7 @@ final class SettingsRow: NSStackView, NSTextFieldDelegate, NSTextViewDelegate {
             scroll.heightAnchor.constraint(equalToConstant: field.key == "keybind" ? 220 : 96).isActive = true
             addArrangedSubview(scroll)
             self.editor = editor
-            addArrangedSubview(settingsLabel("每行一个值，按顺序应用。", muted: true))
+            addArrangedSubview(settingsLabel("One value per line, applied in order.", muted: true))
         } else {
             let input = NSTextField()
             input.cell = SettingsTextCell(textCell: "")
@@ -75,7 +95,7 @@ final class SettingsRow: NSStackView, NSTextFieldDelegate, NSTextViewDelegate {
             input.textColor = .white
             input.backgroundColor = NSColor(calibratedWhite: 0.16, alpha: 1)
             input.stringValue = value
-            input.placeholderString = field.defaultValue.isEmpty ? "自动 / 未设置" : field.defaultValue
+            input.placeholderString = field.defaultValue.isEmpty ? "Auto" : field.defaultValue
             input.delegate = self
             input.setAccessibilityIdentifier("settings.\(field.key)")
             input.heightAnchor.constraint(equalToConstant: 32).isActive = true
@@ -83,10 +103,6 @@ final class SettingsRow: NSStackView, NSTextFieldDelegate, NSTextViewDelegate {
             self.input = input
         }
         if !field.help.isEmpty { addArrangedSubview(settingsLabel(field.help, muted: true)) }
-        let defaultText = field.defaultValue.isEmpty ? "自动 / 未设置" : field.defaultValue.components(separatedBy: "\n").prefix(2).joined(separator: " · ")
-        let summary = settingsLabel("默认：\(defaultText)", muted: true)
-        summary.maximumNumberOfLines = 2
-        addArrangedSubview(summary)
         errorLabel.textColor = NSColor(calibratedRed: 1, green: 0.57, blue: 0.5, alpha: 1)
         errorLabel.isHidden = true
         addArrangedSubview(errorLabel)
@@ -95,27 +111,27 @@ final class SettingsRow: NSStackView, NSTextFieldDelegate, NSTextViewDelegate {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
-    private func setValue(_ value: String) {
-        input?.stringValue = value
-        editor?.string = value
-        popup?.selectItem(at: value.isEmpty ? 0 : (popup?.indexOfItem(withTitle: value) ?? 0))
-        changed(value)
+    @objc private func choiceChanged() {
+        changed(popup?.selectedItem?.representedObject as? String ?? "")
     }
 
-    @objc private func choiceChanged() {
-        guard let popup else { return }
-        changed(popup.indexOfSelectedItem == 0 ? "" : popup.selectedItem?.representedObject as? String ?? popup.titleOfSelectedItem ?? "")
+    @objc private func segmentChanged() {
+        guard let index = segments?.selectedSegment, field.choiceValues.indices.contains(index) else { return }
+        changed(field.choiceValues[index])
     }
 
     func controlTextDidChange(_ obj: Notification) { changed(input?.stringValue ?? "") }
     func textDidChange(_ notification: Notification) { changed(editor?.string ?? "") }
 
+    func refreshFontPreset(_ active: Bool) { fontPicker?.refreshPreset(active) }
+
     func showError(_ error: String?, enabled: Bool) {
-        errorLabel.stringValue = error ?? ""
+        errorLabel.stringValue = SettingsField.readable(error ?? "")
         errorLabel.isHidden = error == nil
         input?.isEnabled = enabled
         editor?.isEditable = enabled
         popup?.isEnabled = enabled
-        resetButton.isEnabled = enabled
+        segments?.isEnabled = enabled
+        fontPicker?.setEnabled(enabled)
     }
 }

@@ -20,7 +20,7 @@ struct ConfigurationErrorsView: View {
                     .frame(alignment: .center)
 
                 Text("""
-                    配置未完全应用，请查看下面的原因。修改配置后重启应用生效。\n\nConfiguration could not be fully applied. Review the messages below, edit the file, and restart the application.
+                    Settings could not be fully applied. Review the messages below, open Settings to correct them, and restart the app.
                     """)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding()
@@ -47,9 +47,9 @@ struct ConfigurationErrorsView: View {
 
             HStack {
                 Spacer()
-                Button("关闭 / Close", action: dismiss)
+                Button("Close", action: dismiss)
                     .keyboardShortcut(.cancelAction)
-                Button("打开设置 / Open Settings", action: edit)
+                Button("Open Settings", action: edit)
                     .keyboardShortcut(.defaultAction)
             }
             .controlSize(.large)

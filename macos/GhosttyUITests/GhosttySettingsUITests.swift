@@ -17,10 +17,10 @@ final class GhosttySettingsUITests: GhosttyCustomConfigCase {
         defer { app.terminate() }
         app.menuBars.menuBarItems["cghostty"].click()
         app.menuItems["Settings…"].click()
-        let window = app.windows["cghostty · 设置"]
+        let window = app.windows["cghostty · Settings"]
         XCTAssertTrue(window.waitForExistence(timeout: 10))
         app.typeKey(",", modifierFlags: .command)
-        XCTAssertEqual(app.windows.matching(identifier: "cghostty · 设置").count, 1)
+        XCTAssertEqual(app.windows.matching(identifier: "cghostty · Settings").count, 1)
         let search = window.textFields["settings.search"]
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         search.click()
@@ -40,7 +40,7 @@ final class GhosttySettingsUITests: GhosttyCustomConfigCase {
         save.click()
         attach(window.screenshot(), name: "settings-saved")
         XCTAssertTrue(save.wait(for: \.isEnabled, toEqual: false, timeout: 3))
-        XCTAssertTrue((window.staticTexts["settings.status"].value as? String ?? "").contains("已保存"))
+        XCTAssertTrue((window.staticTexts["settings.status"].value as? String ?? "").contains("Saved"))
         app.terminate()
         app.launch()
         app.activate()
@@ -59,5 +59,55 @@ final class GhosttySettingsUITests: GhosttyCustomConfigCase {
         search.typeKey("a", modifierFlags: .command)
         search.typeKey(XCUIKeyboardKey.delete, modifierFlags: [])
         attach(window.screenshot(), name: "settings-overview")
+    }
+
+    @MainActor func testChoiceButtonsAndFontPresetKeepFallbacksAfterRestart() throws {
+        try updateConfig("initial-window = true\nwindow-save-state = never\nconfirm-close-surface = false\nfont-family = Menlo\nfont-family = Monaco\nfont-thicken = false\ncommand = /bin/zsh -f\nshell-integration = none")
+        let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
+        app.launch()
+        app.activate()
+        defer { app.terminate() }
+        updateSetting(app, key: "cursor-style", value: "bar")
+        app.menuBars.menuBarItems["cghostty"].click()
+        app.menuItems["Settings…"].click()
+        let window = app.windows["cghostty · Settings"]
+        let search = window.textFields["settings.search"]
+        search.click()
+        search.typeKey("a", modifierFlags: .command)
+        paste("font-family", into: search, submit: false)
+        let primary = window.comboBoxes["settings.font-family.0"]
+        let fallback = window.comboBoxes["settings.font-family.1"]
+        XCTAssertTrue(primary.waitForExistence(timeout: 5))
+        XCTAssertEqual(primary.value as? String, "Menlo")
+        XCTAssertEqual(fallback.value as? String, "Monaco")
+        primary.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).click()
+        attach(window.screenshot(), name: "settings-font-dropdown")
+        let preset = "default:LXGW WenKai Mono:medium:thickened"
+        let presetOption = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@ OR value == %@", preset, preset)).firstMatch
+        XCTAssertTrue(presetOption.waitForExistence(timeout: 5))
+        presetOption.click()
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", preset), object: primary)], timeout: 5), .completed)
+        XCTAssertEqual(fallback.value as? String, "Monaco")
+        let save = window.buttons["settings.save"]
+        attach(window.screenshot(), name: "settings-font-selection")
+        XCTAssertTrue(save.isEnabled, window.debugDescription)
+        save.click()
+        app.terminate()
+        app.launch()
+        app.activate()
+        app.menuBars.menuBarItems["cghostty"].click()
+        app.menuItems["Settings…"].click()
+        XCTAssertTrue(window.waitForExistence(timeout: 10))
+        search.click()
+        paste("font-family", into: search, submit: false)
+        XCTAssertTrue(primary.waitForExistence(timeout: 5))
+        XCTAssertEqual(primary.value as? String, preset)
+        XCTAssertEqual(fallback.value as? String, "Monaco")
+        attach(window.screenshot(), name: "settings-font-preset")
+        search.click()
+        search.typeKey("a", modifierFlags: .command)
+        paste("cursor-style", into: search, submit: false)
+        XCTAssertEqual(window.radioGroups["settings.cursor-style"].radioButtons["Bar"].value as? Int, 1)
+        attach(window.screenshot(), name: "settings-choice-buttons")
     }
 }

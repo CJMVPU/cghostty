@@ -205,7 +205,40 @@ import Testing
             #expect(window.appearance?.name == .darkAqua)
             #expect(window.styleMask.contains(.resizable))
             #expect(!window.isRestorable)
+            func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
+            let search = try #require(window.contentView.flatMap { descendants($0).first { $0.accessibilityIdentifier() == "settings.search" } } as? NSTextField)
+            #expect(search.focusRingType == .none)
             window.contentView?.layoutSubtreeIfNeeded()
+        }
+    }
+
+    @Test func bundledFontPresetPreservesFallbacksAndPersistsAllParameters() throws {
+        try withStore("font-family = Menlo\nfont-family = Unavailable Custom Font\nfont-style = Regular\nfont-thicken = false\nfont-thicken-strength = 100") { store, _ in
+            _ = store.load(cli: false)
+            let model = SettingsModel(store: store)
+            #expect(!model.usesBundledFontPreset)
+            model.applyBundledFontPreset(families: "LXGW WenKai Mono\nUnavailable Custom Font")
+            #expect(model.usesBundledFontPreset)
+            #expect(model.canSave)
+            #expect(model.save())
+            let restored = SettingsModel(store: store)
+            #expect(restored.usesBundledFontPreset)
+            #expect(restored.displayed["font-family"] == "LXGW WenKai Mono\nUnavailable Custom Font")
+            #expect(restored.displayed["font-style"] == "default")
+            let thicken = try #require(SettingsField.catalog.first { $0.key == "font-thicken" })
+            restored.edit(thicken, value: "false")
+            #expect(!restored.usesBundledFontPreset)
+        }
+    }
+
+    @Test func choicesPreserveAutomaticMeaningAndCatalogUsesEnglish() throws {
+        let blink = try #require(SettingsField.catalog.first { $0.key == "cursor-style-blink" })
+        #expect(blink.choiceValues == ["", "true", "false"])
+        let initial = try #require(SettingsField.catalog.first { $0.key == "initial-window" })
+        #expect(initial.choiceValues == ["true", "false"])
+        for field in SettingsField.catalog {
+            #expect(!field.title.contains("-"), "\(field.key): \(field.title)")
+            #expect(!(field.title + field.help).unicodeScalars.contains { (0x4E00...0x9FFF).contains($0.value) }, "\(field.key)")
         }
     }
 }

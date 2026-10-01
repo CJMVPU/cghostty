@@ -39,9 +39,9 @@ import Darwin
         var errorDescription: String? {
             switch self {
             case .invalid(let errors): return errors.joined(separator: "\n")
-            case .changed: return "设置已被另一个窗口或应用实例修改。请重新读取后再编辑。"
-            case .unreadable: return "无法读取应用设置。可重试，或使用“恢复默认设置”；原数据会先备份。"
-            case .unsupported: return "设置来自较新版本，当前版本无法编辑。请使用较新版本的应用。"
+            case .changed: return "Settings were changed by another app instance. Reload before editing."
+            case .unreadable: return "Unable to read settings. Retry or restore defaults; existing data will be backed up."
+            case .unsupported: return "These settings require a newer version of the app."
             }
         }
     }
@@ -76,9 +76,9 @@ import Darwin
                 result.report(startupErrors)
                 return applyCLI(record.current, checked: result, cli: cli)
             }
-            startupErrors = errors + (result?.errors ?? ["无法解析设置。"])
+            startupErrors = errors + (result?.errors ?? ["Unable to parse settings."])
             if let previous = record.previous, validate(previous).isEmpty, let recovered = parse(previous), recovered.errors.isEmpty {
-                startupErrors.insert("设置无效，已使用上次成功设置。请在设置窗口修正。", at: 0)
+                startupErrors.insert("Invalid settings. The last valid settings were restored. Open Settings to correct the errors.", at: 0)
                 recovered.report(startupErrors)
                 return applyCLI(previous, checked: recovered, cli: cli)
             }
@@ -86,7 +86,7 @@ import Darwin
             startupErrors = [error.localizedDescription]
         }
         let defaults = parse(Input(), cli: false)
-        startupErrors.insert("无法应用已保存设置，当前使用内置默认值。原数据已保留。", at: 0)
+        startupErrors.insert("Unable to apply saved settings. Built in defaults are in use. Existing data has been preserved.", at: 0)
         defaults?.report(startupErrors)
         return defaults
     }
@@ -97,7 +97,7 @@ import Darwin
             effective.report(checked.errors)
             return effective
         }
-        checked.report(effective.errors + ["启动参数无效，本次启动未应用这些覆盖；已保存设置保持有效。"])
+        checked.report(effective.errors + ["Invalid launch arguments were ignored. Saved settings remain in effect."])
         return checked
     }
 
@@ -107,7 +107,7 @@ import Darwin
 
     func validate(_ input: Input) -> [String] {
         let known = Set(SettingsField.catalog.map(\.key))
-        var errors = input.values.keys.filter { !known.contains($0) }.map { "未知设置：\($0)" }
+        var errors = input.values.keys.filter { !known.contains($0) }.map { "Unknown setting: \($0)" }
         var explainedKeys = Set<String>()
         for field in SettingsField.catalog {
             if let value = input.values[field.key], let error = field.validate(value) {
@@ -115,7 +115,7 @@ import Darwin
                 explainedKeys.insert(field.key)
             }
         }
-        let coreErrors = parse(input)?.errors ?? ["无法创建配置解析器。"]
+        let coreErrors = parse(input)?.errors ?? ["Unable to create the settings parser."]
         errors += coreErrors.filter { diagnostic in
             !explainedKeys.contains { diagnostic.hasPrefix($0 + ":") }
         }
@@ -171,9 +171,9 @@ import Darwin
             let legacy = Ghostty.ConfigStore(source: legacySource, directory: recoveryDirectory)
             guard let saved = legacy.successfulMigrationData(),
                   let recovered = Ghostty.ConfigHandle.load(data: saved, source: legacySource) else {
-                throw Failure.invalid(["旧配置存在错误，尚未迁移。原文件已保留，可恢复默认设置后继续。"] + checked.errors)
+                throw Failure.invalid(["The old configuration contains errors and could not be imported. The original file was preserved. Restore defaults to continue."] + checked.errors)
             }
-            startupErrors = ["旧配置存在错误，已迁入上次成功配置。原文件已保留，后续请使用设置窗口。"] + checked.errors
+            startupErrors = ["The old configuration contains errors. The last valid configuration was imported. The original file was preserved. Use Settings for future changes."] + checked.errors
             data = saved
             checked = recovered
         }
@@ -209,7 +209,7 @@ import Darwin
         encoder.outputFormatting = [.sortedKeys]
         let data = try encoder.encode(record)
         guard data.count <= Self.maximumRecordBytes else {
-            throw Failure.invalid(["设置内容过大，无法保存。请减少设置内容后重试。"])
+            throw Failure.invalid(["Settings are too large to save. Reduce their size and try again."])
         }
         let temporary = directory.appendingPathComponent(".settings-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: temporary) }

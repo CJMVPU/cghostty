@@ -43,7 +43,7 @@ class GhosttyCustomConfigCase: XCTestCase {
     @MainActor func updateSetting(_ app: XCUIApplication, key: String, value: String) {
         app.menuBars.menuBarItems["cghostty"].click()
         app.menuItems["Settings…"].click()
-        let window = app.windows["cghostty · 设置"]
+        let window = app.windows["cghostty · Settings"]
         XCTAssertTrue(window.waitForExistence(timeout: 10))
         let search = window.textFields["settings.search"]
         search.click()
@@ -59,9 +59,12 @@ class GhosttyCustomConfigCase: XCTestCase {
             multiline.click()
             multiline.typeKey("a", modifierFlags: .command)
             paste(value, into: multiline, submit: false)
+        } else if window.radioGroups["settings." + key].exists {
+            let label = value == "true" ? "On" : value == "false" ? "Off" : value.replacingOccurrences(of: "_", with: " ").capitalized
+            window.radioGroups["settings." + key].radioButtons[label].click()
         } else {
             window.popUpButtons["settings." + key].click()
-            app.menuItems[value].click()
+            app.menuItems[value.replacingOccurrences(of: "-", with: " ").capitalized].click()
         }
         let save = window.buttons["settings.save"]
         XCTAssertTrue(save.isEnabled)

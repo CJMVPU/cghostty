@@ -22,7 +22,7 @@ private final class SettingsList: NSStackView {
 
 @MainActor final class SettingsController: NSWindowController, NSWindowDelegate, NSTextFieldDelegate {
     let model: SettingsModel
-    private let groups = ["常规", "外观与字体", "窗口与分屏", "快捷终端", "键盘与鼠标", "终端行为", "通知与安全", "高级"]
+    private let groups = ["General", "Appearance", "Windows", "Quick Terminal", "Input", "Terminal", "Security", "Advanced"]
     private let preferences: UserDefaults
     private var category: Int
     private var query = ""
@@ -44,7 +44,7 @@ private final class SettingsList: NSStackView {
         let window = SettingsWindow(contentRect: NSRect(x: 0, y: 0, width: 1040, height: 760),
                                     styleMask: [.titled, .closable, .miniaturizable, .resizable],
                                     backing: .buffered, defer: false)
-        window.title = "cghostty · 设置"
+        window.title = "cghostty · Settings"
         window.appearance = NSAppearance(named: .darkAqua)
         window.backgroundColor = NSColor(calibratedWhite: 0.115, alpha: 1)
         window.minSize = NSSize(width: 840, height: 600)
@@ -90,11 +90,11 @@ private final class SettingsList: NSStackView {
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         guard model.dirty else { return true }
         let alert = NSAlert()
-        alert.messageText = "保存设置修改？"
-        alert.informativeText = model.canSave ? "保存后重启应用生效。" : "当前设置有错误，请继续编辑或放弃修改。"
-        alert.addButton(withTitle: "保存")
-        alert.addButton(withTitle: "放弃修改")
-        alert.addButton(withTitle: "继续编辑")
+        alert.messageText = "Save changes?"
+        alert.informativeText = model.canSave ? "Restart the app to apply saved changes." : "Fix the invalid settings or discard your changes."
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Discard Changes")
+        alert.addButton(withTitle: "Keep Editing")
         alert.buttons[0].isEnabled = model.canSave
         switch alert.runModal() {
         case .alertFirstButtonReturn:
@@ -127,7 +127,7 @@ private final class SettingsList: NSStackView {
         sidebar.edgeInsets = NSEdgeInsets(top: 26, left: 18, bottom: 20, right: 18)
         sidebar.wantsLayer = true
         sidebar.layer?.backgroundColor = NSColor(calibratedWhite: 0.145, alpha: 1).cgColor
-        sidebar.addArrangedSubview(settingsLabel("全局设置"))
+        sidebar.addArrangedSubview(settingsLabel("Settings"))
         for (index, name) in groups.enumerated() {
             let button = SettingsButton(name) { [weak self] in self?.selectCategory(index + 1) }
             button.isBordered = false
@@ -155,9 +155,10 @@ private final class SettingsList: NSStackView {
         search.font = SettingsTypography.font
         search.isEditable = true
         search.isSelectable = true
+        search.focusRingType = .none
         search.isBezeled = true
         search.drawsBackground = true
-        search.placeholderString = "搜索设置名称或关键字"
+        search.placeholderString = "Search settings"
         search.delegate = self
         search.setAccessibilityIdentifier("settings.search")
         search.heightAnchor.constraint(equalToConstant: 34).isActive = true
@@ -183,14 +184,14 @@ private final class SettingsList: NSStackView {
         let footer = NSStackView()
         footer.orientation = .horizontal
         footer.spacing = 12
-        footer.addArrangedSubview(SettingsButton("恢复默认") { [weak self] in self?.resetDefaults() })
-        footer.addArrangedSubview(SettingsButton("重新读取") { [weak self] in self?.reload() })
+        footer.addArrangedSubview(SettingsButton("Restore Defaults") { [weak self] in self?.resetDefaults() })
+        footer.addArrangedSubview(SettingsButton("Reload") { [weak self] in self?.reload() })
         let space = NSView()
         space.setContentHuggingPriority(.init(1), for: .horizontal)
         footer.addArrangedSubview(space)
-        discardButton = SettingsButton("撤销修改") { [weak self] in self?.reload() }
+        discardButton = SettingsButton("Discard Changes") { [weak self] in self?.reload() }
         footer.addArrangedSubview(discardButton)
-        saveButton = SettingsButton("保存") { [weak self] in self?.save() }
+        saveButton = SettingsButton("Save") { [weak self] in self?.save() }
         saveButton.keyEquivalent = "s"
         saveButton.keyEquivalentModifierMask = .command
         saveButton.contentTintColor = NSColor(calibratedRed: 0.71, green: 0.81, blue: 0.63, alpha: 1)
@@ -221,19 +222,25 @@ private final class SettingsList: NSStackView {
         for (index, button) in categoryButtons.enumerated() {
             button.contentTintColor = index + 1 == category ? NSColor(calibratedRed: 0.71, green: 0.81, blue: 0.63, alpha: 1) : .secondaryLabelColor
         }
-        rows.addArrangedSubview(settingsLabel(query.isEmpty ? groups[category - 1] : "搜索结果"))
+        rows.addArrangedSubview(settingsLabel(query.isEmpty ? groups[category - 1] : "Search Results"))
         let pinned = ["initial-window", "quit-after-last-window-closed", "window-width", "window-height"]
         let fields = SettingsField.catalog.filter {
             query.isEmpty ? ($0.group == category || (category == 1 && pinned.contains($0.key))) : "\($0.title) \($0.key) \($0.help)".localizedCaseInsensitiveContains(query)
         }.sorted {
             (pinned.firstIndex(of: $0.key) ?? 1000) < (pinned.firstIndex(of: $1.key) ?? 1000)
         }
-        if fields.isEmpty { rows.addArrangedSubview(settingsLabel("没有匹配的设置", muted: true)) }
+        if fields.isEmpty { rows.addArrangedSubview(settingsLabel("No matching settings", muted: true)) }
         for field in fields {
-            let row = SettingsRow(field: field, value: model.displayed[field.key] ?? field.defaultValue) { [weak self] value in
+            let row = SettingsRow(field: field, value: model.displayed[field.key] ?? field.defaultValue,
+                                  usesFontPreset: model.usesBundledFontPreset,
+                                  presetSelected: { [weak self] families in
+                self?.model.applyBundledFontPreset(families: families)
+                // Let the native dropdown finish dispatching its selection first.
+                DispatchQueue.main.async { [weak self] in self?.renderRows() }
+            }, changed: { [weak self] value in
                 self?.model.edit(field, value: value)
                 self?.updateState()
-            }
+            })
             rows.addArrangedSubview(row)
             row.widthAnchor.constraint(equalTo: rows.widthAnchor, constant: -14).isActive = true
             rowViews[field.key] = row
@@ -244,13 +251,16 @@ private final class SettingsList: NSStackView {
 
     private func updateState() {
         status.stringValue = model.status
-        diagnostics.stringValue = model.errors.joined(separator: "\n")
+        diagnostics.stringValue = SettingsField.readable(model.errors.joined(separator: "\n"))
         diagnostics.toolTip = diagnostics.stringValue
         diagnostics.isHidden = model.errors.isEmpty
         saveButton.isEnabled = model.canSave
         discardButton.isEnabled = model.dirty
         window?.isDocumentEdited = model.dirty
-        for (key, row) in rowViews { row.showError(model.error(for: key), enabled: model.record != nil) }
+        for (key, row) in rowViews {
+            row.showError(model.error(for: key), enabled: model.record != nil)
+            row.refreshFontPreset(model.usesBundledFontPreset)
+        }
     }
 
     private func save() { _ = model.save(); updateState() }
@@ -258,9 +268,9 @@ private final class SettingsList: NSStackView {
     private func reload() {
         if model.dirty {
             let alert = NSAlert()
-            alert.messageText = "放弃未保存的修改？"
-            alert.addButton(withTitle: "放弃并重新读取")
-            alert.addButton(withTitle: "继续编辑")
+            alert.messageText = "Discard unsaved changes?"
+            alert.addButton(withTitle: "Discard and Reload")
+            alert.addButton(withTitle: "Keep Editing")
             guard alert.runModal() == .alertFirstButtonReturn else { return }
         }
         model.reload()
@@ -269,10 +279,10 @@ private final class SettingsList: NSStackView {
 
     private func resetDefaults() {
         let alert = NSAlert()
-        alert.messageText = "恢复全部默认设置？"
-        alert.informativeText = "已保存设置会先备份。未保存的修改将被清除，重启后生效。"
-        alert.addButton(withTitle: "恢复默认")
-        alert.addButton(withTitle: "取消")
+        alert.messageText = "Restore all defaults?"
+        alert.informativeText = "Saved settings will be backed up. Unsaved changes will be discarded. Restart to apply."
+        alert.addButton(withTitle: "Restore Defaults")
+        alert.addButton(withTitle: "Cancel")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         do {
             try model.store.restoreDefaults()

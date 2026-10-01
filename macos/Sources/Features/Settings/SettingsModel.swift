@@ -31,27 +31,49 @@ import Foundation
             input.values.forEach { displayed[$0.key] = $0.value }
             errors = store.validate(input)
             inputIsValid = errors.isEmpty
-            status = "设置保存在应用内；保存后重启生效。"
+            status = "Settings are stored in the app. Restart after saving to apply changes."
         } catch {
             record = nil
             inputIsValid = false
             errors = [error.localizedDescription]
-            status = "读取失败，可重试或恢复默认设置。"
+            status = "Unable to read settings. Retry or restore defaults."
         }
     }
 
     func edit(_ field: SettingsField, value: String) {
-        displayed[field.key] = value
-        input.values[field.key] = value
+        edit([field.key: value])
+    }
+
+    var usesBundledFontPreset: Bool {
+        let family = displayed["font-family", default: ""].components(separatedBy: "\n").first ?? ""
+        let style = displayed["font-style", default: "default"].lowercased()
+        return (family.isEmpty || family == SettingsFontPicker.bundledFamily)
+            && ["", "default", "medium"].contains(style)
+            && displayed["font-thicken"] == "true" && displayed["font-thicken-strength"] == "255"
+    }
+
+    func applyBundledFontPreset(families: String) {
+        // The bundled family's automatic face is Medium. Leave style discovery
+        // automatic so later choices and fallback families use their own face.
+        edit(["font-family": families, "font-style": "default", "font-thicken": "true", "font-thicken-strength": "255"])
+    }
+
+    private func edit(_ changes: [String: String]) {
+        let original = record?.current
+        let parsed = original.flatMap { store.parse($0) }
         // Returning a field to its original value should also remove its dirty
         // state, instead of introducing an unnecessary explicit override.
-        if let original = record?.current, let parsed = store.parse(original) {
-            let initial = original.values[field.key] ?? SettingsField.values(from: parsed.formattedEntry(field.key)).joined(separator: "\n")
-            if value == initial { input.values[field.key] = original.values[field.key] }
+        for (key, value) in changes {
+            displayed[key] = value
+            input.values[key] = value
+            if let original, let parsed {
+                let initial = original.values[key] ?? SettingsField.values(from: parsed.formattedEntry(key)).joined(separator: "\n")
+                if value == initial { input.values[key] = original.values[key] }
+            }
         }
         errors = store.validate(input)
         inputIsValid = errors.isEmpty
-        status = errors.isEmpty ? "有未保存的修改；保存后重启生效。" : "请先修正无效设置。"
+        status = errors.isEmpty ? "Unsaved changes. Restart after saving to apply changes." : "Fix the invalid settings before saving."
     }
 
     func error(for key: String) -> String? {
@@ -64,11 +86,11 @@ import Foundation
         do {
             self.record = try store.save(input, revision: record.revision)
             errors = []
-            status = "已保存。重启应用后生效。"
+            status = "Saved. Restart the app to apply changes."
             return true
         } catch {
             errors = [error.localizedDescription]
-            status = "保存失败；修改内容仍保留在窗口中。"
+            status = "Unable to save. Your edits are still available in this window."
             return false
         }
     }

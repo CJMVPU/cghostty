@@ -92,10 +92,10 @@ final class GhosttyConfigSnapshotUITests: GhosttyCustomConfigCase {
         XCTAssertTrue(app.windows["Before Reset"].waitForExistence(timeout: 10))
         app.menuBars.menuBarItems["cghostty"].click()
         app.menuItems["Restore Default Settings…"].click()
-        let restore = app.dialogs.buttons["恢复默认 / Restore Defaults"]
+        let restore = app.dialogs.buttons["Restore Defaults"]
         XCTAssertTrue(restore.waitForExistence(timeout: 5))
         restore.click()
-        let ready = app.staticTexts["重启后使用默认设置 / Defaults Ready for Next Launch"]
+        let ready = app.staticTexts["Defaults Ready for Next Launch"]
         XCTAssertTrue(ready.waitForExistence(timeout: 5))
         app.typeKey("\n", modifierFlags: [])
         XCTAssertTrue(app.windows["Before Reset"].exists)

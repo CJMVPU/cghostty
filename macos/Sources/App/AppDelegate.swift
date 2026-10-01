@@ -808,20 +808,20 @@ class AppDelegate: NSObject,
 
     @IBAction func restoreDefaultSettings(_ sender: Any?) {
         let alert = NSAlert()
-        alert.messageText = "恢复默认设置？ / Restore Default Settings?"
-        alert.informativeText = "当前配置会先备份，再清除用户覆盖。重启应用后生效，当前终端保持不变。\nYour configuration will be backed up. Defaults take effect after restarting; current terminals stay unchanged."
-        alert.addButton(withTitle: "恢复默认 / Restore Defaults")
-        alert.addButton(withTitle: "取消 / Cancel")
+        alert.messageText = "Restore Default Settings?"
+        alert.informativeText = "Your settings will be backed up. Restart the app to apply defaults."
+        alert.addButton(withTitle: "Restore Defaults")
+        alert.addButton(withTitle: "Cancel")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         do {
             let backup = try ghostty.restoreDefaultSettings()
             let result = NSAlert()
-            result.messageText = "重启后使用默认设置 / Defaults Ready for Next Launch"
-            result.informativeText = backup.map { "备份 / Backup: \($0.path)" } ?? "当前终端保持不变。 / Current terminals are unchanged."
+            result.messageText = "Defaults Ready for Next Launch"
+            result.informativeText = backup.map { "Backup: \($0.path)" } ?? "Restart the app to apply defaults."
             result.runModal()
         } catch {
             let failure = NSAlert(error: error)
-            failure.messageText = "无法完成恢复默认设置 / Could Not Restore Default Settings"
+            failure.messageText = "Could Not Restore Default Settings"
             failure.runModal()
         }
     }

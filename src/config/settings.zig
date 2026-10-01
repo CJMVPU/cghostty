@@ -35,7 +35,7 @@ pub fn catalog(alloc: std.mem.Allocator) ![:0]const u8 {
         try std.json.Stringify.value(.{
             .key = name,
             .group = entry.group,
-            .title = entry.zh,
+            .title = entry.en,
             .note = entry.note orelse "",
             .kind = kind,
             .choices = choices,
