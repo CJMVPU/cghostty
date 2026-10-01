@@ -63,11 +63,13 @@ final class SettingsScalarEditor: SettingsValueEditor, NSTextFieldDelegate, NSCo
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
     override func refresh(context: [String: String]) {
-        guard field.isFontStyle else { return }
-        if combo.currentEditor() == nil, let value = context[field.key], raw != value {
+        if combo.currentEditor() == nil, pathInput?.currentEditor() == nil,
+           let value = context[field.key], raw != value {
             raw = value
+            pathInput?.stringValue = value
             populate()
         }
+        guard field.isFontStyle else { return }
         let familyKey = field.key.replacingOccurrences(of: "font-style", with: "font-family")
         let selected = context[familyKey]?.components(separatedBy: "\n").first ?? ""
         let next = selected.isEmpty ? (context["font-family"]?.components(separatedBy: "\n").first ?? SettingsFontPicker.bundledFamily) : selected
@@ -176,6 +178,12 @@ final class SettingsFlagsEditor: SettingsValueEditor {
             }
         }
         return result
+    }
+
+    override func refresh(context: [String: String]) {
+        guard let value = context[field.key] else { return }
+        let enabled = Self.enabledFlags(value, defaults: field.defaultValue, names: field.flags)
+        for (name, button) in zip(field.flags, toggles) { button.state = enabled.contains(name) ? .on : .off }
     }
 
     private func publish() {

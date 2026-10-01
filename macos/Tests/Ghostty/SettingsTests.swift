@@ -54,6 +54,31 @@ import Testing
         }
     }
 
+    @Test func themeInheritanceUpdatesDraftWithoutChangingRunningSettings() throws {
+        try withStore("background = #102030") { store, source in
+            _ = store.load(cli: false)
+            let model = SettingsModel(store: store)
+            let theme = source.deletingLastPathComponent().appendingPathComponent("TestTheme")
+            try "background = #abcdef\nforeground = #123456".write(to: theme, atomically: true, encoding: .utf8)
+            let original = model.runningValues
+            model.edit(try #require(SettingsField.byKey["theme"]), value: theme.path)
+            #expect(model.errors.isEmpty)
+            #expect(model.displayed["foreground"] == "#123456")
+            #expect(model.displayed["background"] == "#102030")
+            #expect(model.savedValues == original)
+            let size = try #require(SettingsField.byKey["font-size"])
+            model.edit(size, value: "invalid")
+            #expect(model.displayed["font-size"] == "invalid")
+            #expect(model.effectiveValues["foreground"] == "#123456")
+            model.edit(size, value: "18")
+            #expect(model.save())
+            #expect(model.savedValues["foreground"] == "#123456")
+            #expect(model.runningValues == original)
+            model.reload()
+            #expect(model.displayed["foreground"] == "#123456")
+        }
+    }
+
     @Test func defaultsAreInternalAndDoNotCreateLegacyFile() throws {
         try withStore { store, source in
             #expect(store.load(cli: false)?.errors.isEmpty == true)

@@ -88,6 +88,17 @@ final class SettingsThemeEditor: SettingsValueEditor, NSComboBoxDelegate, NSComb
         }
         return (light, dark)
     }
+    override func refresh(context: [String: String]) {
+        guard let value = context["theme"], value != raw, combos.allSatisfy({ $0.currentEditor() == nil }) else { return }
+        raw = value
+        let pair = Self.split(value)
+        mode.selectedSegment = value.hasPrefix("light:") || value.hasPrefix("dark:") ? 1 : 0
+        combos[0].stringValue = pair.0
+        combos[1].stringValue = pair.1
+        updateVisibility()
+        updatePreview()
+    }
+
     private func updateVisibility() {
         themeRows[1].isHidden = mode.selectedSegment == 0
         themeRows[0].arrangedSubviews.first?.isHidden = mode.selectedSegment == 0

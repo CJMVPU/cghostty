@@ -51,6 +51,7 @@ import Darwin
     var url: URL { directory.appendingPathComponent("settings.json") }
     var validationSource: URL { directory.appendingPathComponent("settings") }
     private(set) var startupErrors: [String] = []
+    private(set) var runningValues: [String: String] = [:]
     private static let maximumRecordBytes = 16 * 1024 * 1024
 
     init(legacySource: URL, directory: URL? = nil) {
@@ -67,6 +68,19 @@ import Darwin
     }
 
     func load(cli: Bool = true) -> Ghostty.ConfigHandle? {
+        let config = loadConfiguration(cli: cli)
+        runningValues = Self.values(config)
+        return config
+    }
+
+    static func values(_ config: Ghostty.ConfigHandle?) -> [String: String] {
+        guard let config else { return [:] }
+        return Dictionary(uniqueKeysWithValues: SettingsField.catalog.map {
+            ($0.key, SettingsField.values(from: config.formattedEntry($0.key)).joined(separator: "\n"))
+        })
+    }
+
+    private func loadConfiguration(cli: Bool) -> Ghostty.ConfigHandle? {
         startupErrors = []
         do {
             let record = try FileManager.default.fileExists(atPath: url.path) ? read() : migrate()
@@ -143,15 +157,24 @@ import Darwin
 
     @discardableResult
     func save(_ input: Input, revision: UUID) throws -> Record {
-        let errors = validate(input)
-        guard errors.isEmpty else { throw Failure.invalid(errors) }
+        try saveEvaluated(input, revision: revision).record
+    }
+
+    struct Saved {
+        let record: Record
+        let evaluation: Evaluation
+    }
+
+    func saveEvaluated(_ input: Input, revision: UUID) throws -> Saved {
+        let evaluation = evaluate(input)
+        guard evaluation.diagnostics.isEmpty else { throw Failure.invalid(evaluation.diagnostics.map(\.rawMessage)) }
         return try withLock {
             let old = try read()
             guard old.revision == revision else { throw Failure.changed }
             let previous = validate(old.current).isEmpty ? old.current : old.previous
             let record = Record(current: input, previous: previous)
             try write(record)
-            return record
+            return Saved(record: record, evaluation: evaluation)
         }
     }
 

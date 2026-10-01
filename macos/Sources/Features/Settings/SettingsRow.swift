@@ -165,9 +165,9 @@ final class SettingsRow: NSStackView, NSTextFieldDelegate {
     func controlTextDidChange(_ obj: Notification) { changed(input?.stringValue ?? "") }
 
     func refresh(context: [String: String], preset: Bool) {
-        fontPicker?.refreshPreset(preset)
-        valueEditor?.refresh(context: context)
         let value = context[field.key] ?? field.defaultValue
+        fontPicker?.refresh(value: value, preset: preset)
+        valueEditor?.refresh(context: context)
         if input?.currentEditor() == nil { input?.stringValue = value }
         if let index = field.choiceValues.firstIndex(of: value.isEmpty ? field.defaultValue : value) {
             segments?.selectedSegment = index

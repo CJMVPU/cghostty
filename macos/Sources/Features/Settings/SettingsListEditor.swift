@@ -176,6 +176,15 @@ final class SettingsListEditor: SettingsValueEditor, NSTextFieldDelegate, NSText
         entries = value.isEmpty ? [] : value.components(separatedBy: "\n")
         changed(value)
     }
+    override func refresh(context: [String: String]) {
+        guard let value = context[field.key], value != serialized,
+              inputs.allSatisfy({ $0.0.currentEditor() == nil && $0.1?.currentEditor() == nil }),
+              rawEditor == nil || window?.firstResponder !== rawEditor else { return }
+        entries = value.isEmpty ? [] : value.components(separatedBy: "\n")
+        placeholders = []
+        render()
+    }
+
     override func setEnabled(_ enabled: Bool) {
         super.setEnabled(enabled)
         rawEditor?.isEditable = enabled

@@ -93,6 +93,19 @@ final class SettingsMeasureEditor: SettingsValueEditor, NSTextFieldDelegate {
         refreshInputs()
     }
 
+    override func refresh(context: [String: String]) {
+        guard let value = context[field.key], numbers.allSatisfy({ $0.currentEditor() == nil }) else { return }
+        let parts = numbers.count == 2 ? value.components(separatedBy: ",") : [value]
+        for index in numbers.indices {
+            let parsed = Self.split(parts.indices.contains(index) ? parts[index] : "", choices: modes[index])
+            numbers[index].stringValue = parsed.0
+            let selected = modes[index].firstIndex(of: parsed.1) ?? 0
+            if let segments = units[index] as? NSSegmentedControl { segments.selectedSegment = selected }
+            if let popup = units[index] as? NSPopUpButton { popup.selectItem(at: selected) }
+        }
+        refreshInputs()
+    }
+
     private func selected(_ index: Int) -> String {
         if let segments = units[index] as? NSSegmentedControl {
             let selected = segments.selectedSegment

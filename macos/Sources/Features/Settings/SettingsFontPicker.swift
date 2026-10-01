@@ -154,6 +154,15 @@ final class SettingsFontPicker: NSStackView, NSComboBoxDelegate {
         addButton?.isEnabled = enabled && canAddFallback
     }
 
+    func refresh(value: String, preset: Bool) {
+        if value != serialized, combos.allSatisfy({ $0.currentEditor() == nil }) {
+            families = value.isEmpty ? [""] : value.components(separatedBy: "\n")
+            usesPreset = preset
+            render()
+        }
+        refreshPreset(preset)
+    }
+
     func refreshPreset(_ active: Bool) {
         guard field.key == "font-family", active != usesPreset, let primary = combos.first else { return }
         usesPreset = active

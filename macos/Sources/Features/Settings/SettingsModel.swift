@@ -4,6 +4,10 @@ import Foundation
     let store: SettingsStore
     private(set) var record: SettingsStore.Record?
     private(set) var input = SettingsStore.Input()
+    /// Raw edits remain in input; these snapshots contain resolved core values.
+    private(set) var effectiveValues: [String: String] = [:]
+    private(set) var savedValues: [String: String] = [:]
+    let runningValues: [String: String]
     private(set) var displayed: [String: String] = [:]
     private(set) var diagnostics: [SettingsDiagnostic] = []
     var errors: [String] { diagnostics.map(\.displayMessage) }
@@ -24,6 +28,7 @@ import Foundation
 
     init(store: SettingsStore) {
         self.store = store
+        runningValues = store.runningValues
         reload()
     }
 
@@ -35,15 +40,10 @@ import Foundation
             let loaded = try store.read()
             record = loaded
             input = loaded.current
-            displayed = [:]
             let evaluation = store.evaluate(input)
-            if let parsed = evaluation.config {
-                for field in SettingsField.catalog {
-                    displayed[field.key] = SettingsField.values(from: parsed.formattedEntry(field.key)).joined(separator: "\n")
-                }
-            }
-            // Invalid edits in a damaged record must remain visible and fixable.
-            input.values.forEach { displayed[$0.key] = $0.value }
+            effectiveValues = SettingsStore.values(evaluation.config)
+            savedValues = effectiveValues
+            refreshDisplayed()
             originalDisplayed = displayed
             diagnostics = evaluation.diagnostics
             inputIsValid = errors.isEmpty
@@ -105,9 +105,17 @@ import Foundation
         validationTask?.cancel()
         validationTask = nil
         validationPending = false
-        diagnostics = store.evaluate(input).diagnostics
+        let evaluation = store.evaluate(input)
+        diagnostics = evaluation.diagnostics
+        // Keep the last coherent resolution while invalid raw edits stay visible.
+        if diagnostics.isEmpty { effectiveValues = SettingsStore.values(evaluation.config) }
+        refreshDisplayed()
         inputIsValid = diagnostics.isEmpty
         updateStatus()
+    }
+
+    private func refreshDisplayed() {
+        displayed = effectiveValues.merging(input.values) { _, raw in raw }
     }
 
     private func updateStatus() {
@@ -130,7 +138,11 @@ import Foundation
         validationPending = false
         guard let record else { return false }
         do {
-            self.record = try store.save(input, revision: record.revision)
+            let saved = try store.saveEvaluated(input, revision: record.revision)
+            self.record = saved.record
+            effectiveValues = SettingsStore.values(saved.evaluation.config)
+            savedValues = effectiveValues
+            refreshDisplayed()
             diagnostics = []
             inputIsValid = true
             originalDisplayed = displayed
