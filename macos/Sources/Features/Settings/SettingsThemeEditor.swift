@@ -6,7 +6,7 @@ final class SettingsThemeEditor: SettingsValueEditor, NSComboBoxDelegate, NSComb
     private var combos: [SettingsComboBox] = []
     private var themeRows: [NSStackView] = []
     private let preview = settingsLabel("Aa Bb 0123   Terminal preview")
-    private let names: [String]
+    private var names: [String]
     private var filtered: [ObjectIdentifier: [String]] = [:]
     override var headingControl: NSControl? { mode }
     private var raw: String
@@ -14,20 +14,7 @@ final class SettingsThemeEditor: SettingsValueEditor, NSComboBoxDelegate, NSComb
     init(value: String, changed: @escaping (String) -> Void) {
         self.changed = changed
         raw = value
-        var directories: [URL] = []
-        if let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
-            directories.append(support.appendingPathComponent(Bundle.main.bundleIdentifier ?? "com.cjmvpu.cghostty").appendingPathComponent("themes"))
-        }
-        if let resources = Bundle.main.resourceURL { directories.append(resources.appendingPathComponent("cghostty/themes")) }
-        #if !DEBUG
-        if let resources = ProcessInfo.processInfo.environment["CGHOSTTY_RESOURCES_DIR"], !resources.isEmpty {
-            directories.append(URL(fileURLWithPath: resources).appendingPathComponent("themes"))
-        }
-        #endif
-        names = Set(directories.flatMap { directory in
-            ((try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.isRegularFileKey], options: .skipsHiddenFiles)) ?? [])
-                .filter { (try? $0.resolvingSymlinksInPath().resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true }.map(\.lastPathComponent)
-        }).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        names = SettingsThemeCatalog.shared.load()
         super.init(frame: .zero)
         orientation = .vertical
         alignment = .leading
@@ -132,6 +119,12 @@ final class SettingsThemeEditor: SettingsValueEditor, NSComboBoxDelegate, NSComb
         DispatchQueue.main.async { [weak self] in self?.committed() }
     }
     func comboBoxWillPopUp(_ notification: Notification) {
+        let updated = SettingsThemeCatalog.shared.load()
+        if names != updated {
+            names = updated
+            filtered = [:]
+            combos.forEach { $0.reloadData() }
+        }
         guard let combo = notification.object as? NSComboBox else { return }
         if names.contains(combo.stringValue) { filtered[ObjectIdentifier(combo)] = nil; combo.reloadData() }
     }

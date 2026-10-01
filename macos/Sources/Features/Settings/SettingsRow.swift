@@ -11,7 +11,7 @@ final class SettingsRow: NSStackView, NSTextFieldDelegate {
     private var valueEditor: SettingsValueEditor?
 
     init(field: SettingsField, value: String, usesFontPreset: Bool = false, context: [String: String] = [:],
-         presetSelected: @escaping (String) -> Void, changed: @escaping (String) -> Void) {
+         listState: SettingsListEditor.State = SettingsListEditor.State(), presetSelected: @escaping (String) -> Void, changed: @escaping (String) -> Void) {
         self.field = field
         self.changed = changed
         super.init(frame: .zero)
@@ -62,7 +62,7 @@ final class SettingsRow: NSStackView, NSTextFieldDelegate {
                                             changed: changed, presetSelected: presetSelected)
             addArrangedSubview(picker)
             fontPicker = picker
-        } else if let editor = Self.makeEditor(field, value: value, context: context, changed: changed) {
+        } else if let editor = Self.makeEditor(field, value: value, context: context, listState: listState, changed: changed) {
             valueEditor = editor
             if let control = editor.headingControl { heading.addArrangedSubview(control) }
             if field.presentation.inline {
@@ -148,14 +148,14 @@ final class SettingsRow: NSStackView, NSTextFieldDelegate {
         }
     }
 
-    private static func makeEditor(_ field: SettingsField, value: String, context: [String: String],
+    private static func makeEditor(_ field: SettingsField, value: String, context: [String: String], listState: SettingsListEditor.State,
                                    changed: @escaping (String) -> Void) -> SettingsValueEditor? {
         switch field.presentation.editor {
         case .flags: return SettingsFlagsEditor(field: field, value: value, changed: changed)
         case .theme: return SettingsThemeEditor(value: value, changed: changed)
         case .fontStyle, .color, .path: return SettingsScalarEditor(field: field, value: value, context: context, changed: changed)
         case .duration, .limit, .quickSize, .blur: return SettingsMeasureEditor(field: field, value: value, changed: changed)
-        case .list: return SettingsListEditor(field: field, value: value, changed: changed)
+        case .list: return SettingsListEditor(field: field, value: value, state: listState, changed: changed)
         case .scalar, .fontFamily: return nil
         }
     }

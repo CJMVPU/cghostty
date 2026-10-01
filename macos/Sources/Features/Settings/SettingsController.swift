@@ -31,6 +31,9 @@ private final class SettingsList: NSStackView {
     private let status = settingsLabel("")
     private let diagnostics = settingsLabel("")
     private var rowViews: [String: SettingsRow] = [:]
+    private var listStates: [String: SettingsListEditor.State] = [:]
+    private var renderedKeys: [String] = []
+    private var renderedSearch = false
     private var categoryButtons: [SettingsButton] = []
     private var saveButton: SettingsButton!
     private var discardButton: SettingsButton!
@@ -74,6 +77,7 @@ private final class SettingsList: NSStackView {
     func present() {
         if window?.isVisible != true && !model.dirty {
             model.reload()
+            listStates = [:]
             renderRows()
             updateState()
         }
@@ -84,6 +88,7 @@ private final class SettingsList: NSStackView {
 
     func settingsWereReset() {
         model.reload(afterReset: true)
+        listStates = [:]
         renderRows()
         updateState()
     }
@@ -221,10 +226,20 @@ private final class SettingsList: NSStackView {
 
     func controlTextDidChange(_ obj: Notification) {
         query = search.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        renderRows(offset: .zero)
+        renderRows(offset: .zero, searchOnly: true)
     }
 
-    private func renderRows(offset: NSPoint? = nil) {
+    private func renderRows(offset: NSPoint? = nil, searchOnly: Bool = false) {
+        let pinned = ["initial-window", "quit-after-last-window-closed", "window-width", "window-height"]
+        let fields = SettingsField.catalog.filter {
+            $0.isVisible && (query.isEmpty ? ($0.group == category || (category == 1 && pinned.contains($0.key))) : $0.matches(query))
+        }.sorted {
+            (pinned.firstIndex(of: $0.key) ?? 1000) < (pinned.firstIndex(of: $1.key) ?? 1000)
+        }
+        let keys = fields.map(\.key)
+        if searchOnly && renderedSearch && !query.isEmpty && keys == renderedKeys { return }
+        renderedKeys = keys
+        renderedSearch = !query.isEmpty
         let savedOffset = offset ?? rows.enclosingScrollView?.contentView.bounds.origin ?? .zero
         rows.arrangedSubviews.forEach { rows.removeArrangedSubview($0); $0.removeFromSuperview() }
         rowViews = [:]
@@ -238,12 +253,6 @@ private final class SettingsList: NSStackView {
             button.layer?.backgroundColor = index + 1 == category ? NSColor(calibratedWhite: 0.23, alpha: 1).cgColor : NSColor.clear.cgColor
             button.setAccessibilityValue(index + 1 == category ? "Selected" : "")
             button.contentTintColor = index + 1 == category ? NSColor(calibratedRed: 0.71, green: 0.81, blue: 0.63, alpha: 1) : .secondaryLabelColor
-        }
-        let pinned = ["initial-window", "quit-after-last-window-closed", "window-width", "window-height"]
-        let fields = SettingsField.catalog.filter {
-            $0.isVisible && (query.isEmpty ? ($0.group == category || (category == 1 && pinned.contains($0.key))) : $0.matches(query))
-        }.sorted {
-            (pinned.firstIndex(of: $0.key) ?? 1000) < (pinned.firstIndex(of: $1.key) ?? 1000)
         }
         rows.addArrangedSubview(settingsLabel(query.isEmpty ? groups[category - 1] : "\(fields.count) Search \(fields.count == 1 ? "Result" : "Results")"))
         if fields.isEmpty { rows.addArrangedSubview(settingsLabel("No matching settings", muted: true)) }
@@ -267,8 +276,10 @@ private final class SettingsList: NSStackView {
                     if breadcrumb != lastBreadcrumb { rows.addArrangedSubview(settingsLabel(breadcrumb, muted: true)) }
                     lastBreadcrumb = breadcrumb
                 }
+                let listState = listStates[field.key] ?? SettingsListEditor.State()
+                listStates[field.key] = listState
                 let row = SettingsRow(field: field, value: model.displayed[field.key] ?? field.defaultValue,
-                                      usesFontPreset: model.usesBundledFontPreset, context: model.displayed,
+                                      usesFontPreset: model.usesBundledFontPreset, context: model.displayed, listState: listState,
                                       presetSelected: { [weak self] families in
                     self?.model.applyBundledFontPreset(families: families)
                     self?.updateState()
@@ -330,6 +341,7 @@ private final class SettingsList: NSStackView {
             guard alert.runModal() == .alertFirstButtonReturn else { return }
         }
         model.reload()
+        listStates = [:]
         renderRows()
     }
 

@@ -79,6 +79,60 @@ import Testing
         }
     }
 
+    @Test func longListsKeepNewRowsBoundedAndRetainEditingState() throws {
+        let field = try #require(SettingsField.byKey["env"])
+        let value = (0..<1000).map { "KEY\($0)=value" }.joined(separator: "\n")
+        let state = SettingsListEditor.State()
+        var published = value
+        let editor = SettingsListEditor(field: field, value: value, state: state) { published = $0 }
+        let add = try #require(editor.controls.compactMap { $0 as? NSButton }.first { $0.title == "Add Entry" })
+        add.performClick(nil)
+        #expect(state.visibleIndices.count == 13)
+        #expect(published == value)
+        let key = try #require(editor.controls.first { $0.accessibilityIdentifier() == "settings.env.1000.key" } as? NSTextField)
+        key.stringValue = "LAST"
+        editor.controlTextDidChange(Notification(name: NSText.didChangeNotification))
+        #expect(published.hasSuffix("LAST="))
+        #expect(published.components(separatedBy: "\n")[999] == "KEY999=value")
+        let advanced = try #require(editor.controls.compactMap { $0 as? NSButton }.first { $0.title == "Advanced" })
+        advanced.performClick(nil)
+        let rebuilt = SettingsListEditor(field: field, value: published, state: state) { _ in }
+        #expect(state.isAdvanced)
+        #expect(rebuilt.controls.compactMap { $0 as? NSButton }.contains { $0.title == "Use Rows" })
+    }
+
+    @Test func themeCatalogNoticesAddedAndRemovedThemes() throws {
+        try withStore { _, source in
+            let directory = source.deletingLastPathComponent().appendingPathComponent("themes")
+            let catalog = SettingsThemeCatalog(directories: [directory])
+            #expect(catalog.load().isEmpty)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let file = directory.appendingPathComponent("Custom")
+            try "background = #123456".write(to: file, atomically: true, encoding: .utf8)
+            #expect(catalog.load() == ["Custom"])
+            #expect(catalog.load() == ["Custom"])
+            try FileManager.default.removeItem(at: file)
+            #expect(catalog.load().isEmpty)
+        }
+    }
+
+    @Test func equivalentSearchResultsReuseControls() throws {
+        try withStore { store, _ in
+            _ = store.load(cli: false)
+            let controller = SettingsController(store: store)
+            let root = try #require(controller.window?.contentView)
+            func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
+            let search = try #require(descendants(root).first { $0.accessibilityIdentifier() == "settings.search" } as? NSTextField)
+            search.stringValue = "font-size"
+            controller.controlTextDidChange(Notification(name: NSText.didChangeNotification, object: search))
+            let before = try #require(descendants(root).first { $0.accessibilityIdentifier() == "settings.font-size" })
+            search.stringValue = "font-size font"
+            controller.controlTextDidChange(Notification(name: NSText.didChangeNotification, object: search))
+            let after = try #require(descendants(root).first { $0.accessibilityIdentifier() == "settings.font-size" })
+            #expect(before === after)
+        }
+    }
+
     @Test func defaultsAreInternalAndDoNotCreateLegacyFile() throws {
         try withStore { store, source in
             #expect(store.load(cli: false)?.errors.isEmpty == true)

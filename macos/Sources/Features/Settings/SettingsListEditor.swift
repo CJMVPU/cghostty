@@ -5,21 +5,36 @@ import AppKit
 final class SettingsListEditor: SettingsValueEditor, NSTextFieldDelegate, NSTextViewDelegate {
     private let field: SettingsField
     private let changed: (String) -> Void
-    private var entries: [String]
+    final class State {
+        var entries: [String] = []
+        var placeholders: Set<Int> = []
+        var isAdvanced = false
+        var visibleCount = 12
+        var extraVisible: Set<Int> = []
+        var serialized: String { entries.enumerated().filter { !placeholders.contains($0.offset) }.map(\.element).joined(separator: "\n") }
+        var visibleIndices: [Int] { Set(entries.indices.prefix(visibleCount)).union(extraVisible.intersection(Set(entries.indices))).sorted() }
+    }
+    private let state: State
+    private var entries: [String] { get { state.entries } set { state.entries = newValue } }
     private let content = NSStackView()
     private let advanced = SettingsButton("Advanced") {}
     private var rawEditor: SettingsTextView?
-    private var inputs: [(NSTextField, NSTextField?)] = []
-    private var isAdvanced = false
-    private var visibleCount = 12
-    private var placeholders: Set<Int> = []
+    private var inputs: [(index: Int, key: NSTextField, value: NSTextField?)] = []
+    private var isAdvanced: Bool { get { state.isAdvanced } set { state.isAdvanced = newValue } }
+    private var visibleCount: Int { get { state.visibleCount } set { state.visibleCount = newValue } }
+    private var placeholders: Set<Int> { get { state.placeholders } set { state.placeholders = newValue } }
     private let recordingHint = settingsLabel("", muted: true)
-    private var serialized: String { entries.enumerated().filter { !placeholders.contains($0.offset) }.map(\.element).joined(separator: "\n") }
+    private var serialized: String { state.serialized }
 
-    init(field: SettingsField, value: String, changed: @escaping (String) -> Void) {
+    init(field: SettingsField, value: String, state: State = State(), changed: @escaping (String) -> Void) {
         self.field = field
         self.changed = changed
-        entries = value.isEmpty ? [] : value.components(separatedBy: "\n")
+        self.state = state
+        if state.serialized != value {
+            state.entries = value.isEmpty ? [] : value.components(separatedBy: "\n")
+            state.placeholders = []
+            state.extraVisible = []
+        }
         super.init(frame: .zero)
         orientation = .vertical
         alignment = .leading
@@ -30,6 +45,7 @@ final class SettingsListEditor: SettingsValueEditor, NSTextFieldDelegate, NSText
                 let value = self.serialized
                 self.entries = value.isEmpty ? [] : value.components(separatedBy: "\n")
                 self.placeholders = []
+                self.state.extraVisible = []
             }
             self.isAdvanced.toggle()
             self.render()
@@ -69,7 +85,8 @@ final class SettingsListEditor: SettingsValueEditor, NSTextFieldDelegate, NSText
         advanced.title = isAdvanced ? "Use Rows" : "Advanced"
         if isAdvanced { renderRaw(); return }
         if entries.isEmpty { content.addArrangedSubview(settingsLabel("No entries", muted: true)) }
-        for (index, entry) in entries.prefix(visibleCount).enumerated() {
+        for index in state.visibleIndices {
+            let entry = entries[index]
             let row = NSStackView()
             row.orientation = .horizontal
             row.spacing = 8
@@ -100,19 +117,21 @@ final class SettingsListEditor: SettingsValueEditor, NSTextFieldDelegate, NSText
             let remove = SettingsButton("Remove") { [weak self] in
                 guard let self else { return }
                 self.entries.remove(at: index)
+                self.state.extraVisible = Set(self.state.extraVisible.filter { $0 != index }.map { $0 > index ? $0 - 1 : $0 })
                 self.placeholders = Set(self.placeholders.filter { $0 != index }.map { $0 > index ? $0 - 1 : $0 })
                 self.changed(self.serialized)
                 self.render()
             }
             remove.setAccessibilityLabel("Remove entry \(index + 1)")
             row.addArrangedSubview(remove)
-            inputs.append((left, right))
+            inputs.append((index, left, right))
             controls += [left, remove]
             content.addArrangedSubview(row)
             row.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true
         }
-        if entries.count > visibleCount {
-            let more = SettingsButton("Show More (\(entries.count - visibleCount) remaining)") { [weak self] in
+        let remaining = entries.count - state.visibleIndices.count
+        if remaining > 0 {
+            let more = SettingsButton("Show More (\(remaining) remaining)") { [weak self] in
                 guard let self else { return }
                 self.visibleCount += 12
                 self.render()
@@ -124,9 +143,9 @@ final class SettingsListEditor: SettingsValueEditor, NSTextFieldDelegate, NSText
             guard let self else { return }
             self.placeholders.insert(self.entries.count)
             self.entries.append("")
-            self.visibleCount = self.entries.count
+            self.state.extraVisible.insert(self.entries.count - 1)
             self.render()
-            if let input = self.inputs.last?.0 { self.window?.makeFirstResponder(input) }
+            if let input = self.inputs.last?.key { self.window?.makeFirstResponder(input) }
         }
         content.addArrangedSubview(add)
         controls.append(add)
@@ -149,24 +168,25 @@ final class SettingsListEditor: SettingsValueEditor, NSTextFieldDelegate, NSText
         editor.textContainerInset = NSSize(width: 8, height: 8)
         editor.setAccessibilityIdentifier("settings.\(field.key)")
         scroll.documentView = editor
+        content.addArrangedSubview(scroll)
         scroll.heightAnchor.constraint(equalToConstant: 180).isActive = true
         scroll.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true
-        content.addArrangedSubview(scroll)
         content.addArrangedSubview(settingsLabel("One entry per line. Order is preserved.", muted: true))
         rawEditor = editor
     }
 
     private func publishRows() {
-        for (index, pair) in inputs.enumerated() {
+        for pair in inputs {
+            let index = pair.index
             if placeholders.contains(index) {
-                if pair.0.stringValue.isEmpty && (pair.1?.stringValue.isEmpty ?? true) { continue }
+                if pair.key.stringValue.isEmpty && (pair.value?.stringValue.isEmpty ?? true) { continue }
                 placeholders.remove(index)
             }
-            if let right = pair.1 {
+            if let right = pair.value {
                 // An untouched non-pair expression (e.g. 'clear') stays exact.
-                if Self.split(entries[index]).1 == nil && right.stringValue.isEmpty && pair.0.stringValue == entries[index] { continue }
-                entries[index] = pair.0.stringValue + "=" + right.stringValue
-            } else { entries[index] = pair.0.stringValue }
+                if Self.split(entries[index]).1 == nil && right.stringValue.isEmpty && pair.key.stringValue == entries[index] { continue }
+                entries[index] = pair.key.stringValue + "=" + right.stringValue
+            } else { entries[index] = pair.key.stringValue }
         }
         changed(serialized)
     }
@@ -178,10 +198,11 @@ final class SettingsListEditor: SettingsValueEditor, NSTextFieldDelegate, NSText
     }
     override func refresh(context: [String: String]) {
         guard let value = context[field.key], value != serialized,
-              inputs.allSatisfy({ $0.0.currentEditor() == nil && $0.1?.currentEditor() == nil }),
+              inputs.allSatisfy({ $0.key.currentEditor() == nil && $0.value?.currentEditor() == nil }),
               rawEditor == nil || window?.firstResponder !== rawEditor else { return }
         entries = value.isEmpty ? [] : value.components(separatedBy: "\n")
         placeholders = []
+        state.extraVisible = []
         render()
     }
 

@@ -69,8 +69,9 @@ struct SettingsPresentation {
     }
 }
 
-extension SettingsField {
-    var presentation: SettingsPresentation { SettingsPresentation(self) }
+@MainActor extension SettingsField {
+    @MainActor private static let presentations = Dictionary(uniqueKeysWithValues: catalog.map { ($0.key, SettingsPresentation($0)) })
+    @MainActor var presentation: SettingsPresentation { Self.presentations[key] ?? SettingsPresentation(self) }
     var isVisible: Bool { presentation.visible }
     var isFontFamily: Bool { presentation.editor == .fontFamily }
     var isFontStyle: Bool { presentation.editor == .fontStyle }
@@ -83,8 +84,12 @@ extension SettingsField {
     var isPairList: Bool { presentation.pairList }
     var unitLabel: String? { presentation.unit }
     var section: String { presentation.section }
+    @MainActor private static let searchIndex = Dictionary(uniqueKeysWithValues: catalog.map { ($0.key, $0.searchText) })
+    @MainActor private var searchText: String {
+        "\(title) \(key) \(help) \(choices.map(Self.choiceTitle).joined(separator: " ")) \(flags.joined(separator: " "))"
+    }
     @MainActor func matches(_ query: String) -> Bool {
-        let searchable = "\(title) \(key) \(help) \(choices.map(Self.choiceTitle).joined(separator: " ")) \(flags.joined(separator: " "))"
+        let searchable = Self.searchIndex[key] ?? searchText
         return query.split(whereSeparator: \.isWhitespace).allSatisfy { searchable.localizedCaseInsensitiveContains($0) }
     }
 }
