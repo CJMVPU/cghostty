@@ -128,8 +128,8 @@ final class GhosttyConfigSnapshotUITests: GhosttyCustomConfigCase {
         }
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: reportsGrid, object: nil)], timeout: 10), .completed)
         let attachment = XCTAttachment(screenshot: window.screenshot())
-        XCTAssertEqual(try String(contentsOf: output, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines), "33 133")
-        attachment.name = "LXGW WenKai Mono — default 16 pt, 133 × 33"
+        XCTAssertEqual(try String(contentsOf: output, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines), "43 157")
+        attachment.name = "LXGW WenKai Mono — default 16 pt, 157 × 43"
         attachment.lifetime = .keepAlways
         add(attachment)
         XCTAssertFalse(app.windows["Configuration Errors"].exists)

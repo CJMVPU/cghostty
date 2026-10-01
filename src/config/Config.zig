@@ -1939,7 +1939,7 @@ keybind: Keybinds = .{},
 /// This setting is currently only supported on macOS.
 @"window-colorspace": WindowColorspace = .srgb,
 
-/// The fixed window size in terminal grid cells: 133 columns by 33 rows.
+/// The fixed window size in terminal grid cells: 157 columns by 43 rows.
 /// The first surface converts the startup grid to a logical content size shared
 /// by normal windows. Font changes and split layouts do not resize the window.
 /// Edit these settings and restart the application to change window size.
@@ -1951,8 +1951,8 @@ keybind: Keybinds = .{},
 /// Windows larger than the available display area are constrained to fit.
 /// Moving between displays still updates the rendering resolution as needed.
 /// Quick Terminal uses quick-terminal-size instead.
-@"window-height": u32 = 33,
-@"window-width": u32 = 133,
+@"window-height": u32 = 43,
+@"window-width": u32 = 157,
 
 /// The starting window position. This position is in pixels and is relative
 /// to the top-left corner of the primary monitor. Both values must be set to take
