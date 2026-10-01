@@ -208,14 +208,6 @@ extension Ghostty {
             surface.updateConfig(config)
         }
 
-        @discardableResult
-        func restoreDefaultSettings() throws -> URL? {
-            guard let settingsStore else { return nil }
-            let backup = try settingsStore.restoreDefaults()
-            settingsController?.settingsWereReset()
-            return backup
-        }
-
         // MARK: Notifications
 
         // Called when the selected keyboard changes. We have to notify Ghostty so that

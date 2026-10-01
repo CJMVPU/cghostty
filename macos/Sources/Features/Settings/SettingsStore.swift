@@ -39,7 +39,7 @@ import Darwin
         var errorDescription: String? {
             switch self {
             case .invalid(let errors): return errors.joined(separator: "\n")
-            case .changed: return "Settings were changed by another app instance. Reload before editing."
+            case .changed: return "Settings were changed by another app instance. Discard this draft to load the saved settings."
             case .unreadable: return "Unable to read settings. Retry or restore defaults; existing data will be backed up."
             case .unsupported: return "These settings require a newer version of the app."
             }

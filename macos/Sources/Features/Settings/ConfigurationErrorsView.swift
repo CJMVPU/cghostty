@@ -5,57 +5,50 @@ import Observation
     var errors: [String] = []
 }
 
-struct ConfigurationErrorsView: View {
+/// Reuse the settings controls so startup diagnostics share the same fixed
+/// typography, dark appearance and scrolling behavior as the editor.
+struct ConfigurationErrorsView: NSViewRepresentable {
     let model: ConfigurationErrorsState
     let dismiss: () -> Void
     let edit: () -> Void
 
-    var body: some View {
-        VStack {
-            HStack {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundColor(.yellow)
-                    .font(.system(size: 52))
-                    .padding()
-                    .frame(alignment: .center)
-
-                Text("""
-                    Settings could not be fully applied. Review the messages below, open Settings to correct them, and restart the app.
-                    """)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
-            }
-
-            GeometryReader { geo in
-                ScrollView {
-                    VStack(alignment: .leading) {
-                        ForEach(model.errors, id: \.self) { error in
-                            Text(error)
-                                .lineLimit(nil)
-                                .font(.system(size: 12).monospaced())
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .topLeading)
-                        }
-
-                        Spacer()
-                    }
-                    .padding(.all)
-                    .frame(minHeight: geo.size.height)
-                    .background(Color(.controlBackgroundColor))
-                }
-            }
-
-            HStack {
-                Spacer()
-                Button("Close", action: dismiss)
-                    .keyboardShortcut(.cancelAction)
-                Button("Open Settings", action: edit)
-                    .keyboardShortcut(.defaultAction)
-            }
-            .controlSize(.large)
-            .padding([.bottom, .trailing])
-        }
-        .frame(minWidth: 480, maxWidth: 960, minHeight: 270)
+    func makeNSView(context: Context) -> NSStackView {
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 16
+        stack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
+        stack.addArrangedSubview(settingsLabel("Some settings could not be applied. Open Settings to review them, then restart."))
+        let scroll = NSScrollView()
+        scroll.hasVerticalScroller = false
+        scroll.drawsBackground = false
+        let editor = SettingsTextView(frame: NSRect(x: 0, y: 0, width: 600, height: 200))
+        editor.configurePlainText()
+        editor.isEditable = false
+        editor.isSelectable = true
+        editor.font = SettingsTypography.font
+        editor.textColor = NSColor(calibratedRed: 1, green: 0.57, blue: 0.5, alpha: 1)
+        editor.backgroundColor = NSColor(calibratedWhite: 0.115, alpha: 1)
+        editor.isVerticallyResizable = true
+        editor.autoresizingMask = [.width]
+        editor.textContainer?.widthTracksTextView = true
+        scroll.documentView = editor
+        scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 180).isActive = true
+        stack.addArrangedSubview(scroll)
+        let footer = NSStackView()
+        footer.orientation = .horizontal
+        let space = NSView()
+        space.setContentHuggingPriority(.init(1), for: .horizontal)
+        footer.addArrangedSubview(space)
+        footer.addArrangedSubview(SettingsButton("Close", handler: dismiss))
+        footer.addArrangedSubview(SettingsButton("Open Settings", handler: edit))
+        stack.addArrangedSubview(footer)
+        for view in stack.arrangedSubviews { view.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -40).isActive = true }
+        return stack
     }
 
+    func updateNSView(_ view: NSStackView, context: Context) {
+        let scroll = view.arrangedSubviews.compactMap { $0 as? NSScrollView }.first
+        (scroll?.documentView as? NSTextView)?.string = SettingsField.readable(model.errors.joined(separator: "\n\n"))
+    }
 }

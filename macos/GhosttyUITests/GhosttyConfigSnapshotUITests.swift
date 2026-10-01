@@ -83,7 +83,7 @@ final class GhosttyConfigSnapshotUITests: GhosttyCustomConfigCase {
         XCTAssertFalse(app.windows["Invalid Partial"].exists)
     }
 
-    @MainActor func testRestoreDefaultsMenuWaitsForRestart() throws {
+    @MainActor func testRestoreDefaultsInSettingsWaitsForRestart() throws {
         try updateConfig(configuration(title: "Before Reset"))
         let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         app.launch()
@@ -91,13 +91,15 @@ final class GhosttyConfigSnapshotUITests: GhosttyCustomConfigCase {
         defer { app.terminate() }
         XCTAssertTrue(app.windows["Before Reset"].waitForExistence(timeout: 10))
         app.menuBars.menuBarItems["cghostty"].click()
-        app.menuItems["Restore Default Settings…"].click()
+        XCTAssertFalse(app.menuItems["Restore Default Settings…"].exists)
+        app.menuItems["Settings…"].click()
+        let settings = app.windows["cghostty · Settings"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 10))
+        settings.buttons["Restore Defaults"].click()
         let restore = app.dialogs.buttons["Restore Defaults"]
         XCTAssertTrue(restore.waitForExistence(timeout: 5))
         restore.click()
-        let ready = app.staticTexts["Defaults Ready for Next Launch"]
-        XCTAssertTrue(ready.waitForExistence(timeout: 5))
-        app.typeKey("\n", modifierFlags: [])
+        XCTAssertTrue(restore.waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.windows["Before Reset"].exists)
         app.terminate()
         app.launch()

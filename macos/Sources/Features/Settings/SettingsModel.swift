@@ -8,7 +8,14 @@ import Foundation
     private(set) var errors: [String] = []
     private(set) var status = ""
     private var inputIsValid = false
+    private var originalDisplayed: [String: String] = [:]
+    private var restartRequired = false
+    private var savedStatus: String { restartRequired ? "Saved. Restart the app to apply changes." : "No unsaved changes." }
     var dirty: Bool { record.map { $0.current != input } ?? false }
+    var changedCount: Int {
+        guard let original = record?.current else { return 0 }
+        return Set(original.values.keys).union(input.values.keys).filter { original.values[$0] != input.values[$0] }.count
+    }
     var canSave: Bool { dirty && inputIsValid && record != nil }
 
     init(store: SettingsStore) {
@@ -16,7 +23,8 @@ import Foundation
         reload()
     }
 
-    func reload() {
+    func reload(afterReset: Bool = false) {
+        if afterReset { restartRequired = true }
         do {
             let loaded = try store.read()
             record = loaded
@@ -29,9 +37,10 @@ import Foundation
             }
             // Invalid edits in a damaged record must remain visible and fixable.
             input.values.forEach { displayed[$0.key] = $0.value }
+            originalDisplayed = displayed
             errors = store.validate(input)
             inputIsValid = errors.isEmpty
-            status = "Settings are stored in the app. Restart after saving to apply changes."
+            status = savedStatus
         } catch {
             record = nil
             inputIsValid = false
@@ -60,20 +69,22 @@ import Foundation
 
     private func edit(_ changes: [String: String]) {
         let original = record?.current
-        let parsed = original.flatMap { store.parse($0) }
         // Returning a field to its original value should also remove its dirty
         // state, instead of introducing an unnecessary explicit override.
         for (key, value) in changes {
             displayed[key] = value
             input.values[key] = value
-            if let original, let parsed {
-                let initial = original.values[key] ?? SettingsField.values(from: parsed.formattedEntry(key)).joined(separator: "\n")
+            if let original, let initial = originalDisplayed[key] {
                 if value == initial { input.values[key] = original.values[key] }
             }
         }
         errors = store.validate(input)
         inputIsValid = errors.isEmpty
-        status = errors.isEmpty ? "Unsaved changes. Restart after saving to apply changes." : "Fix the invalid settings before saving."
+        if !errors.isEmpty {
+            status = "Fix the invalid settings before saving."
+        } else if dirty {
+            status = "\(changedCount) modified \(changedCount == 1 ? "setting" : "settings"). Restart after saving to apply changes."
+        } else { status = savedStatus }
     }
 
     func error(for key: String) -> String? {
@@ -86,7 +97,9 @@ import Foundation
         do {
             self.record = try store.save(input, revision: record.revision)
             errors = []
-            status = "Saved. Restart the app to apply changes."
+            originalDisplayed = displayed
+            restartRequired = true
+            status = savedStatus
             return true
         } catch {
             errors = [error.localizedDescription]

@@ -36,10 +36,13 @@ class ConfigurationErrorsController: NSWindowController, NSWindowDelegate {
 
     override func loadWindow() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 480, height: 270),
+            contentRect: NSRect(x: 0, y: 0, width: 720, height: 400),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered, defer: false)
         window.title = "Configuration Errors"
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.backgroundColor = NSColor(calibratedWhite: 0.115, alpha: 1)
+        window.minSize = NSSize(width: 640, height: 360)
         window.isRestorable = false
         window.isReleasedWhenClosed = false
         window.delegate = self

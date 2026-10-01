@@ -35,6 +35,8 @@ private final class SettingsList: NSStackView {
     private var saveButton: SettingsButton!
     private var discardButton: SettingsButton!
     private let fieldEditor = SettingsTextView()
+    private var collapsedSections: Set<String> = ["Advanced Typography"]
+    private var categoryOffsets: [Int: NSPoint] = [:]
 
     init(store: SettingsStore, preferences: UserDefaults = .ghostty) {
         model = SettingsModel(store: store)
@@ -76,7 +78,7 @@ private final class SettingsList: NSStackView {
     }
 
     func settingsWereReset() {
-        model.reload()
+        model.reload(afterReset: true)
         renderRows()
         updateState()
     }
@@ -185,7 +187,6 @@ private final class SettingsList: NSStackView {
         footer.orientation = .horizontal
         footer.spacing = 12
         footer.addArrangedSubview(SettingsButton("Restore Defaults") { [weak self] in self?.resetDefaults() })
-        footer.addArrangedSubview(SettingsButton("Reload") { [weak self] in self?.reload() })
         let space = NSView()
         space.setContentHuggingPriority(.init(1), for: .horizontal)
         footer.addArrangedSubview(space)
@@ -204,48 +205,78 @@ private final class SettingsList: NSStackView {
     }
 
     private func selectCategory(_ category: Int) {
+        if query.isEmpty { categoryOffsets[self.category] = rows.enclosingScrollView?.contentView.bounds.origin }
         self.category = category
         preferences.set(category, forKey: "settings.category")
         query = ""
         search.stringValue = ""
-        renderRows()
+        renderRows(offset: categoryOffsets[category] ?? .zero)
     }
 
     func controlTextDidChange(_ obj: Notification) {
         query = search.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        renderRows()
+        renderRows(offset: .zero)
     }
 
-    private func renderRows() {
+    private func renderRows(offset: NSPoint? = nil) {
+        let savedOffset = offset ?? rows.enclosingScrollView?.contentView.bounds.origin ?? .zero
         rows.arrangedSubviews.forEach { rows.removeArrangedSubview($0); $0.removeFromSuperview() }
         rowViews = [:]
         for (index, button) in categoryButtons.enumerated() {
+            button.wantsLayer = true
+            button.layer?.cornerRadius = 7
+            button.layer?.backgroundColor = index + 1 == category ? NSColor(calibratedWhite: 0.23, alpha: 1).cgColor : NSColor.clear.cgColor
+            button.setAccessibilityValue(index + 1 == category ? "Selected" : "")
             button.contentTintColor = index + 1 == category ? NSColor(calibratedRed: 0.71, green: 0.81, blue: 0.63, alpha: 1) : .secondaryLabelColor
         }
-        rows.addArrangedSubview(settingsLabel(query.isEmpty ? groups[category - 1] : "Search Results"))
         let pinned = ["initial-window", "quit-after-last-window-closed", "window-width", "window-height"]
         let fields = SettingsField.catalog.filter {
-            query.isEmpty ? ($0.group == category || (category == 1 && pinned.contains($0.key))) : "\($0.title) \($0.key) \($0.help)".localizedCaseInsensitiveContains(query)
+            $0.isVisible && (query.isEmpty ? ($0.group == category || (category == 1 && pinned.contains($0.key))) : $0.matches(query))
         }.sorted {
             (pinned.firstIndex(of: $0.key) ?? 1000) < (pinned.firstIndex(of: $1.key) ?? 1000)
         }
+        rows.addArrangedSubview(settingsLabel(query.isEmpty ? groups[category - 1] : "\(fields.count) Search \(fields.count == 1 ? "Result" : "Results")"))
         if fields.isEmpty { rows.addArrangedSubview(settingsLabel("No matching settings", muted: true)) }
-        for field in fields {
-            let row = SettingsRow(field: field, value: model.displayed[field.key] ?? field.defaultValue,
-                                  usesFontPreset: model.usesBundledFontPreset,
-                                  presetSelected: { [weak self] families in
-                self?.model.applyBundledFontPreset(families: families)
-                // Let the native dropdown finish dispatching its selection first.
-                DispatchQueue.main.async { [weak self] in self?.renderRows() }
-            }, changed: { [weak self] value in
-                self?.model.edit(field, value: value)
-                self?.updateState()
-            })
-            rows.addArrangedSubview(row)
-            row.widthAnchor.constraint(equalTo: rows.widthAnchor, constant: -14).isActive = true
-            rowViews[field.key] = row
+        let sections = category == 2 && query.isEmpty ? ["Font", "Colors", "Cursor", "Advanced Typography"] : [""]
+        var lastBreadcrumb = ""
+        for section in sections {
+            if !section.isEmpty {
+                let button = SettingsButton("\(collapsedSections.contains(section) ? "▸" : "▾") \(section)") { [weak self] in
+                    guard let self else { return }
+                    if self.collapsedSections.contains(section) { self.collapsedSections.remove(section) } else { self.collapsedSections.insert(section) }
+                    self.renderRows()
+                }
+                button.isBordered = false
+                button.setAccessibilityIdentifier("settings.section.\(section)")
+                rows.addArrangedSubview(button)
+                if collapsedSections.contains(section) { continue }
+            }
+            for field in fields where section.isEmpty || field.section == section {
+                if !query.isEmpty {
+                    let breadcrumb = groups[field.group - 1] + (field.section.isEmpty ? "" : " · " + field.section)
+                    if breadcrumb != lastBreadcrumb { rows.addArrangedSubview(settingsLabel(breadcrumb, muted: true)) }
+                    lastBreadcrumb = breadcrumb
+                }
+                let row = SettingsRow(field: field, value: model.displayed[field.key] ?? field.defaultValue,
+                                      usesFontPreset: model.usesBundledFontPreset, context: model.displayed,
+                                      presetSelected: { [weak self] families in
+                    self?.model.applyBundledFontPreset(families: families)
+                    self?.updateState()
+                }, changed: { [weak self] value in
+                    self?.model.edit(field, value: value)
+                    self?.updateState()
+                })
+                rows.addArrangedSubview(row)
+                row.widthAnchor.constraint(equalTo: rows.widthAnchor, constant: -14).isActive = true
+                rowViews[field.key] = row
+            }
         }
-        rows.enclosingScrollView?.contentView.scroll(to: .zero)
+        rows.layoutSubtreeIfNeeded()
+        if let scroll = rows.enclosingScrollView {
+            let maxY = max(0, rows.bounds.height - scroll.contentView.bounds.height)
+            scroll.contentView.scroll(to: NSPoint(x: 0, y: min(savedOffset.y, maxY)))
+            scroll.reflectScrolledClipView(scroll.contentView)
+        }
         updateState()
     }
 
@@ -255,11 +286,12 @@ private final class SettingsList: NSStackView {
         diagnostics.toolTip = diagnostics.stringValue
         diagnostics.isHidden = model.errors.isEmpty
         saveButton.isEnabled = model.canSave
-        discardButton.isEnabled = model.dirty
+        discardButton.isEnabled = model.dirty || model.record == nil
+        discardButton.title = model.record == nil ? "Retry" : "Discard Changes"
         window?.isDocumentEdited = model.dirty
         for (key, row) in rowViews {
             row.showError(model.error(for: key), enabled: model.record != nil)
-            row.refreshFontPreset(model.usesBundledFontPreset)
+            row.refresh(context: model.displayed, preset: model.usesBundledFontPreset)
         }
     }
 

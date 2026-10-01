@@ -7,6 +7,7 @@ struct SettingsField: Decodable {
     let note: String
     let kind: String
     let choices: [String]
+    let flags: [String]
     let multiline: Bool
     let defaults: String
     let example: String
@@ -33,6 +34,8 @@ struct SettingsField: Decodable {
         case "false": return "Off"
         case "srgb": return "sRGB"
         case "macos": return "macOS"
+        case "ssh-env": return "SSH Environment"
+        case "ssh-terminfo": return "SSH Terminfo"
         case "block_hollow": return "Hollow Block"
         default: return value.replacingOccurrences(of: "-", with: " ").replacingOccurrences(of: "_", with: " ").capitalized
         }

@@ -31,6 +31,7 @@ pub fn catalog(alloc: std.mem.Allocator) ![:0]const u8 {
             .@"enum" => "enum",
             else => "text",
         };
+        const flags = comptime flagNames(T);
         const choices = comptime choicesFor(T);
         try std.json.Stringify.value(.{
             .key = name,
@@ -39,13 +40,27 @@ pub fn catalog(alloc: std.mem.Allocator) ![:0]const u8 {
             .note = entry.note orelse "",
             .kind = kind,
             .choices = choices,
-            .multiline = std.mem.indexOf(u8, @typeName(T), "Repeatable") != null or std.mem.eql(u8, name, "keybind"),
+            .flags = flags,
+            .multiline = std.mem.indexOf(u8, @typeName(T), "Repeatable") != null or std.mem.eql(u8, name, "keybind") or std.mem.eql(u8, name, "key-remap"),
             .defaults = value.written(),
             .example = entry.example orelse "",
         }, .{}, &output.writer);
     }
     try output.writer.writeByte(']');
     return alloc.dupeZ(u8, output.written());
+}
+
+// Flag names are derived from the same packed boolean structures the parser uses.
+fn flagNames(comptime T: type) []const []const u8 {
+    const info = @typeInfo(T);
+    if (info != .@"struct") return &.{};
+    if (info.@"struct".layout != .@"packed") return &.{};
+    const fields = info.@"struct".fields;
+    for (fields) |field| if (field.type != bool) return &.{};
+    var names: [fields.len][]const u8 = undefined;
+    for (fields, 0..) |field, i| names[i] = field.name;
+    const result = names;
+    return &result;
 }
 
 fn choicesFor(comptime T: type) []const []const u8 {

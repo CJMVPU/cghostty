@@ -519,6 +519,9 @@ class AppDelegate: NSObject,
     }
 
     private func localEventKeyDown(_ event: NSEvent) -> NSEvent? {
+        if let recorder = NSApp.keyWindow?.firstResponder as? SettingsShortcutRecorder,
+           recorder.capture(event) { return nil }
+
         if Ghostty.MenuShortcutManager.performTextEditingKeyEquivalent(
             with: event, responder: event.window?.firstResponder ?? NSApp.keyWindow?.firstResponder) {
             return nil
@@ -804,26 +807,6 @@ class AppDelegate: NSObject,
 
     @IBAction func openConfig(_ sender: Any?) {
         ghostty.openConfig()
-    }
-
-    @IBAction func restoreDefaultSettings(_ sender: Any?) {
-        let alert = NSAlert()
-        alert.messageText = "Restore Default Settings?"
-        alert.informativeText = "Your settings will be backed up. Restart the app to apply defaults."
-        alert.addButton(withTitle: "Restore Defaults")
-        alert.addButton(withTitle: "Cancel")
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        do {
-            let backup = try ghostty.restoreDefaultSettings()
-            let result = NSAlert()
-            result.messageText = "Defaults Ready for Next Launch"
-            result.informativeText = backup.map { "Backup: \($0.path)" } ?? "Restart the app to apply defaults."
-            result.runModal()
-        } catch {
-            let failure = NSAlert(error: error)
-            failure.messageText = "Could Not Restore Default Settings"
-            failure.runModal()
-        }
     }
 
     @IBAction func checkForUpdates(_ sender: Any?) {

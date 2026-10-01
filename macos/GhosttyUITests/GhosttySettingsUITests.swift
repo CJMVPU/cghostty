@@ -110,4 +110,135 @@ final class GhosttySettingsUITests: GhosttyCustomConfigCase {
         XCTAssertEqual(window.radioGroups["settings.cursor-style"].radioButtons["Bar"].value as? Int, 1)
         attach(window.screenshot(), name: "settings-choice-buttons")
     }
+    @MainActor func testStructuredEditorsSaveAndRestoreValues() throws {
+        // macOS may display a transient input-source indicator while switching
+        // focus. It is not a modal app alert and does not need a button click.
+        let monitor = addUIInterruptionMonitor(withDescription: "Input source indicator") { interruption in
+            guard interruption.buttons["InputSource"].exists else { return false }
+            return interruption.waitForNonExistence(timeout: 5)
+        }
+        defer { removeUIInterruptionMonitor(monitor) }
+        try updateConfig("initial-window = true\nwindow-save-state = never\nconfirm-close-surface = false\ncommand = /bin/zsh -f\nshell-integration = none\nenv = TOKEN=a=b\nundo-timeout = 5s")
+        let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
+        app.launch()
+        app.activate()
+        defer { app.terminate() }
+        XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 10))
+        app.menuBars.menuBarItems["cghostty"].click()
+        app.menuItems["Settings…"].click()
+        let window = app.windows["cghostty · Settings"]
+        XCTAssertTrue(window.waitForExistence(timeout: 10))
+        let search = window.textFields["settings.search"]
+        func find(_ key: String) {
+            search.click()
+            search.typeKey("a", modifierFlags: .command)
+            paste(key, into: search, submit: false)
+        }
+        find("env")
+        let token = window.textFields["settings.env.0.value"]
+        XCTAssertTrue(token.waitForExistence(timeout: 5))
+        XCTAssertEqual(token.value as? String, "a=b")
+        token.click()
+        token.typeKey("a", modifierFlags: .command)
+        paste("x=y=z", into: token, submit: false)
+        attach(window.screenshot(), name: "settings-environment-rows")
+        find("undo-timeout")
+        let duration = window.textFields["settings.undo-timeout.0.value"]
+        XCTAssertTrue(duration.waitForExistence(timeout: 5))
+        duration.click()
+        duration.typeKey("a", modifierFlags: .command)
+        duration.typeText("7")
+        find("scrollback-limit-lines")
+        let limit = window.radioGroups["settings.scrollback-limit-lines.0.unit"]
+        XCTAssertTrue(limit.waitForExistence(timeout: 5))
+        limit.radioButtons["Limited"].click()
+        let lines = window.textFields["settings.scrollback-limit-lines.0.value"]
+        lines.click()
+        lines.typeText("2000")
+        attach(window.screenshot(), name: "settings-limit-controls")
+        find("bell-features")
+        let audio = window.checkBoxes["settings.bell-features.audio"]
+        XCTAssertTrue(audio.waitForExistence(timeout: 5))
+        audio.click()
+        attach(window.screenshot(), name: "settings-feature-toggles")
+        let save = window.buttons["settings.save"]
+        XCTAssertTrue(save.isEnabled)
+        save.click()
+        app.terminate()
+        app.launch()
+        app.activate()
+        XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 10))
+        app.menuBars.menuBarItems["cghostty"].click()
+        app.menuItems["Settings…"].click()
+        XCTAssertTrue(window.waitForExistence(timeout: 10))
+        find("env")
+        XCTAssertEqual(token.value as? String, "x=y=z")
+        find("undo-timeout")
+        XCTAssertEqual(duration.value as? String, "7")
+        find("scrollback-limit-lines")
+        XCTAssertEqual(lines.value as? String, "2000")
+        find("font-style")
+        XCTAssertTrue(window.comboBoxes["settings.font-style"].waitForExistence(timeout: 5))
+        attach(window.screenshot(), name: "settings-font-styles")
+        find("theme")
+        XCTAssertTrue(window.comboBoxes["settings.theme.0"].waitForExistence(timeout: 5))
+        attach(window.screenshot(), name: "settings-theme-preview")
+        find("background")
+        attach(window.screenshot(), name: "settings-color-controls")
+        search.click()
+        search.typeKey("a", modifierFlags: .command)
+        search.typeKey(XCUIKeyboardKey.delete, modifierFlags: [])
+        window.buttons["Appearance"].click()
+        attach(window.screenshot(), name: "settings-appearance-sections")
+    }
+
+    @MainActor func testThemeSelectionAndShortcutRecording() throws {
+        try updateConfig("initial-window = true\nwindow-save-state = never\nconfirm-close-surface = false\ncommand = /bin/zsh -f\nshell-integration = none\nkeybind = super+shift+j=ignore")
+        let monitor = addUIInterruptionMonitor(withDescription: "Input source indicator") { interruption in
+            guard interruption.buttons["InputSource"].exists else { return false }
+            return interruption.waitForNonExistence(timeout: 5)
+        }
+        defer { removeUIInterruptionMonitor(monitor) }
+        let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
+        app.launch()
+        app.activate()
+        defer { app.terminate() }
+        XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 10))
+        app.menuBars.menuBarItems["cghostty"].click()
+        app.menuItems["Settings…"].click()
+        let window = app.windows["cghostty · Settings"]
+        XCTAssertTrue(window.waitForExistence(timeout: 10))
+        let search = window.textFields["settings.search"]
+        search.click()
+        paste("theme", into: search, submit: false)
+        let theme = window.comboBoxes["settings.theme.0"]
+        XCTAssertTrue(theme.waitForExistence(timeout: 5))
+        theme.click()
+        theme.typeKey("a", modifierFlags: .command)
+        paste("Builtin Tango", into: theme, submit: false)
+        theme.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).click()
+        let option = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@ OR value == %@", "Builtin Tango Dark", "Builtin Tango Dark")).firstMatch
+        XCTAssertTrue(option.waitForExistence(timeout: 5))
+        option.click()
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "Builtin Tango Dark"), object: theme)], timeout: 5), .completed)
+        search.click()
+        XCTAssertTrue(window.buttons["settings.save"].isEnabled)
+        attach(window.screenshot(), name: "settings-selected-theme")
+        search.typeKey("a", modifierFlags: .command)
+        paste("keybind", into: search, submit: false)
+        let recorder = window.buttons["Record"].firstMatch
+        XCTAssertTrue(recorder.waitForExistence(timeout: 5))
+        recorder.click()
+        XCTAssertTrue(window.buttons["Press Keys"].waitForExistence(timeout: 3))
+        attach(window.screenshot(), name: "settings-recording-active")
+        app.typeKey("9", modifierFlags: [.control, .shift])
+        let shortcut = window.textFields["settings.keybind.0.key"]
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "ctrl+shift+9"), object: shortcut)], timeout: 5), .completed)
+        attach(window.screenshot(), name: "settings-recorded-shortcut")
+        let save = window.buttons["settings.save"]
+        XCTAssertTrue(save.isEnabled)
+        save.click()
+        XCTAssertTrue(save.wait(for: \.isEnabled, toEqual: false, timeout: 3))
+    }
+
 }

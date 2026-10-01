@@ -49,6 +49,8 @@ class GhosttyCustomConfigCase: XCTestCase {
         search.click()
         search.typeKey("a", modifierFlags: .command)
         paste(key, into: search, submit: false)
+        let advanced = window.buttons["settings." + key + ".advanced"]
+        if advanced.exists { advanced.click() }
         let text = window.textFields["settings." + key]
         let multiline = window.textViews["settings." + key]
         if text.exists {

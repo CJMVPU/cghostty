@@ -24,8 +24,6 @@ extension AppDelegate {
         self.menuOpenConfig = menuOpenConfig
         menuOpenConfig.target = self
         cghosttyMenu.addItem(.separator())
-        let reset = cghosttyMenu.addItem(withTitle: "Restore Default Settings…", action: #selector(restoreDefaultSettings(_:)), keyEquivalent: "")
-        reset.target = self
         let menuSecureInput = shortcut("toggle_secure_input", cghosttyMenu.addItem(withTitle: "Secure Keyboard Entry", action: NSSelectorFromString("toggleSecureInput:"), keyEquivalent: ""))
         self.menuSecureInput = menuSecureInput
         menuSecureInput.target = self

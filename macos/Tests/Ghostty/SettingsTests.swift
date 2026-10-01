@@ -241,4 +241,139 @@ import Testing
             #expect(!(field.title + field.help).unicodeScalars.contains { (0x4E00...0x9FFF).contains($0.value) }, "\(field.key)")
         }
     }
+    @Test func returningToSavedValueClearsStatusAndDirtyState() throws {
+        try withStore("font-size = 17") { store, _ in
+            _ = store.load(cli: false)
+            let model = SettingsModel(store: store)
+            let field = try #require(SettingsField.catalog.first { $0.key == "font-size" })
+            model.edit(field, value: "18")
+            #expect(model.changedCount == 1 && model.canSave)
+            model.edit(field, value: "17")
+            #expect(!model.dirty && !model.canSave && model.changedCount == 0)
+            #expect(model.status == "No unsaved changes.")
+        }
+    }
+
+    @Test func semanticEditorsPreserveComplexValuesUntilExplicitEdit() throws {
+        let duration = try #require(SettingsField.catalog.first { $0.key == "undo-timeout" })
+        var updates: [String] = []
+        let measure = SettingsMeasureEditor(field: duration, value: "1h 30m", changed: { updates.append($0) })
+        #expect(updates.isEmpty)
+        let number = try #require(measure.controls.compactMap { $0 as? NSTextField }.first)
+        #expect(number.stringValue == "1h 30m")
+        measure.controlTextDidChange(Notification(name: NSText.didChangeNotification))
+        #expect(updates == ["1h 30m"])
+        #expect(SettingsField.catalog.first { $0.key == "key-remap" }?.multiline == true)
+        #expect(SettingsField.catalog.filter { ["maximize", "fullscreen"].contains($0.key) }.allSatisfy { !$0.isVisible })
+    }
+
+    @Test func flagControlsPersistExactCoreOptions() throws {
+        try withStore("shell-integration-features = cursor,no-sudo,title,no-ssh-env,no-ssh-terminfo,path") { store, _ in
+            _ = store.load(cli: false)
+            let model = SettingsModel(store: store)
+            let field = try #require(SettingsField.catalog.first { $0.key == "shell-integration-features" })
+            #expect(field.flags.contains("ssh-terminfo"))
+            let editor = SettingsFlagsEditor(field: field, value: model.displayed[field.key] ?? "") { model.edit(field, value: $0) }
+            let sudo = try #require(editor.controls.first { $0.accessibilityIdentifier() == "settings.shell-integration-features.sudo" } as? NSButton)
+            sudo.performClick(nil)
+            #expect(model.canSave && model.save())
+            let parsed = try #require(store.load(cli: false))
+            #expect(parsed.errors.isEmpty)
+            let value = SettingsField.values(from: parsed.formattedEntry(field.key)).joined(separator: "\n")
+            #expect(value.contains("sudo") && !value.contains("no-sudo"))
+            #expect(value.contains("no-ssh-env") && value.contains("no-ssh-terminfo"))
+        }
+    }
+
+    @Test func rowEditorPreservesEqualsInsideEnvironmentValues() throws {
+        try withStore("env = TOKEN=a=b=c\nenv = MODE=before") { store, _ in
+            _ = store.load(cli: false)
+            let model = SettingsModel(store: store)
+            let field = try #require(SettingsField.catalog.first { $0.key == "env" })
+            let editor = SettingsListEditor(field: field, value: "TOKEN=a=b=c\nMODE=before") { model.edit(field, value: $0) }
+            #expect(!model.dirty)
+            let add = try #require(editor.controls.compactMap { $0 as? NSButton }.first { $0.title == "Add Entry" })
+            add.performClick(nil)
+            let second = try #require(editor.controls.first { $0.accessibilityIdentifier() == "settings.env.1.value" } as? NSTextField)
+            second.stringValue = "after=kept"
+            editor.controlTextDidChange(Notification(name: NSText.didChangeNotification))
+            #expect(model.canSave && model.save())
+            let record = try store.read()
+            #expect(record.current.values["env"] == "TOKEN=a=b=c\nMODE=after=kept")
+            #expect(store.load(cli: false)?.errors.isEmpty == true)
+        }
+    }
+
+    @Test func themePairsAndMeasurementUnitsKeepTheirMeaning() {
+        let pair = SettingsThemeEditor.split("dark:Night,light:Day")
+        #expect(pair.0 == "Day" && pair.1 == "Night")
+        let microseconds = SettingsMeasureEditor.split("250ms", choices: ["", "m", "s", "ms", "raw"])
+        #expect(microseconds.0 == "250" && microseconds.1 == "ms")
+        let binding = SettingsListEditor.split("super+==increase_font_size:1", binding: true)
+        #expect(binding.0 == "super+=" && binding.1 == "increase_font_size:1")
+        let action = SettingsListEditor.split("super+a=text:a=b=c", binding: true)
+        #expect(action.0 == "super+a" && action.1 == "text:a=b=c")
+        let color = SettingsScalarEditor.color("#12abff")?.usingColorSpace(.sRGB)
+        #expect(color != nil && abs((color?.redComponent ?? 0) - 18.0 / 255) < 0.001)
+    }
+
+    @Test func savedRestartNoticeSurvivesReopeningAndDiscardingDraft() throws {
+        try withStore("font-size = 17") { store, _ in
+            _ = store.load(cli: false)
+            let model = SettingsModel(store: store)
+            let field = try #require(SettingsField.catalog.first { $0.key == "font-size" })
+            model.edit(field, value: "18")
+            #expect(model.save())
+            model.reload()
+            #expect(model.status.contains("Restart"))
+            model.edit(field, value: "19")
+            model.edit(field, value: "18")
+            #expect(!model.dirty && model.status.contains("Restart"))
+            try store.restoreDefaults()
+            model.reload(afterReset: true)
+            #expect(!model.dirty && model.status.contains("Restart"))
+        }
+    }
+
+    @Test func compactEditorsFitMinimumSettingsWidth() throws {
+        try withStore { store, _ in
+            _ = store.load(cli: false)
+            let model = SettingsModel(store: store)
+            for key in ["clipboard-write-limit-bytes", "notify-on-command-finish-after", "background-blur", "unfocused-split-fill", "font-style-bold-italic"] {
+                let field = try #require(SettingsField.catalog.first { $0.key == key })
+                let row = SettingsRow(field: field, value: model.displayed[key] ?? "", context: model.displayed,
+                                      presetSelected: { _ in }, changed: { _ in })
+                let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 575, height: 180), styleMask: [.titled], backing: .buffered, defer: false)
+                window.contentView = row
+                row.layoutSubtreeIfNeeded()
+                func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
+                for control in descendants(row).compactMap({ $0 as? NSControl }) where !control.isHiddenOrHasHiddenAncestor {
+                    let rect = control.convert(control.alignmentRect(forFrame: control.bounds), to: row)
+                    #expect(rect.minX >= -1 && rect.maxX <= row.bounds.width + 1, "\(key): \(rect)")
+                }
+            }
+        }
+    }
+
+    @Test func shortcutRecordingCancelsOnFocusLossAndPreservesShiftedDigits() async throws {
+        var recorded: [String] = []
+        var message = ""
+        let recorder = SettingsShortcutRecorder(recorded: { recorded.append($0) }, status: { message = $0 })
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 200, height: 60), styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = recorder
+        recorder.performClick(nil)
+        await withCheckedContinuation { continuation in DispatchQueue.main.async { continuation.resume() } }
+        #expect(recorder.title == "Press Keys")
+        NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: window)
+        #expect(recorder.title == "Record" && message.contains("lost focus"))
+        let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.control, .shift], timestamp: 0,
+                                                windowNumber: window.windowNumber, context: nil, characters: "(", charactersIgnoringModifiers: "(", isARepeat: false, keyCode: 25))
+        #expect(!recorder.capture(event) && recorded.isEmpty)
+        recorder.performClick(nil)
+        await withCheckedContinuation { continuation in DispatchQueue.main.async { continuation.resume() } }
+        #expect(recorder.capture(event))
+        #expect(recorded == ["ctrl+shift+9"])
+        #expect(!recorder.capture(event))
+    }
+
 }

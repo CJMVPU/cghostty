@@ -1,16 +1,16 @@
 import AppKit
 
-final class SettingsRow: NSStackView, NSTextFieldDelegate, NSTextViewDelegate {
+final class SettingsRow: NSStackView, NSTextFieldDelegate {
     private let field: SettingsField
     private let changed: (String) -> Void
     private let errorLabel = settingsLabel("")
     private var input: NSTextField?
-    private var editor: SettingsTextView?
     private var popup: NSPopUpButton?
     private var segments: NSSegmentedControl?
     private var fontPicker: SettingsFontPicker?
+    private var valueEditor: SettingsValueEditor?
 
-    init(field: SettingsField, value: String, usesFontPreset: Bool = false,
+    init(field: SettingsField, value: String, usesFontPreset: Bool = false, context: [String: String] = [:],
          presetSelected: @escaping (String) -> Void, changed: @escaping (String) -> Void) {
         self.field = field
         self.changed = changed
@@ -23,6 +23,36 @@ final class SettingsRow: NSStackView, NSTextFieldDelegate, NSTextViewDelegate {
         heading.alignment = .centerY
         heading.spacing = 16
         heading.addArrangedSubview(settingsLabel(field.title))
+        if !field.help.isEmpty {
+            let help = SettingsButton("?") {}
+            help.bezelStyle = .helpButton
+            help.toolTip = field.help
+            help.setAccessibilityLabel("Help for \(field.title)")
+            help.handler = { [weak help] in
+                guard let help else { return }
+                let popover = NSPopover()
+                popover.behavior = .transient
+                let controller = NSViewController()
+                let scroll = NSScrollView(frame: NSRect(x: 16, y: 16, width: 420, height: 180))
+                scroll.hasVerticalScroller = false
+                let text = SettingsTextView(frame: scroll.bounds)
+                text.configurePlainText()
+                text.font = SettingsTypography.font
+                text.string = field.help
+                text.isEditable = false
+                text.isVerticallyResizable = true
+                text.autoresizingMask = [.width]
+                text.textContainer?.widthTracksTextView = true
+                text.drawsBackground = false
+                scroll.drawsBackground = false
+                scroll.documentView = text
+                controller.view = NSView(frame: NSRect(x: 0, y: 0, width: 452, height: 212))
+                controller.view.addSubview(scroll)
+                popover.contentViewController = controller
+                popover.show(relativeTo: help.bounds, of: help, preferredEdge: .maxY)
+            }
+            heading.addArrangedSubview(help)
+        }
         let spacer = NSView()
         spacer.setContentHuggingPriority(.init(1), for: .horizontal)
         heading.addArrangedSubview(spacer)
@@ -32,6 +62,16 @@ final class SettingsRow: NSStackView, NSTextFieldDelegate, NSTextViewDelegate {
                                             changed: changed, presetSelected: presetSelected)
             addArrangedSubview(picker)
             fontPicker = picker
+        } else if let editor = Self.makeEditor(field, value: value, context: context, changed: changed) {
+            valueEditor = editor
+            if let control = editor.headingControl { heading.addArrangedSubview(control) }
+            if field.isFontStyle || field.isColor || field.isDuration || field.isLimit || field.key == "background-blur" {
+                heading.addArrangedSubview(editor)
+                editor.widthAnchor.constraint(lessThanOrEqualToConstant: 330).isActive = true
+                editor.setContentCompressionResistancePriority(.required, for: .horizontal)
+            } else {
+                addArrangedSubview(editor)
+            }
         } else if !field.choices.isEmpty {
             let values = field.choiceValues
             let effective = value.isEmpty ? field.defaultValue : value
@@ -61,31 +101,10 @@ final class SettingsRow: NSStackView, NSTextFieldDelegate, NSTextViewDelegate {
                 popup.target = self
                 popup.action = #selector(choiceChanged)
                 popup.setAccessibilityIdentifier("settings.\(field.key)")
-                addArrangedSubview(popup)
+                heading.addArrangedSubview(popup)
+                popup.widthAnchor.constraint(lessThanOrEqualToConstant: 280).isActive = true
                 self.popup = popup
             }
-        } else if field.multiline {
-            let scroll = NSScrollView()
-            scroll.hasVerticalScroller = true
-            scroll.borderType = .bezelBorder
-            let editor = SettingsTextView(frame: NSRect(x: 0, y: 0, width: 450, height: 100))
-            editor.font = SettingsTypography.font
-            editor.textColor = .white
-            editor.backgroundColor = NSColor(calibratedWhite: 0.16, alpha: 1)
-            editor.configurePlainText()
-            editor.string = value
-            editor.delegate = self
-            editor.isVerticallyResizable = true
-            editor.isHorizontallyResizable = false
-            editor.autoresizingMask = [.width]
-            editor.textContainer?.widthTracksTextView = true
-            editor.textContainerInset = NSSize(width: 8, height: 8)
-            editor.setAccessibilityIdentifier("settings.\(field.key)")
-            scroll.documentView = editor
-            scroll.heightAnchor.constraint(equalToConstant: field.key == "keybind" ? 220 : 96).isActive = true
-            addArrangedSubview(scroll)
-            self.editor = editor
-            addArrangedSubview(settingsLabel("One value per line, applied in order.", muted: true))
         } else {
             let input = NSTextField()
             input.cell = SettingsTextCell(textCell: "")
@@ -105,12 +124,12 @@ final class SettingsRow: NSStackView, NSTextFieldDelegate, NSTextViewDelegate {
                 input.widthAnchor.constraint(equalToConstant: width).isActive = true
                 input.setContentCompressionResistancePriority(.required, for: .horizontal)
                 heading.addArrangedSubview(input)
+                if let unit = field.unitLabel { heading.addArrangedSubview(settingsLabel(unit, muted: true)) }
             } else {
                 addArrangedSubview(input)
             }
             self.input = input
         }
-        if !field.help.isEmpty { addArrangedSubview(settingsLabel(field.help, muted: true)) }
         errorLabel.textColor = NSColor(calibratedRed: 1, green: 0.57, blue: 0.5, alpha: 1)
         errorLabel.isHidden = true
         addArrangedSubview(errorLabel)
@@ -125,10 +144,10 @@ final class SettingsRow: NSStackView, NSTextFieldDelegate, NSTextViewDelegate {
         if field.kind == "integer" || field.kind == "number" { return 160 }
         if field.key.hasPrefix("adjust-") { return 160 }
         switch field.key {
-        case "window-padding-x", "window-padding-y", "undo-timeout": return 160
+        case "window-padding-x", "window-padding-y", "undo-timeout", "resize-overlay-duration", "notify-on-command-finish-after": return 160
         case "background", "foreground", "cursor-color", "cursor-text",
              "selection-foreground", "selection-background", "search-foreground", "search-background",
-             "search-selected-foreground", "search-selected-background", "split-divider-color", "bold-color":
+             "search-selected-foreground", "search-selected-background", "split-divider-color", "bold-color", "unfocused-split-fill":
             return 220
         default: return nil
         }
@@ -144,15 +163,37 @@ final class SettingsRow: NSStackView, NSTextFieldDelegate, NSTextViewDelegate {
     }
 
     func controlTextDidChange(_ obj: Notification) { changed(input?.stringValue ?? "") }
-    func textDidChange(_ notification: Notification) { changed(editor?.string ?? "") }
 
-    func refreshFontPreset(_ active: Bool) { fontPicker?.refreshPreset(active) }
+    func refresh(context: [String: String], preset: Bool) {
+        fontPicker?.refreshPreset(preset)
+        valueEditor?.refresh(context: context)
+        let value = context[field.key] ?? field.defaultValue
+        if input?.currentEditor() == nil { input?.stringValue = value }
+        if let index = field.choiceValues.firstIndex(of: value.isEmpty ? field.defaultValue : value) {
+            segments?.selectedSegment = index
+            popup?.selectItem(at: index)
+        }
+    }
+
+    private static func makeEditor(_ field: SettingsField, value: String, context: [String: String],
+                                   changed: @escaping (String) -> Void) -> SettingsValueEditor? {
+        if !field.flags.isEmpty { return SettingsFlagsEditor(field: field, value: value, changed: changed) }
+        if field.key == "theme" { return SettingsThemeEditor(value: value, changed: changed) }
+        if field.isFontStyle || field.isColor || field.isPath {
+            return SettingsScalarEditor(field: field, value: value, context: context, changed: changed)
+        }
+        if field.isDuration || field.isLimit || ["quick-terminal-size", "background-blur"].contains(field.key) {
+            return SettingsMeasureEditor(field: field, value: value, changed: changed)
+        }
+        if field.multiline || field.isPairList { return SettingsListEditor(field: field, value: value, changed: changed) }
+        return nil
+    }
 
     func showError(_ error: String?, enabled: Bool) {
         errorLabel.stringValue = SettingsField.readable(error ?? "")
         errorLabel.isHidden = error == nil
         input?.isEnabled = enabled
-        editor?.isEditable = enabled
+        valueEditor?.setEnabled(enabled)
         popup?.isEnabled = enabled
         segments?.isEnabled = enabled
         fontPicker?.setEnabled(enabled)
