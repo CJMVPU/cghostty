@@ -54,7 +54,7 @@ pub fn create(alloc: Allocator, opts: Options, query: []const u8) !*Self {
     if (opts.changes) |changes| changes.attach(&self.state.wakeup);
     self.thread = try std.Thread.spawn(.{}, Worker.threadMain, .{&self.state});
     self.thread.?.setName(global.io(), "search") catch {};
-    self.send(.{ .change_needle = needle });
+    try self.send(.{ .change_needle = needle });
     return self;
 }
 
@@ -91,18 +91,20 @@ pub fn destroy(self: *Self) void {
 
 pub fn setQuery(self: *Self, query: []const u8) !void {
     std.debug.assert(query.len > 0);
-    self.send(.{ .change_needle = try Worker.Message.WriteReq.init(self.alloc, query) });
+    const needle = try Worker.Message.WriteReq.init(self.alloc, query);
+    errdefer needle.deinit();
+    try self.send(.{ .change_needle = needle });
 }
 
-pub fn navigate(self: *Self, direction: enum { next, previous }) void {
-    self.send(.{ .select = switch (direction) {
+pub fn navigate(self: *Self, direction: enum { next, previous }) !void {
+    try self.send(.{ .select = switch (direction) {
         .next => .next,
         .previous => .prev,
     } });
 }
 
-fn send(self: *Self, message: Worker.Message) void {
-    _ = self.state.mailbox.push(global.io(), message, .forever);
+fn send(self: *Self, message: Worker.Message) !void {
+    try self.state.mailbox.push(global.io(), message);
     self.state.wakeup.notify() catch {};
 }
 
@@ -140,7 +142,7 @@ test "SearchSession initialization and queued queries unwind on allocation failu
             try std.testing.expectEqual(@as(u8, 'x'), message.change_needle.slice()[0]);
             // Unconsumed allocated messages must be released during destruction.
             try session.setQuery(&text);
-            session.navigate(.next);
+            try session.navigate(.next);
             try session.setQuery(&text);
         }
     }.check, .{});

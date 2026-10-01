@@ -4545,7 +4545,7 @@ pub fn performBindingAction(self: *Surface, action: input.Binding.Action) !bool 
 
         .navigate_search => |nav| {
             const session = self.search orelse return false;
-            session.navigate(switch (nav) {
+            try session.navigate(switch (nav) {
                 .next => .next,
                 .previous => .previous,
             });

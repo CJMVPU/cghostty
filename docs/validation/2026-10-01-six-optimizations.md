@@ -77,3 +77,27 @@ The index costs memory proportional to emitted row spans. Content changes still
 require full capture; a selection spanning the whole history visits its rows.
 No wall-clock speedup is claimed. Initial Swift initializer compilation errors
 and one rejected stale-core reuse were corrected before the successful runs.
+
+## 6. Search request coalescing before enqueue
+
+Replace the fixed 64-entry blocking search queue with an owned linked queue.
+Consecutive pending queries replace the tail without allocating another node;
+navigation remains an ordering barrier. Publishing never waits for the worker
+to free queue space. A short mutex protects bookkeeping, and replaced payloads
+are released outside it. Allocation failure leaves the queue unchanged and is
+returned through the existing command error path. Each drain captures a finite
+request budget so producers cannot indefinitely extend that event-loop turn.
+
+Validation: 78/78 targeted mailbox/thread/SearchSession tests passed, including
+10,000 allocated queries with a paused consumer, 800 ordered requests spanning
+navigation barriers, allocation-failure ownership and shutdown while app and
+renderer queues are full. Native Debug search tests passed both startup cases,
+with 300 rapid queries plus navigation and visibility restoration. Core/native
+compilation, strict SwiftLint, scope, formatting and diff checks passed.
+
+The initial broader search run passed 165 tests before a new fixture supplied
+an array pointer where MessageData requires a slice. The fixture was corrected
+and the relevant mailbox/thread/session tests rerun successfully; the broader
+suite is not reported as fully passing. Navigation backlogs consume memory
+until drained; allocation errors propagate rather than blocking or silently
+discarding navigation. This is not a lock-free queue.

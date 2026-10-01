@@ -347,6 +347,13 @@ import Testing
                 try await Task.sleep(for: .milliseconds(10))
             }
         }
+        // Keep publishing on the main thread while the search worker consumes.
+        // Navigation barriers must survive bursts, and the final query wins.
+        for index in 0..<300 {
+            #expect(surface.search("superseded-query-\(index)"))
+            if index.isMultiple(of: 25) { #expect(surface.navigateSearch(.next)) }
+        }
+        #expect(surface.search(needle))
         try await waitForMatches(1)
         surface.setVisible(false)
         #expect(surface.sendKeyEvent(.init(keyCode: 0, action: .press, text: " " + needle)))

@@ -15,8 +15,6 @@ const Mutex = std.Io.Mutex;
 const global = @import("../../global.zig");
 const xev = global.xev;
 const internal_os = @import("../../os/main.zig");
-const BlockingQueue = @import("../../datastruct/main.zig").BlockingQueue;
-const MessageData = @import("../../datastruct/main.zig").MessageData;
 const point = @import("../point.zig");
 const FlattenedHighlight = @import("../highlight.zig").Flattened;
 const UntrackedHighlight = @import("../highlight.zig").Untracked;
@@ -35,8 +33,7 @@ const REFRESH_INTERVAL = 24;
 /// Allocator used for some state
 alloc: std.mem.Allocator,
 
-/// The mailbox that can be used to send this thread messages. Note
-/// this is a blocking queue so if it is full you will get errors (or block).
+/// Producer-coalesced requests; navigation preserves query ordering.
 mailbox: *Mailbox,
 
 /// The event loop for the search thread.
@@ -114,13 +111,7 @@ pub fn deinit(self: *Thread) void {
     self.wakeup.deinit();
     self.stop.deinit();
     self.loop.deinit();
-    // This also handles partial startup and early event-loop failure. Queued
-    // needles own their bytes even when the worker never consumed them.
-    while (self.mailbox.pop(global.io())) |message| switch (message) {
-        .change_needle => |needle| needle.deinit(),
-        .select => {},
-    };
-    // Nothing can possibly access the mailbox anymore, destroy it.
+    // Also releases queued needles after partial startup or event-loop failure.
     self.mailbox.destroy(self.alloc);
 
     if (self.search) |*s| {
@@ -248,7 +239,9 @@ fn feedLocked(self: *Thread, s: *TerminalSearch) void {
 fn drainMailbox(self: *Thread) !void {
     var pending: ?Message.WriteReq = null;
     defer if (pending) |v| v.deinit();
-    while (self.mailbox.pop(global.io())) |message| {
+    const budget = self.mailbox.pendingCount(global.io());
+    for (0..budget) |_| {
+        const message = self.mailbox.pop(global.io()) orelse break;
         switch (message) {
             .change_needle => |v| {
                 if (pending) |old| old.deinit();
@@ -512,23 +505,8 @@ pub const Options = struct {
 
 pub const EventCallback = *const fn (event: Event, userdata: ?*anyopaque) void;
 
-/// The type used for sending messages to the thread.
-pub const Mailbox = BlockingQueue(Message, 64);
-
-/// The messages that can be sent to the thread.
-pub const Message = union(enum) {
-    /// Represents a write request. Magic number comes from the max size
-    /// we want this union to be.
-    pub const WriteReq = MessageData(u8, 255);
-
-    /// Change the search term. If no prior search term is given this
-    /// will start a search. If an existing search term is given this will
-    /// stop the prior search and start a new one.
-    change_needle: WriteReq,
-
-    /// Select a search result.
-    select: ScreenSearch.Select,
-};
+pub const Mailbox = @import("Mailbox.zig");
+pub const Message = Mailbox.Message;
 
 /// Events that can be emitted from the search thread. The caller
 /// chooses to handle these as they see fit.
@@ -639,13 +617,12 @@ test {
     );
 
     // Start our search
-    _ = thread.mailbox.push(
+    try thread.mailbox.push(
         io,
         .{ .change_needle = try .init(
             alloc,
             @as([]const u8, "world"),
         ) },
-        .forever,
     );
     try thread.wakeup.notify();
 
@@ -681,20 +658,20 @@ test "search mailbox coalesces queries but navigation remains an ordering barrie
     var thread = try Thread.init(alloc, .{ .mutex = &mutex, .terminal = &term });
     defer thread.deinit();
     for ([_][]const u8{ "a", "al", "alpha" }) |needle| {
-        _ = thread.mailbox.push(testing.io, .{ .change_needle = try .init(alloc, needle) }, .forever);
+        try thread.mailbox.push(testing.io, .{ .change_needle = try .init(alloc, needle) });
     }
     try thread.drainMailbox();
     try testing.expectEqualStrings("alpha", thread.search.?.needle());
     try testing.expectEqual(@as(usize, 1), thread.query_restarts);
-    _ = thread.mailbox.push(testing.io, .{ .change_needle = try .init(alloc, @as([]const u8, "alphabet")) }, .forever);
-    _ = thread.mailbox.push(testing.io, .{ .select = .next }, .forever);
-    _ = thread.mailbox.push(testing.io, .{ .change_needle = try .init(alloc, @as([]const u8, "alphabetic")) }, .forever);
+    try thread.mailbox.push(testing.io, .{ .change_needle = try .init(alloc, @as([]const u8, "alphabet")) });
+    try thread.mailbox.push(testing.io, .{ .select = .next });
+    try thread.mailbox.push(testing.io, .{ .change_needle = try .init(alloc, @as([]const u8, "alphabetic")) });
     try thread.drainMailbox();
     try testing.expectEqualStrings("alphabetic", thread.search.?.needle());
     try testing.expectEqual(@as(usize, 3), thread.query_restarts);
     // An empty final query releases the previous search and all superseded bytes.
     for ([_][]const u8{ "long query" ** 50, "" }) |needle| {
-        _ = thread.mailbox.push(testing.io, .{ .change_needle = try .init(alloc, needle) }, .forever);
+        try thread.mailbox.push(testing.io, .{ .change_needle = try .init(alloc, needle) });
     }
     try thread.drainMailbox();
     try testing.expect(thread.search == null);
