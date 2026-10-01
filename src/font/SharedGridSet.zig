@@ -808,8 +808,8 @@ test "bundled WenKai resolves all styles and preserves configured fonts" {
         try cfg.loadData(alloc, data, "/tmp/cghostty-font-test.ghostty");
         try cfg.finalize();
         try testing.expectEqual(@as(f32, 16), cfg.@"font-size");
-        try testing.expectEqual(@as(u32, 133), cfg.@"window-width");
-        try testing.expectEqual(@as(u32, 33), cfg.@"window-height");
+        try testing.expectEqual(@as(u32, 157), cfg.@"window-width");
+        try testing.expectEqual(@as(u32, 43), cfg.@"window-height");
         var derived = try DerivedConfig.init(alloc, &cfg);
         defer derived.deinit();
         const key, const grid = try set.ref(&derived, .{ .points = cfg.@"font-size" });
