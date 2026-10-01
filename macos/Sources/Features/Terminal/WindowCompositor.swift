@@ -250,7 +250,7 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
     }
 
     private func traceOwner() -> Ghostty.Surface? {
-        lock.withLock { panes.keys.sorted { $0.uuidString < $1.uuidString }.first.flatMap { panes[$0]?.surface } }
+        lock.withLock { panes.keys.min { $0.uuidString < $1.uuidString }.flatMap { panes[$0]?.surface } }
     }
     private var index = 0
     private let inFlight = DispatchGroup()
@@ -459,7 +459,9 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
 
     private func draw(drawable: any CAMetalDrawable, deadline: Double, prediction: Double, callbackTime: Double) {
         let sequence = Self.sequences.withLock { $0 &+= 1; return $0 }
-        let owner = traceOwner()
+        let snapshot = lock.withLock { (panes, size, stopping) }
+        let orderedIDs = snapshot.0.keys.sorted { $0.uuidString < $1.uuidString }
+        let owner = orderedIDs.first.flatMap { snapshot.0[$0]?.surface }
         owner?.traceCompositor(stage: 8, sequence: sequence, time: callbackTime, prediction: Double(windowID))
         owner?.traceCompositor(stage: 12, sequence: sequence, time: deadline,
                               prediction: 1 / Double(lock.withLock { requestedRate }))
@@ -467,7 +469,6 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
         encodingLock.lock()
         defer { encodingLock.unlock() }
         #endif
-        let snapshot = lock.withLock { (panes, size, stopping) }
         var framePanes = snapshot.0
         let size = snapshot.1
         #if CGHOSTTY_TESTING
@@ -487,10 +488,11 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
         index = (index + 1) % slots.count
         // One trace owner per window frame avoids multiplying presentation
         // samples by pane count. Process-wide IDs survive owner/window changes.
-        let participants = framePanes.keys.sorted(by: { $0.uuidString < $1.uuidString }).compactMap { id -> Ghostty.Surface? in
-            guard let pane = framePanes[id], pane.geometry.visible, !pane.geometry.clip.isEmpty else { return nil }
-            return pane.surface
-        }.prefix(1)
+        let traceSurface = orderedIDs.first { id in
+            guard let pane = framePanes[id] else { return false }
+            return pane.geometry.visible && !pane.geometry.clip.isEmpty
+        }.flatMap { framePanes[$0]?.surface }
+        let participants = traceSurface.flatMap { $0.compositorTracing ? [$0] : nil } ?? []
         for surface in participants {
             surface.traceCompositor(stage: 0, sequence: sequence, time: deadline, prediction: prediction)
             surface.traceCompositor(stage: 1, sequence: sequence, time: callbackTime)
@@ -535,7 +537,7 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
             transaction.didSubmit()
             let prepareStart = CACurrentMediaTime()
             var slowestPane: Double = 0
-            for id in framePanes.keys.sorted(by: { $0.uuidString < $1.uuidString }) {
+            for id in orderedIDs {
                 guard let pane = framePanes[id], pane.geometry.visible, !pane.geometry.clip.isEmpty else { continue }
                 let paneStart = CACurrentMediaTime()
                 let rendered = try pane.surface.withCompositor(signal) {
