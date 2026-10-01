@@ -5,7 +5,8 @@ import Foundation
     private(set) var record: SettingsStore.Record?
     private(set) var input = SettingsStore.Input()
     private(set) var displayed: [String: String] = [:]
-    private(set) var errors: [String] = []
+    private(set) var diagnostics: [SettingsDiagnostic] = []
+    var errors: [String] { diagnostics.map(\.displayMessage) }
     private(set) var status = ""
     private var inputIsValid = false
     private var originalDisplayed: [String: String] = [:]
@@ -38,13 +39,13 @@ import Foundation
             // Invalid edits in a damaged record must remain visible and fixable.
             input.values.forEach { displayed[$0.key] = $0.value }
             originalDisplayed = displayed
-            errors = store.validate(input)
+            diagnostics = store.diagnostics(input)
             inputIsValid = errors.isEmpty
             status = savedStatus
         } catch {
             record = nil
             inputIsValid = false
-            errors = [error.localizedDescription]
+            diagnostics = [SettingsDiagnostic(kind: .storage, message: error.localizedDescription)]
             status = "Unable to read settings. Retry or restore defaults."
         }
     }
@@ -78,7 +79,7 @@ import Foundation
                 if value == initial { input.values[key] = original.values[key] }
             }
         }
-        errors = store.validate(input)
+        diagnostics = store.diagnostics(input)
         inputIsValid = errors.isEmpty
         if !errors.isEmpty {
             status = "Fix the invalid settings before saving."
@@ -88,7 +89,7 @@ import Foundation
     }
 
     func error(for key: String) -> String? {
-        errors.filter { $0.contains(key) }.joined(separator: "\n").nonEmpty
+        diagnostics.filter { $0.key == key }.map(\.message).joined(separator: "\n").nonEmpty
     }
 
     @discardableResult
@@ -96,13 +97,13 @@ import Foundation
         guard let record else { return false }
         do {
             self.record = try store.save(input, revision: record.revision)
-            errors = []
+            diagnostics = []
             originalDisplayed = displayed
             restartRequired = true
             status = savedStatus
             return true
         } catch {
-            errors = [error.localizedDescription]
+            diagnostics = [SettingsDiagnostic(kind: .storage, message: error.localizedDescription)]
             status = "Unable to save. Your edits are still available in this window."
             return false
         }

@@ -14,6 +14,25 @@ import Testing
         try body(store, source)
     }
 
+    @Test func diagnosticsMatchExactKeysAndPreserveValues() throws {
+        let error = SettingsDiagnostic(coreMessage: "font-family-bold: cannot open /tmp/font-family-test")
+        #expect(error.key == "font-family-bold")
+        #expect(error.message == "cannot open /tmp/font-family-test")
+        #expect(error.displayMessage.hasSuffix("/tmp/font-family-test"))
+        let global = SettingsDiagnostic(coreMessage: "Unable to read /tmp/font-family-bold")
+        #expect(global.key == nil)
+        #expect(global.displayMessage == global.message)
+        #expect(throws: (any Error).self) { try SettingsField.decodeCatalog(Data("[]".utf8)) }
+        #expect(throws: (any Error).self) { try SettingsField.decodeCatalog(Data("broken".utf8)) }
+        try withStore { store, _ in
+            _ = store.load(cli: false)
+            let model = SettingsModel(store: store)
+            model.edit(try #require(SettingsField.byKey["font-thicken-strength"]), value: "256")
+            #expect(model.error(for: "font-thicken-strength") != nil)
+            #expect(model.error(for: "font-thicken") == nil)
+        }
+    }
+
     @Test func defaultsAreInternalAndDoNotCreateLegacyFile() throws {
         try withStore { store, source in
             #expect(store.load(cli: false)?.errors.isEmpty == true)

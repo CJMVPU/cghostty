@@ -12,9 +12,22 @@ struct SettingsField: Decodable {
     let defaults: String
     let example: String
 
-    @MainActor static let catalog: [SettingsField] = {
-        (try? JSONDecoder().decode([SettingsField].self, from: Ghostty.SettingsBridge.catalogData)) ?? []
-    }()
+    @MainActor static let catalogResult = Result { try decodeCatalog(Ghostty.SettingsBridge.catalogData) }
+    @MainActor static let catalog: [SettingsField] = (try? catalogResult.get()) ?? []
+    @MainActor static let byKey = Dictionary(uniqueKeysWithValues: catalog.map { ($0.key, $0) })
+    @MainActor static var catalogError: SettingsDiagnostic? {
+        guard case .failure(let error) = catalogResult else { return nil }
+        return SettingsDiagnostic(kind: .catalog, message: "Unable to load the settings catalog: \(error.localizedDescription)")
+    }
+
+    static func decodeCatalog(_ data: Data) throws -> [SettingsField] {
+        let fields = try JSONDecoder().decode([SettingsField].self, from: data)
+        guard !fields.isEmpty, Set(fields.map(\.key)).count == fields.count,
+              fields.allSatisfy({ (1...8).contains($0.group) && !$0.key.isEmpty }) else {
+            throw CocoaError(.coderReadCorrupt)
+        }
+        return fields
+    }
 
     static func values(from entry: String) -> [String] {
         entry.components(separatedBy: "\n").compactMap { line in
@@ -48,11 +61,7 @@ struct SettingsField: Decodable {
     }
 
     @MainActor static func readable(_ text: String) -> String {
-        // Longest keys first so a shorter name cannot replace part of another.
-        catalog.sorted { $0.key.count > $1.key.count }.reduce(text) { result, field in
-            guard field.key.contains("-") else { return result }
-            return result.replacingOccurrences(of: field.key, with: field.title)
-        }
+        text.components(separatedBy: "\n").map { SettingsDiagnostic(coreMessage: $0).displayMessage }.joined(separator: "\n")
     }
 
     func validate(_ input: String) -> String? {

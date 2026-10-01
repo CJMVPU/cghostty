@@ -190,7 +190,7 @@ final class SettingsRow: NSStackView, NSTextFieldDelegate {
     }
 
     func showError(_ error: String?, enabled: Bool) {
-        errorLabel.stringValue = SettingsField.readable(error ?? "")
+        errorLabel.stringValue = error ?? ""
         errorLabel.isHidden = error == nil
         input?.isEnabled = enabled
         valueEditor?.setEnabled(enabled)

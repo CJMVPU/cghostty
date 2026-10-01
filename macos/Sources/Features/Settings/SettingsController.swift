@@ -282,7 +282,7 @@ private final class SettingsList: NSStackView {
 
     private func updateState() {
         status.stringValue = model.status
-        diagnostics.stringValue = SettingsField.readable(model.errors.joined(separator: "\n"))
+        diagnostics.stringValue = model.errors.joined(separator: "\n")
         diagnostics.toolTip = diagnostics.stringValue
         diagnostics.isHidden = model.errors.isEmpty
         saveButton.isEnabled = model.canSave

@@ -105,21 +105,24 @@ import Darwin
         Ghostty.ConfigHandle.load(settings: input, source: validationSource, cli: cli)
     }
 
-    func validate(_ input: Input) -> [String] {
-        let known = Set(SettingsField.catalog.map(\.key))
-        var errors = input.values.keys.filter { !known.contains($0) }.map { "Unknown setting: \($0)" }
+    func validate(_ input: Input) -> [String] { diagnostics(input).map(\.rawMessage) }
+
+    func diagnostics(_ input: Input) -> [SettingsDiagnostic] {
+        var errors: [SettingsDiagnostic] = SettingsField.catalogError.map { [$0] } ?? []
+        errors += input.values.keys.sorted().filter { SettingsField.byKey[$0] == nil }.map {
+            SettingsDiagnostic(kind: .field, message: "Unknown setting: \($0)")
+        }
         var explainedKeys = Set<String>()
         for field in SettingsField.catalog {
             if let value = input.values[field.key], let error = field.validate(value) {
-                errors.append("\(field.key): \(error)")
+                errors.append(SettingsDiagnostic(key: field.key, kind: .field, message: error))
                 explainedKeys.insert(field.key)
             }
         }
-        let coreErrors = parse(input)?.errors ?? ["Unable to create the settings parser."]
-        errors += coreErrors.filter { diagnostic in
-            !explainedKeys.contains { diagnostic.hasPrefix($0 + ":") }
-        }
-        return errors
+        let coreErrors = (parse(input)?.errors ?? ["Unable to create the settings parser."]).map(SettingsDiagnostic.init(coreMessage:))
+        errors += coreErrors.filter { !explainedKeys.contains($0.key ?? "") }
+        var seen = Set<SettingsDiagnostic>()
+        return errors.filter { seen.insert($0).inserted }
     }
 
     @discardableResult
