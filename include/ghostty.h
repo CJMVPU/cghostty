@@ -1229,7 +1229,7 @@ GHOSTTY_API void ghostty_surface_free_accessibility(ghostty_accessibility_s*);
 GHOSTTY_API uint64_t ghostty_surface_render_revision(ghostty_surface_t);
 // Main-thread snapshot; returns an owned id<MTLTexture> in shared storage.
 // Returns NULL when unavailable. The caller releases the Objective-C object.
-GHOSTTY_API void* ghostty_surface_copy_snapshot(ghostty_surface_t);
+GHOSTTY_API void* ghostty_surface_copy_snapshot(ghostty_surface_t, uint32_t max_dimension);
 // Window compositor bridge: sink is a retained NSObject with thread-safe requestFrame.
 // Caller serializes render/attach/detach and keeps the surface alive for each call.
 typedef struct { uint32_t width, height, pixel_format; float latency; bool trace_enabled; } ghostty_compositor_info_s;

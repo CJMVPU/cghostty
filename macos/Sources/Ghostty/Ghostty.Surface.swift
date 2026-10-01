@@ -309,8 +309,9 @@ extension Ghostty {
         @MainActor var renderRevision: UInt64 { ghostty_surface_render_revision(surface) }
 
         /// Explicit readback from an independent Metal texture; no window drawable is retained.
-        @MainActor func copySnapshot() -> CGImage? {
-            guard let value = ghostty_surface_copy_snapshot(surface),
+        @MainActor func copySnapshot(maxDimension: Int = 0) -> CGImage? {
+            guard let limit = UInt32(exactly: maxDimension),
+                  let value = ghostty_surface_copy_snapshot(surface, limit),
                   let texture = Unmanaged<AnyObject>.fromOpaque(value).takeRetainedValue() as? any MTLTexture,
                   let colorSpace = CGColorSpace(name: CGColorSpace.displayP3) else { return nil }
             let rowBytes = texture.width * 4

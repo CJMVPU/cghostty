@@ -44,7 +44,7 @@ extension NSView {
         )?.retagging(with: .sRGB) else { return nil }
         bitmap.size = bounds.size
         if let terminal = self as? Ghostty.SurfaceView {
-            guard let image = terminal.surfaceModel?.copySnapshot(),
+            guard let image = terminal.surfaceModel?.copySnapshot(maxDimension: max(bitmap.pixelsWide, bitmap.pixelsHigh)),
                   let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
                   let context = CGContext(data: bitmap.bitmapData, width: bitmap.pixelsWide,
                     height: bitmap.pixelsHigh, bitsPerComponent: 8, bytesPerRow: bitmap.bytesPerRow,

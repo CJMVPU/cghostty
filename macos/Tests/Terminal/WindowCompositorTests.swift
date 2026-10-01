@@ -302,6 +302,62 @@ import Synchronization
         #expect(bitmap.pixelsWide > 0 && bitmap.pixelsHigh > 0)
     }
 
+    @Test(arguments: ["native", "linear", "linear-corrected"])
+    func boundedSnapshotPreservesPixelsAndPresentation(blending: String) async throws {
+        let config = try TemporaryConfig("""
+        background = #123456
+        background-opacity = 0.5
+        background-blur = false
+        alpha-blending = \(blending)
+        cursor-style-blink = false
+        cursor-effect = false
+        shell-integration = none
+        """)
+        let app = Ghostty.App(configPath: config.temporaryFile.path)
+        var base = Ghostty.SurfaceConfiguration()
+        base.command = "/bin/sh -c 'printf bounded-ready; exec /bin/cat'"
+        var view: Ghostty.SurfaceView? = Ghostty.SurfaceView(app, baseConfig: base)
+        weak let surface = view?.surfaceModel
+        let window = makeWindow()
+        defer { window.close() }
+        window.contentView = view
+        window.orderFront(nil)
+        view?.sizeDidChange(window.contentView!.bounds.size)
+        surface?.setVisible(true)
+        let owner = try #require(view?.windowCompositor)
+        owner.updateGeometry()
+        try await wait("bounded snapshot startup", worker: owner.worker, {
+            surface?.readContents(viewport: false).contains("bounded-ready") == true &&
+                owner.worker.statistics.paneDraws > 0 && owner.worker.isIdle
+        })
+        let revision = surface?.renderRevision
+        let full = try #require(surface?.copySnapshot())
+        let small = try #require(surface?.copySnapshot(maxDimension: 256))
+        #expect(max(small.width, small.height) == 256)
+        #expect(abs(Double(small.width) / Double(small.height) - Double(full.width) / Double(full.height)) < 0.02)
+        #expect(surface?.renderRevision == revision)
+        func center(_ image: CGImage) throws -> NSColor {
+            let bitmap = NSBitmapImageRep(cgImage: image)
+            return try #require(bitmap.colorAt(x: bitmap.pixelsWide / 2, y: bitmap.pixelsHigh / 2)?.usingColorSpace(.sRGB))
+        }
+        let expected = try center(full)
+        let actual = try center(small)
+        #expect(abs(actual.alphaComponent - 0.5) < 0.02)
+        #expect(abs(actual.redComponent - expected.redComponent) < 0.02)
+        #expect(abs(actual.greenComponent - expected.greenComponent) < 0.02)
+        #expect(abs(actual.blueComponent - expected.blueComponent) < 0.02)
+        surface?.sendText("after-snapshot\n")
+        try await wait("presentation after bounded snapshot", worker: owner.worker, {
+            surface?.readContents(viewport: false).contains("after-snapshot") == true &&
+                (surface?.renderRevision ?? 0) > (revision ?? 0) && owner.worker.isIdle
+        })
+        window.close()
+        window.contentView = nil
+        view = nil
+        try await wait("bounded snapshot session release", worker: owner.worker, { surface == nil })
+        #expect(abs(try center(small).alphaComponent - 0.5) < 0.02)
+    }
+
     @Test func failedBackgroundReplacementRetriesSamePathAndKeepsOldImage() async throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

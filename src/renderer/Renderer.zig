@@ -1193,21 +1193,29 @@ pub fn updateFrame(
     }
 }
 
-const Snapshot = struct { target: Target, healthy: bool = false };
+const Snapshot = struct { target: Target, readback: ?Target = null, healthy: bool = false };
 
 /// Main-thread, on-demand offscreen rendering. Never obtains or retains a
 /// drawable, changes presentation history, or publishes a completed display.
 /// Returns an owned shared Metal texture; caller releases it after readback.
-pub fn copySnapshot(self: *Self) !?@import("objc").Object {
+pub fn copySnapshot(self: *Self, max_dimension: u32) !?@import("objc").Object {
     self.draw_mutex.lockUncancelable(global.io());
     defer self.draw_mutex.unlock(global.io());
     if (!self.display_realized or !self.visible or
         self.size.screen.width == 0 or self.size.screen.height == 0) return null;
     if (self.swap_chain) |*chain| chain.waitIdle();
-    var snapshot: Snapshot = .{ .target = try self.api.initSnapshotTarget(self.size.screen.width, self.size.screen.height) };
+    const dimensions = snapshotSize(self.size.screen.width, self.size.screen.height, max_dimension);
+    const scale = dimensions[0] != self.size.screen.width or dimensions[1] != self.size.screen.height;
+    var snapshot: Snapshot = .{ .target = try self.api.initSnapshotTarget(self.size.screen.width, self.size.screen.height, !scale) };
     errdefer snapshot.target.deinit();
+    if (scale) snapshot.readback = try self.api.initSnapshotTarget(dimensions[0], dimensions[1], true);
+    errdefer if (snapshot.readback) |*small| small.deinit();
     try self.drawFrameLocked(true, snapshot.target, &snapshot);
     if (!snapshot.healthy) return error.SnapshotFailed;
+    if (snapshot.readback) |small| {
+        snapshot.target.deinit();
+        return small.texture;
+    }
     return snapshot.target.texture;
 }
 
@@ -1655,6 +1663,18 @@ fn drawFrameLocked(
             self.scroll_presented_uniforms = self.uniforms;
         }
     }
+
+    // Keep the full-resolution source GPU-only when a thumbnail was requested.
+    // This pass shares submission/retirement with the snapshot; no extra wait.
+    if (snapshot) |snap| if (snap.readback) |small| {
+        var pass = try frame_ctx.renderPass(&.{.{ .target = .{ .target = small } }});
+        defer pass.complete();
+        pass.step(.{
+            .pipeline = self.shaders.pipelines.snapshot_scale,
+            .textures = &.{.{ .texture = target.texture, .width = target.width, .height = target.height, .bpp = 4 }},
+            .draw = .{ .type = .triangle, .vertex_count = 3 },
+        });
+    };
 
     encoded = true;
     if (if (snapshot == null) self.scroll_shared else null) |shared| shared.scroll_hit.publish(.{
@@ -3132,4 +3152,22 @@ test "font config features compare ordered content rather than allocation identi
     try t.expect(!fontFeaturesEqual(&.{"calt=0"}, &.{"calt=1"}));
     try t.expect(!fontFeaturesEqual(&.{ "calt=0", "calt=1" }, &.{ "calt=1", "calt=0" }));
     try t.expect(!fontFeaturesEqual(&.{}, &.{"calt=0"}));
+}
+
+fn snapshotSize(width: u32, height: u32, limit: u32) [2]u32 {
+    const longest = @max(width, height);
+    if (limit == 0 or longest <= limit) return .{ width, height };
+    return .{
+        @intCast(@max(1, @as(u64, width) * limit / longest)),
+        @intCast(@max(1, @as(u64, height) * limit / longest)),
+    };
+}
+
+test "snapshot dimensions bound readback without upscaling or integer overflow" {
+    const t = std.testing;
+    try t.expectEqual([2]u32{ 256, 144 }, snapshotSize(3840, 2160, 256));
+    try t.expectEqual([2]u32{ 144, 256 }, snapshotSize(2160, 3840, 256));
+    try t.expectEqual([2]u32{ 100, 50 }, snapshotSize(100, 50, 256));
+    try t.expectEqual([2]u32{ 100, 50 }, snapshotSize(100, 50, 0));
+    try t.expectEqual([2]u32{ 256, 1 }, snapshotSize(std.math.maxInt(u32), 1, 256));
 }

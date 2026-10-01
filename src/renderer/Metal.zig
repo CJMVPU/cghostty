@@ -162,8 +162,8 @@ pub fn setBlending(self: *Metal, blending: configpkg.Config.AlphaBlending) void 
     self.blending = blending;
 }
 
-/// Independent readable target, allocated only for an explicit snapshot.
-pub fn initSnapshotTarget(self: *const Metal, width: usize, height: usize) !Target {
+/// Independent snapshot target; only the final readback texture is shared.
+pub fn initSnapshotTarget(self: *const Metal, width: usize, height: usize, readback: bool) !Target {
     return Target.init(.{
         .device = self.device,
         // Using an `*_srgb` pixel format makes Metal gamma encode the pixels
@@ -173,7 +173,7 @@ pub fn initSnapshotTarget(self: *const Metal, width: usize, height: usize) !Targ
             .bgra8unorm_srgb
         else
             .bgra8unorm,
-        .storage_mode = .shared,
+        .storage_mode = if (readback) .shared else .private,
         .width = width,
         .height = height,
     });

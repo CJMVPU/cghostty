@@ -977,3 +977,22 @@ fragment float4 image_fragment(
 
   return rgba;
 }
+
+// Independent snapshot downsampling. Sample premultiplied pixels, preserving
+// alpha; matching source/destination formats preserve the blending color space.
+struct SnapshotScaleVertexOut {
+  float4 position [[position]];
+  float2 uv;
+};
+vertex SnapshotScaleVertexOut snapshot_scale_vertex(uint vid [[vertex_id]]) {
+  SnapshotScaleVertexOut out;
+  out.position = float4(vid == 2 ? 3.0 : -1.0, vid == 0 ? -3.0 : 1.0, 1.0, 1.0);
+  out.uv = float2((out.position.x + 1.0) * 0.5, (1.0 - out.position.y) * 0.5);
+  return out;
+}
+fragment float4 snapshot_scale_fragment(
+  SnapshotScaleVertexOut in [[stage_in]], texture2d<float> source [[texture(0)]]
+) {
+  constexpr sampler normalized(coord::normalized, address::clamp_to_edge, filter::linear);
+  return source.sample(normalized, in.uv);
+}

@@ -39,3 +39,18 @@ Validation: new native Debug damaged-PNG/repaired-same-path/removal test passed
 failed because AppKit's setColor produced transparent PNG pixels; explicit RGBA
 fixture bytes corrected this. Temporary diagnostic renderer edits were removed.
 Core compilation, strict SwiftLint, Zig formatting and diff checks passed.
+
+## 4. Bounded GPU snapshot readback
+
+Pass the destination pixel limit through the internal snapshot bridge. Render
+into a private full-resolution texture, then scale on the GPU into the shared
+readback target in the same submission. Full-size callers retain their existing
+path. CPU readback now contains only the requested pixels; the full GPU render
+and synchronous snapshot completion still exist.
+
+Validation: 71/71 targeted Zig tests, three native blending cases checking
+bounded dimensions, aspect ratio, color, alpha, presentation revision and
+post-close ownership, and the existing full-snapshot lifetime test passed.
+Core/Metal compilation, strict SwiftLint without cache, formatting and diff
+checks passed. The test CLI uses one selector at a time; both functions were
+verified in separate runs. No frame-time or end-to-end speedup is claimed.
