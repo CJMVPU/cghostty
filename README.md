@@ -1,7 +1,7 @@
 # cghostty
 
-基于 Ghostty 独立维护的原生终端
-仅支持 macOS 27+ 与 Apple Silicon
+## 基于 Ghostty 独立维护的原生终端
+## 仅支持 macOS 27+ 与 Apple Silicon
 
 ## 功能
 
@@ -26,8 +26,7 @@
 2. 下载 macOS arm64 压缩包
 3. 解压，将应用拖入“应用程序”
 
-更新时下载新版并替换应用
-签名与公证状态以发布说明为准
+更新时下载新版并替换应用, 签名与公证状态以发布说明为准
 
 ## 设置
 
@@ -90,8 +89,7 @@ nu macos/build.nu \
   --configuration ReleaseLocal
 ```
 
-产物位于 `macos/build/` 下的
-`ReleaseLocal/cghostty.app`
+产物位于 `macos/build/` 下的`ReleaseLocal/cghostty.app`
 
 ## 开发文档
 
@@ -113,9 +111,9 @@ nu macos/build.nu \
 ## 许可
 
 - 应用：[MIT](LICENSE)
-  - 保留 Ghostty 上游版权声明。
+  - 保留 Ghostty 上游版权声明
 - 默认字体：[SIL OFL 1.1][ofl]
-- 第三方依赖遵循[各自许可][dep]。
+- 第三方依赖遵循[各自许可][dep]
 
 [r]: /CJMVPU/cghostty/releases
 [ui]: UI_ARCHITECTURE.md
