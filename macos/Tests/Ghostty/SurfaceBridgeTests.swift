@@ -150,11 +150,20 @@ import Testing
 
     @Test(.enabled(if: try MetalTestSupport.metal4Available(), "Requires a Metal 4 GPU"))
     func selectionOnlyUpdateRepaintsNativeHighlight() async throws {
-        let config = FileManager.default.temporaryDirectory.appending(path: "selection-probe-\(UUID()).conf")
-        try "background = #000000\nforeground = #ffffff\nselection-background = #ff0000\nselection-foreground = #000000\n"
-            .write(to: config, atomically: true, encoding: .utf8)
-        defer { try? FileManager.default.removeItem(at: config) }
-        let view = makeView(command: "/usr/bin/printf 'selection-ready'", configPath: config.path)
+        let config = try TemporaryConfig("""
+        background = #000000
+        foreground = #ffffff
+        selection-background = #ff0000
+        selection-foreground = #000000
+        cursor-style-blink = false
+        cursor-effect = false
+        shell-integration = none
+        """)
+        let app = Ghostty.App(configPath: config.temporaryFile.path)
+        try #require(app.startupConfigurationErrors.isEmpty)
+        var base = Ghostty.SurfaceConfiguration()
+        base.command = "/bin/sh -c 'printf selection-ready; exec /bin/cat'"
+        let view = Ghostty.SurfaceView(app, baseConfig: base)
         let surface = try #require(view.surfaceModel)
         let window = try show(view)
         defer { window.close() }
@@ -162,11 +171,15 @@ import Testing
         try await waitForFrame(after: 0, in: view)
         func redPixels(_ png: Data) throws -> Int {
             let bitmap = try #require(NSBitmapImageRep(data: png))
+            try #require(bitmap.bitsPerSample == 8 && bitmap.samplesPerPixel >= 3)
+            // The thumbnail is encoded as sRGB. Inspect its stored components:
+            // colorAt returns calibrated RGB, whose conversion shifts pure red.
+            var pixel = [Int](repeating: 0, count: bitmap.samplesPerPixel)
             var count = 0
             for y in 0..<bitmap.pixelsHigh {
                 for x in 0..<bitmap.pixelsWide {
-                    if let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
-                       color.redComponent > 0.6, color.greenComponent < 0.1, color.blueComponent < 0.1 {
+                    bitmap.getPixel(&pixel, atX: x, y: y)
+                    if pixel[0] > 153 && pixel[1] < 26 && pixel[2] < 26 {
                         count += 1
                     }
                 }
@@ -176,8 +189,13 @@ import Testing
         let before = try redPixels(#require(view.thumbnailPNG()))
         let revision = surface.renderRevision
         #expect(surface.perform(.selectAll))
-        try await waitForFrame(after: revision, in: view)
-        let selected = try redPixels(#require(view.thumbnailPNG()))
+        var selected = 0
+        try await NativeTestWait.until("selection highlight pixels", timeout: .seconds(5), polling: .milliseconds(10),
+            diagnostics: { "before=\(before), selected=\(selected)\n" + NativeTestWait.surfaceState(surface, view: view) }, {
+            guard surface.renderRevision > revision else { return false }
+            selected = try redPixels(#require(view.thumbnailPNG()))
+            return selected > before + 100
+        })
         #expect(selected > before + 100)
         #expect(view.healthy)
     }

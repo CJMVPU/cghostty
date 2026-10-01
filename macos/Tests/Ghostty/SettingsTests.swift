@@ -67,6 +67,23 @@ import Testing
         }
     }
 
+    @Test(arguments: [
+        "background = #000000\nforeground = #ffffff\nselection-background = #ff0000\nselection-foreground = #000000\n",
+        "cursor-style-blink = false\ncursor-effect = false\nshell-integration = none\nbackground-image-fit = stretch\nbackground-image-opacity = 1\nbackground-image = ?image.png"
+    ])
+    func migrationPreservesExplicitAppearance(_ text: String) throws {
+        try withStore(text) { store, source in
+            let original = try #require(Ghostty.ConfigHandle.load(data: Data(text.utf8), source: source))
+            let imported = try #require(store.parse(.init(layers: [.init(text: text, source: source)])))
+            for field in SettingsField.catalog {
+                #expect(imported.formattedEntry(field.key) == original.formattedEntry(field.key), "\(field.key)")
+            }
+            let loaded = try #require(store.load(cli: false))
+            #expect(loaded.errors.isEmpty)
+            #expect(FileManager.default.fileExists(atPath: store.url.path))
+        }
+    }
+
     @Test func saveIsRestartOnlyAndStaleDraftIsRejected() throws {
         try withStore("title = Before") { store, _ in
             let current = try #require(store.load(cli: false))

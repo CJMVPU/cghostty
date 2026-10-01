@@ -54,8 +54,7 @@ import Testing
         let one = try #require(first.window as? TerminalWindow)
         defer { one.close() }
         let original = try #require(one.fixedContentSize)
-        try "window-width = 80\nwindow-height = 20".write(
-            to: config.temporaryFile, atomically: true, encoding: .utf8)
+        try config.saveAppSettings(["window-width": "80", "window-height": "20"])
         let second = terminal(app)
         let two = try #require(second.window as? TerminalWindow)
         defer { two.close() }

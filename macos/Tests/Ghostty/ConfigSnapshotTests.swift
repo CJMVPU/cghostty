@@ -155,13 +155,7 @@ import Testing
         let file = try TemporaryConfig("title = Before")
         let app = Ghostty.App(configPath: file.temporaryFile.path)
         let other = Ghostty.App(configPath: file.temporaryFile.path)
-        let source = file.temporaryFile
-        let store = SettingsStore(legacySource: source, directory: source.deletingLastPathComponent()
-            .appendingPathComponent(".settings-state-" + source.lastPathComponent))
-        let record = try store.read()
-        var edited = record.current
-        edited.values["title"] = "After"
-        try store.save(edited, revision: record.revision)
+        try file.saveAppSettings(["title": "After"])
         app.applyTheme()
         #expect(app.config.snapshot.title == "Before")
         let restarted = Ghostty.App(configPath: file.temporaryFile.path)

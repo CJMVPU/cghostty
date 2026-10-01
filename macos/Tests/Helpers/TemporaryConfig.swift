@@ -10,6 +10,11 @@ class TemporaryConfig: Ghostty.Config {
 
     let temporaryFile: URL
 
+    private var settingsDirectory: URL {
+        temporaryFile.deletingLastPathComponent()
+            .appendingPathComponent(".settings-state-" + temporaryFile.lastPathComponent)
+    }
+
     init(_ configText: String, finalize: Bool = true) throws {
         let temporaryFile = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
@@ -29,7 +34,18 @@ class TemporaryConfig: Ghostty.Config {
         replace(with: cfg)
     }
 
+    /// Save through the same store as Settings after an App has migrated this
+    /// fixture. Existing App and Config instances keep their loaded snapshots.
+    func saveAppSettings(_ values: [String: String]) throws {
+        let store = SettingsStore(legacySource: temporaryFile, directory: settingsDirectory)
+        let record = try store.read()
+        var edited = record.current
+        edited.values.merge(values) { _, new in new }
+        try store.save(edited, revision: record.revision)
+    }
+
     isolated deinit {
         try? FileManager.default.removeItem(at: temporaryFile)
+        try? FileManager.default.removeItem(at: settingsDirectory)
     }
 }

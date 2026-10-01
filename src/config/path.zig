@@ -30,7 +30,28 @@ pub const Path = union(enum) {
     }
 
     pub fn equal(self: Path, other: Path) bool {
-        return std.meta.eql(self, other);
+        if (std.meta.activeTag(self) != std.meta.activeTag(other)) return false;
+        return switch (self) {
+            inline else => |value, tag| std.mem.eql(u8, value, @field(other, @tagName(tag))),
+        };
+    }
+
+    test "path equality compares contents and optionality" {
+        const testing = std.testing;
+        for ([_][]const u8{ "/tmp/background.png", "?/tmp/background.png" }) |input| {
+            var arena = ArenaAllocator.init(testing.allocator);
+            defer arena.deinit();
+            const first = (try Path.parse(arena.allocator(), input)).?;
+            const copied = try first.clone(arena.allocator());
+            try testing.expect(first.equal(copied));
+            const different = (try Path.parse(arena.allocator(), "/tmp/other.png")).?;
+            try testing.expect(!first.equal(different));
+            const changed_tag: Path = switch (first) {
+                .required => |value| .{ .optional = value },
+                .optional => |value| .{ .required = value },
+            };
+            try testing.expect(!first.equal(changed_tag));
+        }
     }
 
     /// ghostty_config_path_s
