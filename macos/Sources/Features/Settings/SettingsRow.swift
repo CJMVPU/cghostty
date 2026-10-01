@@ -20,6 +20,8 @@ final class SettingsRow: NSStackView, NSTextFieldDelegate, NSTextViewDelegate {
         spacing = 8
         let heading = NSStackView()
         heading.orientation = .horizontal
+        heading.alignment = .centerY
+        heading.spacing = 16
         heading.addArrangedSubview(settingsLabel(field.title))
         let spacer = NSView()
         spacer.setContentHuggingPriority(.init(1), for: .horizontal)
@@ -99,7 +101,13 @@ final class SettingsRow: NSStackView, NSTextFieldDelegate, NSTextViewDelegate {
             input.delegate = self
             input.setAccessibilityIdentifier("settings.\(field.key)")
             input.heightAnchor.constraint(equalToConstant: 32).isActive = true
-            addArrangedSubview(input)
+            if let width = compactInputWidth {
+                input.widthAnchor.constraint(equalToConstant: width).isActive = true
+                input.setContentCompressionResistancePriority(.required, for: .horizontal)
+                heading.addArrangedSubview(input)
+            } else {
+                addArrangedSubview(input)
+            }
             self.input = input
         }
         if !field.help.isEmpty { addArrangedSubview(settingsLabel(field.help, muted: true)) }
@@ -110,6 +118,21 @@ final class SettingsRow: NSStackView, NSTextFieldDelegate, NSTextViewDelegate {
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    /// Short scalar values leave enough room for the name, including at the
+    /// minimum window width. Paths, commands and other long text keep a full row.
+    private var compactInputWidth: CGFloat? {
+        if field.kind == "integer" || field.kind == "number" { return 160 }
+        if field.key.hasPrefix("adjust-") { return 160 }
+        switch field.key {
+        case "window-padding-x", "window-padding-y", "undo-timeout": return 160
+        case "background", "foreground", "cursor-color", "cursor-text",
+             "selection-foreground", "selection-background", "search-foreground", "search-background",
+             "search-selected-foreground", "search-selected-background", "split-divider-color", "bold-color":
+            return 220
+        default: return nil
+        }
+    }
 
     @objc private func choiceChanged() {
         changed(popup?.selectedItem?.representedObject as? String ?? "")
