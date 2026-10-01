@@ -151,13 +151,9 @@ images: ImageState = .empty,
 
 /// Background image, if we have one.
 bg_image: ?imagepkg.Image = null,
-/// Set whenever the background image changes, signalling
-/// that the new background image needs to be uploaded to
-/// the GPU.
-///
-/// This is initialized as true so that we load the image
-/// on renderer initialization, not just on config change.
-bg_image_changed: bool = true,
+/// Retry a failed preparation on the next explicit configuration update,
+/// never from the frame loop. The last successfully loaded image stays visible.
+bg_image_load_failed: bool = false,
 /// Background image vertex buffer.
 bg_image_buffer: shaderpkg.BgImage,
 /// This value is used to force-update the swap chain copy
@@ -620,7 +616,11 @@ pub fn init(alloc: Allocator, options: renderer.Options) !Self {
     result.updateScreenSizeUniforms();
     result.updateBgImageBuffer();
     if (result.config.bg_image) |path| {
-        if (try result.loadBackgroundImage(path)) |image| result.bg_image = image;
+        result.bg_image = result.loadBackgroundImage(path) catch |err| failed: {
+            log.warn("background image preparation failed: {}", .{err});
+            break :failed null;
+        };
+        result.bg_image_load_failed = result.bg_image == null;
     }
 
     result.trace = Trace.init(alloc, options.config.render_trace, options.config.render_trace_directory);
@@ -1794,7 +1794,8 @@ pub fn changeConfig(self: *Self, config: *DerivedConfig) !void {
         if (config.bg_image) |new| !old.equal(new) else true
     else
         config.bg_image != null;
-    var prepared: ?imagepkg.Image = if (bg_image_changed) image: {
+    const prepare_image = bg_image_changed or self.bg_image_load_failed;
+    var prepared: ?imagepkg.Image = if (prepare_image) image: {
         const path = config.bg_image orelse break :image null;
         break :image self.loadBackgroundImage(path) catch |err| {
             log.warn("background image preparation failed: {}", .{err});
@@ -1840,6 +1841,7 @@ pub fn changeConfig(self: *Self, config: *DerivedConfig) !void {
     self.config.deinit();
     self.config = config.*;
 
+    self.bg_image_load_failed = prepare_image and config.bg_image != null and prepared == null;
     if (prepared) |image| {
         if (self.bg_image) |*old| old.markForReplace(self.alloc, image) else self.bg_image = image;
         prepared = null;

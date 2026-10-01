@@ -26,3 +26,16 @@ ordered feature strings change; real grid changes retain cache invalidation.
 Validation: 113/113 targeted Zig tests (font feature comparison and Key), native
 Debug blendReloadAndResizeKeepActualTargetsAndSnapshotOwnership (one case),
 core rebuild, Zig formatting and diff checks passed. No timing gain is claimed.
+
+## 3. Background replacement recovery
+
+Replace the unused background-change flag with failed-load state. Startup and
+explicit config application retain failure state; identical paths retry on the
+next config application, not on each frame. A failed replacement keeps the old
+image, a successful replacement clears failure, and removal unloads it.
+
+Validation: new native Debug damaged-PNG/repaired-same-path/removal test passed
+(one function), with actual red/green snapshot pixels. Early fixture runs
+failed because AppKit's setColor produced transparent PNG pixels; explicit RGBA
+fixture bytes corrected this. Temporary diagnostic renderer edits were removed.
+Core compilation, strict SwiftLint, Zig formatting and diff checks passed.

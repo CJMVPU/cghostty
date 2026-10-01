@@ -302,6 +302,77 @@ import Synchronization
         #expect(bitmap.pixelsWide > 0 && bitmap.pixelsHigh > 0)
     }
 
+    @Test func failedBackgroundReplacementRetriesSamePathAndKeepsOldImage() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let first = directory.appending(path: "first.png")
+        let second = directory.appending(path: "second.png")
+        func writeImage(_ color: NSColor, to url: URL) throws {
+            let bitmap = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 2, pixelsHigh: 2,
+                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+            let rgba = try #require(color.usingColorSpace(.sRGB))
+            let bytes = try #require(bitmap.bitmapData)
+            for y in 0..<2 { for x in 0..<2 {
+                let offset = y * bitmap.bytesPerRow + x * 4
+                bytes[offset] = UInt8((rgba.redComponent * 255).rounded())
+                bytes[offset + 1] = UInt8((rgba.greenComponent * 255).rounded())
+                bytes[offset + 2] = UInt8((rgba.blueComponent * 255).rounded())
+                bytes[offset + 3] = 255
+            } }
+            #expect(bitmap.bitmapData?[3] == 255)
+            try #require(bitmap.representation(using: .png, properties: [:])).write(to: url)
+        }
+        try writeImage(.red, to: first)
+        try Data("broken image".utf8).write(to: second)
+        let settings = "cursor-style-blink = false\ncursor-effect = false\nshell-integration = none\nbackground-image-fit = stretch\nbackground-image-opacity = 1"
+        let config = try TemporaryConfig(settings + "\nbackground-image = \(first.path)")
+        let app = Ghostty.App(configPath: config.temporaryFile.path)
+        var base = Ghostty.SurfaceConfiguration()
+        base.command = "/bin/sh -c 'printf background-ready; exec /bin/cat'"
+        let view = Ghostty.SurfaceView(app, baseConfig: base)
+        let surface = try #require(view.surfaceModel)
+        let window = makeWindow()
+        defer { window.close() }
+        window.contentView = view
+        window.orderFront(nil)
+        view.sizeDidChange(view.bounds.size)
+        surface.setVisible(true)
+        let owner = try #require(view.windowCompositor)
+        owner.updateGeometry()
+        try await wait("background fixture", worker: owner.worker, {
+            surface.readContents(viewport: false).contains("background-ready") &&
+                owner.worker.statistics.paneDraws > 0 && owner.worker.isIdle
+        })
+        func center() throws -> NSColor {
+            let image = NSBitmapImageRep(cgImage: try #require(surface.copySnapshot()))
+            let color = try #require(image.colorAt(x: image.pixelsWide / 2, y: image.pixelsHigh / 2)?.usingColorSpace(.sRGB))
+            print("Background center: \(color)")
+            return color
+        }
+        #expect(try center().redComponent > 0.9)
+        for repaired in [false, true] {
+            if repaired { try writeImage(.green, to: second) }
+            let revision = surface.renderRevision
+            try config.reload(settings + "\nbackground-image = \(second.path)")
+            surface.updateConfig(config)
+            try await wait("background replacement", worker: owner.worker, {
+                surface.renderRevision > revision && owner.worker.isIdle
+            })
+            let color = try center()
+            #expect(repaired ? color.greenComponent > 0.9 : color.redComponent > 0.9)
+        }
+        let revision = surface.renderRevision
+        try config.reload(settings)
+        surface.updateConfig(config)
+        try await wait("background removal", worker: owner.worker, {
+            surface.renderRevision > revision && owner.worker.isIdle
+        })
+        #expect(try center().greenComponent < 0.5)
+        #expect(owner.worker.statistics.failed == 0)
+    }
+
     @Test func membershipAndCloseDoNotWaitForFramePreparation() async throws {
         let config = try TemporaryConfig("cursor-style-blink = false\ncursor-effect = false")
         let app = Ghostty.App(configPath: config.temporaryFile.path)
