@@ -1808,23 +1808,18 @@ pub fn changeConfig(self: *Self, config: *DerivedConfig) !void {
 
     self.releaseScrollTextures();
 
-    // We always redo the font shaper in case font features changed. We
-    // could check to see if there was an actual config change but this is
-    // easier and rare enough to not cause performance issues.
-    {
+    // Grid changes invalidate cached glyph indices in setFontGrid. A config
+    // update only replaces the shaper when its ordered feature list changes.
+    if (!fontFeaturesEqual(self.config.font_features.items, config.font_features.items)) {
         var font_shaper = try font.Shaper.init(self.alloc, .{
             .features = config.font_features.items,
         });
         errdefer font_shaper.deinit();
         self.font_shaper.deinit();
         self.font_shaper = font_shaper;
+        self.font_shaper_cache.deinit(self.alloc);
+        self.font_shaper_cache = font.ShaperCache.init();
     }
-
-    // We also need to reset the shaper cache so shaper info
-    // from the previous font isn't reused for the new font.
-    const font_shaper_cache = font.ShaperCache.init();
-    self.font_shaper_cache.deinit(self.alloc);
-    self.font_shaper_cache = font_shaper_cache;
 
     // Set our new minimum contrast
     self.uniforms.min_contrast = config.min_contrast;
@@ -3119,4 +3114,20 @@ fn addPreeditCell(
     if (cp.wide and coord.x < self.cells.size.columns - 1) {
         try self.addUnderline(@intCast(coord.x + 1), @intCast(coord.y), .single, screen_fg, 255);
     }
+}
+
+fn fontFeaturesEqual(a: []const [:0]const u8, b: []const [:0]const u8) bool {
+    if (a.len != b.len) return false;
+    for (a, b) |left, right| if (!std.mem.eql(u8, left, right)) return false;
+    return true;
+}
+
+test "font config features compare ordered content rather than allocation identity" {
+    const t = std.testing;
+    const copy = try t.allocator.dupeZ(u8, "calt=0");
+    defer t.allocator.free(copy);
+    try t.expect(fontFeaturesEqual(&.{"calt=0"}, &.{copy}));
+    try t.expect(!fontFeaturesEqual(&.{"calt=0"}, &.{"calt=1"}));
+    try t.expect(!fontFeaturesEqual(&.{ "calt=0", "calt=1" }, &.{ "calt=1", "calt=0" }));
+    try t.expect(!fontFeaturesEqual(&.{}, &.{"calt=0"}));
 }

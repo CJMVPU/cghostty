@@ -1490,11 +1490,8 @@ pub fn updateConfig(
         log.warn("failed to deactivate key tables err={}", .{err});
     };
 
-    // Before sending any other config changes, we give the renderer a new font
-    // grid. We could check to see if there was an actual change to the font,
-    // but this is easier and pretty rare so it's not a performance concern.
-    //
-    // (Calling setFontSize builds and sends a new font grid to the renderer.)
+    // Publish a changed font grid before the renderer config. setFontSize
+    // compares the complete grid key, including DPI, style and variations.
     try self.setFontSize(font_size: {
         // If we have manually adjusted the font size, keep it that way.
         if (self.font_size_adjusted) {
@@ -2157,6 +2154,14 @@ pub fn setFontSize(self: *Surface, size: font.face.DesiredSize) !void {
         .width = font_grid.metrics.cell_width,
         .height = font_grid.metrics.cell_height,
     });
+
+    // The set may return the existing grid for a theme-only update. Balance
+    // the temporary reference without invalidating atlas or shaping caches.
+    // Cell-size propagation above still applies new padding/window settings.
+    if (font_grid_key.eql(self.font_grid_key)) {
+        self.app.font_grid_set.deref(font_grid_key);
+        return;
+    }
 
     // Notify our render thread of the new font stack. The renderer
     // MUST accept the new font grid and deref the old.
