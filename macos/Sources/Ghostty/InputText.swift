@@ -7,7 +7,10 @@ struct InputText {
     private let text: NSString
 
     init(_ value: String, selectedRanges: [NSRange]) {
-        let document = value as NSString
+        self.init(document: value as NSString, selectedRanges: selectedRanges)
+    }
+
+    init(document: NSString, selectedRanges: [NSRange]) {
         text = document
         // AppKit has one selection; a rectangular selection exposes its first
         // contiguous span. Accessibility continues to expose every span.

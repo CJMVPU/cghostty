@@ -1523,38 +1523,38 @@ pub const CAPI = struct {
     }
 
     const Accessibility = extern struct {
-        text: [*:0]const u8,
+        text: ?[*:0]const u8,
         text_len: usize,
         visible: terminal.accessibility.Range,
         selected: [*]const terminal.accessibility.Range,
         selected_len: usize,
         revision: u64,
+        text_revision: u64,
     };
 
-    // -1: failure; 0: unchanged (no output allocation); 1: owned snapshot.
+    // -1: failure; 0: unchanged; 1: owned update (null text reuses text_revision).
     export fn ghostty_surface_read_accessibility(surface: *Surface, previous: u64, result: *Accessibility) c_int {
         const core = &surface.core_surface;
         core.render.state.lockDemand(global.io());
         defer core.render.state.unlockDemand(global.io());
-        const revision = core.accessibility_tracker.current(&core.io.termio.terminal);
-        if (previous != 0 and previous == revision) return 0;
-        const snapshot = terminal.accessibility.capture(global.alloc(), core.io.termio.terminal.screens.active) catch |err| {
+        const snapshot = (core.accessibility_tracker.read(global.alloc(), &core.io.termio.terminal, previous) catch |err| {
             log.warn("error capturing accessibility text err={}", .{err});
             return -1;
-        };
+        }) orelse return 0;
         result.* = .{
-            .text = snapshot.text.ptr,
-            .text_len = snapshot.text.len,
+            .text = if (snapshot.text) |text| text.ptr else null,
+            .text_len = if (snapshot.text) |text| text.len else 0,
             .visible = snapshot.visible,
             .selected = snapshot.selected.ptr,
             .selected_len = snapshot.selected.len,
-            .revision = revision,
+            .revision = snapshot.revision,
+            .text_revision = snapshot.text_revision,
         };
         return 1;
     }
 
     export fn ghostty_surface_free_accessibility(snapshot: *Accessibility) void {
-        global.alloc().free(snapshot.text[0..snapshot.text_len :0]);
+        if (snapshot.text) |text| global.alloc().free(text[0..snapshot.text_len :0]);
         global.alloc().free(snapshot.selected[0..snapshot.selected_len]);
     }
 

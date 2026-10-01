@@ -182,6 +182,34 @@ import Testing
         #expect(view.healthy)
     }
 
+    @Test func selectionUpdatesReuseAccessibilityDocumentAndLineIndex() async throws {
+        let view = makeView(command: "/bin/sh -c 'printf \"old\\n桥接🙂é\\nready\"; exec /bin/cat'")
+        let surface = try #require(view.surfaceModel)
+        try await waitForText("ready", in: surface)
+        let initial = try #require(surface.readAccessibility())
+        let captures = surface.accessibilityCaptureCount
+        var indexed = AccessibilityText(initial)
+        #expect(surface.perform(.selectAll))
+        for direction in Array(repeating: ["left", "right"], count: 20).flatMap({ $0 }) {
+            #expect(surface.perform(action: "adjust_selection:\(direction)"))
+            let update = try #require(surface.readAccessibility())
+            #expect(update.textRevision == initial.textRevision)
+            #expect(update.cocoaText === initial.cocoaText)
+            #expect(surface.accessibilityCaptureCount == captures)
+            indexed = AccessibilityText(update, reusing: indexed)
+            #expect(indexed.selectedRanges == update.selectedRanges)
+            #expect(view.selectedRange() == update.selectedRanges.first)
+            let reference = AccessibilityText(update)
+            #expect(indexed.utf16Length == reference.utf16Length)
+            for offset in 0...indexed.utf16Length { #expect(indexed.line(for: offset) == reference.line(for: offset)) }
+        }
+        #expect(surface.perform(.reset))
+        let reset = try #require(surface.readAccessibility())
+        #expect(reset.textRevision > initial.textRevision)
+        #expect(surface.accessibilityCaptureCount == captures + 1)
+        #expect(initial.text.contains("桥接🙂"))
+    }
+
     @Test func accessibilitySnapshotKeepsTextAndUTF16SelectionTogether() async throws {
         var view: Ghostty.SurfaceView? = makeView()
         var surface: Ghostty.Surface? = try #require(view?.surfaceModel)

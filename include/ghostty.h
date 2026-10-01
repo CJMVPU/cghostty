@@ -456,7 +456,7 @@ typedef struct {
   uintptr_t text_len;
 } ghostty_text_s;
 
-// UTF-16 offsets into the text carried by this same snapshot.
+// UTF-16 offsets into text_revision. Null text means reuse the prior document.
 typedef struct { uintptr_t location; uintptr_t length; } ghostty_text_range_s;
 typedef struct {
   const char* text;
@@ -465,6 +465,7 @@ typedef struct {
   const ghostty_text_range_s* selected;
   uintptr_t selected_len;
   uint64_t revision;
+  uint64_t text_revision;
 } ghostty_accessibility_s;
 
 

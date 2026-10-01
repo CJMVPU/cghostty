@@ -261,9 +261,11 @@ extension Ghostty {
 
         struct AccessibilitySnapshot {
             let text: String
+            let cocoaText: NSString
             let visibleRange: NSRange
             let selectedRanges: [NSRange]
             let revision: UInt64
+            let textRevision: UInt64
         }
 
         @MainActor private var accessibilitySnapshot: AccessibilitySnapshot?
@@ -277,19 +279,31 @@ extension Ghostty {
             if result == 0 { return accessibilitySnapshot }
             guard result == 1 else { return nil }
             defer { ghostty_surface_free_accessibility(&value) }
-            let bytes = UnsafeRawBufferPointer(start: value.text, count: Int(value.text_len))
-            guard let text = String(bytes: bytes, encoding: .utf8) else { return nil }
+            let text: String
+            let cocoaText: NSString
+            if let pointer = value.text {
+                let bytes = UnsafeRawBufferPointer(start: pointer, count: Int(value.text_len))
+                guard let decoded = String(bytes: bytes, encoding: .utf8) else { return nil }
+                text = decoded
+                cocoaText = decoded as NSString
+                #if CGHOSTTY_TESTING
+                accessibilityCaptureCount += 1
+                #endif
+            } else {
+                guard let previous = accessibilitySnapshot, previous.textRevision == value.text_revision else { return nil }
+                text = previous.text
+                cocoaText = previous.cocoaText
+            }
             let snapshot = AccessibilitySnapshot(
                 text: text,
+                cocoaText: cocoaText,
                 visibleRange: NSRange(location: Int(value.visible.location), length: Int(value.visible.length)),
                 selectedRanges: UnsafeBufferPointer(start: value.selected, count: Int(value.selected_len)).map {
                     NSRange(location: Int($0.location), length: Int($0.length))
                 },
-                revision: value.revision)
+                revision: value.revision,
+                textRevision: value.text_revision)
             accessibilitySnapshot = snapshot
-            #if CGHOSTTY_TESTING
-            accessibilityCaptureCount += 1
-            #endif
             return snapshot
         }
 
@@ -303,7 +317,7 @@ extension Ghostty {
         /// Input uses document-relative UTF-16 ranges from the same snapshot.
         @MainActor var inputText: InputText? {
             guard let snapshot = readAccessibility() else { return nil }
-            return InputText(snapshot.text, selectedRanges: snapshot.selectedRanges)
+            return InputText(document: snapshot.cocoaText, selectedRanges: snapshot.selectedRanges)
         }
 
         @MainActor var renderRevision: UInt64 { ghostty_surface_render_revision(surface) }

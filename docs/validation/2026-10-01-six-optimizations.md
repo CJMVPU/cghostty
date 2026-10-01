@@ -54,3 +54,26 @@ post-close ownership, and the existing full-snapshot lifetime test passed.
 Core/Metal compilation, strict SwiftLint without cache, formatting and diff
 checks passed. The test CLI uses one selector at a time; both functions were
 verified in separate runs. No frame-time or end-to-end speedup is claimed.
+
+## 5. Accessibility document and metadata caching
+
+Cache sparse emitted row spans with the content identity, independently of
+viewport and selection. Metadata updates binary-search the relevant rows and
+inspect cells only for partial row ranges. Text-changing updates replace the
+index atomically after successful allocation. Swift keeps the same String,
+NSString and line-start array while updating ranges/revisions; input queries
+also reuse the NSString. Deferred whitespace and UTF-16 semantics are retained.
+
+Validation: 81/81 targeted Zig tests passed, including indexed-versus-full
+capture comparisons over wide/combining text, blank/soft-wrapped rows, reversed
+rectangles and viewport moves; allocation failures, resize, history pruning,
+alternate-screen changes and reset were checked. The native test performed 40
+selection adjustments without increasing full-text capture count and verified
+NSString identity, input ranges and line lookups; reset added exactly one
+capture. All four AccessibilityTextTests passed. Core/native compilation,
+strict SwiftLint, scope, formatting and diff checks passed.
+
+The index costs memory proportional to emitted row spans. Content changes still
+require full capture; a selection spanning the whole history visits its rows.
+No wall-clock speedup is claimed. Initial Swift initializer compilation errors
+and one rejected stale-core reuse were corrected before the successful runs.

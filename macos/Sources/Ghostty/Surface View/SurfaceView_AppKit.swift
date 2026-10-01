@@ -340,7 +340,7 @@ extension Ghostty {
             cachedScreenContents = .init(duration: .milliseconds(500), refresh: { [weak self] previous in
                 let snapshot = self?.surfaceModel?.readAccessibility()
                 if let previous, let snapshot, previous.revision == snapshot.revision { return previous }
-                return AccessibilityText(snapshot)
+                return AccessibilityText(snapshot, reusing: previous)
             })
             cachedVisibleContents = .init(duration: .milliseconds(500)) { [weak self] in
                 guard let self else { return "" }

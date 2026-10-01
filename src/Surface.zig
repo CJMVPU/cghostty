@@ -649,6 +649,7 @@ pub fn deinit(self: *Surface) void {
     self.render.destroy();
 
     self.link_hit_cache.deinit(self.alloc);
+    self.accessibility_tracker.deinit(self.alloc);
 
     // Clean up our keyboard state
     self.keyboard.deinit(self.alloc);

@@ -108,16 +108,34 @@ struct AccessibilityText {
     let visibleRange: NSRange
     let selectedRanges: [NSRange]
     let revision: UInt64
+    let textRevision: UInt64
 
-    init(_ snapshot: Ghostty.Surface.AccessibilitySnapshot?) {
-        self.init(snapshot?.text ?? "", visibleRange: snapshot?.visibleRange,
-                  selectedRanges: snapshot?.selectedRanges ?? [], revision: snapshot?.revision ?? 0)
+    init(_ snapshot: Ghostty.Surface.AccessibilitySnapshot?, reusing previous: AccessibilityText? = nil) {
+        if let snapshot, let previous, snapshot.textRevision == previous.textRevision {
+            self.init(reusing: previous, snapshot: snapshot)
+        } else {
+            self.init(snapshot?.text ?? "", visibleRange: snapshot?.visibleRange,
+                      selectedRanges: snapshot?.selectedRanges ?? [], revision: snapshot?.revision ?? 0,
+                      textRevision: snapshot?.textRevision ?? 0)
+        }
     }
 
-    init(_ text: String, visibleRange: NSRange? = nil, selectedRanges: [NSRange] = [], revision: UInt64 = 0) {
+    private init(reusing previous: AccessibilityText, snapshot: Ghostty.Surface.AccessibilitySnapshot) {
+            text = previous.text
+            cocoaText = previous.cocoaText
+            utf16Length = previous.utf16Length
+            lineStarts = previous.lineStarts
+            visibleRange = snapshot.visibleRange
+            selectedRanges = snapshot.selectedRanges
+            revision = snapshot.revision
+            textRevision = snapshot.textRevision
+    }
+
+    init(_ text: String, visibleRange: NSRange? = nil, selectedRanges: [NSRange] = [], revision: UInt64 = 0, textRevision: UInt64 = 0) {
         self.visibleRange = visibleRange ?? NSRange(location: 0, length: text.utf16.count)
         self.selectedRanges = selectedRanges
         self.revision = revision
+        self.textRevision = textRevision
         self.text = text
         cocoaText = text as NSString
         var starts = [0]
