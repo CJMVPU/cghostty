@@ -9,6 +9,9 @@ import Foundation
     var errors: [String] { diagnostics.map(\.displayMessage) }
     private(set) var status = ""
     private var inputIsValid = false
+    private var validationTask: Task<Void, Never>?
+    private(set) var validationPending = false
+    var validationCompleted: (() -> Void)?
     private var originalDisplayed: [String: String] = [:]
     private var restartRequired = false
     private var savedStatus: String { restartRequired ? "Saved. Restart the app to apply changes." : "No unsaved changes." }
@@ -25,13 +28,16 @@ import Foundation
     }
 
     func reload(afterReset: Bool = false) {
+        validationTask?.cancel()
+        validationPending = false
         if afterReset { restartRequired = true }
         do {
             let loaded = try store.read()
             record = loaded
             input = loaded.current
             displayed = [:]
-            if let parsed = store.parse(input) {
+            let evaluation = store.evaluate(input)
+            if let parsed = evaluation.config {
                 for field in SettingsField.catalog {
                     displayed[field.key] = SettingsField.values(from: parsed.formattedEntry(field.key)).joined(separator: "\n")
                 }
@@ -39,7 +45,7 @@ import Foundation
             // Invalid edits in a damaged record must remain visible and fixable.
             input.values.forEach { displayed[$0.key] = $0.value }
             originalDisplayed = displayed
-            diagnostics = store.diagnostics(input)
+            diagnostics = evaluation.diagnostics
             inputIsValid = errors.isEmpty
             status = savedStatus
         } catch {
@@ -50,8 +56,8 @@ import Foundation
         }
     }
 
-    func edit(_ field: SettingsField, value: String) {
-        edit([field.key: value])
+    func edit(_ field: SettingsField, value: String, deferred: Bool = false) {
+        edit([field.key: value], deferred: deferred)
     }
 
     var usesBundledFontPreset: Bool {
@@ -68,7 +74,7 @@ import Foundation
         edit(["font-family": families, "font-style": "default", "font-thicken": "true", "font-thicken-strength": "255"])
     }
 
-    private func edit(_ changes: [String: String]) {
+    private func edit(_ changes: [String: String], deferred: Bool = false) {
         let original = record?.current
         // Returning a field to its original value should also remove its dirty
         // state, instead of introducing an unnecessary explicit override.
@@ -79,10 +85,36 @@ import Foundation
                 if value == initial { input.values[key] = original.values[key] }
             }
         }
-        diagnostics = store.diagnostics(input)
-        inputIsValid = errors.isEmpty
-        if !errors.isEmpty {
+        validationTask?.cancel()
+        if deferred {
+            diagnostics = store.fieldDiagnostics(input)
+            inputIsValid = false
+            validationPending = true
+            updateStatus()
+            // Coalesce typing; saving and closing always flush the current draft.
+            validationTask = Task { [weak self] in
+                do { try await Task.sleep(for: .milliseconds(150)) } catch { return }
+                guard !Task.isCancelled, let self else { return }
+                self.flushValidation()
+                self.validationCompleted?()
+            }
+        } else { flushValidation() }
+    }
+
+    func flushValidation() {
+        validationTask?.cancel()
+        validationTask = nil
+        validationPending = false
+        diagnostics = store.evaluate(input).diagnostics
+        inputIsValid = diagnostics.isEmpty
+        updateStatus()
+    }
+
+    private func updateStatus() {
+        if !diagnostics.isEmpty {
             status = "Fix the invalid settings before saving."
+        } else if validationPending {
+            status = "Checking settings…"
         } else if dirty {
             status = "\(changedCount) modified \(changedCount == 1 ? "setting" : "settings"). Restart after saving to apply changes."
         } else { status = savedStatus }
@@ -94,10 +126,13 @@ import Foundation
 
     @discardableResult
     func save() -> Bool {
+        validationTask?.cancel()
+        validationPending = false
         guard let record else { return false }
         do {
             self.record = try store.save(input, revision: record.revision)
             diagnostics = []
+            inputIsValid = true
             originalDisplayed = displayed
             restartRequired = true
             status = savedStatus

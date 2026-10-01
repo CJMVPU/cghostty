@@ -70,14 +70,13 @@ import Darwin
         startupErrors = []
         do {
             let record = try FileManager.default.fileExists(atPath: url.path) ? read() : migrate()
-            let result = parse(record.current)
-            let errors = validate(record.current)
-            if let result, errors.isEmpty && result.errors.isEmpty {
+            let evaluation = evaluate(record.current)
+            if let result = evaluation.config, evaluation.diagnostics.isEmpty {
                 result.report(startupErrors)
                 return applyCLI(record.current, checked: result, cli: cli)
             }
-            startupErrors = errors + (result?.errors ?? ["Unable to parse settings."])
-            if let previous = record.previous, validate(previous).isEmpty, let recovered = parse(previous), recovered.errors.isEmpty {
+            startupErrors = evaluation.diagnostics.map(\.rawMessage)
+            if let previous = record.previous, let recovered = validatedConfig(previous) {
                 startupErrors.insert("Invalid settings. The last valid settings were restored. Open Settings to correct the errors.", at: 0)
                 recovered.report(startupErrors)
                 return applyCLI(previous, checked: recovered, cli: cli)
@@ -107,22 +106,39 @@ import Darwin
 
     func validate(_ input: Input) -> [String] { diagnostics(input).map(\.rawMessage) }
 
-    func diagnostics(_ input: Input) -> [SettingsDiagnostic] {
+    struct Evaluation {
+        let config: Ghostty.ConfigHandle?
+        let diagnostics: [SettingsDiagnostic]
+    }
+
+    private func validatedConfig(_ input: Input) -> Ghostty.ConfigHandle? {
+        let result = evaluate(input)
+        return result.diagnostics.isEmpty ? result.config : nil
+    }
+
+    func diagnostics(_ input: Input) -> [SettingsDiagnostic] { evaluate(input).diagnostics }
+
+    func fieldDiagnostics(_ input: Input) -> [SettingsDiagnostic] {
         var errors: [SettingsDiagnostic] = SettingsField.catalogError.map { [$0] } ?? []
         errors += input.values.keys.sorted().filter { SettingsField.byKey[$0] == nil }.map {
             SettingsDiagnostic(kind: .field, message: "Unknown setting: \($0)")
         }
-        var explainedKeys = Set<String>()
         for field in SettingsField.catalog {
             if let value = input.values[field.key], let error = field.validate(value) {
                 errors.append(SettingsDiagnostic(key: field.key, kind: .field, message: error))
-                explainedKeys.insert(field.key)
             }
         }
-        let coreErrors = (parse(input)?.errors ?? ["Unable to create the settings parser."]).map(SettingsDiagnostic.init(coreMessage:))
+        return errors
+    }
+
+    func evaluate(_ input: Input) -> Evaluation {
+        let config = parse(input)
+        var errors = fieldDiagnostics(input)
+        let explainedKeys = Set(errors.compactMap(\.key))
+        let coreErrors = (config?.errors ?? ["Unable to create the settings parser."]).map(SettingsDiagnostic.init(coreMessage:))
         errors += coreErrors.filter { !explainedKeys.contains($0.key ?? "") }
         var seen = Set<SettingsDiagnostic>()
-        return errors.filter { seen.insert($0).inserted }
+        return Evaluation(config: config, diagnostics: errors.filter { seen.insert($0).inserted })
     }
 
     @discardableResult
@@ -193,9 +209,9 @@ import Darwin
         }
         // Compare against the bytes that will be imported before committing.
         if exists, try Data(contentsOf: legacySource) != original { throw Failure.changed }
-        let errors = validate(input)
-        guard errors.isEmpty else { throw Failure.invalid(errors) }
-        guard let imported = parse(input), imported.hasSameSettings(as: checked) else { throw Failure.changed }
+        let evaluation = evaluate(input)
+        guard evaluation.diagnostics.isEmpty else { throw Failure.invalid(evaluation.diagnostics.map(\.rawMessage)) }
+        guard let imported = evaluation.config, imported.hasSameSettings(as: checked) else { throw Failure.changed }
         let record = Record(current: input)
         try write(record)
         return record

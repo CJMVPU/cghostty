@@ -36,6 +36,10 @@ private final class SettingsList: NSStackView {
     private var discardButton: SettingsButton!
     private let fieldEditor = SettingsTextView()
     private var collapsedSections: Set<String> = ["Advanced Typography"]
+    private var renderedContext: [String: String] = [:]
+    private var renderedErrors: [String: String] = [:]
+    private var renderedEnabled: Bool?
+    private var renderedPreset: Bool?
     private var categoryOffsets: [Int: NSPoint] = [:]
 
     init(store: SettingsStore, preferences: UserDefaults = .ghostty) {
@@ -59,6 +63,7 @@ private final class SettingsList: NSStackView {
         fieldEditor.isFieldEditor = true
         fieldEditor.configurePlainText()
         fieldEditor.font = SettingsTypography.font
+        model.validationCompleted = { [weak self] in self?.updateState() }
         buildContent()
         renderRows()
         updateState()
@@ -91,6 +96,7 @@ private final class SettingsList: NSStackView {
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         guard model.dirty else { return true }
+        if model.validationPending { model.flushValidation() }
         let alert = NSAlert()
         alert.messageText = "Save changes?"
         alert.informativeText = model.canSave ? "Restart the app to apply saved changes." : "Fix the invalid settings or discard your changes."
@@ -222,6 +228,10 @@ private final class SettingsList: NSStackView {
         let savedOffset = offset ?? rows.enclosingScrollView?.contentView.bounds.origin ?? .zero
         rows.arrangedSubviews.forEach { rows.removeArrangedSubview($0); $0.removeFromSuperview() }
         rowViews = [:]
+        renderedContext = [:]
+        renderedErrors = [:]
+        renderedEnabled = nil
+        renderedPreset = nil
         for (index, button) in categoryButtons.enumerated() {
             button.wantsLayer = true
             button.layer?.cornerRadius = 7
@@ -263,7 +273,7 @@ private final class SettingsList: NSStackView {
                     self?.model.applyBundledFontPreset(families: families)
                     self?.updateState()
                 }, changed: { [weak self] value in
-                    self?.model.edit(field, value: value)
+                    self?.model.edit(field, value: value, deferred: true)
                     self?.updateState()
                 })
                 rows.addArrangedSubview(row)
@@ -289,10 +299,24 @@ private final class SettingsList: NSStackView {
         discardButton.isEnabled = model.dirty || model.record == nil
         discardButton.title = model.record == nil ? "Retry" : "Discard Changes"
         window?.isDocumentEdited = model.dirty
+        let context = model.displayed
+        let enabled = model.record != nil
+        let preset = model.usesBundledFontPreset
+        let changed = Set(context.keys).union(renderedContext.keys).filter { context[$0] != renderedContext[$0] }
+        let fontChanged = changed.contains { $0.hasPrefix("font-family") }
         for (key, row) in rowViews {
-            row.showError(model.error(for: key), enabled: model.record != nil)
-            row.refresh(context: model.displayed, preset: model.usesBundledFontPreset)
+            let error = model.error(for: key)
+            if renderedEnabled != enabled || renderedErrors[key] != error {
+                row.showError(error, enabled: enabled)
+            }
+            if changed.contains(key) || renderedPreset != preset || (fontChanged && key.hasPrefix("font-style")) {
+                row.refresh(context: context, preset: preset)
+            }
+            renderedErrors[key] = error
         }
+        renderedContext = context
+        renderedEnabled = enabled
+        renderedPreset = preset
     }
 
     private func save() { _ = model.save(); updateState() }

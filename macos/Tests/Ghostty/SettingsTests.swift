@@ -33,6 +33,27 @@ import Testing
         }
     }
 
+    @Test func deferredValidationUsesLatestDraftAndSaveChecksIt() throws {
+        try withStore { store, _ in
+            _ = store.load(cli: false)
+            let model = SettingsModel(store: store)
+            let field = try #require(SettingsField.byKey["font-size"])
+            model.edit(field, value: "1", deferred: true)
+            model.edit(field, value: "19", deferred: true)
+            #expect(model.validationPending)
+            #expect(!model.canSave)
+            model.flushValidation()
+            #expect(model.canSave)
+            #expect(model.displayed[field.key] == "19")
+            model.edit(field, value: "nan", deferred: true)
+            #expect(model.error(for: field.key) != nil)
+            #expect(!model.save())
+            model.reload()
+            #expect(!model.validationPending)
+            #expect(!model.dirty)
+        }
+    }
+
     @Test func defaultsAreInternalAndDoNotCreateLegacyFile() throws {
         try withStore { store, source in
             #expect(store.load(cli: false)?.errors.isEmpty == true)
