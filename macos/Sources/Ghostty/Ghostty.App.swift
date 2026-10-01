@@ -37,9 +37,9 @@ extension Ghostty {
         @ObservationIgnored let undoManager = ExpiringUndoManager()
         @ObservationIgnored nonisolated let wakeupGate = AppWakeupGate()
 
-        /// Preferred config file than the default ones
-        @ObservationIgnored private var configPath: String?
-        @ObservationIgnored private var configurationStore: ConfigStore?
+        /// User-facing editing and persistence are owned by the settings window.
+        @ObservationIgnored private var settingsStore: SettingsStore?
+        @ObservationIgnored private(set) var settingsController: SettingsController?
         private(set) var startupConfigurationErrors: [String] = []
         /// The ghostty app instance. We only have one of these for the entire app, although I guess
         /// in theory you can have multiple... I don't know why you would...
@@ -57,7 +57,6 @@ extension Ghostty {
         }
 
         init(configPath: String? = nil) {
-            self.configPath = configPath
             // Initialize the global configuration.
             if configPath == "/dev/null" {
                 self.config = Config(at: configPath)
@@ -65,9 +64,9 @@ extension Ghostty {
                 let path = configPath ?? ConfigHandle.defaultPath
                 let source = URL(fileURLWithPath: path)
                 let directory = configPath == nil ? nil : source.deletingLastPathComponent()
-                    .appendingPathComponent(".config-state-" + source.lastPathComponent)
-                let store = ConfigStore(source: source, directory: directory)
-                self.configurationStore = store
+                    .appendingPathComponent(".settings-state-" + source.lastPathComponent)
+                let store = SettingsStore(legacySource: source, directory: directory)
+                self.settingsStore = store
                 self.config = Config(handle: store.load())
                 self.startupConfigurationErrors = self.config.errors
             }
@@ -194,22 +193,9 @@ extension Ghostty {
         }
 
         func openConfig() {
-            let str = ConfigHandle.prepareForEditing(at: configPath)
-            guard !str.isEmpty else {
-                let alert = NSAlert()
-                alert.messageText = "无法打开配置 / Could Not Open Settings"
-                alert.informativeText = "无法准备配置文件。请检查文件路径和写入权限后重试。\nCould not prepare the configuration file. Check its path and write permissions, then try again."
-                alert.runModal()
-                return
-            }
-            let fileURL = URL(fileURLWithPath: str).absoluteString
-            var action = ghostty_action_open_url_s()
-            action.kind = GHOSTTY_ACTION_OPEN_URL_KIND_TEXT
-            fileURL.withCString { cStr in
-                action.url = cStr
-                action.len = UInt(fileURL.count)
-                _ = App.openURL(action)
-            }
+            guard let settingsStore else { return }
+            if settingsController == nil { settingsController = SettingsController(store: settingsStore) }
+            settingsController?.present()
         }
 
         /// Reapply the loaded configuration after a light/dark appearance change.
@@ -224,8 +210,10 @@ extension Ghostty {
 
         @discardableResult
         func restoreDefaultSettings() throws -> URL? {
-            guard let configurationStore else { return nil }
-            return try configurationStore.restoreDefaults()
+            guard let settingsStore else { return nil }
+            let backup = try settingsStore.restoreDefaults()
+            settingsController?.settingsWereReset()
+            return backup
         }
 
         // MARK: Notifications

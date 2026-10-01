@@ -136,6 +136,13 @@ extension Ghostty {
             return record
         }
 
+        /// Read-only bridge for the one-time move to application-owned settings.
+        func successfulMigrationData() -> Data? {
+            guard let record = readRecord(),
+                  let checked = ConfigHandle.load(data: record.data, source: source), checked.errors.isEmpty else { return nil }
+            return record.data
+        }
+
         private func save(_ data: Data, fingerprint: Fingerprint?) throws {
             try prepareDirectory()
             let record = Record(schema: 1, source: source.path, build: build,

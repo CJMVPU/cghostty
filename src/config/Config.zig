@@ -3124,6 +3124,11 @@ test "handle bom in config files" {
 /// Missing or empty files leave the built-in defaults intact. Other failures
 /// must be visible instead of silently replacing user settings with defaults.
 pub fn loadDefaultFiles(self: *Config, alloc: Allocator) !void {
+    const stored = @import("settings.zig").loadStored(self, alloc) catch |err| {
+        try self.addDiagnosticFmt("unable to read application settings: {}", .{err});
+        return;
+    };
+    if (stored) return;
     const path = try file_load.defaultPath(alloc);
     defer alloc.free(path);
 

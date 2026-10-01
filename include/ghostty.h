@@ -1112,6 +1112,12 @@ GHOSTTY_API uint32_t ghostty_config_diagnostics_count(ghostty_config_t);
 GHOSTTY_API ghostty_diagnostic_s ghostty_config_get_diagnostic(ghostty_config_t, uint32_t);
 GHOSTTY_API ghostty_string_s ghostty_config_open_path(const char*);
 GHOSTTY_API ghostty_string_s ghostty_config_template(void);
+GHOSTTY_API ghostty_string_s ghostty_settings_catalog(void);
+GHOSTTY_API bool ghostty_settings_load(ghostty_config_t, const uint8_t*, size_t, const char*);
+GHOSTTY_API bool ghostty_settings_equal(ghostty_config_t, ghostty_config_t);
+GHOSTTY_API ghostty_string_s ghostty_config_format_entry(ghostty_config_t, const char*, size_t);
+// Borrowed bytes; do not free. Valid for the lifetime of the process.
+GHOSTTY_API const uint8_t* ghostty_settings_font_data(size_t*);
 
 GHOSTTY_API ghostty_app_t ghostty_app_new(const ghostty_runtime_config_s*,
                                              ghostty_config_t);

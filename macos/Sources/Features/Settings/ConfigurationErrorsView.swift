@@ -49,7 +49,7 @@ struct ConfigurationErrorsView: View {
                 Spacer()
                 Button("关闭 / Close", action: dismiss)
                     .keyboardShortcut(.cancelAction)
-                Button("打开配置 / Open Configuration", action: edit)
+                Button("打开设置 / Open Settings", action: edit)
                     .keyboardShortcut(.defaultAction)
             }
             .controlSize(.large)

@@ -560,13 +560,8 @@ fn actionCommands(action: Action.Key) []const Command {
         .open_config => comptime &.{
             .{
                 .action = .{ .open_config = .os_open },
-                .title = "Open Config Using OS editor",
-                .description = "Open the config file with the OS's default editor.",
-            },
-            .{
-                .action = .{ .open_config = .new_window },
-                .title = "Open Config in New Terminal Window",
-                .description = "Open the config file in a new window using $EDITOR or $VISUAL.",
+                .title = "Open Settings",
+                .description = "Open the settings window.",
             },
         },
 

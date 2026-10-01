@@ -159,6 +159,52 @@ export fn ghostty_config_template() String {
     return .fromSlice(data);
 }
 
+export fn ghostty_settings_catalog() String {
+    return .fromSlice(@import("settings.zig").catalog(global.alloc()) catch return .empty);
+}
+
+export fn ghostty_settings_load(self: *Config, data: [*]const u8, len: usize, source: [*:0]const u8) bool {
+    @import("settings.zig").loadInput(self, global.alloc(), data[0..len], std.mem.span(source)) catch |err| {
+        self.addDiagnosticFmt("Unable to parse application settings: {s}", .{@errorName(err)}) catch return false;
+    };
+    return true;
+}
+
+/// Verify migration preserved every public setting after detaching includes.
+export fn ghostty_settings_equal(a: *Config, b: *Config) bool {
+    @setEvalBranchQuota(100_000);
+    inline for (@import("template_metadata.zig").entries) |entry| {
+        if (comptime entry.key == .@"config-file" or entry.key == .@"config-default-files") continue;
+        if (a.changed(b, entry.key)) return false;
+    }
+    return true;
+}
+
+/// Text for one setting, using the same formatter as the configuration guide.
+/// The caller owns the returned string. This is a display API, not a serializer
+/// for replacing a user's file (which may contain comments and ordered rules).
+export fn ghostty_config_format_entry(self: *Config, key_str: [*]const u8, len: usize) String {
+    @setEvalBranchQuota(100_000);
+    inline for (@import("template_metadata.zig").entries) |entry| {
+        const name = @tagName(entry.key);
+        if (std.mem.eql(u8, name, key_str[0..len])) {
+            var output: std.Io.Writer.Allocating = .init(global.alloc());
+            defer output.deinit();
+            @import("formatter.zig").formatEntry(@TypeOf(@field(self, name)), name, @field(self, name), &output.writer) catch return .empty;
+            return .fromSlice(global.alloc().dupeZ(u8, output.written()) catch return .empty);
+        }
+    }
+    return .empty;
+}
+
+/// Borrowed immutable bytes, valid for the process lifetime. Native settings
+/// use the embedded face even when it is not installed as a system font.
+export fn ghostty_settings_font_data(len: *usize) [*]const u8 {
+    const data = @import("../font/embedded.zig").default_font;
+    len.* = data.len;
+    return data.ptr;
+}
+
 export fn ghostty_config_open_path(requested: ?[*:0]const u8) String {
     const result = if (requested) |path| edit.openPathAt(global.alloc(), std.mem.span(path)) else edit.openPath(global.alloc());
     const path = result catch |err| {

@@ -34,6 +34,12 @@ extension Ghostty {
             errors.append(contentsOf: messages)
         }
 
+        func formattedEntry(_ key: String) -> String {
+            key.withCString { Ghostty.AllocatedString(ghostty_config_format_entry(value, $0, key.utf8.count)).string }
+        }
+
+        func hasSameSettings(as other: ConfigHandle) -> Bool { ghostty_settings_equal(value, other.value) }
+
         static var defaultTemplate: Data? {
             let text = Ghostty.AllocatedString(ghostty_config_template()).string
             return text.isEmpty ? nil : Data(text.utf8)
@@ -52,6 +58,22 @@ extension Ghostty {
 
         static var hasCLIOverrides: Bool {
             !isRunningInXcode() && ghostty_config_has_cli_args()
+        }
+
+        static func load(settings: SettingsStore.Input, source: URL, cli: Bool = false) -> ConfigHandle? {
+            guard let data = try? JSONEncoder().encode(settings), let cfg = ghostty_config_new() else { return nil }
+            let loaded = data.withUnsafeBytes { bytes in
+                source.path.withCString { path in
+                    ghostty_settings_load(cfg, bytes.bindMemory(to: UInt8.self).baseAddress!, bytes.count, path)
+                }
+            }
+            guard loaded else { ghostty_config_free(cfg); return nil }
+            if cli && hasCLIOverrides {
+                ghostty_config_load_cli_args(cfg)
+                ghostty_config_load_recursive_files(cfg)
+            }
+            ghostty_config_finalize(cfg)
+            return ConfigHandle(adopting: cfg)
         }
 
         /// Startup snapshots contain file input only. CLI overrides are applied

@@ -22,6 +22,8 @@ class GhosttyCustomConfigCase: XCTestCase {
         try? FileManager.default.removeItem(at: configFile)
         let state = configFile.deletingLastPathComponent().appendingPathComponent(".config-state-" + configFile.lastPathComponent)
         try? FileManager.default.removeItem(at: state)
+        let settings = configFile.deletingLastPathComponent().appendingPathComponent(".settings-state-" + configFile.lastPathComponent)
+        try? FileManager.default.removeItem(at: settings)
     }
 
     func updateConfig(_ newConfig: String) throws {
@@ -36,6 +38,35 @@ class GhosttyCustomConfigCase: XCTestCase {
         app.launchEnvironment["CGHOSTTY_CONFIG_PATH"] = configFile.path
         app.launchEnvironment["GHOSTTY_USER_DEFAULTS_SUITE"] = defaultsSuite
         return app
+    }
+
+    @MainActor func updateSetting(_ app: XCUIApplication, key: String, value: String) {
+        app.menuBars.menuBarItems["cghostty"].click()
+        app.menuItems["Settings…"].click()
+        let window = app.windows["cghostty · 设置"]
+        XCTAssertTrue(window.waitForExistence(timeout: 10))
+        let search = window.textFields["settings.search"]
+        search.click()
+        search.typeKey("a", modifierFlags: .command)
+        paste(key, into: search, submit: false)
+        let text = window.textFields["settings." + key]
+        let multiline = window.textViews["settings." + key]
+        if text.exists {
+            text.click()
+            text.typeKey("a", modifierFlags: .command)
+            paste(value, into: text, submit: false)
+        } else if multiline.exists {
+            multiline.click()
+            multiline.typeKey("a", modifierFlags: .command)
+            paste(value, into: multiline, submit: false)
+        } else {
+            window.popUpButtons["settings." + key].click()
+            app.menuItems[value].click()
+        }
+        let save = window.buttons["settings.save"]
+        XCTAssertTrue(save.isEnabled)
+        save.click()
+        window.typeKey("w", modifierFlags: .command)
     }
 
     /// Preserve every representation, including non-text user clipboard contents.

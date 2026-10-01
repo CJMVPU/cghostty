@@ -54,7 +54,8 @@ fn generateGuide(alloc: std.mem.Allocator, explicit_trace_default: bool) ![:0]co
     try writer.print(marker ++ "\n# cghostty {s} — 用户配置 / User Configuration\n", .{build_config.version_string});
     try writer.writeAll(
         \\# 中文说明
-        \\# Settings（⌘,）打开此文件；修改后保存、退出并重新启动应用。
+        \\# 日常设置请使用 Settings（⌘,）窗口；保存后退出并重新启动应用。
+        \\# 此文本格式供旧配置迁移和显式命令行覆盖使用，日常设置由应用内部保存。
         \\# 将 Example: 后的 key = value 复制到单独一行启用；优先修改已有设置，避免重复定义。
         \\# 默认值不含主题或用户覆盖；完整快捷键默认值见末尾附录。
         \\# 新模板显式关闭 render-trace；其他示例及附录均为注释。
@@ -62,7 +63,8 @@ fn generateGuide(alloc: std.mem.Allocator, explicit_trace_default: bool) ![:0]co
         \\# Restore Default Settings… 会先备份再恢复模板。详细说明：cghostty +show-config --default --docs
         \\#
         \\# English guide
-        \\# Open with Settings (⌘,); save, quit, and restart the app to apply changes.
+        \\# Use the Settings (⌘,) window for everyday changes; save, quit, and restart to apply.
+        \\# This text format is for legacy migration and explicit CLI overrides; settings are stored internally.
         \\# Copy key = value after Example: onto a separate line to enable it. Edit existing settings first to avoid duplicates.
         \\# Defaults exclude theme/user overrides; full key bindings are in the appendix.
         \\# New templates explicitly disable render-trace; other examples and appendix entries are comments.

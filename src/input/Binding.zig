@@ -679,13 +679,9 @@ pub const Action = union(enum) {
     /// untested.
     show_on_screen_keyboard,
 
-    /// Open the configuration file in an editor.
-    ///
-    /// * `os_open`: Use the OS's default editor to edit the configuration file.
-    ///   This is the default action. (Available since 1.4.0)
-    /// * `new_window`: Launch the editor specified in `$EDITOR` or `$VISUAL` in
-    ///   a new Ghostty window to edit the configuration file. GTK only. (Available
-    ///   since 1.4.0.)
+    /// Open the independent settings window. Reuses an existing window.
+    /// Legacy `os_open` and `new_window` arguments remain accepted; both open
+    /// native settings. Settings are stored inside the application.
     open_config: OpenConfig,
 
     /// Close the current "surface", whether that is a window, tab, split, etc.

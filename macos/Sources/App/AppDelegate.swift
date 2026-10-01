@@ -351,6 +351,9 @@ class AppDelegate: NSObject,
             }
         }
 
+        if let settings = ghostty.settingsController, let window = settings.window,
+           !settings.windowShouldClose(window) { return .terminateCancel }
+
         // If our app says we don't need to confirm, we can exit now.
         if !ghostty.needsConfirmQuit { return .terminateNow }
 

@@ -111,7 +111,7 @@ Xcode scheme 和 Swift 模块仍为 `Ghostty`，C 桥接模块为 `GhosttyKit`�
 
 使用应用的绝对路径启动，避免命中另外安装的 Ghostty。验证终端可执行命令、UTF-8 输出、分屏、标签页，以及修改配置后重启应用生效。AppleScript 必须继续受 `macos-applescript` 设置保护。
 
-独立测试配置在 Debug 下可通过 `CGHOSTTY_CONFIG_PATH` 指定；ReleaseLocal 使用 `--config-default-files=false --config-file=/absolute/path/test.ghostty` 启动可执行文件。Release 不读取这个 Debug 专用环境变量，不要把个人 shell 的标题更新误判为隔离故障。
+独立测试配置在 Debug 下可通过 `CGHOSTTY_CONFIG_PATH` 指定；该文件仅作为首次迁移种子，内部设置隔离在其同级 `.settings-state-<文件名>` 目录。重启测试需要通过设置 UI 保存，不能继续修改已迁移的旧文件。ReleaseLocal 使用 `--config-default-files=false --config-file=/absolute/path/test.ghostty` 启动可执行文件。Release 不读取这个 Debug 专用环境变量，不要把个人 shell 的标题更新误判为隔离故障。
 
 ## 构建服务
 
@@ -330,6 +330,13 @@ Observation 模型；窗口由 `TerminalWindowState` 保存共享显示状态，
 `zig build check-config-bridge` 只校验，不改文件；核心构建/测试、`--skip-core` 原生构建和范围检查都会执行。
 修改字段类型或桥接规则时，运行配置 Zig 定向测试、`ConfigSnapshotTests` 和 `GhosttyConfigSnapshotUITests`。
 快捷键查询继续使用同代句柄，解析和配置优先级由 Zig 负责。
+设置编辑器使用独立草稿句柄，绝不修改 App/Surface 正在使用的配置。`SettingsStore` 原子保存应用内部 JSON，
+以文件锁和 revision 拒绝过期草稿，成功记录同时保留上次有效输入。首次迁移复制主文件及引用内容，
+用核心逐项比较迁移前后的设置；旧文件保持原样，此后不参与加载。`src/config/settings.zig` 统一解析内部输入，
+原生应用和 CLI 使用同一份记录。字段默认值、枚举及重复项类型由核心生成，界面只管理编辑状态和显示。
+`Ghostty.SettingsBridge` 封装设置目录和嵌入字体的 C 接口；`ConfigHandle` 持有草稿解析结果。
+固定设置字体通过 CoreText 使用同一份嵌入字体，开启字体平滑加厚、强度固定 255；不查询终端字体设置。
+`+edit-config` 仅提示原生设置入口，不再创建或打开文本配置文件。热重载尚未接入，保存后重启生效。
 应用内部事件直接调用所属对象的类型化方法；共享状态使用 Observation。
 NotificationCenter 只接收 AppKit 系统事件，订阅必须随原生宿主结束。无 Combine 订阅。
 分屏移动、关闭和撤销规则集中在 `BaseTerminalController+Splits.swift`；跨窗口操作
@@ -344,7 +351,7 @@ NotificationCenter 只接收 AppKit 系统事件，订阅必须随原生宿主�
 标题提示应使用 `prompt_surface_title` 或 `prompt_tab_title`。
 
 `--ui-tests` 显式包含桌面测试，`--only-testing` 接受 Xcode 的目标/套件/测试标识；
-默认单元测试和 CI 仍不启动桌面交互测试。辅助窗口直接创建并托管 SwiftUI 内容；
+默认单元测试和 CI 仍不启动桌面交互测试。辅助窗口直接创建；设置窗口使用 AppKit 表单，其余辅助窗口托管 SwiftUI 内容；
 主菜单、主终端窗口样式和快捷终端均由 Swift 显式构造，保留 AppKit 响应链和动态快捷键。
 窗口延迟加载有重入保护；没有窗口的基础控制器不会尝试加载 nib。
 桌面测试要求解锁的交互会话及已处理的系统提示。测试命令使用粘贴避免输入法转换，

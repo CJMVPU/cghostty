@@ -23,7 +23,8 @@ final class GhosttyConfigSnapshotUITests: GhosttyCustomConfigCase {
         let first = app.windows.firstMatch
         XCTAssertTrue(first.wait(for: \.title, toEqual: "Snapshot Before", timeout: 10))
 
-        try updateConfig(configuration(title: "Snapshot After", extras: "keybind = super+shift+h=new_window"))
+        updateSetting(app, key: "title", value: "Snapshot After")
+        updateSetting(app, key: "keybind", value: "super+shift+h=new_window")
         // Existing and new windows must continue using the startup generation.
         app.typeKey("n", modifierFlags: .command)
         XCTAssertTrue(app.wait(for: \.windows.count, toEqual: 2, timeout: 10))
@@ -57,7 +58,7 @@ final class GhosttyConfigSnapshotUITests: GhosttyCustomConfigCase {
         }
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: initiallyDark, object: nil)], timeout: 5), .completed)
 
-        try updateConfig(configuration(title: "Snapshot Appearance", extras: "window-theme = light"))
+        updateSetting(app, key: "window-theme", value: "light")
         app.terminate()
         app.launch()
         app.activate()
@@ -67,7 +68,7 @@ final class GhosttyConfigSnapshotUITests: GhosttyCustomConfigCase {
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: becomesLight, object: nil)], timeout: 10), .completed)
     }
 
-    @MainActor func testInvalidRestartShowsErrorsAndRestoresSuccessfulConfiguration() throws {
+    @MainActor func testRetiredLegacyFileCannotChangeMigratedSettings() throws {
         try updateConfig(configuration(title: "Last Successful"))
         let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         app.launch()
@@ -77,10 +78,8 @@ final class GhosttyConfigSnapshotUITests: GhosttyCustomConfigCase {
         app.terminate()
         app.launch()
         app.activate()
-        let errors = app.windows["Configuration Errors"]
-        XCTAssertTrue(errors.waitForExistence(timeout: 10))
-        errors.buttons["关闭 / Close"].click()
         XCTAssertTrue(app.windows["Last Successful"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.windows["Configuration Errors"].exists)
         XCTAssertFalse(app.windows["Invalid Partial"].exists)
     }
 

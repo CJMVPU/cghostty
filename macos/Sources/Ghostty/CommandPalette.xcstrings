@@ -2347,48 +2347,25 @@
         }
       }
     },
-    "Open Config Using OS editor": {
+    "Open Settings": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "用系统编辑器打开配置"
+            "value": "打开设置"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "使用作業系統編輯器開啟設定"
+            "value": "開啟設定"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "標準エディタで設定を開く"
-          }
-        }
-      }
-    },
-    "Open Config in New Terminal Window": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "在新终端窗口打开配置"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "在新終端機視窗中開啟設定"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "新しいターミナルウィンドウで設定を開く"
+            "value": "設定を開く"
           }
         }
       }
@@ -2439,48 +2416,25 @@
         }
       }
     },
-    "Open the config file in a new window using $EDITOR or $VISUAL.": {
+    "Open the settings window.": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "在新终端窗口内用 $EDITOR 或 $VISUAL 程序打开配置文件。"
+            "value": "打开独立设置窗口。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "使用 $EDITOR 或 $VISUAL 在新視窗中開啟設定檔。"
+            "value": "開啟獨立設定視窗。"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "$EDITORまたは$VISUALを使い、新しいウィンドウで設定ファイルを開きます。"
-          }
-        }
-      }
-    },
-    "Open the config file with the OS's default editor.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "用系统默认的编辑器打开配置文件。"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "使用作業系統的預設編輯器開啟設定檔。"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "OSの標準エディタで設定ファイルを開きます。"
+            "value": "設定ウィンドウを開きます。"
           }
         }
       }
