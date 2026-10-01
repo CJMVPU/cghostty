@@ -69,7 +69,7 @@ class GhosttyCustomConfigCase: XCTestCase {
             app.menuItems[value.replacingOccurrences(of: "-", with: " ").capitalized].click()
         }
         let save = window.buttons["settings.save"]
-        XCTAssertTrue(save.isEnabled)
+        XCTAssertTrue(save.wait(for: \.isEnabled, toEqual: true, timeout: 5))
         save.click()
         window.typeKey("w", modifierFlags: .command)
     }

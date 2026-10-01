@@ -23,7 +23,7 @@
 - 纯文本 CLI 列表、配置文件主题加载、常规日志及自动化测试。
 - 应用需要的 `include/ghostty.h`、`GhosttyKit` C 模块和内部静态库，作为内部桥接而非对外库产品。
 - 帮助、终端描述、命令补全、主题、命令面板的原生中英日翻译资源以及可选手册/性能工具生成。这些直接用于应用或维护核心，不属于网站流程。
-- `TERM=xterm-ghostty` 和必要的协议/接口名称；当前配置字段及 `config.ghostty` 文件格式；默认用户配置仅使用 `~/Library/Application Support/com.cjmvpu.cghostty/config.ghostty`，不扫描 XDG 或旧文件名。显式文件引用和主题资源查找仍保留。
+- `TERM=xterm-ghostty` 和必要的协议/接口名称；当前配置字段及旧 `config.ghostty` 格式的只读迁移；日常设置保存到应用管理的 `Settings/settings.json`。首次迁移从 Application Support 下的旧配置及其引用文件导入，成功后不再读取旧文件；不扫描 XDG 或其他旧文件名。显式命令行文件引用和主题资源查找仍保留。
 - 第三方依赖内的通用实现、协议中描述远端系统的内容、历史问题链接和版权归属。第三方源码能支持其他架构，并不意味着本项目会构建或交付这些目标。
 
 独立发行目前采取 ZIP + SHA-256 + 草稿 Release；Developer ID、公证和公开发布需要使用本项目维护者自己的签名凭据与发布操作。

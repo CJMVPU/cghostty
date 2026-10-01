@@ -36,7 +36,7 @@ final class GhosttySettingsUITests: GhosttyCustomConfigCase {
         attach(window.screenshot(), name: "settings-invalid")
         width.typeKey("a", modifierFlags: .command)
         width.typeText("158")
-        XCTAssertTrue(save.isEnabled)
+        XCTAssertTrue(save.wait(for: \.isEnabled, toEqual: true, timeout: 5))
         save.click()
         attach(window.screenshot(), name: "settings-saved")
         XCTAssertTrue(save.wait(for: \.isEnabled, toEqual: false, timeout: 3))
@@ -90,7 +90,7 @@ final class GhosttySettingsUITests: GhosttyCustomConfigCase {
         XCTAssertEqual(fallback.value as? String, "Monaco")
         let save = window.buttons["settings.save"]
         attach(window.screenshot(), name: "settings-font-selection")
-        XCTAssertTrue(save.isEnabled, window.debugDescription)
+        XCTAssertTrue(save.wait(for: \.isEnabled, toEqual: true, timeout: 5), window.debugDescription)
         save.click()
         app.terminate()
         app.launch()
@@ -162,7 +162,7 @@ final class GhosttySettingsUITests: GhosttyCustomConfigCase {
         audio.click()
         attach(window.screenshot(), name: "settings-feature-toggles")
         let save = window.buttons["settings.save"]
-        XCTAssertTrue(save.isEnabled)
+        XCTAssertTrue(save.wait(for: \.isEnabled, toEqual: true, timeout: 5))
         save.click()
         app.terminate()
         app.launch()
@@ -222,7 +222,7 @@ final class GhosttySettingsUITests: GhosttyCustomConfigCase {
         option.click()
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "Builtin Tango Dark"), object: theme)], timeout: 5), .completed)
         search.click()
-        XCTAssertTrue(window.buttons["settings.save"].isEnabled)
+        XCTAssertTrue(window.buttons["settings.save"].wait(for: \.isEnabled, toEqual: true, timeout: 5))
         attach(window.screenshot(), name: "settings-selected-theme")
         search.typeKey("a", modifierFlags: .command)
         paste("keybind", into: search, submit: false)
@@ -236,7 +236,7 @@ final class GhosttySettingsUITests: GhosttyCustomConfigCase {
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "ctrl+shift+9"), object: shortcut)], timeout: 5), .completed)
         attach(window.screenshot(), name: "settings-recorded-shortcut")
         let save = window.buttons["settings.save"]
-        XCTAssertTrue(save.isEnabled)
+        XCTAssertTrue(save.wait(for: \.isEnabled, toEqual: true, timeout: 5))
         save.click()
         XCTAssertTrue(save.wait(for: \.isEnabled, toEqual: false, timeout: 3))
     }

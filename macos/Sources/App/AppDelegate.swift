@@ -519,7 +519,7 @@ class AppDelegate: NSObject,
     }
 
     private func localEventKeyDown(_ event: NSEvent) -> NSEvent? {
-        if let recorder = NSApp.keyWindow?.firstResponder as? SettingsShortcutRecorder,
+        if let recorder = (event.window ?? NSApp.keyWindow)?.firstResponder as? any SettingsKeyCapture,
            recorder.capture(event) { return nil }
 
         if Ghostty.MenuShortcutManager.performTextEditingKeyEquivalent(

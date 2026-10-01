@@ -172,3 +172,29 @@ tabs or tabs to the right. A confirmation never includes tabs opened afterward;
 targets that moved out of the group are ignored. Undo retains the existing split
 trees and SurfaceViews, preserving shell sessions. Deferred focus restoration
 requires the anchor controller to remain registered with its owning app.
+
+## Settings editing
+
+`SettingsStore` owns persisted input, revisions, atomic writes and recovery.
+Legacy files and successful snapshots are read only by
+`SettingsLegacyMigration` during first migration. No legacy writer remains.
+
+`SettingsModel` keeps raw draft input separate from resolved draft values,
+saved values and the running configuration snapshot. Invalid text stays in the
+draft; a valid theme change updates inherited values without changing running
+terminals. Saving still requires a restart.
+
+Validation returns one parsed configuration and structured diagnostics.
+Field checks run immediately; continuous typing coalesces full validation.
+Saving validates the current draft again, and closing flushes pending checks.
+Diagnostics identify exact keys and preserve paths and user-supplied text.
+
+`SettingsPresentation` is the UI policy for editor selection, placement, units,
+sections and numeric hints. The core remains the final configuration authority.
+Search text is cached, unchanged search results retain controls, and list state
+survives navigation. New entries remain visible without expanding an entire
+long list. Theme names are cached until their directories change.
+
+`SettingsShortcutRecorder` owns focus and recording lifetime. The app routes
+local key events through `SettingsKeyCapture`; `SettingsShortcut` converts
+supported keys without focus side effects. Recording cancels when focus leaves.

@@ -133,6 +133,30 @@ import Testing
         }
     }
 
+    @Test func incompleteLimitModeSurvivesItsOwnDraftRefresh() throws {
+        let field = try #require(SettingsField.byKey["scrollback-limit-lines"])
+        var editor: SettingsMeasureEditor?
+        var published: String?
+        editor = SettingsMeasureEditor(field: field, value: "unlimited") { value in
+            published = value
+            editor?.refresh(context: [field.key: value])
+        }
+        let view = try #require(editor)
+        defer { editor = nil }
+        let selector = try #require(view.controls.compactMap { $0 as? NSSegmentedControl }.first)
+        let input = try #require(view.controls.compactMap { $0 as? NSTextField }.first)
+        selector.selectedSegment = 2
+        _ = NSApp.sendAction(try #require(selector.action), to: selector.target, from: selector)
+        #expect(published == "")
+        #expect(selector.selectedSegment == 2)
+        #expect(!input.isHidden)
+        input.stringValue = "5000"
+        view.controlTextDidChange(Notification(name: NSText.didChangeNotification))
+        #expect(published == "5000")
+        view.refresh(context: [field.key: "unlimited"])
+        #expect(selector.selectedSegment == 1 && input.isHidden)
+    }
+
     @Test func defaultsAreInternalAndDoNotCreateLegacyFile() throws {
         try withStore { store, source in
             #expect(store.load(cli: false)?.errors.isEmpty == true)
@@ -273,8 +297,7 @@ import Testing
 
     @Test func migrationUsesLegacySuccessfulSnapshotWhenCurrentFileIsBroken() throws {
         try withStore("title = Previous") { store, source in
-            let legacy = Ghostty.ConfigStore(source: source)
-            _ = legacy.load(cli: false)
+            try LegacySettingsFixture.write("title = Previous", source: source)
             try "font-size = invalid".write(to: source, atomically: true, encoding: .utf8)
             let migrated = try #require(store.load(cli: false))
             #expect(migrated.formattedEntry("title") == "title = Previous\n")

@@ -40,18 +40,6 @@ extension Ghostty {
 
         func hasSameSettings(as other: ConfigHandle) -> Bool { ghostty_settings_equal(value, other.value) }
 
-        static var defaultTemplate: Data? {
-            let text = Ghostty.AllocatedString(ghostty_config_template()).string
-            return text.isEmpty ? nil : Data(text.utf8)
-        }
-
-        static func prepareForEditing(at path: String?) -> String {
-            if let path {
-                return path.withCString { Ghostty.AllocatedString(ghostty_config_open_path($0)).string }
-            }
-            return Ghostty.AllocatedString(ghostty_config_open_path(nil)).string
-        }
-
         static var defaultPath: String {
             Ghostty.AllocatedString(ghostty_config_default_path()).string
         }

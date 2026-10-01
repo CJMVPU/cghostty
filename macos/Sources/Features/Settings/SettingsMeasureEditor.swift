@@ -4,6 +4,7 @@ import AppKit
 final class SettingsMeasureEditor: SettingsValueEditor, NSTextFieldDelegate {
     private let field: SettingsField
     private let changed: (String) -> Void
+    private var lastValue: String
     private var numbers: [NSTextField] = []
     private var units: [NSControl] = []
     private var modes: [[String]] = []
@@ -11,6 +12,7 @@ final class SettingsMeasureEditor: SettingsValueEditor, NSTextFieldDelegate {
     init(field: SettingsField, value: String, changed: @escaping (String) -> Void) {
         self.field = field
         self.changed = changed
+        lastValue = value
         super.init(frame: .zero)
         orientation = .vertical
         alignment = .leading
@@ -94,7 +96,8 @@ final class SettingsMeasureEditor: SettingsValueEditor, NSTextFieldDelegate {
     }
 
     override func refresh(context: [String: String]) {
-        guard let value = context[field.key], numbers.allSatisfy({ $0.currentEditor() == nil }) else { return }
+        guard let value = context[field.key], value != lastValue, numbers.allSatisfy({ $0.currentEditor() == nil }) else { return }
+        lastValue = value
         let parts = numbers.count == 2 ? value.components(separatedBy: ",") : [value]
         for index in numbers.indices {
             let parsed = Self.split(parts.indices.contains(index) ? parts[index] : "", choices: modes[index])
@@ -128,8 +131,9 @@ final class SettingsMeasureEditor: SettingsValueEditor, NSTextFieldDelegate {
         if parts.count == 2 {
             // A secondary dimension needs a primary one. Keep the incomplete
             // expression visible to validation instead of silently discarding it.
-            changed(parts[1].isEmpty ? parts[0] : parts.joined(separator: ","))
-        } else { changed(parts[0]) }
+            lastValue = parts[1].isEmpty ? parts[0] : parts.joined(separator: ",")
+        } else { lastValue = parts[0] }
+        changed(lastValue)
     }
     @objc private func unitChanged() { refreshInputs(); publish() }
     func controlTextDidChange(_ obj: Notification) { publish() }

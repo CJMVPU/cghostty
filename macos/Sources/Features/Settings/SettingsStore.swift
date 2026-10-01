@@ -210,7 +210,7 @@ import Darwin
         if !checked.errors.isEmpty {
             let recoveryDirectory = directory.lastPathComponent.hasPrefix(".settings-state-") ?
                 legacySource.deletingLastPathComponent().appendingPathComponent(".config-state-" + legacySource.lastPathComponent) : nil
-            let legacy = Ghostty.ConfigStore(source: legacySource, directory: recoveryDirectory)
+            let legacy = SettingsLegacyMigration(source: legacySource, directory: recoveryDirectory)
             guard let saved = legacy.successfulMigrationData(),
                   let recovered = Ghostty.ConfigHandle.load(data: saved, source: legacySource) else {
                 throw Failure.invalid(["The old configuration contains errors and could not be imported. The original file was preserved. Restore defaults to continue."] + checked.errors)

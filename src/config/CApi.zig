@@ -5,7 +5,6 @@ const String = @import("../main_c.zig").String;
 
 const Config = @import("Config.zig");
 const c_get = @import("c_get.zig");
-const edit = @import("edit.zig");
 const Key = @import("key.zig").Key;
 
 const log = std.log.scoped(.config);
@@ -151,14 +150,6 @@ export fn ghostty_config_get_diagnostic(self: *Config, idx: u32) Diagnostic {
     return .{ .message = message.ptr };
 }
 
-export fn ghostty_config_template() String {
-    const data = @import("template.zig").generate(global.alloc()) catch |err| {
-        log.err("error generating configuration guide err={}", .{err});
-        return .empty;
-    };
-    return .fromSlice(data);
-}
-
 export fn ghostty_settings_catalog() String {
     return .fromSlice(@import("settings.zig").catalog(global.alloc()) catch return .empty);
 }
@@ -203,16 +194,6 @@ export fn ghostty_settings_font_data(len: *usize) [*]const u8 {
     const data = @import("../font/embedded.zig").default_font;
     len.* = data.len;
     return data.ptr;
-}
-
-export fn ghostty_config_open_path(requested: ?[*:0]const u8) String {
-    const result = if (requested) |path| edit.openPathAt(global.alloc(), std.mem.span(path)) else edit.openPath(global.alloc());
-    const path = result catch |err| {
-        log.err("error opening config in editor err={}", .{err});
-        return .empty;
-    };
-
-    return .fromSlice(path);
 }
 
 /// Sync with ghostty_diagnostic_s
