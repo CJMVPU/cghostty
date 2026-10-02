@@ -162,16 +162,6 @@ import Foundation
         diagnostics.filter { $0.key == key }.map(\.message).joined(separator: "\n").nonEmpty
     }
 
-    @discardableResult
-    func save() -> Bool {
-        guard !isBusy, let record else { return false }
-        cancelValidation()
-        do {
-            didSave(try store.saveEvaluated(input, revision: record.revision))
-            return true
-        } catch { saveFailed(error); return false }
-    }
-
     func saveAsync() async -> Bool {
         guard !isBusy, let record else { return false }
         cancelValidation()

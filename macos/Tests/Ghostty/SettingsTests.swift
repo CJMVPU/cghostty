@@ -14,6 +14,16 @@ import Testing
         try body(store, source)
     }
 
+    private func withStoreAsync(_ text: String = "", _ body: (SettingsStore, URL) async throws -> Void) async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("legacy.conf")
+        if !text.isEmpty { try text.write(to: source, atomically: true, encoding: .utf8) }
+        let store = SettingsStore(legacySource: source, directory: root.appendingPathComponent("Settings"))
+        try await body(store, source)
+    }
+
     @Test func diagnosticsMatchExactKeysAndPreserveValues() throws {
         let source = URL(fileURLWithPath: "/tmp/settings:custom")
         let config = try #require(Ghostty.ConfigHandle.load(data: Data("font-size = bad\n".utf8), source: source))
@@ -36,8 +46,8 @@ import Testing
         }
     }
 
-    @Test func deferredValidationUsesLatestDraftAndSaveChecksIt() throws {
-        try withStore { store, _ in
+    @Test func deferredValidationUsesLatestDraftAndSaveChecksIt() async throws {
+        try await withStoreAsync { store, _ in
             _ = store.load(cli: false)
             let model = SettingsModel(store: store)
             let field = try #require(SettingsField.byKey["font-size"])
@@ -50,7 +60,7 @@ import Testing
             #expect(model.displayed[field.key] == "19")
             model.edit(field, value: "nan", deferred: true)
             #expect(model.error(for: field.key) != nil)
-            #expect(!model.save())
+            #expect(await model.saveAsync() == false)
             #expect(model.error(for: field.key) != nil)
             model.reload()
             #expect(!model.validationPending)
@@ -58,8 +68,8 @@ import Testing
         }
     }
 
-    @Test func themeInheritanceUpdatesDraftWithoutChangingRunningSettings() throws {
-        try withStore("background = #102030") { store, source in
+    @Test func themeInheritanceUpdatesDraftWithoutChangingRunningSettings() async throws {
+        try await withStoreAsync("background = #102030") { store, source in
             _ = store.load(cli: false)
             let model = SettingsModel(store: store)
             let theme = source.deletingLastPathComponent().appendingPathComponent("TestTheme")
@@ -75,7 +85,7 @@ import Testing
             #expect(model.displayed["font-size"] == "invalid")
             #expect(model.effectiveValues["foreground"] == "#123456")
             model.edit(size, value: "18")
-            #expect(model.save())
+            #expect(await model.saveAsync())
             #expect(model.savedValues["foreground"] == "#123456")
             #expect(model.runningValues == original)
             model.reload()
@@ -267,8 +277,8 @@ import Testing
         }
     }
 
-    @Test func damagedCurrentRecordUsesPreviousAndCanBeRepairedInUI() throws {
-        try withStore("title = Good") { store, _ in
+    @Test func damagedCurrentRecordUsesPreviousAndCanBeRepairedInUI() async throws {
+        try await withStoreAsync("title = Good") { store, _ in
             _ = store.load(cli: false)
             let record = try store.read()
             var bad = record.current
@@ -283,7 +293,7 @@ import Testing
             #expect(model.displayed[field.key] == "invalid")
             model.edit(field, value: "0.8")
             #expect(model.canSave)
-            #expect(model.save())
+            #expect(await model.saveAsync())
             #expect(store.load(cli: false)?.errors.isEmpty == true)
         }
     }
@@ -312,8 +322,8 @@ import Testing
         }
     }
 
-    @Test func failedWritePreservesRecordAndDraft() throws {
-        try withStore("title = Original") { store, _ in
+    @Test func failedWritePreservesRecordAndDraft() async throws {
+        try await withStoreAsync("title = Original") { store, _ in
             _ = store.load(cli: false)
             let data = try Data(contentsOf: store.url)
             let model = SettingsModel(store: store)
@@ -321,7 +331,7 @@ import Testing
             model.edit(title, value: "Draft")
             try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: store.directory.path)
             defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: store.directory.path) }
-            #expect(!model.save())
+            #expect(await model.saveAsync() == false)
             #expect(model.dirty)
             #expect(model.canSave)
             #expect(model.displayed["title"] == "Draft")
@@ -359,15 +369,15 @@ import Testing
         }
     }
 
-    @Test func bundledFontPresetPreservesFallbacksAndPersistsAllParameters() throws {
-        try withStore("font-family = Menlo\nfont-family = Unavailable Custom Font\nfont-style = Regular\nfont-thicken = false\nfont-thicken-strength = 100") { store, _ in
+    @Test func bundledFontPresetPreservesFallbacksAndPersistsAllParameters() async throws {
+        try await withStoreAsync("font-family = Menlo\nfont-family = Unavailable Custom Font\nfont-style = Regular\nfont-thicken = false\nfont-thicken-strength = 100") { store, _ in
             _ = store.load(cli: false)
             let model = SettingsModel(store: store)
             #expect(!model.usesBundledFontPreset)
             model.applyBundledFontPreset(families: "LXGW WenKai Mono\nUnavailable Custom Font")
             #expect(model.usesBundledFontPreset)
             #expect(model.canSave)
-            #expect(model.save())
+            #expect(await model.saveAsync())
             let restored = SettingsModel(store: store)
             #expect(restored.usesBundledFontPreset)
             #expect(restored.displayed["font-family"] == "LXGW WenKai Mono\nUnavailable Custom Font")
@@ -414,8 +424,8 @@ import Testing
         #expect(SettingsField.catalog.filter { ["maximize", "fullscreen"].contains($0.key) }.allSatisfy { !$0.isVisible })
     }
 
-    @Test func flagControlsPersistExactCoreOptions() throws {
-        try withStore("shell-integration-features = cursor,no-sudo,title,no-ssh-env,no-ssh-terminfo,path") { store, _ in
+    @Test func flagControlsPersistExactCoreOptions() async throws {
+        try await withStoreAsync("shell-integration-features = cursor,no-sudo,title,no-ssh-env,no-ssh-terminfo,path") { store, _ in
             _ = store.load(cli: false)
             let model = SettingsModel(store: store)
             let field = try #require(SettingsField.catalog.first { $0.key == "shell-integration-features" })
@@ -423,7 +433,8 @@ import Testing
             let editor = SettingsFlagsEditor(field: field, value: model.displayed[field.key] ?? "") { model.edit(field, value: $0) }
             let sudo = try #require(editor.controls.first { $0.accessibilityIdentifier() == "settings.shell-integration-features.sudo" } as? NSButton)
             sudo.performClick(nil)
-            #expect(model.canSave && model.save())
+            #expect(model.canSave)
+            #expect(await model.saveAsync())
             let parsed = try #require(store.load(cli: false))
             #expect(parsed.errors.isEmpty)
             let value = SettingsField.values(from: parsed.formattedEntry(field.key)).joined(separator: "\n")
@@ -432,8 +443,8 @@ import Testing
         }
     }
 
-    @Test func rowEditorPreservesEqualsInsideEnvironmentValues() throws {
-        try withStore("env = TOKEN=a=b=c\nenv = MODE=before") { store, _ in
+    @Test func rowEditorPreservesEqualsInsideEnvironmentValues() async throws {
+        try await withStoreAsync("env = TOKEN=a=b=c\nenv = MODE=before") { store, _ in
             _ = store.load(cli: false)
             let model = SettingsModel(store: store)
             let field = try #require(SettingsField.catalog.first { $0.key == "env" })
@@ -444,7 +455,8 @@ import Testing
             let second = try #require(editor.controls.first { $0.accessibilityIdentifier() == "settings.env.1.value" } as? NSTextField)
             second.stringValue = "after=kept"
             editor.controlTextDidChange(Notification(name: NSText.didChangeNotification))
-            #expect(model.canSave && model.save())
+            #expect(model.canSave)
+            #expect(await model.saveAsync())
             let record = try store.read()
             #expect(record.current.values["env"] == "TOKEN=a=b=c\nMODE=after=kept")
             #expect(store.load(cli: false)?.errors.isEmpty == true)
@@ -464,13 +476,13 @@ import Testing
         #expect(color != nil && abs((color?.redComponent ?? 0) - 18.0 / 255) < 0.001)
     }
 
-    @Test func savedRestartNoticeSurvivesReopeningAndDiscardingDraft() throws {
-        try withStore("font-size = 17") { store, _ in
+    @Test func savedRestartNoticeSurvivesReopeningAndDiscardingDraft() async throws {
+        try await withStoreAsync("font-size = 17") { store, _ in
             _ = store.load(cli: false)
             let model = SettingsModel(store: store)
             let field = try #require(SettingsField.catalog.first { $0.key == "font-size" })
             model.edit(field, value: "18")
-            #expect(model.save())
+            #expect(await model.saveAsync())
             model.reload()
             #expect(model.status.contains("Restart"))
             model.edit(field, value: "19")
@@ -545,17 +557,19 @@ import Testing
         #expect(!inheritedAdd.isEnabled)
     }
 
-    @Test func restartNoticeTracksResolvedSavedDifferenceAcrossModels() throws {
-        try withStore("font-size = 17") { store, _ in
+    @Test func restartNoticeTracksResolvedSavedDifferenceAcrossModels() async throws {
+        try await withStoreAsync("font-size = 17") { store, _ in
             _ = store.load(cli: false)
             let field = try #require(SettingsField.byKey["font-size"])
             let model = SettingsModel(store: store)
             model.edit(field, value: "18")
-            #expect(model.save() && model.restartRequired)
+            #expect(await model.saveAsync())
+            #expect(model.restartRequired)
             let reopened = SettingsModel(store: store)
             #expect(reopened.restartRequired)
             reopened.edit(field, value: "17")
-            #expect(reopened.save() && !reopened.restartRequired)
+            #expect(await reopened.saveAsync())
+            #expect(!reopened.restartRequired)
             model.reload()
             #expect(!model.restartRequired)
             #expect(model.savedValues == store.startupValues)

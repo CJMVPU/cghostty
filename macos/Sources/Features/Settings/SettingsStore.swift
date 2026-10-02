@@ -171,16 +171,17 @@ import Darwin
     }
 
     func saveEvaluated(_ input: Input, revision: UUID) throws -> Saved {
+        let saved = try prepareSave(input, replacing: read(), revision: revision)
+        try disk.withLock { try disk.commit(saved.record, replacing: revision) }
+        return saved
+    }
+
+    private func prepareSave(_ input: Input, replacing old: Record, revision: UUID) throws -> Saved {
         let evaluation = evaluate(input)
         guard evaluation.diagnostics.isEmpty else { throw Failure.invalid(evaluation.diagnostics) }
-        return try disk.withLock {
-            let old = try read()
-            guard old.revision == revision else { throw Failure.changed }
-            let previous = validate(old.current).isEmpty ? old.current : old.previous
-            let record = Record(current: input, previous: previous)
-            try disk.write(record)
-            return Saved(record: record, evaluation: evaluation)
-        }
+        guard old.revision == revision else { throw Failure.changed }
+        let previous = validate(old.current).isEmpty ? old.current : old.previous
+        return Saved(record: Record(current: input, previous: previous), evaluation: evaluation)
     }
 
     @discardableResult
@@ -195,23 +196,16 @@ import Darwin
     }
 
     func saveEvaluatedAsync(_ input: Input, revision: UUID) async throws -> Saved {
-        let evaluation = evaluate(input)
-        guard evaluation.diagnostics.isEmpty else { throw Failure.invalid(evaluation.diagnostics) }
         let old = try await readAsync()
-        guard old.revision == revision else { throw Failure.changed }
-        let previous = validate(old.current).isEmpty ? old.current : old.previous
-        let record = Record(current: input, previous: previous)
+        try Task.checkCancellation()
+        let saved = try prepareSave(input, replacing: old, revision: revision)
         let disk = disk
+        let record = saved.record
         let task = Task.detached(priority: .userInitiated) {
-            try await disk.withLockAsync {
-                // Recheck under the lock after validation; another instance can
-                // commit while the UI is awaiting its disk operation.
-                guard try disk.read().revision == revision else { throw Failure.changed }
-                try disk.write(record)
-            }
+            try await disk.withLockAsync { try disk.commit(record, replacing: revision) }
         }
         try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
-        return Saved(record: record, evaluation: evaluation)
+        return saved
     }
 
     private func migrate() throws -> Record {
@@ -275,6 +269,12 @@ import Darwin
             let record = try JSONDecoder().decode(Record.self, from: data)
             guard record.schema == 1 else { throw Failure.unsupported }
             return record
+        }
+
+        /// Recheck under the lock: validation may race another instance's save.
+        func commit(_ record: Record, replacing revision: UUID) throws {
+            guard try read().revision == revision else { throw Failure.changed }
+            try write(record)
         }
 
         func reset() throws -> URL? {
