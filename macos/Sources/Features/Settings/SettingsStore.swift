@@ -35,12 +35,13 @@ import Darwin
     }
 
     nonisolated enum Failure: LocalizedError, Equatable {
-        case invalid([SettingsDiagnostic]), changed, unreadable, unsupported
+        case invalid([SettingsDiagnostic]), changed, unreadable, unsupported, locked
         var errorDescription: String? {
             switch self {
             case .invalid(let errors): return errors.map(\.rawMessage).joined(separator: "\n")
             case .changed: return "Settings were changed by another app instance. Discard this draft to load the saved settings."
             case .unreadable: return "Unable to read settings. Retry or restore defaults; existing data will be backed up."
+            case .locked: return "Settings are busy in another app instance. Your edits are preserved; try saving again."
             case .unsupported: return "These settings require a newer version of the app."
             }
         }
@@ -189,7 +190,8 @@ import Darwin
 
     func restoreDefaultsAsync() async throws -> URL? {
         let disk = disk
-        return try await Task.detached(priority: .userInitiated) { try disk.withLock { try disk.reset() } }.value
+        let task = Task.detached(priority: .userInitiated) { try await disk.withLockAsync { try disk.reset() } }
+        return try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
     }
 
     func saveEvaluatedAsync(_ input: Input, revision: UUID) async throws -> Saved {
@@ -200,14 +202,15 @@ import Darwin
         let previous = validate(old.current).isEmpty ? old.current : old.previous
         let record = Record(current: input, previous: previous)
         let disk = disk
-        try await Task.detached(priority: .userInitiated) {
-            try disk.withLock {
+        let task = Task.detached(priority: .userInitiated) {
+            try await disk.withLockAsync {
                 // Recheck under the lock after validation; another instance can
                 // commit while the UI is awaiting its disk operation.
                 guard try disk.read().revision == revision else { throw Failure.changed }
                 try disk.write(record)
             }
-        }.value
+        }
+        try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
         return Saved(record: record, evaluation: evaluation)
     }
 
@@ -307,13 +310,41 @@ import Darwin
             guard rename(temporary.path, url.path) == 0 else { throw POSIXError(.init(rawValue: errno) ?? .EIO) }
         }
 
-        func withLock<T>(_ operation: () throws -> T) throws -> T {
+        private func openLock() throws -> Int32 {
             try prepareDirectory()
             let descriptor = open(directory.appendingPathComponent("settings.lock").path, O_CREAT | O_RDWR | O_NOFOLLOW, 0o600)
             guard descriptor >= 0 else { throw POSIXError(.init(rawValue: errno) ?? .EIO) }
+            return descriptor
+        }
+
+        private func acquire(_ descriptor: Int32, deadline: ContinuousClock.Instant) throws -> Bool {
+            try Task.checkCancellation()
+            if flock(descriptor, LOCK_EX | LOCK_NB) == 0 { return true }
+            let code = errno
+            guard code == EWOULDBLOCK || code == EINTR else { throw POSIXError(.init(rawValue: code) ?? .EIO) }
+            guard ContinuousClock.now < deadline else { throw Failure.locked }
+            return false
+        }
+
+        func withLock<T>(timeout: Duration = .seconds(2), _ operation: () throws -> T) throws -> T {
+            let descriptor = try openLock()
             defer { close(descriptor) }
-            guard flock(descriptor, LOCK_EX) == 0 else { throw POSIXError(.init(rawValue: errno) ?? .EIO) }
+            let deadline = ContinuousClock.now.advanced(by: timeout)
+            while try !acquire(descriptor, deadline: deadline) { Thread.sleep(forTimeInterval: 0.02) }
             defer { flock(descriptor, LOCK_UN) }
+            try Task.checkCancellation()
+            return try operation()
+        }
+
+        func withLockAsync<T: Sendable>(timeout: Duration = .seconds(2), _ operation: @Sendable () throws -> T) async throws -> T {
+            let descriptor = try openLock()
+            defer { close(descriptor) }
+            let deadline = ContinuousClock.now.advanced(by: timeout)
+            while try !acquire(descriptor, deadline: deadline) { try await Task.sleep(for: .milliseconds(20)) }
+            defer { flock(descriptor, LOCK_UN) }
+            // Cancellation is accepted before the transaction starts. Once the
+            // atomic rename commits, report success even if cancellation arrives.
+            try Task.checkCancellation()
             return try operation()
         }
     }

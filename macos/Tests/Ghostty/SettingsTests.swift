@@ -573,6 +573,41 @@ import Testing
         }
     }
 
+    @Test func lockedSettingsTimeOutAndCancellationPreservesDraft() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = SettingsStore(legacySource: root.appendingPathComponent("legacy"), directory: root)
+        _ = store.load(cli: false)
+        let original = try store.read().revision
+        let model = SettingsModel(store: store)
+        model.edit(try #require(SettingsField.byKey["title"]), value: "Keep this draft")
+        let lock = open(root.appendingPathComponent("settings.lock").path, O_RDWR)
+        #expect(lock >= 0)
+        defer { close(lock) }
+        #expect(flock(lock, LOCK_EX | LOCK_NB) == 0)
+        defer { flock(lock, LOCK_UN) }
+        let started = ContinuousClock.now
+        #expect(await model.saveAsync() == false)
+        #expect(ContinuousClock.now - started < .seconds(5))
+        #expect(model.errors.contains { $0.contains("busy in another app instance") })
+        #expect(!model.isBusy && model.dirty && model.canSave)
+        let saving = Task { await model.saveAsync() }
+        try await NativeTestWait.until("save waiting for lock", timeout: .seconds(1), polling: .milliseconds(5),
+                                       diagnostics: { model.status }, { model.isBusy })
+        saving.cancel()
+        #expect(await saving.value == false)
+        #expect(!model.isBusy && model.dirty && model.canSave)
+        #expect(model.displayed["title"] == "Keep this draft")
+        #expect(try store.read().revision == original)
+        let reset = Task { try await store.restoreDefaultsAsync() }
+        reset.cancel()
+        do { _ = try await reset.value; Issue.record("Cancelled reset unexpectedly succeeded") } catch is CancellationError {}
+        #expect(try store.read().revision == original)
+        #expect(flock(lock, LOCK_UN) == 0)
+        #expect(await model.saveAsync())
+        #expect(try store.read().current.values["title"] == "Keep this draft")
+    }
+
     @Test func asyncSaveKeepsMainActorAvailableAndRejectsStaleWriter() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
