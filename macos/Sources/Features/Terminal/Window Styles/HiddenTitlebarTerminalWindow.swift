@@ -4,8 +4,13 @@ class HiddenTitlebarTerminalWindow: TerminalWindow {
     override var usesToolbarForAccessories: Bool { true }
     var chrome: TerminalChromeView? { contentView as? TerminalChromeView }
 
+    var chromeEdgeInset: CGFloat {
+        let nativeRadius = responds(to: NSSelectorFromString("_cornerRadius")) ? value(forKey: "_cornerRadius") as? CGFloat : nil
+        return TerminalChromeMetrics.edgeInset(scale: backingScaleFactor, windowRadius: nativeRadius ?? TerminalChromeMetrics.cornerRadius)
+    }
+
     override func decoratedContentSize(_ size: NSSize) -> NSSize {
-        let rim = TerminalChromeMetrics.border(scale: backingScaleFactor)
+        let rim = TerminalChromeMetrics.border(scale: backingScaleFactor) + chromeEdgeInset
         return NSSize(width: size.width + rim * 2, height: size.height + rim * 2 + TerminalChromeMetrics.buttonSize.height)
     }
 

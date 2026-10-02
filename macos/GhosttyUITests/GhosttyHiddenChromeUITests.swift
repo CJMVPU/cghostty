@@ -32,6 +32,18 @@ final class GhosttyHiddenChromeUITests: GhosttyCustomConfigCase {
         initial.name = "hidden-chrome-before-drag"
         initial.lifetime = .keepAlways
         add(initial)
+        window.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.8)).hover()
+        let hoverTarget = app.buttons["terminal.chrome.tab.2"].firstMatch
+        let targetFrame = hoverTarget.frame
+        let idlePixels = hoverTarget.screenshot().pngRepresentation
+        hoverTarget.hover()
+        let hoverChanged = NSPredicate { _, _ in hoverTarget.screenshot().pngRepresentation != idlePixels }
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: hoverChanged, object: hoverTarget)], timeout: 3), .completed)
+        XCTAssertEqual(hoverTarget.frame, targetFrame)
+        let hovered = XCTAttachment(screenshot: window.screenshot())
+        hovered.name = "metal-chrome-hover"
+        hovered.lifetime = .keepAlways
+        add(hovered)
         let before = window.frame
         let dragBefore = drag.frame
         let tabBefore = one.frame
@@ -61,4 +73,39 @@ final class GhosttyHiddenChromeUITests: GhosttyCustomConfigCase {
         app.buttons["terminal.chrome.minimize"].firstMatch.click()
         XCTAssertTrue(drag.wait(for: \.isHittable, toEqual: false, timeout: 5))
     }
+
+    @MainActor func testCloseControlPreservesConfirmation() throws {
+        try updateConfig("""
+        macos-titlebar-style = hidden
+        initial-window = true
+        window-save-state = never
+        window-width = 157
+        window-height = 43
+        confirm-close-surface = always
+        command = /bin/zsh -f
+        shell-integration = none
+        """)
+        let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
+        app.launch()
+        app.activate()
+        defer { app.terminate() }
+        let close = app.buttons["terminal.chrome.close"].firstMatch
+        XCTAssertTrue(close.waitForExistence(timeout: 10))
+        close.click()
+        let cancel = app.sheets.buttons["Cancel"].firstMatch
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+        cancel.click()
+        XCTAssertTrue(app.wait(for: \.sheets.count, toEqual: 0, timeout: 5))
+        XCTAssertTrue(close.exists)
+        let screenshot = XCTAttachment(screenshot: app.windows.firstMatch.screenshot())
+        screenshot.name = "metal-chrome-default-window"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        close.click()
+        let confirm = app.sheets.buttons["Close"].firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.click()
+        XCTAssertTrue(app.wait(for: \.windows.count, toEqual: 0, timeout: 5))
+    }
+
 }

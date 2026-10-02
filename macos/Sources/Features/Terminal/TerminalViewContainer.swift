@@ -16,6 +16,9 @@ class TerminalViewContainer: NSView {
     }
 
     var windowCornerRadius: CGFloat? {
+        if let window = window as? HiddenTitlebarTerminalWindow {
+            return TerminalChromeMetrics.innerRadius(scale: window.backingScaleFactor)
+        }
         guard let window, window.responds(to: Selector(("_cornerRadius"))) else {
             return nil
         }
@@ -75,6 +78,11 @@ class TerminalViewContainer: NSView {
         super.viewDidMoveToWindow()
         updateGlassEffectIfNeeded()
         updateGlassEffectTopInsetIfNeeded()
+    }
+
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        updateGlassEffectIfNeeded()
     }
 
     override func layout() {
@@ -223,7 +231,7 @@ extension TerminalViewContainer {
             glass: derivedConfig.glass,
             backgroundColor: derivedConfig.backgroundColor,
             backgroundOpacity: derivedConfig.backgroundOpacity,
-            cornerRadius: derivedConfig.cornerRadius,
+            cornerRadius: window is HiddenTitlebarTerminalWindow ? windowCornerRadius : derivedConfig.cornerRadius,
         )
     }
 
