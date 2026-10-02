@@ -11,15 +11,20 @@ import Foundation
     private(set) var displayed: [String: String] = [:]
     private(set) var diagnostics: [SettingsDiagnostic] = []
     var errors: [String] { diagnostics.map(\.displayMessage) }
-    private(set) var status = ""
-    private var inputIsValid = false
+    enum Operation { case idle, loading, saving, resetting }
+    enum Validation { case pending, valid, invalid }
+    private enum Failure { case reading, saving }
+    private(set) var operation: Operation = .idle
+    private(set) var validation: Validation = .invalid
+    private var failure: Failure?
+    private var inputIsValid: Bool { validation == .valid }
     private var validationTask: Task<Void, Never>?
-    private(set) var validationPending = false
-    var validationCompleted: (() -> Void)?
+    var validationPending: Bool { validation == .pending }
+    var stateChanged: (() -> Void)?
     private var originalDisplayed: [String: String] = [:]
     private let startupValues: [String: String]
     var restartRequired: Bool { savedValues != startupValues }
-    private(set) var isBusy = false
+    var isBusy: Bool { operation != .idle }
     private var savedStatus: String { restartRequired ? "Saved. Restart to apply." : "No unsaved changes." }
     var dirty: Bool { record.map { $0.current != input } ?? false }
     var changedCount: Int {
@@ -38,7 +43,7 @@ import Foundation
     private func cancelValidation() {
         validationTask?.cancel()
         validationTask = nil
-        validationPending = false
+        if validation == .pending { validation = .invalid }
     }
 
     func reload() {
@@ -47,17 +52,24 @@ import Foundation
         do { apply(try store.read()) } catch { readFailed(error) }
     }
 
-    func reloadAsync(reset: Bool = false) async {
-        guard !isBusy else { return }
-        isBusy = true
+    @discardableResult
+    func reloadAsync(reset: Bool = false) async -> Bool {
+        guard !isBusy else { return false }
+        operation = reset ? .resetting : .loading
         cancelValidation()
-        status = reset ? "Restoring defaults…" : "Loading settings…"
-        validationCompleted?()
-        defer { isBusy = false; validationCompleted?() }
+        failure = nil
+        stateChanged?()
+        defer { operation = .idle; stateChanged?() }
         do {
             if reset { _ = try await store.restoreDefaultsAsync() }
-            apply(try await store.readAsync())
-        } catch { readFailed(error) }
+            let loaded = try await store.readAsync()
+            apply(loaded)
+            return true
+        } catch {
+            // A failed reset has not replaced the draft or the saved record.
+            if reset, record != nil { saveFailed(error) } else { readFailed(error) }
+            return false
+        }
     }
 
     func discardDraft() {
@@ -74,15 +86,15 @@ import Foundation
         refreshDisplayed()
         originalDisplayed = displayed
         diagnostics = evaluation.diagnostics
-        inputIsValid = diagnostics.isEmpty
-        updateStatus()
+        validation = diagnostics.isEmpty ? .valid : .invalid
+        failure = nil
     }
 
     private func readFailed(_ error: any Error) {
         record = nil
-        inputIsValid = false
+        validation = .invalid
         diagnostics = [SettingsDiagnostic(kind: .storage, message: error.localizedDescription)]
-        status = "Unable to read settings. Retry or restore defaults."
+        failure = .reading
     }
 
     func edit(_ field: SettingsField, value: String, deferred: Bool = false) {
@@ -105,6 +117,7 @@ import Foundation
 
     private func edit(_ changes: [String: String], deferred: Bool = false) {
         guard !isBusy else { return }
+        failure = nil
         let original = record?.current
         // Returning a field to its original value should also remove its dirty
         // state, instead of introducing an unnecessary explicit override.
@@ -118,15 +131,13 @@ import Foundation
         validationTask?.cancel()
         if deferred {
             diagnostics = store.fieldDiagnostics(input)
-            inputIsValid = false
-            validationPending = true
-            updateStatus()
+            validation = .pending
             // Coalesce typing; saving and closing always flush the current draft.
             validationTask = Task { [weak self] in
                 do { try await Task.sleep(for: .milliseconds(150)) } catch { return }
                 guard !Task.isCancelled, let self else { return }
                 self.flushValidation()
-                self.validationCompleted?()
+                self.stateChanged?()
             }
         } else { flushValidation() }
     }
@@ -134,28 +145,36 @@ import Foundation
     func flushValidation() {
         validationTask?.cancel()
         validationTask = nil
-        validationPending = false
+        if validation == .pending { validation = .invalid }
         let evaluation = store.evaluate(input)
         diagnostics = evaluation.diagnostics
         // Keep the last coherent resolution while invalid raw edits stay visible.
         if diagnostics.isEmpty { effectiveValues = SettingsStore.values(evaluation.config) }
         refreshDisplayed()
-        inputIsValid = diagnostics.isEmpty
-        updateStatus()
+        validation = diagnostics.isEmpty ? .valid : .invalid
+        failure = nil
     }
 
     private func refreshDisplayed() {
         displayed = effectiveValues.merging(input.values) { _, raw in raw }
     }
 
-    private func updateStatus() {
-        if !diagnostics.isEmpty {
-            status = "Fix the invalid settings before saving."
-        } else if validationPending {
-            status = "Checking settings…"
-        } else if dirty {
-            status = "\(changedCount) unsaved \(changedCount == 1 ? "change" : "changes")."
-        } else { status = savedStatus }
+    var status: String {
+        switch operation {
+        case .loading: return "Loading settings…"
+        case .saving: return "Saving…"
+        case .resetting: return "Restoring defaults…"
+        case .idle: break
+        }
+        switch failure {
+        case .reading: return "Unable to read settings. Retry or restore defaults."
+        case .saving: return "Unable to save. Your edits are still available."
+        case nil: break
+        }
+        if !diagnostics.isEmpty { return "Fix the invalid settings before saving." }
+        if validationPending { return "Checking settings…" }
+        if dirty { return "\(changedCount) unsaved \(changedCount == 1 ? "change" : "changes")." }
+        return savedStatus
     }
 
     func error(for key: String) -> String? {
@@ -165,10 +184,10 @@ import Foundation
     func saveAsync() async -> Bool {
         guard !isBusy, let record else { return false }
         cancelValidation()
-        isBusy = true
-        status = "Saving…"
-        validationCompleted?()
-        defer { isBusy = false; validationCompleted?() }
+        operation = .saving
+        failure = nil
+        stateChanged?()
+        defer { operation = .idle; stateChanged?() }
         do {
             didSave(try await store.saveEvaluatedAsync(input, revision: record.revision))
             return true
@@ -181,19 +200,20 @@ import Foundation
         savedValues = effectiveValues
         refreshDisplayed()
         diagnostics = []
-        inputIsValid = true
+        validation = .valid
         originalDisplayed = displayed
-        status = savedStatus
+        failure = nil
     }
 
     private func saveFailed(_ error: any Error) {
         if case SettingsStore.Failure.invalid(let errors) = error {
             diagnostics = errors
-            inputIsValid = false
-            status = "Fix the invalid settings before saving."
+            validation = .invalid
+            failure = nil
         } else {
             diagnostics = [SettingsDiagnostic(kind: .storage, message: error.localizedDescription)]
-            status = "Unable to save. Your edits are still available."
+            failure = .saving
+            validation = store.evaluate(input).diagnostics.isEmpty ? .valid : .invalid
         }
     }
 

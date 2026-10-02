@@ -44,6 +44,7 @@ private final class SettingsList: NSStackView {
     private var renderedErrors: [String: String] = [:]
     private var renderedEnabled: Bool?
     private var renderedPreset: Bool?
+    private var loadTask: Task<Void, Never>?
     private var categoryOffsets: [Int: NSPoint] = [:]
 
     init(store: SettingsStore, preferences: UserDefaults = .ghostty) {
@@ -67,11 +68,11 @@ private final class SettingsList: NSStackView {
         fieldEditor.isFieldEditor = true
         fieldEditor.configurePlainText()
         fieldEditor.font = SettingsTypography.font
-        model.validationCompleted = { [weak self] in self?.updateState() }
+        model.stateChanged = { [weak self] in self?.updateState() }
         buildContent()
         renderRows()
         updateState()
-        Task { await model.reloadAsync(); renderRows() }
+        loadSettings()
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
@@ -335,10 +336,13 @@ private final class SettingsList: NSStackView {
     private func save() { Task { _ = await model.saveAsync() } }
 
     private func loadSettings(reset: Bool = false) {
-        Task {
-            await model.reloadAsync(reset: reset)
-            listStates = [:]
-            renderRows()
+        guard loadTask == nil, !model.isBusy else { return }
+        loadTask = Task { [weak self] in
+            guard let self else { return }
+            defer { self.loadTask = nil }
+            guard await self.model.reloadAsync(reset: reset) else { return }
+            self.listStates = [:]
+            self.renderRows()
         }
     }
 

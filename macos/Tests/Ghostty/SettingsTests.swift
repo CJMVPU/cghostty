@@ -587,6 +587,52 @@ import Testing
         }
     }
 
+    @Test func operationStatesRemainConsistentAndBusyReloadIsIgnored() async throws {
+        try await withStoreAsync { store, _ in
+            _ = store.load(cli: false)
+            let model = SettingsModel(store: store)
+            let title = try #require(SettingsField.byKey["title"])
+            model.edit(title, value: "State transitions", deferred: true)
+            #expect(model.validation == .pending && !model.canSave)
+            var operations: [SettingsModel.Operation] = []
+            model.stateChanged = {
+                operations.append(model.operation)
+                if model.operation == .saving { #expect(model.status == "Saving…" && !model.canSave) }
+            }
+            let saving = Task { await model.saveAsync() }
+            try await NativeTestWait.until("save started", timeout: .seconds(1), polling: .milliseconds(1),
+                                           diagnostics: { model.status }, { model.isBusy || !model.dirty })
+            // The callback captures the transition even if a fast disk finishes first.
+            #expect(await saving.value)
+            #expect(operations == [.saving, .idle])
+            #expect(model.validation == .valid && !model.dirty)
+            #expect(model.status == "Saved. Restart to apply.")
+            operations = []
+            #expect(await model.reloadAsync())
+            #expect(operations == [.loading, .idle])
+        }
+    }
+
+    @Test func presentingSettingsCoalescesInitialLoad() async throws {
+        try await withStoreAsync { store, _ in
+            _ = store.load(cli: false)
+            let controller = SettingsController(store: store)
+            defer { controller.window?.close() }
+            let update = controller.model.stateChanged
+            var loads = 0
+            controller.model.stateChanged = {
+                if controller.model.operation == .loading { loads += 1 }
+                update?()
+            }
+            defer { controller.model.stateChanged = update }
+            controller.present()
+            controller.present()
+            try await NativeTestWait.until("initial load", timeout: .seconds(3), polling: .milliseconds(5),
+                                           diagnostics: { controller.model.status }, { controller.model.record != nil && !controller.model.isBusy })
+            #expect(loads == 1)
+        }
+    }
+
     @Test func lockedSettingsTimeOutAndCancellationPreservesDraft() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -608,6 +654,8 @@ import Testing
         let saving = Task { await model.saveAsync() }
         try await NativeTestWait.until("save waiting for lock", timeout: .seconds(1), polling: .milliseconds(5),
                                        diagnostics: { model.status }, { model.isBusy })
+        #expect(await model.reloadAsync() == false)
+        #expect(model.operation == .saving)
         saving.cancel()
         #expect(await saving.value == false)
         #expect(!model.isBusy && model.dirty && model.canSave)
