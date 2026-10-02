@@ -134,7 +134,9 @@ def verify(bundle, selected=()):
              '--path', str(bundle), '--format', 'json'], text=True, stderr=subprocess.PIPE))
         executed = list(executed_tests(tree.get('testNodes', [])))
         for selection in selected:
-            count = sum(test == selection or test.startswith(selection + '/') for test in executed)
+            # XCTest accepts method selectors without parentheses; xcresult adds them.
+            count = sum(test.removesuffix('()') == selection.removesuffix('()')
+                        or test.startswith(selection + '/') for test in executed)
             print(f'  {selection}: {count} executed', flush=True)
             if count == 0:
                 reject(f'No tests executed for requested selection: {selection}')

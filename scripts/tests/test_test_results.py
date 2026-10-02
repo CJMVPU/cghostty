@@ -129,3 +129,13 @@ class TestResultRetentionTests(unittest.TestCase):
         results.maintain(self.root)
         self.assertTrue(good.exists())
         self.assertTrue(zero.exists())
+
+    def test_xctest_method_selection_matches_result_parentheses(self):
+        tree = {'testNodes': [{'nodeType': 'UI test bundle', 'name': 'GhosttyUITests', 'children': [
+            {'nodeType': 'Test Case', 'nodeIdentifier': 'SettingsTests/testSave()', 'result': 'Passed'}]}]}
+        with patch.object(results, 'summary', return_value={'result': 'Passed', 'passedTests': 1}), \
+                patch.object(results.subprocess, 'check_output', return_value=json.dumps(tree)):
+            results.verify(self.root / 'test.xcresult', ['GhosttyUITests/SettingsTests/testSave'])
+            results.verify(self.root / 'test.xcresult', ['GhosttyUITests/SettingsTests/testSave()'])
+            with self.assertRaisesRegex(ValueError, 'No tests executed'):
+                results.verify(self.root / 'test.xcresult', ['GhosttyUITests/SettingsTests/testSav'])

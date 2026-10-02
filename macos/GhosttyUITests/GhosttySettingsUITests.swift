@@ -61,6 +61,8 @@ final class GhosttySettingsUITests: GhosttyCustomConfigCase {
         XCTAssertTrue(confirmSave.waitForExistence(timeout: 5))
         confirmSave.click()
         XCTAssertTrue(window.waitForNonExistence(timeout: 5))
+        // Closing the modal settings window can hand activation to another app.
+        app.activate()
         app.typeKey(",", modifierFlags: .command)
         XCTAssertTrue(window.waitForExistence(timeout: 5))
         XCTAssertEqual(width.value as? String, "157")

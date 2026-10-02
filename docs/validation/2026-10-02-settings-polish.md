@@ -44,17 +44,40 @@ formatted display values: median 9.63 ms, maximum 9.97 ms. This is a local sampl
 not a release benchmark or a bound for every possible configuration. Parsing stays
 on MainActor; disk I/O and lock acquisition are isolated from it.
 
-## Pending desktop verification
+## Desktop verification completed after unlocking
 
-The Settings UI suite could not start: XCTest reported that system authentication
-was running. Computer Use independently reported the Mac was locked and automatic
-unlock had failed. Actual click-through tests and screenshots therefore remain
-unverified for this revision. Programmatic AppKit checks did pass for minimum-width
-layout, the shared footer row, all category inputs' focus ring settings, sidebar
-background transparency and row separators.
+On 2026-10-02, rebuilt Debug 0.4.8/build 38 at application commit `117c4b052`.
+The final complete Settings UI run passed all four tests, with zero failures and
+zero skips; the managed entrypoint confirmed four executed tests from xcresult.
 
-The UI suite also covers saving from the close confirmation and reopening the
-saved values. Run after unlocking:
+- Font choice buttons, bundled preset and fallback families survive restart.
+- Invalid values prevent saving; valid values persist across restart. Closing with
+  unsaved edits can save, close and reopen the settings window with the saved value.
+- Environment entries, duration/limit controls, flags and font/style editors retain
+  their values; theme and color controls render correctly.
+- Theme selection and Control+Shift+9 shortcut recording work.
+
+Two test-infrastructure issues were found and corrected during verification:
+
+1. After the close confirmation, the test must reactivate the app before sending
+   Command+Comma. The initial attempt failed to reopen it; the focused retry and
+   final complete run passed with explicit activation.
+2. XCTest accepts a method selector without `()`, but xcresult includes `()`.
+   The verification script now accepts both exact forms while still rejecting
+   absent tests and partial names. All 57 Python tests passed.
+
+No application implementation change was needed for these corrections. Screenshot
+inspection confirmed the shared Save/status row, sidebar text-only selection,
+row separators, compact layout and no blue focus outline on editable fields.
+The earlier programmatic AppKit checks also covered minimum-width layout and
+input focus-ring settings across every settings category.
+
+Final result bundle:
+`run-1790916938967497000-d68be021ebcb47389e49ee25a2bd1853.xcresult`
+
+Local log: `/tmp/cghostty-0.4.8-ui-final.log`.
+Exported screenshots: `/tmp/cghostty-0.4.8-ui-final-attachments/`.
+These are local temporary verification artifacts, not release packages.
 
 ```sh
 PATH="$PWD/.tools/zig-aarch64-macos-0.16.0:$PATH" \
@@ -67,5 +90,5 @@ PATH="$PWD/.tools/zig-aarch64-macos-0.16.0:$PATH" \
 The implementation checks above used 0.4.7/build 37 before the metadata bump.
 Release metadata is now 0.4.8/build 38, with synchronized Debug, ReleaseLocal and
 Release app configurations and updated release notes. Version, project plist,
-Swift 6 configuration and whitespace checks passed. No 0.4.8 binary was built,
-packaged or installed locally; the desktop verification limitation above remains.
+Swift 6 configuration and whitespace checks passed. A 0.4.8 Debug binary was subsequently built and its version verified for the UI
+run above. No ReleaseLocal package was created or installed.
