@@ -18,7 +18,8 @@ final class WindowCompositor {
 
     static func attach(_ view: Ghostty.SurfaceView) -> WindowCompositor? {
         guard let window = view.window, let surface = view.surfaceModel,
-              let content = window.contentView else { return nil }
+              let root = window.contentView else { return nil }
+        let content = (root as? TerminalChromeView)?.terminalContent ?? root
         do {
             let owner: WindowCompositor
             if let existing = owners.object(forKey: window) {

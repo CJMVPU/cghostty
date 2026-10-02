@@ -5,6 +5,27 @@ import Observation
 /// The base class for all standalone, "normal" terminal windows. This sets the basic
 /// style and configuration of the window based on the app configuration.
 class TerminalWindow: NSWindow {
+    static let maximumTabs = 5
+
+    static func canAddTab(to window: NSWindow?) -> Bool {
+        (window?.tabGroup?.windows.count ?? 1) < maximumTabs
+    }
+
+    static func reportTabLimit(_ window: NSWindow) {
+        NSSound.beep()
+        NSAccessibility.post(element: window, notification: .announcementRequested,
+                             userInfo: [.announcement: "A window can contain at most five tabs.",
+                                        .priority: NSAccessibilityPriorityLevel.medium.rawValue])
+    }
+
+    override func addTabbedWindow(_ window: NSWindow, ordered: NSWindow.OrderingMode) {
+        guard tabGroup?.windows.contains(where: { $0 === window }) == true || Self.canAddTab(to: self) else {
+            Self.reportTabLimit(self)
+            return
+        }
+        super.addTabbedWindow(window, ordered: ordered)
+    }
+
     /// Logical content size chosen at creation. Backing pixels may still change
     /// when moving between displays; saved frames must not replace this size.
     private(set) var fixedContentSize: NSSize?
@@ -18,17 +39,19 @@ class TerminalWindow: NSWindow {
         fatalError("init(coder:) is not supported")
     }
 
+    func decoratedContentSize(_ size: NSSize) -> NSSize { size }
+
     func fixContentSize(_ size: NSSize) {
         guard size.width > 0, size.height > 0 else { return }
         fixedContentSize = size
-        setContentSize(size)
+        setContentSize(decoratedContentSize(size))
         standardWindowButton(.zoomButton)?.isEnabled = false
     }
 
     private func fixedFrame(_ requested: NSRect) -> NSRect {
         guard let fixedContentSize else { return requested }
         var result = requested
-        result.size = frameRect(forContentRect: NSRect(origin: .zero, size: fixedContentSize)).size
+        result.size = frameRect(forContentRect: NSRect(origin: .zero, size: decoratedContentSize(fixedContentSize))).size
         // Display removal or resolution changes may require a smaller window.
         // Keep the configured size so it can be used again on a larger display.
         if let screen = screen ?? NSScreen.main {
@@ -254,8 +277,15 @@ class TerminalWindow: NSWindow {
     }
 
     override func mergeAllWindows(_ sender: Any?) {
-        super.mergeAllWindows(sender)
-
+        // Merge only as many compatible windows as fit; leave the others open.
+        guard let registry = terminalController?.ghostty.windowRegistry else { return }
+        for controller in registry.all {
+            guard Self.canAddTab(to: self) else { break }
+            guard let candidate = controller.window, candidate !== self,
+                  type(of: candidate) == type(of: self) else { continue }
+            guard tabGroup?.windows.contains(where: { $0 === candidate }) != true else { continue }
+            _ = addTabbedWindowSafely(candidate, ordered: .above)
+        }
         terminalController?.scheduleTabRelabel()
     }
 

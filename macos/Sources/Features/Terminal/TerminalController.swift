@@ -292,6 +292,11 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
             return newWindow(ghostty, withBaseConfig: baseConfig, withParent: parent)
         }
 
+        guard TerminalWindow.canAddTab(to: parent) else {
+            TerminalWindow.reportTabLimit(parent)
+            return nil
+        }
+
         // Create a new window and add it to the parent
         let controller = TerminalController.init(ghostty, withBaseConfig: baseConfig)
         controller.isBackgroundOpaque = parentController.isBackgroundOpaque
@@ -343,12 +348,7 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         // showWindow makes regular windows key and ordered front. AppKit can
         // throw while selecting a tab if its fullscreen stack is inconsistent,
         // so this must cross the Objective-C exception bridge.
-        // We don't need to dispatch this because `tabbingMode = .disallowed`
-        // for HiddenTitlebarTerminalWindow.
         controller.showWindowSafely(self)
-
-        // Windows with `macos-titlebar-style = hidden` create new windows when the
-        // new tab binding is pressed, we should cascade those windows as well.
 
         // We're dispatching this async because otherwise the lastCascadePoint doesn't
         // take effect after position in `showWindow`. Our best theory is there is some
@@ -410,6 +410,7 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
     func relabelTabs() {
         guard isWindowLoaded,
               ghostty.windowRegistry.registeredControllers.contains(where: { $0 === self }) else { return }
+        (window as? HiddenTitlebarTerminalWindow)?.refreshChrome()
         let group = window?.tabGroup
         if observedTabGroup !== group {
             observedTabGroup = group
@@ -857,7 +858,9 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         // Use the startup grid even when restoring or moving a split tree.
         container.initialContentSize = ghostty.initialWindowContentSize ?? NSSize(width: 800, height: 600)
 
-        window.contentView = container
+        if let hidden = window as? HiddenTitlebarTerminalWindow {
+            window.contentView = TerminalChromeView(content: container, window: hidden)
+        } else { window.contentView = container }
 
         if let terminalWindow = window as? TerminalWindow,
            let size = container.initialContentSize {
@@ -1246,6 +1249,11 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
 extension TerminalController {
     override func validateMenuItem(_ item: NSMenuItem) -> Bool {
         switch item.action {
+        case #selector(newTab(_:)), #selector(newWindowForTab(_:)):
+            let available = TerminalWindow.canAddTab(to: window)
+            item.toolTip = available ? nil : "Maximum 5 tabs per window"
+            return available
+
         case #selector(closeTabsOnTheRight):
             guard let window, let tabGroup = window.tabGroup else { return false }
             guard let currentIndex = tabGroup.windows.firstIndex(of: window) else { return false }

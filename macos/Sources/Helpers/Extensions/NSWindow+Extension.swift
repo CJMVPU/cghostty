@@ -48,6 +48,11 @@ extension NSWindow {
         _ child: NSWindow,
         ordered: NSWindow.OrderingMode
     ) -> Bool {
+        if self is TerminalWindow, tabGroup?.windows.contains(where: { $0 === child }) != true,
+           !TerminalWindow.canAddTab(to: self) {
+            TerminalWindow.reportTabLimit(self)
+            return false
+        }
         var error: NSError?
         let success = GhosttyAddTabbedWindowSafely(self, child, ordered.rawValue, &error)
         if let error {
