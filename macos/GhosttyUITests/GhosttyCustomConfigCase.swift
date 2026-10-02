@@ -40,11 +40,19 @@ class GhosttyCustomConfigCase: XCTestCase {
         return app
     }
 
-    @MainActor func updateSetting(_ app: XCUIApplication, key: String, value: String) {
+    @discardableResult
+    @MainActor func openSettings(_ app: XCUIApplication) -> XCUIElement {
+        app.activate()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 5))
         app.menuBars.menuBarItems["cghostty"].click()
         app.menuItems["Settings…"].click()
         let window = app.windows["cghostty · Settings"]
         XCTAssertTrue(window.waitForExistence(timeout: 10))
+        return window
+    }
+
+    @MainActor func updateSetting(_ app: XCUIApplication, key: String, value: String) {
+        let window = openSettings(app)
         let search = window.textFields["settings.search"]
         search.click()
         search.typeKey("a", modifierFlags: .command)
@@ -68,11 +76,25 @@ class GhosttyCustomConfigCase: XCTestCase {
             window.popUpButtons["settings." + key].click()
             app.menuItems[value.replacingOccurrences(of: "-", with: " ").capitalized].click()
         }
-        let save = window.buttons["settings.save"]
-        XCTAssertTrue(save.wait(for: \.isEnabled, toEqual: true, timeout: 5))
-        save.click()
-        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "Saved. Restart to apply."), object: window.staticTexts["settings.status"])], timeout: 5), .completed)
+        saveAndWait(in: window)
         window.typeKey("w", modifierFlags: .command)
+    }
+
+    /// A disabled button can mean the write just started. Wait for the saved
+    /// status before closing or terminating the app, including a return to defaults.
+    @MainActor func saveAndWait(in window: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
+        let save = window.buttons["settings.save"]
+        guard save.wait(for: \.isEnabled, toEqual: true, timeout: 5) else {
+            XCTFail("Settings did not become saveable: \(window.debugDescription)", file: file, line: line)
+            return
+        }
+        save.click()
+        let status = window.staticTexts["settings.status"]
+        let completed = NSPredicate(format: "value IN %@", ["Saved. Restart to apply.", "No unsaved changes."])
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: completed, object: status)], timeout: 5),
+                       .completed, "Save did not complete: \(status.value ?? "missing status")", file: file, line: line)
+        XCTAssertFalse(save.isEnabled, file: file, line: line)
+        XCTAssertFalse(window.staticTexts["settings.errors"].exists, file: file, line: line)
     }
 
     /// Preserve every representation, including non-text user clipboard contents.

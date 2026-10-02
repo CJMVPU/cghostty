@@ -2,6 +2,15 @@ import AppKit
 import XCTest
 
 final class GhosttySettingsUITests: GhosttyCustomConfigCase {
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        // A transient input-source indicator is not an app modal dialog.
+        addUIInterruptionMonitor(withDescription: "Input source indicator") { interruption in
+            guard interruption.buttons["InputSource"].exists else { return false }
+            return interruption.waitForNonExistence(timeout: 5)
+        }
+    }
+
     @MainActor private func attach(_ screenshot: XCUIScreenshot, name: String) {
         let attachment = XCTAttachment(screenshot: screenshot)
         attachment.name = name
@@ -37,8 +46,7 @@ final class GhosttySettingsUITests: GhosttyCustomConfigCase {
         width.typeKey("a", modifierFlags: .command)
         width.typeText("158")
         XCTAssertTrue(save.wait(for: \.isEnabled, toEqual: true, timeout: 5))
-        save.click()
-        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "Saved. Restart to apply."), object: window.staticTexts["settings.status"])], timeout: 5), .completed)
+        saveAndWait(in: window)
         attach(window.screenshot(), name: "settings-saved")
         XCTAssertTrue(save.wait(for: \.isEnabled, toEqual: false, timeout: 3))
         XCTAssertTrue((window.staticTexts["settings.status"].value as? String ?? "").contains("Saved"))
@@ -61,10 +69,7 @@ final class GhosttySettingsUITests: GhosttyCustomConfigCase {
         XCTAssertTrue(confirmSave.waitForExistence(timeout: 5))
         confirmSave.click()
         XCTAssertTrue(window.waitForNonExistence(timeout: 5))
-        // Closing the modal settings window can hand activation to another app.
-        app.activate()
-        app.typeKey(",", modifierFlags: .command)
-        XCTAssertTrue(window.waitForExistence(timeout: 5))
+        openSettings(app)
         XCTAssertEqual(width.value as? String, "157")
         search.click()
         search.typeKey("a", modifierFlags: .command)
@@ -102,7 +107,7 @@ final class GhosttySettingsUITests: GhosttyCustomConfigCase {
         let save = window.buttons["settings.save"]
         attach(window.screenshot(), name: "settings-font-selection")
         XCTAssertTrue(save.wait(for: \.isEnabled, toEqual: true, timeout: 5), window.debugDescription)
-        save.click()
+        saveAndWait(in: window)
         app.terminate()
         app.launch()
         app.activate()
@@ -122,13 +127,6 @@ final class GhosttySettingsUITests: GhosttyCustomConfigCase {
         attach(window.screenshot(), name: "settings-choice-buttons")
     }
     @MainActor func testStructuredEditorsSaveAndRestoreValues() throws {
-        // macOS may display a transient input-source indicator while switching
-        // focus. It is not a modal app alert and does not need a button click.
-        let monitor = addUIInterruptionMonitor(withDescription: "Input source indicator") { interruption in
-            guard interruption.buttons["InputSource"].exists else { return false }
-            return interruption.waitForNonExistence(timeout: 5)
-        }
-        defer { removeUIInterruptionMonitor(monitor) }
         try updateConfig("initial-window = true\nwindow-save-state = never\nconfirm-close-surface = false\ncommand = /bin/zsh -f\nshell-integration = none\nenv = TOKEN=a=b\nundo-timeout = 5s")
         let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         app.launch()
@@ -174,7 +172,7 @@ final class GhosttySettingsUITests: GhosttyCustomConfigCase {
         attach(window.screenshot(), name: "settings-feature-toggles")
         let save = window.buttons["settings.save"]
         XCTAssertTrue(save.wait(for: \.isEnabled, toEqual: true, timeout: 5))
-        save.click()
+        saveAndWait(in: window)
         app.terminate()
         app.launch()
         app.activate()
@@ -205,11 +203,6 @@ final class GhosttySettingsUITests: GhosttyCustomConfigCase {
 
     @MainActor func testThemeSelectionAndShortcutRecording() throws {
         try updateConfig("initial-window = true\nwindow-save-state = never\nconfirm-close-surface = false\ncommand = /bin/zsh -f\nshell-integration = none\nkeybind = super+shift+j=ignore")
-        let monitor = addUIInterruptionMonitor(withDescription: "Input source indicator") { interruption in
-            guard interruption.buttons["InputSource"].exists else { return false }
-            return interruption.waitForNonExistence(timeout: 5)
-        }
-        defer { removeUIInterruptionMonitor(monitor) }
         let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
         app.launch()
         app.activate()
@@ -248,7 +241,7 @@ final class GhosttySettingsUITests: GhosttyCustomConfigCase {
         attach(window.screenshot(), name: "settings-recorded-shortcut")
         let save = window.buttons["settings.save"]
         XCTAssertTrue(save.wait(for: \.isEnabled, toEqual: true, timeout: 5))
-        save.click()
+        saveAndWait(in: window)
         XCTAssertTrue(save.wait(for: \.isEnabled, toEqual: false, timeout: 3))
     }
 
