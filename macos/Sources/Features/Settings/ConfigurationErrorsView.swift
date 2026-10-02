@@ -49,6 +49,6 @@ struct ConfigurationErrorsView: NSViewRepresentable {
 
     func updateNSView(_ view: NSStackView, context: Context) {
         let scroll = view.arrangedSubviews.compactMap { $0 as? NSScrollView }.first
-        (scroll?.documentView as? NSTextView)?.string = SettingsField.readable(model.errors.joined(separator: "\n\n"))
+        (scroll?.documentView as? NSTextView)?.string = model.errors.joined(separator: "\n\n")
     }
 }

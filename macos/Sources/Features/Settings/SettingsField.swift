@@ -56,11 +56,7 @@ struct SettingsField: Decodable {
     @MainActor var help: String {
         if isFontFamily { return multiline ? "Choose fonts in order of preference. Type a name to find a font or keep a custom family." : "Type a name to find a font." }
         let english = note.components(separatedBy: " / ").last ?? note
-        return Self.readable(english)
-    }
-
-    @MainActor static func readable(_ text: String) -> String {
-        text.components(separatedBy: "\n").map { SettingsDiagnostic(coreMessage: $0).displayMessage }.joined(separator: "\n")
+        return english
     }
 
     func validate(_ input: String) -> String? {

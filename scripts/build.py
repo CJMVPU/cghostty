@@ -19,6 +19,8 @@ toolchain_spec.loader.exec_module(toolchain)
 
 
 def run(mode, arguments):
+    if mode == 'native':
+        arguments = results.normalize_selections(arguments)
     clean = mode == 'native' and '--action' in arguments and arguments[arguments.index('--action') + 1:][:1] == ['clean']
     if not clean:
         toolchain.check()
@@ -43,6 +45,8 @@ def run(mode, arguments):
         try:
             code = subprocess.run(command, cwd=ROOT, env=env).returncode
             completed = True
+            if code == 0 and mode == 'native' and results.option(arguments, '--action') == 'test':
+                results.verify(Path(results.option(arguments, '--result-bundle')), results.selections(arguments))
             return code
         finally:
             if completed and directory is not None:

@@ -147,7 +147,22 @@ export fn ghostty_config_get_diagnostic(self: *Config, idx: u32) Diagnostic {
     const items = self._diagnostics.items();
     if (idx >= items.len) return .{};
     const message = self._diagnostics.precompute.messages.items[idx];
-    return .{ .message = message.ptr };
+    const item = items[idx];
+    var result: Diagnostic = .{ .message = message.ptr, .key = item.key.ptr, .detail = item.message.ptr };
+    switch (item.location) {
+        .none => {},
+        .cli => |index| {
+            result.source = "cli";
+            result.source_len = 3;
+            result.line = index;
+        },
+        .file => |file| {
+            result.source = file.path.ptr;
+            result.source_len = file.path.len;
+            result.line = file.line;
+        },
+    }
+    return result;
 }
 
 export fn ghostty_settings_catalog() String {
@@ -199,6 +214,11 @@ export fn ghostty_settings_font_data(len: *usize) [*]const u8 {
 /// Sync with ghostty_diagnostic_s
 const Diagnostic = extern struct {
     message: [*:0]const u8 = "",
+    key: [*:0]const u8 = "",
+    detail: [*:0]const u8 = "",
+    source: ?[*]const u8 = null,
+    source_len: usize = 0,
+    line: usize = 0,
 };
 
 test "ghostty_config_get: bool" {
@@ -325,4 +345,22 @@ test "ghostty_config_trigger: default keybind" {
         try testing.expectEqual(.physical, trigger.tag);
         try testing.expectEqual(.unidentified, trigger.key.physical);
     }
+}
+
+test "structured diagnostics preserve keys and file locations" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    var cfg = try Config.default(alloc);
+    defer cfg.deinit();
+    try cfg._diagnostics.append(cfg._arena.?.allocator(), .{
+        .location = .{ .file = .{ .path = "/tmp/theme:custom", .line = 7 } },
+        .key = "font-family-bold",
+        .message = "cannot open /tmp/font-family:custom",
+    });
+    const result = ghostty_config_get_diagnostic(&cfg, 0);
+    try testing.expectEqualStrings("font-family-bold", std.mem.span(result.key));
+    try testing.expectEqualStrings("cannot open /tmp/font-family:custom", std.mem.span(result.detail));
+    try testing.expectEqualStrings("/tmp/theme:custom", result.source.?[0..result.source_len]);
+    try testing.expectEqual(@as(usize, 7), result.line);
+    try testing.expectEqualStrings("", std.mem.span(ghostty_config_get_diagnostic(&cfg, 1).key));
 }

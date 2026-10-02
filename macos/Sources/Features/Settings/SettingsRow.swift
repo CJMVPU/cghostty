@@ -17,7 +17,7 @@ final class SettingsRow: NSStackView, NSTextFieldDelegate {
         super.init(frame: .zero)
         orientation = .vertical
         alignment = .leading
-        spacing = 8
+        spacing = 6
         let heading = NSStackView()
         heading.orientation = .horizontal
         heading.alignment = .centerY
@@ -78,6 +78,7 @@ final class SettingsRow: NSStackView, NSTextFieldDelegate {
             if values.count <= 4 {
                 let segments = NSSegmentedControl(labels: values.map(SettingsField.choiceTitle), trackingMode: .selectOne,
                                                   target: self, action: #selector(segmentChanged))
+                segments.focusRingType = .none
                 segments.font = SettingsTypography.font
                 segments.selectedSegment = values.firstIndex(of: effective) ?? -1
                 segments.setContentCompressionResistancePriority(.required, for: .horizontal)
@@ -87,6 +88,7 @@ final class SettingsRow: NSStackView, NSTextFieldDelegate {
                 self.segments = segments
             } else {
                 let popup = NSPopUpButton(frame: .zero, pullsDown: false)
+                popup.focusRingType = .none
                 popup.font = SettingsTypography.font
                 popup.menu?.font = SettingsTypography.font
                 for choice in values {

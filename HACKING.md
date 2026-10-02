@@ -350,7 +350,10 @@ NotificationCenter 只接收 AppKit 系统事件，订阅必须随原生宿主�
 和 `prompt_window_title` 这四个旧动作。旧配置中的这些绑定会报告无效动作；
 标题提示应使用 `prompt_surface_title` 或 `prompt_tab_title`。
 
-`--ui-tests` 显式包含桌面测试，`--only-testing` 接受 Xcode 的目标/套件/测试标识；
+`--ui-tests` 显式包含桌面测试，`--only-testing` 接受 Xcode 的目标/套件/测试标识。
+多个标识用逗号分隔；通过 `scripts/build.py native` 也可重复传入 `--only-testing`。
+Swift Testing 的单个方法标识应保留 `()`。测试入口检查 xcresult 实际执行数量，
+零测试、全部跳过或无法读取结果都会失败；进程退出码 0 本身不算通过。
 默认单元测试和 CI 仍不启动桌面交互测试。辅助窗口直接创建；设置窗口使用 AppKit 表单，其余辅助窗口托管 SwiftUI 内容；
 主菜单、主终端窗口样式和快捷终端均由 Swift 显式构造，保留 AppKit 响应链和动态快捷键。
 窗口延迟加载有重入保护；没有窗口的基础控制器不会尝试加载 nib。

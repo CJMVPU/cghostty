@@ -4,7 +4,7 @@ import Darwin
 /// Application-owned settings. Legacy text files are copied once into immutable
 /// input layers; subsequent launches never consult those configuration files.
 @MainActor final class SettingsStore {
-    struct Layer: Codable, Equatable {
+    nonisolated struct Layer: Codable, Equatable, Sendable {
         var text: String
         var source: URL
 
@@ -22,23 +22,23 @@ import Darwin
         }
     }
 
-    struct Input: Codable, Equatable {
+    nonisolated struct Input: Codable, Equatable, Sendable {
         var layers: [Layer] = []
         var values: [String: String] = [:]
     }
 
-    struct Record: Codable {
+    nonisolated struct Record: Codable, Sendable {
         var schema = 1
         var revision = UUID()
         var current: Input
         var previous: Input?
     }
 
-    enum Failure: LocalizedError, Equatable {
-        case invalid([String]), changed, unreadable, unsupported
+    nonisolated enum Failure: LocalizedError, Equatable {
+        case invalid([SettingsDiagnostic]), changed, unreadable, unsupported
         var errorDescription: String? {
             switch self {
-            case .invalid(let errors): return errors.joined(separator: "\n")
+            case .invalid(let errors): return errors.map(\.rawMessage).joined(separator: "\n")
             case .changed: return "Settings were changed by another app instance. Discard this draft to load the saved settings."
             case .unreadable: return "Unable to read settings. Retry or restore defaults; existing data will be backed up."
             case .unsupported: return "These settings require a newer version of the app."
@@ -52,19 +52,19 @@ import Darwin
     var validationSource: URL { directory.appendingPathComponent("settings") }
     private(set) var startupErrors: [String] = []
     private(set) var runningValues: [String: String] = [:]
-    private static let maximumRecordBytes = 16 * 1024 * 1024
+    private var disk: Disk { Disk(directory: directory) }
+    private(set) var startupValues: [String: String] = [:]
 
     init(legacySource: URL, directory: URL? = nil) {
         self.legacySource = legacySource
         self.directory = directory ?? legacySource.deletingLastPathComponent().appendingPathComponent("Settings", isDirectory: true)
     }
 
-    func read() throws -> Record {
-        let data = try Data(contentsOf: url)
-        guard data.count <= Self.maximumRecordBytes else { throw Failure.unreadable }
-        let record = try JSONDecoder().decode(Record.self, from: data)
-        guard record.schema == 1 else { throw Failure.unsupported }
-        return record
+    func read() throws -> Record { try disk.read() }
+
+    func readAsync() async throws -> Record {
+        let disk = disk
+        return try await Task.detached(priority: .userInitiated) { try disk.read() }.value
     }
 
     func load(cli: Bool = true) -> Ghostty.ConfigHandle? {
@@ -82,16 +82,19 @@ import Darwin
 
     private func loadConfiguration(cli: Bool) -> Ghostty.ConfigHandle? {
         startupErrors = []
+        startupValues = [:]
         do {
             let record = try FileManager.default.fileExists(atPath: url.path) ? read() : migrate()
             let evaluation = evaluate(record.current)
             if let result = evaluation.config, evaluation.diagnostics.isEmpty {
+                startupValues = Self.values(result)
                 result.report(startupErrors)
                 return applyCLI(record.current, checked: result, cli: cli)
             }
             startupErrors = evaluation.diagnostics.map(\.rawMessage)
             if let previous = record.previous, let recovered = validatedConfig(previous) {
                 startupErrors.insert("Invalid settings. The last valid settings were restored. Open Settings to correct the errors.", at: 0)
+                startupValues = Self.values(recovered)
                 recovered.report(startupErrors)
                 return applyCLI(previous, checked: recovered, cli: cli)
             }
@@ -100,6 +103,7 @@ import Darwin
         }
         let defaults = parse(Input(), cli: false)
         startupErrors.insert("Unable to apply saved settings. Built in defaults are in use. Existing data has been preserved.", at: 0)
+        startupValues = Self.values(defaults)
         defaults?.report(startupErrors)
         return defaults
     }
@@ -149,7 +153,7 @@ import Darwin
         let config = parse(input)
         var errors = fieldDiagnostics(input)
         let explainedKeys = Set(errors.compactMap(\.key))
-        let coreErrors = (config?.errors ?? ["Unable to create the settings parser."]).map(SettingsDiagnostic.init(coreMessage:))
+        let coreErrors = config?.settingsDiagnostics ?? [SettingsDiagnostic(kind: .core, message: "Unable to create the settings parser.")]
         errors += coreErrors.filter { !explainedKeys.contains($0.key ?? "") }
         var seen = Set<SettingsDiagnostic>()
         return Evaluation(config: config, diagnostics: errors.filter { seen.insert($0).inserted })
@@ -167,35 +171,48 @@ import Darwin
 
     func saveEvaluated(_ input: Input, revision: UUID) throws -> Saved {
         let evaluation = evaluate(input)
-        guard evaluation.diagnostics.isEmpty else { throw Failure.invalid(evaluation.diagnostics.map(\.rawMessage)) }
-        return try withLock {
+        guard evaluation.diagnostics.isEmpty else { throw Failure.invalid(evaluation.diagnostics) }
+        return try disk.withLock {
             let old = try read()
             guard old.revision == revision else { throw Failure.changed }
             let previous = validate(old.current).isEmpty ? old.current : old.previous
             let record = Record(current: input, previous: previous)
-            try write(record)
+            try disk.write(record)
             return Saved(record: record, evaluation: evaluation)
         }
     }
 
     @discardableResult
     func restoreDefaults() throws -> URL? {
-        try withLock { try reset() }
+        try disk.withLock { try disk.reset() }
     }
 
-    private func reset() throws -> URL? {
-        let backup: URL?
-        if FileManager.default.fileExists(atPath: url.path) {
-            let target = directory.appendingPathComponent("before-reset-\(UUID().uuidString).json")
-            try Data(contentsOf: url).write(to: target, options: .atomic)
-            backup = target
-        } else { backup = nil }
-        try write(Record(current: Input()))
-        return backup
+    func restoreDefaultsAsync() async throws -> URL? {
+        let disk = disk
+        return try await Task.detached(priority: .userInitiated) { try disk.withLock { try disk.reset() } }.value
+    }
+
+    func saveEvaluatedAsync(_ input: Input, revision: UUID) async throws -> Saved {
+        let evaluation = evaluate(input)
+        guard evaluation.diagnostics.isEmpty else { throw Failure.invalid(evaluation.diagnostics) }
+        let old = try await readAsync()
+        guard old.revision == revision else { throw Failure.changed }
+        let previous = validate(old.current).isEmpty ? old.current : old.previous
+        let record = Record(current: input, previous: previous)
+        let disk = disk
+        try await Task.detached(priority: .userInitiated) {
+            try disk.withLock {
+                // Recheck under the lock after validation; another instance can
+                // commit while the UI is awaiting its disk operation.
+                guard try disk.read().revision == revision else { throw Failure.changed }
+                try disk.write(record)
+            }
+        }.value
+        return Saved(record: record, evaluation: evaluation)
     }
 
     private func migrate() throws -> Record {
-        try withLock {
+        try disk.withLock {
             // Another instance may have finished migration while we waited.
             if FileManager.default.fileExists(atPath: url.path) { return try read() }
             return try importLegacy()
@@ -213,7 +230,7 @@ import Darwin
             let legacy = SettingsLegacyMigration(source: legacySource, directory: recoveryDirectory)
             guard let saved = legacy.successfulMigrationData(),
                   let recovered = Ghostty.ConfigHandle.load(data: saved, source: legacySource) else {
-                throw Failure.invalid(["The old configuration contains errors and could not be imported. The original file was preserved. Restore defaults to continue."] + checked.errors)
+                throw Failure.invalid([SettingsDiagnostic(kind: .storage, message: "The old configuration contains errors and could not be imported. The original file was preserved. Restore defaults to continue.")] + checked.settingsDiagnostics)
             }
             startupErrors = ["The old configuration contains errors. The last valid configuration was imported. The original file was preserved. Use Settings for future changes."] + checked.errors
             data = saved
@@ -233,42 +250,71 @@ import Darwin
         // Compare against the bytes that will be imported before committing.
         if exists, try Data(contentsOf: legacySource) != original { throw Failure.changed }
         let evaluation = evaluate(input)
-        guard evaluation.diagnostics.isEmpty else { throw Failure.invalid(evaluation.diagnostics.map(\.rawMessage)) }
+        guard evaluation.diagnostics.isEmpty else { throw Failure.invalid(evaluation.diagnostics) }
         guard let imported = evaluation.config, imported.hasSameSettings(as: checked) else { throw Failure.changed }
         let record = Record(current: input)
-        try write(record)
+        try disk.write(record)
         return record
     }
 
-    private func prepareDirectory() throws {
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
-                                                attributes: [.posixPermissions: 0o700])
-    }
+    /// Only immutable records cross executors; core handles stay on MainActor.
+    nonisolated struct Disk: Sendable {
+        let directory: URL
+        var url: URL { directory.appendingPathComponent("settings.json") }
+        static let maximumRecordBytes = 16 * 1024 * 1024
 
-    private func write(_ record: Record) throws {
-        try prepareDirectory()
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        let data = try encoder.encode(record)
-        guard data.count <= Self.maximumRecordBytes else {
-            throw Failure.invalid(["Settings are too large to save. Reduce their size and try again."])
+        func read() throws -> Record {
+            let handle = try FileHandle(forReadingFrom: url)
+            defer { try? handle.close() }
+            // Bound allocation before decoding, including files that grow while read.
+            let data = try handle.read(upToCount: Self.maximumRecordBytes + 1) ?? Data()
+            guard data.count <= Self.maximumRecordBytes else { throw Failure.unreadable }
+            let record = try JSONDecoder().decode(Record.self, from: data)
+            guard record.schema == 1 else { throw Failure.unsupported }
+            return record
         }
-        let temporary = directory.appendingPathComponent(".settings-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: temporary) }
-        try data.write(to: temporary, options: .atomic)
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: temporary.path)
-        // Set permissions before the only commit point. A failed write cannot
-        // replace the previous complete record or claim an unsuccessful save.
-        guard rename(temporary.path, url.path) == 0 else { throw POSIXError(.init(rawValue: errno) ?? .EIO) }
-    }
 
-    private func withLock<T>(_ operation: () throws -> T) throws -> T {
-        try prepareDirectory()
-        let descriptor = open(directory.appendingPathComponent("settings.lock").path, O_CREAT | O_RDWR | O_NOFOLLOW, 0o600)
-        guard descriptor >= 0 else { throw POSIXError(.init(rawValue: errno) ?? .EIO) }
-        defer { close(descriptor) }
-        guard flock(descriptor, LOCK_EX) == 0 else { throw POSIXError(.init(rawValue: errno) ?? .EIO) }
-        defer { flock(descriptor, LOCK_UN) }
-        return try operation()
+        func reset() throws -> URL? {
+            let backup: URL?
+            if FileManager.default.fileExists(atPath: url.path) {
+                let target = directory.appendingPathComponent("before-reset-\(UUID().uuidString).json")
+                try FileManager.default.copyItem(at: url, to: target)
+                backup = target
+            } else { backup = nil }
+            try write(Record(current: Input()))
+            return backup
+        }
+
+        func prepareDirectory() throws {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
+                                                    attributes: [.posixPermissions: 0o700])
+        }
+
+        func write(_ record: Record) throws {
+            try prepareDirectory()
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(record)
+            guard data.count <= Self.maximumRecordBytes else {
+                throw Failure.invalid([SettingsDiagnostic(kind: .storage, message: "Settings are too large to save. Reduce their size and try again.")])
+            }
+            let temporary = directory.appendingPathComponent(".settings-\(UUID().uuidString)")
+            defer { try? FileManager.default.removeItem(at: temporary) }
+            try data.write(to: temporary, options: .atomic)
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: temporary.path)
+            // Set permissions before the only commit point. A failed write cannot
+            // replace the previous complete record or claim an unsuccessful save.
+            guard rename(temporary.path, url.path) == 0 else { throw POSIXError(.init(rawValue: errno) ?? .EIO) }
+        }
+
+        func withLock<T>(_ operation: () throws -> T) throws -> T {
+            try prepareDirectory()
+            let descriptor = open(directory.appendingPathComponent("settings.lock").path, O_CREAT | O_RDWR | O_NOFOLLOW, 0o600)
+            guard descriptor >= 0 else { throw POSIXError(.init(rawValue: errno) ?? .EIO) }
+            defer { close(descriptor) }
+            guard flock(descriptor, LOCK_EX) == 0 else { throw POSIXError(.init(rawValue: errno) ?? .EIO) }
+            defer { flock(descriptor, LOCK_UN) }
+            return try operation()
+        }
     }
 }

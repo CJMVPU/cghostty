@@ -15,11 +15,14 @@ import Testing
     }
 
     @Test func diagnosticsMatchExactKeysAndPreserveValues() throws {
-        let error = SettingsDiagnostic(coreMessage: "font-family-bold: cannot open /tmp/font-family-test")
-        #expect(error.key == "font-family-bold")
-        #expect(error.message == "cannot open /tmp/font-family-test")
-        #expect(error.displayMessage.hasSuffix("/tmp/font-family-test"))
-        let global = SettingsDiagnostic(coreMessage: "Unable to read /tmp/font-family-bold")
+        let source = URL(fileURLWithPath: "/tmp/settings:custom")
+        let config = try #require(Ghostty.ConfigHandle.load(data: Data("font-size = bad\n".utf8), source: source))
+        let error = try #require(config.settingsDiagnostics.first)
+        #expect(error.key == "font-size")
+        #expect(error.source == source.path)
+        #expect(error.line == 1)
+        #expect(error.rawMessage.contains("/tmp/settings:custom:1:font-size:"))
+        let global = SettingsDiagnostic(kind: .core, message: "Unable to read /tmp/font-family-bold")
         #expect(global.key == nil)
         #expect(global.displayMessage == global.message)
         #expect(throws: (any Error).self) { try SettingsField.decodeCatalog(Data("[]".utf8)) }
@@ -48,6 +51,7 @@ import Testing
             model.edit(field, value: "nan", deferred: true)
             #expect(model.error(for: field.key) != nil)
             #expect(!model.save())
+            #expect(model.error(for: field.key) != nil)
             model.reload()
             #expect(!model.validationPending)
             #expect(!model.dirty)
@@ -166,6 +170,7 @@ import Testing
             let config = try #require(store.parse(record.current))
             #expect(config.formattedEntry("window-width") == "window-width = 157\n")
             #expect(config.formattedEntry("window-height") == "window-height = 43\n")
+            #expect(config.formattedEntry("macos-titlebar-style") == "macos-titlebar-style = hidden\n")
             #expect(SettingsField.catalog.count > 150)
             #expect(!SettingsField.catalog.contains { $0.key == "config-file" })
         }
@@ -472,7 +477,7 @@ import Testing
             model.edit(field, value: "18")
             #expect(!model.dirty && model.status.contains("Restart"))
             try store.restoreDefaults()
-            model.reload(afterReset: true)
+            model.reload()
             #expect(!model.dirty && model.status.contains("Restart"))
         }
     }
@@ -516,6 +521,139 @@ import Testing
         #expect(recorder.capture(event))
         #expect(recorded == ["ctrl+shift+9"])
         #expect(!recorder.capture(event))
+    }
+
+    @Test func fontFallbackAvailabilityTracksPrimaryAndEditorState() throws {
+        let field = try #require(SettingsField.byKey["font-family-bold"])
+        var published = ""
+        let picker = SettingsFontPicker(field: field, value: "", usesPreset: false,
+                                        changed: { published = $0 }, presetSelected: { _ in })
+        func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
+        let primary = try #require(descendants(picker).compactMap { $0 as? NSComboBox }.first)
+        let add = try #require(descendants(picker).compactMap { $0 as? NSButton }.first { $0.title == "Add Fallback" })
+        #expect(!add.isEnabled)
+        primary.stringValue = "Menlo"
+        picker.controlTextDidChange(Notification(name: NSText.didChangeNotification, object: primary))
+        #expect(add.isEnabled && published == "Menlo")
+        picker.setEnabled(false)
+        #expect(!add.isEnabled)
+        picker.setEnabled(true)
+        add.performClick(nil)
+        #expect(descendants(picker).compactMap { $0 as? NSComboBox }.count == 2)
+        picker.refresh(value: "", preset: false)
+        let inheritedAdd = try #require(descendants(picker).compactMap { $0 as? NSButton }.first { $0.title == "Add Fallback" })
+        #expect(!inheritedAdd.isEnabled)
+    }
+
+    @Test func restartNoticeTracksResolvedSavedDifferenceAcrossModels() throws {
+        try withStore("font-size = 17") { store, _ in
+            _ = store.load(cli: false)
+            let field = try #require(SettingsField.byKey["font-size"])
+            let model = SettingsModel(store: store)
+            model.edit(field, value: "18")
+            #expect(model.save() && model.restartRequired)
+            let reopened = SettingsModel(store: store)
+            #expect(reopened.restartRequired)
+            reopened.edit(field, value: "17")
+            #expect(reopened.save() && !reopened.restartRequired)
+            model.reload()
+            #expect(!model.restartRequired)
+            #expect(model.savedValues == store.startupValues)
+            #expect(model.runningValues == store.runningValues)
+        }
+    }
+
+    @Test func oversizedSettingsAreRejectedBeforeDecoding() throws {
+        try withStore { store, _ in
+            _ = store.load(cli: false)
+            let file = try FileHandle(forWritingTo: store.url)
+            try file.truncate(atOffset: UInt64(SettingsStore.Disk.maximumRecordBytes + 1))
+            try file.close()
+            #expect(throws: SettingsStore.Failure.unreadable) { try store.read() }
+        }
+    }
+
+    @Test func asyncSaveKeepsMainActorAvailableAndRejectsStaleWriter() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = SettingsStore(legacySource: root.appendingPathComponent("legacy"), directory: root)
+        _ = store.load(cli: false)
+        let model = SettingsModel(store: store)
+        let title = try #require(SettingsField.byKey["title"])
+        model.edit(title, value: "Draft")
+        let lock = open(root.appendingPathComponent("settings.lock").path, O_RDWR)
+        #expect(lock >= 0)
+        defer { close(lock) }
+        #expect(flock(lock, LOCK_EX | LOCK_NB) == 0)
+        defer { flock(lock, LOCK_UN) }
+        let saving = Task { await model.saveAsync() }
+        try await NativeTestWait.until("async save started", timeout: .seconds(3), polling: .milliseconds(5),
+                                       diagnostics: { model.status }, { model.isBusy })
+        #expect(!model.canSave)
+        model.edit(title, value: "Ignored while saving")
+        #expect(model.displayed[title.key] == "Draft")
+        // Simulate the competing writer that owns the lock, then release it.
+        let competing = SettingsStore.Record(current: .init(values: ["title": "Other instance"]))
+        try JSONEncoder().encode(competing).write(to: store.url, options: .atomic)
+        #expect(flock(lock, LOCK_UN) == 0)
+        #expect(await saving.value == false)
+        #expect(!model.isBusy && model.dirty)
+        #expect(model.displayed[title.key] == "Draft")
+        #expect(try store.read().revision == competing.revision)
+        await model.reloadAsync()
+        model.edit(title, value: "Saved asynchronously")
+        #expect(await model.saveAsync())
+        #expect(try store.read().current.values[title.key] == "Saved asynchronously")
+        await model.reloadAsync(reset: true)
+        #expect(model.record?.current == SettingsStore.Input())
+    }
+
+    @Test func settingsInputsHaveNoFocusRingAndFooterSharesOneRow() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = SettingsStore(legacySource: root.appendingPathComponent("legacy"), directory: root)
+        _ = store.load(cli: false)
+        let controller = SettingsController(store: store)
+        let window = try #require(controller.window)
+        let content = try #require(window.contentView)
+        func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
+        try await NativeTestWait.until("settings loaded", timeout: .seconds(3), polling: .milliseconds(5),
+                                       diagnostics: { controller.model.status }, { controller.model.record != nil && !controller.model.isBusy })
+        window.setContentSize(NSSize(width: 840, height: 600))
+        content.layoutSubtreeIfNeeded()
+        let status = try #require(descendants(content).first { $0.accessibilityIdentifier() == "settings.status" })
+        let save = try #require(descendants(content).first { $0.accessibilityIdentifier() == "settings.save" })
+        #expect(status.superview === save.superview)
+        #expect(abs(status.convert(status.bounds, to: content).midY - save.convert(save.bounds, to: content).midY) < 3)
+        let search = try #require(descendants(content).first { $0.accessibilityIdentifier() == "settings.search" } as? NSTextField)
+        search.stringValue = ""
+        for category in ["General", "Appearance", "Windows", "Quick Terminal", "Input", "Terminal", "Security", "Advanced"] {
+            let button = try #require(descendants(content).compactMap { $0 as? NSButton }.first { $0.title == category })
+            button.performClick(nil)
+            #expect(button.layer?.backgroundColor?.alpha == 0)
+            let views = descendants(content)
+            #expect(views.contains { ($0 as? NSBox)?.boxType == .separator })
+            for input in views where input is NSTextView || (input as? NSTextField)?.isEditable == true {
+                #expect(input.focusRingType == .none, "\(input.accessibilityIdentifier())")
+            }
+        }
+    }
+
+    @Test func measureSettingsEvaluationForLargeDraft() throws {
+        try withStore { store, _ in
+            _ = store.load(cli: false)
+            let input = SettingsStore.Input(values: ["env": (0..<1000).map { "KEY\($0)=value" }.joined(separator: "\n")])
+            var samples: [Double] = []
+            for _ in 0..<10 {
+                let start = ContinuousClock.now
+                let evaluation = store.evaluate(input)
+                _ = SettingsStore.values(evaluation.config)
+                let duration = start.duration(to: .now).components
+                samples.append(Double(duration.seconds) * 1000 + Double(duration.attoseconds) / 1e15)
+                #expect(evaluation.diagnostics.isEmpty)
+            }
+            print("SETTINGS_METRIC entries=1000 samples=10 median_ms=\(samples.sorted()[5]) max_ms=\(samples.max() ?? 0)")
+        }
     }
 
 }

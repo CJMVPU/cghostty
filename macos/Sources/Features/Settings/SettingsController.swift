@@ -37,6 +37,7 @@ private final class SettingsList: NSStackView {
     private var categoryButtons: [SettingsButton] = []
     private var saveButton: SettingsButton!
     private var discardButton: SettingsButton!
+    private var resetButton: SettingsButton!
     private let fieldEditor = SettingsTextView()
     private var collapsedSections: Set<String> = ["Advanced Typography"]
     private var renderedContext: [String: String] = [:]
@@ -46,7 +47,7 @@ private final class SettingsList: NSStackView {
     private var categoryOffsets: [Int: NSPoint] = [:]
 
     init(store: SettingsStore, preferences: UserDefaults = .ghostty) {
-        model = SettingsModel(store: store)
+        model = SettingsModel(store: store, loadImmediately: false)
         self.preferences = preferences
         category = min(8, max(1, preferences.integer(forKey: "settings.category")))
         super.init(window: nil)
@@ -70,27 +71,16 @@ private final class SettingsList: NSStackView {
         buildContent()
         renderRows()
         updateState()
+        Task { await model.reloadAsync(); renderRows() }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
     func present() {
-        if window?.isVisible != true && !model.dirty {
-            model.reload()
-            listStates = [:]
-            renderRows()
-            updateState()
-        }
+        if window?.isVisible != true && !model.dirty { loadSettings() }
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-    }
-
-    func settingsWereReset() {
-        model.reload(afterReset: true)
-        listStates = [:]
-        renderRows()
-        updateState()
     }
 
     func windowWillReturnFieldEditor(_ sender: NSWindow, to client: Any?) -> Any? { fieldEditor }
@@ -100,6 +90,11 @@ private final class SettingsList: NSStackView {
     @objc func cancel(_ sender: Any?) { window?.performClose(sender) }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
+        confirmClose { sender.close() }
+    }
+
+    func confirmClose(afterSave: @escaping () -> Void) -> Bool {
+        guard !model.isBusy else { return false }
         guard model.dirty else { return true }
         if model.validationPending { model.flushValidation() }
         let alert = NSAlert()
@@ -111,10 +106,9 @@ private final class SettingsList: NSStackView {
         alert.buttons[0].isEnabled = model.canSave
         switch alert.runModal() {
         case .alertFirstButtonReturn:
-            let saved = model.save()
-            updateState()
-            return saved
-        case .alertSecondButtonReturn: model.reload(); return true
+            Task { if await model.saveAsync() { afterSave() } }
+            return false
+        case .alertSecondButtonReturn: model.discardDraft(); return true
         default: return false
         }
     }
@@ -136,8 +130,8 @@ private final class SettingsList: NSStackView {
         let sidebar = NSStackView()
         sidebar.orientation = .vertical
         sidebar.alignment = .leading
-        sidebar.spacing = 14
-        sidebar.edgeInsets = NSEdgeInsets(top: 26, left: 18, bottom: 20, right: 18)
+        sidebar.spacing = 6
+        sidebar.edgeInsets = NSEdgeInsets(top: 18, left: 18, bottom: 20, right: 18)
         sidebar.wantsLayer = true
         sidebar.layer?.backgroundColor = NSColor(calibratedWhite: 0.145, alpha: 1).cgColor
         sidebar.addArrangedSubview(settingsLabel("Settings"))
@@ -146,7 +140,7 @@ private final class SettingsList: NSStackView {
             button.isBordered = false
             button.alignment = .left
             button.widthAnchor.constraint(equalToConstant: 155).isActive = true
-            button.heightAnchor.constraint(equalToConstant: 34).isActive = true
+            button.heightAnchor.constraint(equalToConstant: 30).isActive = true
             sidebar.addArrangedSubview(button)
             categoryButtons.append(button)
         }
@@ -155,8 +149,8 @@ private final class SettingsList: NSStackView {
         let main = NSStackView()
         main.orientation = .vertical
         main.alignment = .leading
-        main.spacing = 18
-        main.edgeInsets = NSEdgeInsets(top: 24, left: 28, bottom: 20, right: 28)
+        main.spacing = 12
+        main.edgeInsets = NSEdgeInsets(top: 16, left: 20, bottom: 14, right: 20)
         main.wantsLayer = true
         main.layer?.backgroundColor = NSColor(calibratedWhite: 0.115, alpha: 1).cgColor
         horizontal.addArrangedSubview(main)
@@ -174,15 +168,15 @@ private final class SettingsList: NSStackView {
         search.placeholderString = "Search settings"
         search.delegate = self
         search.setAccessibilityIdentifier("settings.search")
-        search.heightAnchor.constraint(equalToConstant: 34).isActive = true
+        search.heightAnchor.constraint(equalToConstant: 30).isActive = true
         main.addArrangedSubview(search)
         let scroll = NSScrollView()
         scroll.hasVerticalScroller = false
         scroll.drawsBackground = false
         rows.orientation = .vertical
         rows.alignment = .leading
-        rows.spacing = 24
-        rows.edgeInsets = NSEdgeInsets(top: 4, left: 0, bottom: 24, right: 14)
+        rows.spacing = 6
+        rows.edgeInsets = NSEdgeInsets(top: 4, left: 0, bottom: 12, right: 14)
         rows.translatesAutoresizingMaskIntoConstraints = false
         scroll.documentView = rows
         rows.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor).isActive = true
@@ -191,18 +185,20 @@ private final class SettingsList: NSStackView {
         diagnostics.textColor = NSColor(calibratedRed: 1, green: 0.57, blue: 0.5, alpha: 1)
         diagnostics.maximumNumberOfLines = 4
         diagnostics.setAccessibilityIdentifier("settings.errors")
-        main.addArrangedSubview(status)
-        status.maximumNumberOfLines = 2
+        status.maximumNumberOfLines = 1
+        status.lineBreakMode = .byTruncatingTail
+        status.alignment = .right
+        status.textColor = .secondaryLabelColor
+        status.setContentHuggingPriority(.init(1), for: .horizontal)
         status.setAccessibilityIdentifier("settings.status")
         let footer = NSStackView()
         footer.orientation = .horizontal
-        footer.spacing = 12
-        footer.addArrangedSubview(SettingsButton("Restore Defaults") { [weak self] in self?.resetDefaults() })
-        let space = NSView()
-        space.setContentHuggingPriority(.init(1), for: .horizontal)
-        footer.addArrangedSubview(space)
+        footer.spacing = 8
+        resetButton = SettingsButton("Restore Defaults") { [weak self] in self?.resetDefaults() }
+        footer.addArrangedSubview(resetButton)
         discardButton = SettingsButton("Discard Changes") { [weak self] in self?.reload() }
         footer.addArrangedSubview(discardButton)
+        footer.addArrangedSubview(status)
         saveButton = SettingsButton("Save") { [weak self] in self?.save() }
         saveButton.keyEquivalent = "s"
         saveButton.keyEquivalentModifierMask = .command
@@ -210,8 +206,8 @@ private final class SettingsList: NSStackView {
         saveButton.setAccessibilityIdentifier("settings.save")
         footer.addArrangedSubview(saveButton)
         main.addArrangedSubview(footer)
-        for view in [search, scroll, diagnostics, status, footer] {
-            view.widthAnchor.constraint(equalTo: main.widthAnchor, constant: -56).isActive = true
+        for view in [search, scroll, diagnostics, footer] {
+            view.widthAnchor.constraint(equalTo: main.widthAnchor, constant: -40).isActive = true
         }
     }
 
@@ -249,8 +245,7 @@ private final class SettingsList: NSStackView {
         renderedPreset = nil
         for (index, button) in categoryButtons.enumerated() {
             button.wantsLayer = true
-            button.layer?.cornerRadius = 7
-            button.layer?.backgroundColor = index + 1 == category ? NSColor(calibratedWhite: 0.23, alpha: 1).cgColor : NSColor.clear.cgColor
+            button.layer?.backgroundColor = NSColor.clear.cgColor
             button.setAccessibilityValue(index + 1 == category ? "Selected" : "")
             button.contentTintColor = index + 1 == category ? NSColor(calibratedRed: 0.71, green: 0.81, blue: 0.63, alpha: 1) : .secondaryLabelColor
         }
@@ -287,6 +282,11 @@ private final class SettingsList: NSStackView {
                     self?.model.edit(field, value: value, deferred: true)
                     self?.updateState()
                 })
+                let divider = NSBox()
+                divider.boxType = .separator
+                divider.setAccessibilityElement(false)
+                rows.addArrangedSubview(divider)
+                divider.widthAnchor.constraint(equalTo: rows.widthAnchor, constant: -14).isActive = true
                 rows.addArrangedSubview(row)
                 row.widthAnchor.constraint(equalTo: rows.widthAnchor, constant: -14).isActive = true
                 rowViews[field.key] = row
@@ -303,15 +303,17 @@ private final class SettingsList: NSStackView {
 
     private func updateState() {
         status.stringValue = model.status
+        status.toolTip = model.status
         diagnostics.stringValue = model.errors.joined(separator: "\n")
-        diagnostics.toolTip = diagnostics.stringValue
+        diagnostics.toolTip = model.diagnostics.map(\.rawMessage).joined(separator: "\n")
         diagnostics.isHidden = model.errors.isEmpty
         saveButton.isEnabled = model.canSave
-        discardButton.isEnabled = model.dirty || model.record == nil
+        discardButton.isEnabled = !model.isBusy && (model.dirty || model.record == nil)
+        resetButton.isEnabled = !model.isBusy
         discardButton.title = model.record == nil ? "Retry" : "Discard Changes"
         window?.isDocumentEdited = model.dirty
         let context = model.displayed
-        let enabled = model.record != nil
+        let enabled = model.record != nil && !model.isBusy
         let preset = model.usesBundledFontPreset
         let changed = Set(context.keys).union(renderedContext.keys).filter { context[$0] != renderedContext[$0] }
         let fontChanged = changed.contains { $0.hasPrefix("font-family") }
@@ -330,7 +332,15 @@ private final class SettingsList: NSStackView {
         renderedPreset = preset
     }
 
-    private func save() { _ = model.save(); updateState() }
+    private func save() { Task { _ = await model.saveAsync() } }
+
+    private func loadSettings(reset: Bool = false) {
+        Task {
+            await model.reloadAsync(reset: reset)
+            listStates = [:]
+            renderRows()
+        }
+    }
 
     private func reload() {
         if model.dirty {
@@ -340,9 +350,7 @@ private final class SettingsList: NSStackView {
             alert.addButton(withTitle: "Keep Editing")
             guard alert.runModal() == .alertFirstButtonReturn else { return }
         }
-        model.reload()
-        listStates = [:]
-        renderRows()
+        loadSettings()
     }
 
     private func resetDefaults() {
@@ -352,9 +360,6 @@ private final class SettingsList: NSStackView {
         alert.addButton(withTitle: "Restore Defaults")
         alert.addButton(withTitle: "Cancel")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
-        do {
-            try model.store.restoreDefaults()
-            settingsWereReset()
-        } catch { NSAlert(error: error).runModal() }
+        loadSettings(reset: true)
     }
 }

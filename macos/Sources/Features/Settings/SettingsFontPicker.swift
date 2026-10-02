@@ -15,6 +15,7 @@ final class SettingsFontPicker: NSStackView, NSComboBoxDelegate {
     private var controls: [NSControl] = []
     private var combos: [NSComboBox] = []
     private var addButton: SettingsButton?
+    private var enabled = true
 
     init(field: SettingsField, value: String, usesPreset: Bool,
          changed: @escaping (String) -> Void, presetSelected: @escaping (String) -> Void) {
@@ -49,6 +50,7 @@ final class SettingsFontPicker: NSStackView, NSComboBoxDelegate {
             row.orientation = .horizontal
             row.spacing = 8
             let combo = SettingsFontComboBox()
+            combo.focusRingType = .none
             combo.font = SettingsTypography.font
             combo.isEditable = true
             combo.isSelectable = true
@@ -96,9 +98,9 @@ final class SettingsFontPicker: NSStackView, NSComboBoxDelegate {
             addArrangedSubview(add)
             controls.append(add)
             addButton = add
-            add.isEnabled = canAddFallback
             add.toolTip = "Choose a primary font before adding fallbacks."
         }
+        refreshAvailability()
     }
 
     private var serialized: String {
@@ -123,6 +125,7 @@ final class SettingsFontPicker: NSStackView, NSComboBoxDelegate {
             families[index] = value
             if index == 0 { usesPreset = false }
         }
+        refreshAvailability()
         changed(serialized)
     }
 
@@ -150,6 +153,11 @@ final class SettingsFontPicker: NSStackView, NSComboBoxDelegate {
     private var canAddFallback: Bool { field.key == "font-family" || !families[0].isEmpty }
 
     func setEnabled(_ enabled: Bool) {
+        self.enabled = enabled
+        refreshAvailability()
+    }
+
+    private func refreshAvailability() {
         controls.forEach { $0.isEnabled = enabled }
         addButton?.isEnabled = enabled && canAddFallback
     }

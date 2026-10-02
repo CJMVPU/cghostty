@@ -10,7 +10,7 @@ def main [
     --build-dir: string = ""
     --skip-core
     --ui-tests
-    --only-testing: string = ""
+    --only-testing: string = "" # Comma-separated suites or test identifiers
     --clock-experiment: string = ""
 ] {
     if (^uname -s | str trim) != "Darwin" or (^uname -m | str trim) != "arm64" {
@@ -85,7 +85,8 @@ def main [
         error make {msg: "Internal core archive is missing. Build without --skip-core first."}
     }
     let skip_testing = if $action == "test" and not $ui_tests { [-skip-testing GhosttyUITests] } else { [] }
-    let test_selection = if $only_testing == "" { [] } else { [-only-testing $only_testing] }
+    let test_selection = ($only_testing | split row "," | where { |value| $value != "" }
+        | each { |value| [-only-testing ($value | str trim)] } | flatten)
     # ReleaseLocal benchmarks still build the unit-test target, whose imports
     # require testability. This only affects test actions, never release builds.
     let conditions = ([

@@ -2716,13 +2716,11 @@ keybind: Keybinds = .{},
 /// areas of the frame to drag the window. This is a standard macOS behavior
 /// and not something Ghostty enables.
 ///
-/// The default value is "transparent". This is an opinionated choice
-/// but its one I think is the most aesthetically pleasing and works in
-/// most cases.
+/// The default value is "hidden", preserving the frame and rounded corners.
 ///
 /// Configuration file changes take effect after restarting cghostty.
 /// Runtime actions such as keyboard shortcuts do not reload the file.
-@"macos-titlebar-style": MacTitlebarStyle = .transparent,
+@"macos-titlebar-style": MacTitlebarStyle = .hidden,
 
 /// Whether the proxy icon in the macOS titlebar is visible. The proxy icon
 /// is the icon that represents the folder of the current working directory.

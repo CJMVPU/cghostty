@@ -17,43 +17,72 @@ import Foundation
     private(set) var validationPending = false
     var validationCompleted: (() -> Void)?
     private var originalDisplayed: [String: String] = [:]
-    private var restartRequired = false
-    private var savedStatus: String { restartRequired ? "Saved. Restart the app to apply changes." : "No unsaved changes." }
+    private let startupValues: [String: String]
+    var restartRequired: Bool { savedValues != startupValues }
+    private(set) var isBusy = false
+    private var savedStatus: String { restartRequired ? "Saved. Restart to apply." : "No unsaved changes." }
     var dirty: Bool { record.map { $0.current != input } ?? false }
     var changedCount: Int {
         guard let original = record?.current else { return 0 }
         return Set(original.values.keys).union(input.values.keys).filter { original.values[$0] != input.values[$0] }.count
     }
-    var canSave: Bool { dirty && inputIsValid && record != nil }
+    var canSave: Bool { !isBusy && dirty && inputIsValid && record != nil }
 
-    init(store: SettingsStore) {
+    init(store: SettingsStore, loadImmediately: Bool = true) {
         self.store = store
         runningValues = store.runningValues
-        reload()
+        startupValues = store.startupValues
+        if loadImmediately { reload() }
     }
 
-    func reload(afterReset: Bool = false) {
+    private func cancelValidation() {
         validationTask?.cancel()
+        validationTask = nil
         validationPending = false
-        if afterReset { restartRequired = true }
+    }
+
+    func reload() {
+        guard !isBusy else { return }
+        cancelValidation()
+        do { apply(try store.read()) } catch { readFailed(error) }
+    }
+
+    func reloadAsync(reset: Bool = false) async {
+        guard !isBusy else { return }
+        isBusy = true
+        cancelValidation()
+        status = reset ? "Restoring defaults…" : "Loading settings…"
+        validationCompleted?()
+        defer { isBusy = false; validationCompleted?() }
         do {
-            let loaded = try store.read()
-            record = loaded
-            input = loaded.current
-            let evaluation = store.evaluate(input)
-            effectiveValues = SettingsStore.values(evaluation.config)
-            savedValues = effectiveValues
-            refreshDisplayed()
-            originalDisplayed = displayed
-            diagnostics = evaluation.diagnostics
-            inputIsValid = errors.isEmpty
-            status = savedStatus
-        } catch {
-            record = nil
-            inputIsValid = false
-            diagnostics = [SettingsDiagnostic(kind: .storage, message: error.localizedDescription)]
-            status = "Unable to read settings. Retry or restore defaults."
-        }
+            if reset { _ = try await store.restoreDefaultsAsync() }
+            apply(try await store.readAsync())
+        } catch { readFailed(error) }
+    }
+
+    func discardDraft() {
+        cancelValidation()
+        if let record { apply(record) }
+    }
+
+    private func apply(_ loaded: SettingsStore.Record) {
+        record = loaded
+        input = loaded.current
+        let evaluation = store.evaluate(input)
+        effectiveValues = SettingsStore.values(evaluation.config)
+        savedValues = effectiveValues
+        refreshDisplayed()
+        originalDisplayed = displayed
+        diagnostics = evaluation.diagnostics
+        inputIsValid = diagnostics.isEmpty
+        updateStatus()
+    }
+
+    private func readFailed(_ error: any Error) {
+        record = nil
+        inputIsValid = false
+        diagnostics = [SettingsDiagnostic(kind: .storage, message: error.localizedDescription)]
+        status = "Unable to read settings. Retry or restore defaults."
     }
 
     func edit(_ field: SettingsField, value: String, deferred: Bool = false) {
@@ -75,6 +104,7 @@ import Foundation
     }
 
     private func edit(_ changes: [String: String], deferred: Bool = false) {
+        guard !isBusy else { return }
         let original = record?.current
         // Returning a field to its original value should also remove its dirty
         // state, instead of introducing an unnecessary explicit override.
@@ -124,7 +154,7 @@ import Foundation
         } else if validationPending {
             status = "Checking settings…"
         } else if dirty {
-            status = "\(changedCount) modified \(changedCount == 1 ? "setting" : "settings"). Restart after saving to apply changes."
+            status = "\(changedCount) unsaved \(changedCount == 1 ? "change" : "changes")."
         } else { status = savedStatus }
     }
 
@@ -134,27 +164,49 @@ import Foundation
 
     @discardableResult
     func save() -> Bool {
-        validationTask?.cancel()
-        validationPending = false
-        guard let record else { return false }
+        guard !isBusy, let record else { return false }
+        cancelValidation()
         do {
-            let saved = try store.saveEvaluated(input, revision: record.revision)
-            self.record = saved.record
-            effectiveValues = SettingsStore.values(saved.evaluation.config)
-            savedValues = effectiveValues
-            refreshDisplayed()
-            diagnostics = []
-            inputIsValid = true
-            originalDisplayed = displayed
-            restartRequired = true
-            status = savedStatus
+            didSave(try store.saveEvaluated(input, revision: record.revision))
             return true
-        } catch {
+        } catch { saveFailed(error); return false }
+    }
+
+    func saveAsync() async -> Bool {
+        guard !isBusy, let record else { return false }
+        cancelValidation()
+        isBusy = true
+        status = "Saving…"
+        validationCompleted?()
+        defer { isBusy = false; validationCompleted?() }
+        do {
+            didSave(try await store.saveEvaluatedAsync(input, revision: record.revision))
+            return true
+        } catch { saveFailed(error); return false }
+    }
+
+    private func didSave(_ saved: SettingsStore.Saved) {
+        record = saved.record
+        effectiveValues = SettingsStore.values(saved.evaluation.config)
+        savedValues = effectiveValues
+        refreshDisplayed()
+        diagnostics = []
+        inputIsValid = true
+        originalDisplayed = displayed
+        status = savedStatus
+    }
+
+    private func saveFailed(_ error: any Error) {
+        if case SettingsStore.Failure.invalid(let errors) = error {
+            diagnostics = errors
+            inputIsValid = false
+            status = "Fix the invalid settings before saving."
+        } else {
             diagnostics = [SettingsDiagnostic(kind: .storage, message: error.localizedDescription)]
-            status = "Unable to save. Your edits are still available in this window."
-            return false
+            status = "Unable to save. Your edits are still available."
         }
     }
+
 }
 
 private extension String {

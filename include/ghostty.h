@@ -436,7 +436,13 @@ typedef struct {
 } ghostty_info_s;
 
 typedef struct {
+  // Borrowed until the configuration is freed. source is length delimited.
   const char* message;
+  const char* key;
+  const char* detail;
+  const char* source;
+  uintptr_t source_len;
+  uintptr_t line;
 } ghostty_diagnostic_s;
 
 typedef struct {

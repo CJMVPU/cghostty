@@ -5,11 +5,12 @@ extension Ghostty {
     /// Sole owner of a core configuration allocation. Native values live in ConfigSnapshot.
     @MainActor final class ConfigHandle {
         let value: ghostty_config_t
-        private(set) var errors: [String]
+        private(set) var settingsDiagnostics: [SettingsDiagnostic]
+        var errors: [String] { settingsDiagnostics.map(\.rawMessage) }
 
         private init(adopting value: ghostty_config_t) {
             self.value = value
-            self.errors = Self.diagnostics(value)
+            self.settingsDiagnostics = Self.diagnostics(value)
         }
 
         convenience init?(cloning value: ghostty_config_t) {
@@ -23,15 +24,15 @@ extension Ghostty {
             ghostty_config_trigger(value, action, UInt(action.utf8.count))
         }
 
-        private static func diagnostics(_ config: ghostty_config_t?) -> [String] {
+        private static func diagnostics(_ config: ghostty_config_t?) -> [SettingsDiagnostic] {
             guard let config else { return [] }
             return (0..<ghostty_config_diagnostics_count(config)).map { index in
-                String(cString: ghostty_config_get_diagnostic(config, UInt32(index)).message)
+                SettingsDiagnostic(core: ghostty_config_get_diagnostic(config, UInt32(index)))
             }
         }
 
         func report(_ messages: [String]) {
-            errors.append(contentsOf: messages)
+            settingsDiagnostics.append(contentsOf: messages.map { SettingsDiagnostic(kind: .core, message: $0) })
         }
 
         func formattedEntry(_ key: String) -> String {
@@ -122,4 +123,18 @@ extension Ghostty {
         }
 
     }
+}
+
+private extension SettingsDiagnostic {
+    init(core: ghostty_diagnostic_s) {
+        let field = String(cString: core.key)
+        key = field.isEmpty ? nil : field
+        kind = .core
+        message = String(cString: core.detail)
+        if let path = core.source, core.source_len > 0 {
+            source = String(bytes: UnsafeRawBufferPointer(start: path, count: Int(core.source_len)), encoding: .utf8)
+        }
+        line = core.line
+    }
+
 }

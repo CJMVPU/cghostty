@@ -102,17 +102,20 @@ struct SettingsPresentation {
     input.font = SettingsTypography.font
     input.textColor = .white
     input.backgroundColor = NSColor(calibratedWhite: 0.16, alpha: 1)
+    input.focusRingType = .none
     input.isEditable = true
     input.isSelectable = true
     input.isBezeled = true
     input.drawsBackground = true
     input.delegate = delegate
-    input.heightAnchor.constraint(equalToConstant: 32).isActive = true
+    input.heightAnchor.constraint(equalToConstant: 30).isActive = true
     input.setAccessibilityIdentifier(id)
     return input
 }
 
 final class SettingsComboBox: NSComboBox {
+    override init(frame: NSRect) { super.init(frame: frame); focusRingType = .none }
+    required init?(coder: NSCoder) { super.init(coder: coder); focusRingType = .none }
     override func draw(_ dirtyRect: NSRect) { SettingsTypography.draw { super.draw(dirtyRect) } }
 }
 
@@ -121,6 +124,6 @@ final class SettingsComboBox: NSComboBox {
 class SettingsValueEditor: NSStackView {
     var controls: [NSControl] = []
     var headingControl: NSControl? { nil }
-    func setEnabled(_ enabled: Bool) { controls.forEach { $0.isEnabled = enabled } }
+    func setEnabled(_ enabled: Bool) { controls.forEach { $0.isEnabled = enabled; $0.focusRingType = .none } }
     func refresh(context: [String: String]) {}
 }

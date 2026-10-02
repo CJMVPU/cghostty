@@ -35,6 +35,7 @@ final class SettingsTextCell: NSTextFieldCell {
 
 final class SettingsTextView: NSTextView {
     func configurePlainText() {
+        focusRingType = .none
         isRichText = false
         isAutomaticQuoteSubstitutionEnabled = false
         isAutomaticDashSubstitutionEnabled = false
@@ -69,6 +70,7 @@ final class SettingsButton: NSButton {
         self.title = title
         self.handler = handler
         font = SettingsTypography.font
+        focusRingType = .none
         bezelStyle = .rounded
         target = self
         action = #selector(activate)

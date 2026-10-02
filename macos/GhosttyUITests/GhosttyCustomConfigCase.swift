@@ -71,6 +71,7 @@ class GhosttyCustomConfigCase: XCTestCase {
         let save = window.buttons["settings.save"]
         XCTAssertTrue(save.wait(for: \.isEnabled, toEqual: true, timeout: 5))
         save.click()
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "Saved. Restart to apply."), object: window.staticTexts["settings.status"])], timeout: 5), .completed)
         window.typeKey("w", modifierFlags: .command)
     }
 

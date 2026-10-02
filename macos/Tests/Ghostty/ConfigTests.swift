@@ -90,9 +90,9 @@ struct ConfigTests {
 
     // MARK: - Enum Properties
 
-    @Test func macosTitlebarStyleDefaultsToTransparent() throws {
+    @Test func macosTitlebarStyleDefaultsToHidden() throws {
         let config = try TemporaryConfig("")
-        #expect(config.macosTitlebarStyle == .transparent)
+        #expect(config.macosTitlebarStyle == .hidden)
     }
 
     @Test(arguments: [

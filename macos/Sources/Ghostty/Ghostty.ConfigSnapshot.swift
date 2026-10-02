@@ -219,7 +219,7 @@ extension Ghostty {
             }
 
             var macosTitlebarStyle: Config.MacOSTitlebarStyle {
-                let defaultValue = Config.MacOSTitlebarStyle.transparent
+                let defaultValue = Config.MacOSTitlebarStyle.hidden
                 guard let str = string(ConfigSchema.macosTitlebarStyle) else { return defaultValue }
                 return Config.MacOSTitlebarStyle(rawValue: str) ?? defaultValue
             }
