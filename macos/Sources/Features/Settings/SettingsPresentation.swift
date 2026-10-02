@@ -70,6 +70,15 @@ struct SettingsPresentation {
 }
 
 @MainActor extension SettingsField {
+    static func visibleFields(category: Int, query: String) -> [SettingsField] {
+        let pinned = ["initial-window", "quit-after-last-window-closed", "window-width", "window-height"]
+        return catalog.filter {
+            $0.isVisible && (query.isEmpty ? ($0.group == category || (category == 1 && pinned.contains($0.key))) : $0.matches(query))
+        }.sorted {
+            (pinned.firstIndex(of: $0.key) ?? 1000) < (pinned.firstIndex(of: $1.key) ?? 1000)
+        }
+    }
+
     @MainActor private static let presentations = Dictionary(uniqueKeysWithValues: catalog.map { ($0.key, SettingsPresentation($0)) })
     @MainActor var presentation: SettingsPresentation { Self.presentations[key] ?? SettingsPresentation(self) }
     var isVisible: Bool { presentation.visible }

@@ -147,6 +147,48 @@ import Testing
         }
     }
 
+    @Test func changingSearchAndCategoriesReuseRowsAndDrafts() async throws {
+        try await withStoreAsync("font-size = 17") { store, _ in
+            _ = store.load(cli: false)
+            let controller = SettingsController(store: store)
+            let root = try #require(controller.window?.contentView)
+            func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
+            try await NativeTestWait.until("settings loaded", timeout: .seconds(3), polling: .milliseconds(5),
+                                           diagnostics: { controller.model.status }, { controller.model.record != nil && !controller.model.isBusy })
+            let search = try #require(descendants(root).first { $0.accessibilityIdentifier() == "settings.search" } as? NSTextField)
+            @MainActor func find(_ query: String) {
+                search.stringValue = query
+                controller.controlTextDidChange(Notification(name: NSText.didChangeNotification, object: search))
+            }
+            find("font-size")
+            let input = try #require(descendants(root).first { $0.accessibilityIdentifier() == "settings.font-size" } as? NSTextField)
+            controller.model.edit(try #require(SettingsField.byKey["font-size"]), value: "19")
+            for _ in 0..<3 {
+                find("font")
+                #expect(descendants(root).contains { $0 === input })
+                find("window-width")
+                #expect(!descendants(root).contains { $0 === input })
+                find("font-size")
+                #expect(descendants(root).contains { $0 === input })
+                #expect(input.stringValue == "19")
+            }
+            let appearance = try #require(descendants(root).compactMap { $0 as? NSButton }.first { $0.title == "Appearance" })
+            appearance.performClick(nil)
+            #expect(descendants(root).contains { $0 === input })
+            root.layoutSubtreeIfNeeded()
+            #expect(input.bounds.width > 0)
+            #expect(controller.model.dirty)
+        }
+    }
+
+    @Test func settingsFieldSelectionPinsGeneralAndSearchesAcrossGroups() {
+        let general = SettingsField.visibleFields(category: 1, query: "")
+        #expect(Array(general.prefix(4).map(\.key)) == ["initial-window", "quit-after-last-window-closed", "window-width", "window-height"])
+        let searched = SettingsField.visibleFields(category: 1, query: "font-size font")
+        #expect(searched.contains { $0.key == "font-size" })
+        #expect(!SettingsField.visibleFields(category: 3, query: "").contains { $0.key == "fullscreen" })
+    }
+
     @Test func incompleteLimitModeSurvivesItsOwnDraftRefresh() throws {
         let field = try #require(SettingsField.byKey["scrollback-limit-lines"])
         var editor: SettingsMeasureEditor?

@@ -31,6 +31,8 @@ private final class SettingsList: NSStackView {
     private let status = settingsLabel("")
     private let diagnostics = settingsLabel("")
     private var rowViews: [String: SettingsRow] = [:]
+    private var cachedRows: [String: SettingsRow] = [:]
+    private var decorations: [String: NSView] = [:]
     private var listStates: [String: SettingsListEditor.State] = [:]
     private var renderedKeys: [String] = []
     private var renderedSearch = false
@@ -227,18 +229,13 @@ private final class SettingsList: NSStackView {
     }
 
     private func renderRows(offset: NSPoint? = nil, searchOnly: Bool = false) {
-        let pinned = ["initial-window", "quit-after-last-window-closed", "window-width", "window-height"]
-        let fields = SettingsField.catalog.filter {
-            $0.isVisible && (query.isEmpty ? ($0.group == category || (category == 1 && pinned.contains($0.key))) : $0.matches(query))
-        }.sorted {
-            (pinned.firstIndex(of: $0.key) ?? 1000) < (pinned.firstIndex(of: $1.key) ?? 1000)
-        }
+        let fields = SettingsField.visibleFields(category: category, query: query)
         let keys = fields.map(\.key)
         if searchOnly && renderedSearch && !query.isEmpty && keys == renderedKeys { return }
         renderedKeys = keys
         renderedSearch = !query.isEmpty
         let savedOffset = offset ?? rows.enclosingScrollView?.contentView.bounds.origin ?? .zero
-        rows.arrangedSubviews.forEach { rows.removeArrangedSubview($0); $0.removeFromSuperview() }
+        var desired: [NSView] = []
         rowViews = [:]
         renderedContext = [:]
         renderedErrors = [:]
@@ -250,31 +247,33 @@ private final class SettingsList: NSStackView {
             button.setAccessibilityValue(index + 1 == category ? "Selected" : "")
             button.contentTintColor = index + 1 == category ? NSColor(calibratedRed: 0.71, green: 0.81, blue: 0.63, alpha: 1) : .secondaryLabelColor
         }
-        rows.addArrangedSubview(settingsLabel(query.isEmpty ? groups[category - 1] : "\(fields.count) Search \(fields.count == 1 ? "Result" : "Results")"))
-        if fields.isEmpty { rows.addArrangedSubview(settingsLabel("No matching settings", muted: true)) }
+        desired.append(label(query.isEmpty ? groups[category - 1] : "\(fields.count) Search \(fields.count == 1 ? "Result" : "Results")", key: "heading"))
+        if fields.isEmpty { desired.append(label("No matching settings", key: "empty", muted: true)) }
         let sections = category == 2 && query.isEmpty ? ["Font", "Colors", "Cursor", "Advanced Typography"] : [""]
         var lastBreadcrumb = ""
         for section in sections {
             if !section.isEmpty {
-                let button = SettingsButton("\(collapsedSections.contains(section) ? "▸" : "▾") \(section)") { [weak self] in
+                let button = (decorations["section." + section] as? SettingsButton) ?? SettingsButton(section) { [weak self] in
                     guard let self else { return }
                     if self.collapsedSections.contains(section) { self.collapsedSections.remove(section) } else { self.collapsedSections.insert(section) }
                     self.renderRows()
                 }
+                decorations["section." + section] = button
+                button.title = "\(collapsedSections.contains(section) ? "▸" : "▾") \(section)"
                 button.isBordered = false
                 button.setAccessibilityIdentifier("settings.section.\(section)")
-                rows.addArrangedSubview(button)
+                desired.append(button)
                 if collapsedSections.contains(section) { continue }
             }
             for field in fields where section.isEmpty || field.section == section {
                 if !query.isEmpty {
                     let breadcrumb = groups[field.group - 1] + (field.section.isEmpty ? "" : " · " + field.section)
-                    if breadcrumb != lastBreadcrumb { rows.addArrangedSubview(settingsLabel(breadcrumb, muted: true)) }
+                    if breadcrumb != lastBreadcrumb { desired.append(label(breadcrumb, key: "breadcrumb." + field.key, muted: true)) }
                     lastBreadcrumb = breadcrumb
                 }
                 let listState = listStates[field.key] ?? SettingsListEditor.State()
                 listStates[field.key] = listState
-                let row = SettingsRow(field: field, value: model.displayed[field.key] ?? field.defaultValue,
+                let row = cachedRows[field.key] ?? SettingsRow(field: field, value: model.displayed[field.key] ?? field.defaultValue,
                                       usesFontPreset: model.usesBundledFontPreset, context: model.displayed, listState: listState,
                                       presetSelected: { [weak self] families in
                     self?.model.applyBundledFontPreset(families: families)
@@ -283,16 +282,16 @@ private final class SettingsList: NSStackView {
                     self?.model.edit(field, value: value, deferred: true)
                     self?.updateState()
                 })
-                let divider = NSBox()
+                cachedRows[field.key] = row
+                let divider = (decorations["divider." + field.key] as? NSBox) ?? NSBox()
+                decorations["divider." + field.key] = divider
                 divider.boxType = .separator
                 divider.setAccessibilityElement(false)
-                rows.addArrangedSubview(divider)
-                divider.widthAnchor.constraint(equalTo: rows.widthAnchor, constant: -14).isActive = true
-                rows.addArrangedSubview(row)
-                row.widthAnchor.constraint(equalTo: rows.widthAnchor, constant: -14).isActive = true
+                desired.append(contentsOf: [divider, row])
                 rowViews[field.key] = row
             }
         }
+        reconcileRows(desired)
         rows.layoutSubtreeIfNeeded()
         if let scroll = rows.enclosingScrollView {
             let maxY = max(0, rows.bounds.height - scroll.contentView.bounds.height)
@@ -300,6 +299,32 @@ private final class SettingsList: NSStackView {
             scroll.reflectScrolledClipView(scroll.contentView)
         }
         updateState()
+    }
+
+    private func label(_ title: String, key: String, muted: Bool = false) -> NSTextField {
+        let label = (decorations[key] as? NSTextField) ?? settingsLabel(title, muted: muted)
+        label.stringValue = title
+        decorations[key] = label
+        return label
+    }
+
+    /// Keep surviving views attached so their editors and constraints stay intact.
+    /// The cache is bounded by the catalog and cleared after an explicit reload.
+    private func reconcileRows(_ desired: [NSView]) {
+        let identities = Set(desired.map(ObjectIdentifier.init))
+        for view in rows.arrangedSubviews where !identities.contains(ObjectIdentifier(view)) {
+            rows.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+        for (index, view) in desired.enumerated() {
+            if index < rows.arrangedSubviews.count, rows.arrangedSubviews[index] === view { continue }
+            let attached = view.superview === rows
+            if attached { rows.removeArrangedSubview(view) }
+            rows.insertArrangedSubview(view, at: index)
+            if !attached, view is SettingsRow || view is NSBox {
+                view.widthAnchor.constraint(equalTo: rows.widthAnchor, constant: -14).isActive = true
+            }
+        }
     }
 
     private func updateState() {
@@ -342,6 +367,7 @@ private final class SettingsList: NSStackView {
             defer { self.loadTask = nil }
             guard await self.model.reloadAsync(reset: reset) else { return }
             self.listStates = [:]
+            self.cachedRows = [:]
             self.renderRows()
         }
     }
