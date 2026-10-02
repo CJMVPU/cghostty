@@ -139,3 +139,33 @@ class TestResultRetentionTests(unittest.TestCase):
             results.verify(self.root / 'test.xcresult', ['GhosttyUITests/SettingsTests/testSave()'])
             with self.assertRaisesRegex(ValueError, 'No tests executed'):
                 results.verify(self.root / 'test.xcresult', ['GhosttyUITests/SettingsTests/testSav'])
+
+    def test_reverification_clears_current_failure_and_keeps_history(self):
+        older = self.bundle(1, 'Passed')
+        bundle = self.bundle(2, 'Passed')
+        tree = {'testNodes': [{'nodeType': 'Unit test bundle', 'name': 'GhosttyTests', 'children': [
+            {'nodeType': 'Test Case', 'nodeIdentifier': 'SettingsTests/save()', 'result': 'Passed'}]}]}
+        with patch.object(results.subprocess, 'check_output', return_value=json.dumps(tree)):
+            with self.assertRaisesRegex(ValueError, 'No tests executed'):
+                results.verify(bundle, ['GhosttyTests/Missing'])
+            results.verify(bundle, ['GhosttyTests/SettingsTests'])
+        data = json.loads(bundle.with_suffix('.json').read_text())
+        self.assertEqual(data['result'], 'Passed')
+        self.assertNotIn('validationError', data)
+        self.assertEqual(data['validation']['result'], 'Passed')
+        self.assertEqual(data['validationHistory'][-1]['result'], 'Failed')
+        results.maintain(self.root)
+        self.assertFalse(older.exists())
+        self.assertTrue(bundle.exists())
+
+    def test_failed_inspection_is_recorded_and_history_is_bounded(self):
+        bundle = self.bundle(1, 'Passed')
+        with patch.object(results.subprocess, 'check_output', side_effect=OSError('missing tool')):
+            with self.assertRaisesRegex(ValueError, 'Unable to inspect'):
+                results.verify(bundle, ['GhosttyTests/SettingsTests'])
+        for _ in range(15):
+            results.verify(bundle)
+        data = json.loads(bundle.with_suffix('.json').read_text())
+        self.assertEqual(len(data['validationHistory']), 10)
+        self.assertNotIn('validationError', data)
+        self.assertEqual(data['validation']['result'], 'Passed')

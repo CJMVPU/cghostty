@@ -119,9 +119,24 @@ def executed_tests(nodes, target=''):
 def verify(bundle, selected=()):
     """Xcode can exit successfully when a filter matches zero tests."""
     data = summary(bundle)
-    def reject(message):
-        data['validationError'] = message
+    def record_validation(error=None):
+        previous = data.get('validation')
+        history = data.get('validationHistory', [])
+        if previous:
+            history.append(previous)
+        elif data.get('validationError'):
+            history.append({'result': 'Failed', 'error': data['validationError']})
+        data['validationHistory'] = history[-10:]
+        data['validation'] = {'result': 'Failed' if error else 'Passed', 'selections': list(selected)}
+        if error:
+            data['validation']['error'] = error
+            data['validationError'] = error
+        else:
+            data.pop('validationError', None)
         bundle.with_suffix('.json').write_text(json.dumps(data, indent=2) + '\n')
+
+    def reject(message):
+        record_validation(message)
         raise ValueError(message)
 
     passed, failed, skipped = (data.get(key, 0) for key in ('passedTests', 'failedTests', 'skippedTests'))
@@ -129,9 +144,12 @@ def verify(bundle, selected=()):
     if data.get('result') != 'Passed' or failed or passed == 0:
         reject('Native test run did not execute and pass any tests; inspect the selection and result bundle')
     if selected:
-        tree = json.loads(subprocess.check_output(
-            ['xcrun', 'xcresulttool', 'get', 'test-results', 'tests',
-             '--path', str(bundle), '--format', 'json'], text=True, stderr=subprocess.PIPE))
+        try:
+            tree = json.loads(subprocess.check_output(
+                ['xcrun', 'xcresulttool', 'get', 'test-results', 'tests',
+                 '--path', str(bundle), '--format', 'json'], text=True, stderr=subprocess.PIPE))
+        except (OSError, subprocess.CalledProcessError, ValueError) as error:
+            reject(f'Unable to inspect executed tests: {error}')
         executed = list(executed_tests(tree.get('testNodes', [])))
         for selection in selected:
             # XCTest accepts method selectors without parentheses; xcresult adds them.
@@ -140,6 +158,8 @@ def verify(bundle, selected=()):
             print(f'  {selection}: {count} executed', flush=True)
             if count == 0:
                 reject(f'No tests executed for requested selection: {selection}')
+
+    record_validation()
 
 
 def allocated_bytes(directory):
