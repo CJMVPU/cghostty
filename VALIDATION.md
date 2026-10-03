@@ -1,5 +1,8 @@
 # 验证记录
 
+最新 Mac 恢复显示候选机制、队列退出、关闭撤销及设置/搜索回归见
+[2026-10-03 Mac 恢复显示与审查回归](docs/validation/2026-10-03-native-recovery-review.md)。
+
 最新宽字符选词、中文标点边界及反向换行修复见
 [2026-09-27 选词与反向换行](docs/validation/2026-09-27-word-selection-wrap.md)。
 
