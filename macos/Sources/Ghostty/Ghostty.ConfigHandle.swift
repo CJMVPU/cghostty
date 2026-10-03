@@ -54,8 +54,9 @@ extension Ghostty {
             !isRunningInXcode() && ghostty_config_has_cli_args()
         }
 
-        static func load(settings: SettingsStore.Input, source: URL, cli: Bool = false) -> ConfigHandle? {
+        static func load(settings: SettingsStore.Input, source: URL, cli: Bool = false, dark: Bool = false) -> ConfigHandle? {
             guard let data = try? JSONEncoder().encode(settings), let cfg = ghostty_config_new() else { return nil }
+            ghostty_config_set_initial_theme(cfg, dark)
             let loaded = data.withUnsafeBytes { bytes in
                 source.path.withCString { path in
                     ghostty_settings_load(cfg, bytes.bindMemory(to: UInt8.self).baseAddress!, bytes.count, path)
@@ -72,8 +73,9 @@ extension Ghostty {
 
         /// Startup snapshots contain file input only. CLI overrides are applied
         /// afterward and never written into the shared successful snapshot.
-        static func load(data: Data, source: URL, cli: Bool = false) -> ConfigHandle? {
+        static func load(data: Data, source: URL, cli: Bool = false, dark: Bool = false) -> ConfigHandle? {
             guard let cfg = ghostty_config_new() else { return nil }
+            ghostty_config_set_initial_theme(cfg, dark)
             if !data.isEmpty {
                 data.withUnsafeBytes { bytes in
                     source.path.withCString { path in

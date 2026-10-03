@@ -88,6 +88,12 @@ export fn ghostty_config_load_data(self: *Config, data: [*]const u8, len: usize,
     };
 }
 
+/// Set the initial branch before loading input. Used to validate both theme
+/// branches without changing the configuration returned to the running app.
+export fn ghostty_config_set_initial_theme(self: *Config, dark: bool) void {
+    self._conditional_state.theme = if (dark) .dark else .light;
+}
+
 export fn ghostty_config_default_path() String {
     const path = @import("file_load.zig").defaultPath(global.alloc()) catch return .empty;
     return .fromSlice(path);

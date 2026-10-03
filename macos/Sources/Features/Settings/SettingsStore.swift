@@ -119,14 +119,15 @@ import Darwin
         return checked
     }
 
-    func parse(_ input: Input, cli: Bool = false) -> Ghostty.ConfigHandle? {
-        Ghostty.ConfigHandle.load(settings: input, source: validationSource, cli: cli)
+    func parse(_ input: Input, cli: Bool = false, dark: Bool = false) -> Ghostty.ConfigHandle? {
+        Ghostty.ConfigHandle.load(settings: input, source: validationSource, cli: cli, dark: dark)
     }
 
     func validate(_ input: Input) -> [String] { diagnostics(input).map(\.rawMessage) }
 
     struct Evaluation {
         let config: Ghostty.ConfigHandle?
+        let darkConfig: Ghostty.ConfigHandle?
         let diagnostics: [SettingsDiagnostic]
     }
 
@@ -152,15 +153,18 @@ import Darwin
 
     func evaluate(_ input: Input) -> Evaluation {
         let config = parse(input)
+        let darkConfig = parse(input, dark: true)
         // Formatting failures must block editing/saving instead of becoming an
         // empty repeatable value that can overwrite inherited settings.
         _ = Self.values(config)
+        _ = Self.values(darkConfig)
         var errors = fieldDiagnostics(input)
         let explainedKeys = Set(errors.compactMap(\.key))
-        let coreErrors = config?.settingsDiagnostics ?? [SettingsDiagnostic(kind: .core, message: "Unable to create the settings parser.")]
+        let parserError = SettingsDiagnostic(kind: .core, message: "Unable to create the settings parser.")
+        let coreErrors = (config?.settingsDiagnostics ?? [parserError]) + (darkConfig?.settingsDiagnostics ?? [parserError])
         errors += coreErrors.filter { !explainedKeys.contains($0.key ?? "") }
         var seen = Set<SettingsDiagnostic>()
-        return Evaluation(config: config, diagnostics: errors.filter { seen.insert($0).inserted })
+        return Evaluation(config: config, darkConfig: darkConfig, diagnostics: errors.filter { seen.insert($0).inserted })
     }
 
     @discardableResult

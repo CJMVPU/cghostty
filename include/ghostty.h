@@ -1105,6 +1105,7 @@ GHOSTTY_API bool ghostty_config_has_cli_args(void);
 GHOSTTY_API void ghostty_config_load_cli_args(ghostty_config_t);
 GHOSTTY_API void ghostty_config_load_file(ghostty_config_t, const char*);
 GHOSTTY_API void ghostty_config_load_data(ghostty_config_t, const uint8_t*, size_t, const char*);
+GHOSTTY_API void ghostty_config_set_initial_theme(ghostty_config_t, bool);
 GHOSTTY_API ghostty_string_s ghostty_config_default_path(void);
 GHOSTTY_API void ghostty_config_load_default_files(ghostty_config_t);
 GHOSTTY_API void ghostty_config_load_recursive_files(ghostty_config_t);
