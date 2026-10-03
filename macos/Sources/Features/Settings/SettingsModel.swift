@@ -120,13 +120,19 @@ import Foundation
         guard !isBusy else { return }
         failure = nil
         let original = record?.current
-        // Returning a field to its original value should also remove its dirty
-        // state, instead of introducing an unnecessary explicit override.
         for (key, value) in changes {
             displayed[key] = value
             input.values[key] = value
-            if let original, let initial = originalDisplayed[key] {
-                if value == initial { input.values[key] = original.values[key] }
+        }
+        // Restore saved inheritance only when it still resolves to the value
+        // selected now. Another field may have changed its effective default.
+        for (key, value) in changes {
+            guard let original, value == originalDisplayed[key] else { continue }
+            var inherited = input
+            inherited.values[key] = original.values[key]
+            let evaluation = store.evaluate(inherited)
+            if evaluation.diagnostics.isEmpty, SettingsStore.values(evaluation.config)[key] == value {
+                input = inherited
             }
         }
         validationTask?.cancel()
