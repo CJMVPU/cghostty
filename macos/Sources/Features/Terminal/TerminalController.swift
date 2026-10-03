@@ -187,15 +187,17 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         }
 
         // Setup our undo
+        let approval: @MainActor (TerminalController) async -> Bool = { await $0.approveCreationUndo() }
         if let undoManager = c.undoManager {
             undoManager.setActionName("New Window")
             undoManager.registerUndo(
                 withTarget: c,
-                expiresAfter: c.undoExpiration
+                expiresAfter: c.undoExpiration,
+                approval: approval
             ) { target in
-                // Close the window when undoing
+                // Approval finished before the undo group was consumed.
                 undoManager.disableUndoRegistration {
-                    target.closeWindow(nil)
+                    target.closeTabImmediately()
                 }
 
                 // Register redo action
@@ -249,19 +251,24 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
             }
         }
 
-        // Setup our undo
+        // A moved split belongs to the whole synchronous Move Split group.
+        let approval: (@MainActor (TerminalController) async -> Bool)?
+        if confirmUndo {
+            approval = { (controller: TerminalController) in
+                await controller.approveCreationUndo()
+            }
+        } else {
+            approval = nil
+        }
         if let undoManager = c.undoManager {
             undoManager.setActionName("New Window")
             undoManager.registerUndo(
                 withTarget: c,
-                expiresAfter: c.undoExpiration
+                expiresAfter: c.undoExpiration,
+                approval: approval
             ) { target in
                 undoManager.disableUndoRegistration {
-                    if confirmUndo {
-                        target.closeWindow(nil)
-                    } else {
-                        target.closeWindowImmediately()
-                    }
+                    target.closeTabImmediately()
                 }
 
                 undoManager.registerUndo(
@@ -368,15 +375,16 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         controller.scheduleTabRelabel()
 
         // Setup our undo
+        let approval: @MainActor (TerminalController) async -> Bool = { await $0.approveCreationUndo() }
         if let undoManager = parentController.undoManager {
             undoManager.setActionName("New Tab")
             undoManager.registerUndo(
                 withTarget: controller,
-                expiresAfter: controller.undoExpiration
+                expiresAfter: controller.undoExpiration,
+                approval: approval
             ) { target in
-                // Close the tab when undoing
                 undoManager.disableUndoRegistration {
-                    target.closeTab(nil)
+                    target.closeTabImmediately()
                 }
 
                 // Register redo action
@@ -709,6 +717,15 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
                 target.closeWindowImmediately()
             }
         }
+    }
+
+    private func approveCreationUndo() async -> Bool {
+        guard ghostty.windowRegistry.registeredControllers.contains(where: { $0 === self }) else { return false }
+        guard !windowCanBeClosedWithoutConfirmation() else { return true }
+        return await confirmCloseAsync(
+            messageText: "Close Terminal?",
+            informativeText: "The terminal still has a running process. If you close the terminal the process will be killed."
+        ) == .allowed
     }
 
     /// Close all windows, asking for confirmation if necessary.
