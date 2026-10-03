@@ -1117,7 +1117,7 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
                 informativeText: "All terminal sessions in this window will be terminated.",
             )
 
-            if [.OK, .alertFirstButtonReturn].contains(response) {
+            if response == .allowed {
                 // Close this tab
                 controller.closeTabImmediately()
                 continue

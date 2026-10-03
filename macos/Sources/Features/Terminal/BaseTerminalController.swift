@@ -357,18 +357,31 @@ class BaseTerminalController: NSWindowController,
         savedFrame = .init(window: window.frame, screen: screen.visibleFrame)
     }
 
+    enum CloseConfirmationResult: Equatable {
+        case allowed
+        case cancelled
+        case inFlight
+    }
+
+    /// Kept separate from request arbitration so callers cannot bypass an
+    /// outstanding confirmation, regardless of how the sheet is presented.
+    func presentCloseConfirmation(_ alert: NSAlert, for window: NSWindow) async -> NSApplication.ModalResponse {
+        await alert.beginSheetModal(for: window)
+    }
+
     func confirmCloseAsync(
         messageText: String,
         informativeText: String,
         confirmButtonTitle: String = "Close",
-    ) async -> NSApplication.ModalResponse? {
-        // If we already have an alert, we need to wait for that one.
-        guard alert == nil else { return nil }
+    ) async -> CloseConfirmationResult {
+        // An outstanding request is not approval for a second close operation.
+        guard alert == nil else { return .inFlight }
+        guard !Task.isCancelled else { return .cancelled }
 
         // If there is no window to attach the modal then we assume success
         // since we'll never be able to show the modal.
         guard let window else {
-            return .OK
+            return .allowed
         }
 
         // If we need confirmation by any, show one confirmation for all windows
@@ -387,7 +400,9 @@ class BaseTerminalController: NSWindowController,
             alert.window.orderOut(nil)
             self.alert = nil
         }
-        return await alert.beginSheetModal(for: window)
+        let response = await presentCloseConfirmation(alert, for: window)
+        guard !Task.isCancelled else { return .cancelled }
+        return [.alertFirstButtonReturn, .OK].contains(response) ? .allowed : .cancelled
     }
 
     func confirmClose(
@@ -397,11 +412,8 @@ class BaseTerminalController: NSWindowController,
         completion: @escaping () -> Void
     ) {
         Task {
-            guard let response = await confirmCloseAsync(messageText: messageText, informativeText: informativeText, confirmButtonTitle: confirmButtonTitle) else {
-                completion()
-                return
-            }
-            if [.alertFirstButtonReturn, .OK].contains(response) {
+            let response = await confirmCloseAsync(messageText: messageText, informativeText: informativeText, confirmButtonTitle: confirmButtonTitle)
+            if response == .allowed {
                 completion()
             }
         }

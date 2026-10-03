@@ -556,12 +556,12 @@ class QuickTerminalController: BaseTerminalController {
         terminalViewContainer?.ghosttyConfigDidChange(ghostty.config, preferredBackgroundColor: nil)
     }
 
-    override func confirmCloseAsync(messageText: String, informativeText: String, confirmButtonTitle: String = "Close") async -> NSApplication.ModalResponse? {
+    override func confirmCloseAsync(messageText: String, informativeText: String, confirmButtonTitle: String = "Close") async -> CloseConfirmationResult {
 
-        guard !Task.isCancelled else { return nil }
+        guard !Task.isCancelled else { return .cancelled }
         animateIn()
         guard await presentation.wait(), !Task.isCancelled,
-              visible, window?.isVisible == true else { return nil }
+              visible, window?.isVisible == true else { return .cancelled }
 
         return await super.confirmCloseAsync(messageText: messageText, informativeText: informativeText, confirmButtonTitle: confirmButtonTitle)
     }

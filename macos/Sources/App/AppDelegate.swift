@@ -1118,7 +1118,7 @@ extension AppDelegate {
                     confirmButtonTitle: "Terminate",
                 )
 
-                if [.OK, .alertFirstButtonReturn].contains(response) {
+                if response == .allowed {
                     NSApp.reply(toApplicationShouldTerminate: true)
                 } else {
                     NSApp.reply(toApplicationShouldTerminate: false)
@@ -1152,7 +1152,7 @@ extension AppDelegate {
                     confirmButtonTitle: "Terminate",
                 )
 
-                if [.OK, .alertFirstButtonReturn].contains(response) {
+                if response == .allowed {
                     // Close this window and until next review is cancelled
                     controller.window?.close()
                     continue
