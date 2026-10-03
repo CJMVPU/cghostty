@@ -8,6 +8,83 @@ import Synchronization
 
 @Suite(.serialized, .enabled(if: try MetalTestSupport.metal4Available(), "Requires a Metal 4 GPU"))
 @MainActor struct WindowCompositorTests {
+    @Test func geometryHandoffRetainsCompleteFrameUntilPaneSizeCatchesUp() async throws {
+        let config = try TemporaryConfig("cursor-style-blink = false\ncursor-effect = false\nshell-integration = none")
+        let app = Ghostty.App(configPath: config.temporaryFile.path)
+        let view = makeView(app: app, color: "255;0;0", marker: "handoff-ready")
+        let surface = try #require(view.surfaceModel)
+        let window = makeWindow()
+        defer { window.close() }
+        window.contentView = view
+        window.orderFront(nil)
+        view.sizeDidChange(view.bounds.size)
+        surface.setVisible(true)
+        let owner = try #require(view.windowCompositor)
+        owner.updateGeometry()
+        try await wait("handoff pane first display and idle", worker: owner.worker, {
+            surface.readContents(viewport: false).contains("handoff-ready") &&
+            owner.worker.statistics.displayed > 0 && owner.worker.isIdle
+        })
+        owner.worker.pauseUpdatesForTesting(true)
+        try await wait("handoff clock paused", worker: owner.worker, { owner.worker.isIdle })
+        let submitted = owner.worker.statistics.submitted
+        let attempted = Mutex(false)
+        owner.worker.beforeNextPrepareForTesting { attempted.withLock { $0 = true } }
+        let size = owner.worker.layer.drawableSize
+        // Layout reaches the window worker before the pane's core size update.
+        // Core reports geometry_mismatch rather than composing this pane.
+        owner.worker.update(size: size, geometry: [view.id: .init(
+            rect: CGRect(x: 0, y: 0, width: size.width + 80, height: size.height),
+            clip: CGRect(origin: .zero, size: size), visible: true
+        )])
+        owner.worker.pauseUpdatesForTesting(false)
+        try await wait("mismatched pane preparation", worker: owner.worker, { attempted.withLock { $0 } })
+        // Readback's encoding lock waits for the attempted drawable to finish.
+        _ = try owner.worker.readback()
+        #expect(owner.worker.statistics.submitted == submitted)
+        owner.updateGeometry(forceRedraw: true)
+        try await wait("matching geometry resumes cached composition", worker: owner.worker, {
+            owner.worker.statistics.submitted > submitted && owner.worker.isIdle
+        })
+        #expect(try centerIsRed(owner.worker))
+        #expect(owner.worker.statistics.failed == 0)
+    }
+
+    @Test func coveredGeometryRetainsLastPresentedFrameUntilRestored() async throws {
+        let config = try TemporaryConfig("""
+        cursor-style-blink = false
+        cursor-effect = false
+        shell-integration = none
+        """)
+        let app = Ghostty.App(configPath: config.temporaryFile.path)
+        let view = makeView(app: app, color: "255;0;0", marker: "covered-ready")
+        let surface = try #require(view.surfaceModel)
+        let window = makeWindow()
+        defer { window.close() }
+        window.contentView = view
+        window.orderFront(nil)
+        view.sizeDidChange(view.bounds.size)
+        surface.setVisible(true)
+        let owner = try #require(view.windowCompositor)
+        owner.updateGeometry()
+        try await wait("covered pane first display and idle", worker: owner.worker, {
+            surface.readContents(viewport: false).contains("covered-ready") &&
+            owner.worker.statistics.displayed > 0 && owner.worker.isIdle
+        })
+        let submitted = owner.worker.statistics.submitted
+        // Keep the actual window on screen so CAMetalDisplayLink delivers the
+        // callback. Model the occlusion geometry delivered during a transition.
+        owner.worker.update(size: owner.worker.layer.drawableSize, geometry: [:])
+        try await wait("covered geometry callback and idle", worker: owner.worker, { owner.worker.isIdle })
+        #expect(owner.worker.statistics.submitted == submitted)
+        owner.updateGeometry(forceRedraw: true)
+        try await wait("restored geometry composes cached pane", worker: owner.worker, {
+            owner.worker.statistics.submitted > submitted && owner.worker.isIdle
+        })
+        #expect(try centerIsRed(owner.worker))
+        #expect(owner.worker.statistics.failed == 0)
+    }
+
     @Test(arguments: ["native", "linear", "linear-corrected"], [1, 2])
     func panesShareClockCacheAndMoveWithoutLosingSession(blending: String, latency: Int) async throws {
         let traceDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("cghostty-window-\(blending)-\(UUID().uuidString)")

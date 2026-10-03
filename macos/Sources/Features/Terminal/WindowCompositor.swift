@@ -476,7 +476,17 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
         if lock.withLock({ testUpdatesPaused }) { setPaused(true); return }
         #endif
         guard !snapshot.2, size.width > 0, size.height > 0 else { setPaused(true); return }
+        // Occlusion can arrive before WindowServer finishes animating its
+        // retained window image. Keep that image instead of presenting a clear
+        // drawable while every pane is covered. Restored geometry wakes us.
+        if !framePanes.isEmpty && !framePanes.values.contains(where: { $0.geometry.visible && !$0.geometry.clip.isEmpty }) {
+            setPaused(true)
+            return
+        }
         if layer.drawableSize != size { layer.drawableSize = size; return }
+        // The display-link callback can still carry a drawable obtained before
+        // the backing-size change. Do not present it with the new pane layout.
+        guard drawable.texture.width == Int(size.width), drawable.texture.height == Int(size.height) else { return }
         #if CGHOSTTY_TESTING
         let beforePrepare = lock.withLock { let value = testBeforePrepare; testBeforePrepare = nil; return value }
         beforePrepare?()
@@ -512,6 +522,7 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
         do {
             var more = false
             var draws = 0
+            var incomplete = false
             slot.surfaces = framePanes.values.map(\.surface)
             let traceOwners = participants.map(TraceOwner.init)
             let timelineEnabled = participants.first?.compositorTracing == true
@@ -556,8 +567,10 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
                 slowestPane = max(slowestPane, CACurrentMediaTime() - paneStart)
                 guard let result = rendered else {
                     if pane.surface.ownsCompositor(signal) { more = true }
+                    incomplete = true
                     continue
                 }
+                if !result.contains(.composed) { incomplete = true }
                 if result.contains(.repaint) { draws += 1 }
                 #if CGHOSTTY_TESTING
                 if result.contains(.composed) { framePanes[id]?.initialized = true }
@@ -567,6 +580,13 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
             }
             for surface in participants {
                 surface.traceCompositor(stage: 4, sequence: sequence, time: CACurrentMediaTime() - prepareStart, prediction: slowestPane)
+            }
+            // Visibility and size notifications reach the pane and window
+            // workers separately. A missing pane would expose the clear pass
+            // as a hole; retire these writes without replacing the last frame.
+            if incomplete {
+                setPaused(!more)
+                return
             }
             // Newer layout or membership wins; initialization is test-only.
             lock.withLock {
