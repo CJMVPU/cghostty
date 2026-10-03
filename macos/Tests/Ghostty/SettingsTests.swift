@@ -768,7 +768,7 @@ import Testing
             competingInput.values[field.key] = "23"
             let competing = try competingStore.save(competingInput, revision: original.revision)
             var continued = false
-            #expect(!controller.confirmClose(runModal: { _ in .alertSecondButtonReturn }) {
+            let closed = controller.confirmClose(runModal: { _ in .alertSecondButtonReturn }, afterSave: {
                 // The terminal confirmation cancels quit: keep this controller open.
                 // Both the revision and visible editor must be current before it runs.
                 #expect(model.record?.revision == competing.revision)
@@ -779,6 +779,7 @@ import Testing
                 #expect(controller.window?.isDocumentEdited == false)
                 continued = true
             })
+            #expect(!closed)
             #expect(!continued)
             try await NativeTestWait.until("discard continuation", timeout: .seconds(3), polling: .milliseconds(5),
                                            diagnostics: { model.status }, { continued })
@@ -801,7 +802,7 @@ import Testing
             model.edit(try #require(SettingsField.byKey["title"]), value: "Unsaved title")
             try Data("invalid settings".utf8).write(to: store.url, options: .atomic)
             var continued = false
-            #expect(!controller.confirmClose(runModal: { _ in .alertSecondButtonReturn }) { continued = true })
+            #expect(!controller.confirmClose(runModal: { _ in .alertSecondButtonReturn }, afterSave: { continued = true }))
             try await NativeTestWait.until("discard read failure", timeout: .seconds(3), polling: .milliseconds(5),
                                            diagnostics: { model.status }, { model.record == nil && !model.isBusy })
             #expect(!continued && !model.canSave)
