@@ -552,171 +552,98 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
     }
 
     func closeTabImmediately(registerRedo: Bool = true) {
-        guard let window = window else { return }
-        guard let tabGroup = window.tabGroup,
-                tabGroup.windows.count > 1 else {
-            closeWindowImmediately()
-            return
-        }
-
-        cancelPendingInitialPresentation()
-
-        // Undo
-        if let undoManager, let undoState {
-            // Register undo action to restore the tab
-            undoManager.setActionName("Close Tab")
-            undoManager.registerUndo(
-                withTarget: ghostty,
-                expiresAfter: undoExpiration
-            ) { ghostty in
-                let newController = TerminalController(ghostty, with: undoState)
-
-                if registerRedo {
-                    undoManager.registerUndo(
-                        withTarget: newController,
-                        expiresAfter: newController.undoExpiration
-                    ) { target in
-                        target.closeTabImmediately()
-                    }
-                }
-            }
-        }
-
-        window.close()
+        Self.closeControllerSnapshot([self], actionName: "Close Tab", registerRedo: registerRedo)
     }
 
-    /// Closes the current window (including any other tabs) immediately and without
-    /// confirmation. This will setup proper undo state so the action can be undone.
+    /// Closes exactly the current group. Redo retains the restored identities.
     func closeWindowImmediately() {
-        guard let window = window else { return }
-
-        cancelPendingInitialPresentation()
-
-        registerUndoForCloseWindow()
-
-        if let tabGroup = window.tabGroup, tabGroup.windows.count > 1 {
-            tabGroup.windows.forEach { window in
-                // Clear out the surfacetree to ensure there is no undo state.
-                // This prevents unnecessary undos registered since AppKit may
-                // process them on later ticks so we can't just disable undo registration.
-                if let controller = window.windowController as? TerminalController {
-                    controller.cancelPendingInitialPresentation()
-                    controller.surfaceTree = .init()
-                }
-
-                window.close()
-            }
-        } else {
-            window.close()
+        guard let window else { return }
+        let targets = (window.tabGroup?.windows ?? [window]).compactMap {
+            $0.windowController as? TerminalController
         }
+        Self.closeControllerSnapshot(targets, actionName: "Close Window")
     }
 
-    /// Registers undo for closing window(s), handling both single windows and tab groups.
-    private func registerUndoForCloseWindow() {
-        guard let undoManager, undoManager.isUndoRegistrationEnabled else { return }
-        guard let window else { return }
+    private struct ClosedControllerState {
+        let state: UndoState
+        let groupID: ObjectIdentifier?
+        let selected: Bool
+    }
 
-        // If we don't have a tab group or we don't have multiple tabs, then
-        // do a normal single window close.
-        guard let tabGroup = window.tabGroup,
-              tabGroup.windows.count > 1 else {
-            // No tabs, just save this window's state
-            if let undoState {
-                // Register undo action to restore the window
-                undoManager.setActionName("Close Window")
-                undoManager.registerUndo(
-                    withTarget: ghostty,
-                    expiresAfter: undoExpiration) { ghostty in
-                        // Restore the undo state
-                        let newController = TerminalController(ghostty, with: undoState)
-
-                        // Register redo action
-                        undoManager.registerUndo(
-                            withTarget: newController,
-                            expiresAfter: newController.undoExpiration) { target in
-                                target.closeWindowImmediately()
-                            }
+    /// One identity transaction for a tab, a whole window, or a batch of tabs.
+    /// Existing siblings survive redo even if they joined after restoration.
+    static func closeControllerSnapshot(
+        _ targets: [TerminalController],
+        actionName: String,
+        registerRedo: Bool = true
+    ) {
+        let targets = targets.filter { controller in
+            controller.ghostty.windowRegistry.registeredControllers.contains { $0 === controller }
+        }
+        guard let first = targets.first else { return }
+        let ghostty = first.ghostty
+        let manager = ghostty.undoManager
+        let expiration = first.undoExpiration
+        let previouslySelected = first.window?.tabGroup?.selectedWindow
+        let states = targets.compactMap { controller -> ClosedControllerState? in
+            guard var state = controller.undoState, let window = controller.window else { return nil }
+            let group = window.tabGroup
+            let groupID = group.map(ObjectIdentifier.init)
+            let selected = group?.selectedWindow === window || window.isKeyWindow
+            // Fully closed groups must be rebuilt, while surviving siblings
+            // remain a valid insertion destination for a restored subset.
+            if let group, group.windows.allSatisfy({ window in
+                targets.contains { $0.window === window }
+            }) { state.tabGroup = nil }
+            return .init(state: state, groupID: groupID, selected: selected)
+        }
+        let registersUndo = manager.isUndoRegistrationEnabled && !states.isEmpty
+        if registersUndo { manager.beginUndoGrouping() }
+        defer { if registersUndo { manager.endUndoGrouping() } }
+        if registersUndo {
+            manager.setActionName(actionName)
+            manager.registerUndo(withTarget: ghostty, expiresAfter: expiration) { [weak previouslySelected] ghostty in
+                var restored: [TerminalController] = []
+                var groupTails: [ObjectIdentifier: NSWindow] = [:]
+                var selectedWindow: NSWindow?
+                // Preserve tab order even when targets were collected out of order.
+                let ordered = states.sorted {
+                    ($0.state.tabIndex ?? 0) < ($1.state.tabIndex ?? 0)
+                }
+                for saved in ordered {
+                    let controller = TerminalController(ghostty, with: saved.state)
+                    restored.append(controller)
+                    guard let window = controller.window else { continue }
+                    if let groupID = saved.groupID {
+                        if saved.state.tabGroup == nil, let tail = groupTails[groupID] {
+                            tail.addTabbedWindowSafely(window, ordered: .above)
+                        }
+                        groupTails[groupID] = window
                     }
-            }
-
-            return
-        }
-
-        // Multiple windows in tab group - collect all undo states in sorted order
-        // by tab ordering. Also track which window was key.
-        let undoStates = tabGroup.windows
-            .compactMap { tabWindow -> UndoState? in
-                guard let controller = tabWindow.windowController as? TerminalController,
-                      var undoState = controller.undoState else { return nil }
-                // Clear the tab group reference since it is unneeded. It should be
-                // garbage collected but we want to be extra sure we don't try to
-                // restore into it because we're going to recreate it.
-                undoState.tabGroup = nil
-                return undoState
-            }
-            .sorted { (lhs, rhs) in
-                switch (lhs.tabIndex, rhs.tabIndex) {
-                case let (l?, r?): return l < r
-                case (_?, nil): return true
-                case (nil, _?): return false
-                case (nil, nil): return true
+                    if saved.selected { selectedWindow = window }
+                }
+                if let previouslySelected,
+                   let controller = previouslySelected.windowController as? TerminalController,
+                   ghostty.windowRegistry.registeredControllers.contains(where: { $0 === controller }) {
+                    previouslySelected.makeKeyAndOrderFront(nil)
+                } else {
+                    selectedWindow?.makeKeyAndOrderFront(nil)
+                }
+                if registerRedo {
+                    manager.registerUndo(withTarget: ghostty, expiresAfter: expiration) { _ in
+                        closeControllerSnapshot(restored, actionName: actionName)
+                    }
                 }
             }
-
-        // Find the index of the key window in our sorted states. This is a bit verbose
-        // but we only need this for this style of undo so we don't want to add it to
-        // UndoState.
-        let keyWindowIndex: Int?
-        if let keyWindow = tabGroup.windows.first(where: { $0.isKeyWindow }),
-            let keyController = keyWindow.windowController as? TerminalController,
-            let keyUndoState = keyController.undoState {
-            keyWindowIndex = undoStates.firstIndex {
-                $0.tabIndex == keyUndoState.tabIndex }
-        } else {
-            keyWindowIndex = nil
         }
-
-        // Register undo action to restore all windows
-        guard !undoStates.isEmpty else { return }
-
-        undoManager.setActionName("Close Window")
-        undoManager.registerUndo(
-            withTarget: ghostty,
-            expiresAfter: undoExpiration
-        ) { ghostty in
-            // Restore all windows in the tab group
-            let controllers = undoStates.map { undoState in
-                TerminalController(ghostty, with: undoState)
-            }
-
-            // The first controller becomes the parent window for all tabs.
-            // If we don't have a first controller (shouldn't be possible?)
-            // then we can't restore tabs.
-            guard let firstController = controllers.first else { return }
-
-            // Add all subsequent controllers as tabs to the first window
-            for controller in controllers.dropFirst() {
-                controller.showWindow(nil)
-                if let firstWindow = firstController.window,
-                   let newWindow = controller.window {
-                    firstWindow.addTabbedWindowSafely(newWindow, ordered: .above)
-                }
-            }
-
-            // Make the appropriate window key. If we had a key window, restore it.
-            // Otherwise, make the last window key.
-            if let keyWindowIndex, keyWindowIndex < controllers.count {
-                controllers[keyWindowIndex].window?.makeKeyAndOrderFront(nil)
+        for controller in targets {
+            controller.cancelPendingInitialPresentation()
+            // Keep the saved trees alive only through undo; clearing before
+            // NSWindow.close also avoids AppKit's delayed close registration.
+            if controller.surfaceTree.isEmpty {
+                controller.window?.close()
             } else {
-                controllers.last?.window?.makeKeyAndOrderFront(nil)
-            }
-
-            // Register redo action on the first controller
-            undoManager.registerUndo(
-                withTarget: firstController,
-                expiresAfter: firstController.undoExpiration
-            ) { target in
-                target.closeWindowImmediately()
+                controller.surfaceTree = .init()
             }
         }
     }

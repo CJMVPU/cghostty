@@ -65,20 +65,6 @@ extension TerminalController {
             candidate !== self && candidate.window.map { group.windows.contains($0) } == true
         }
         guard !targets.isEmpty else { return }
-        let manager = undoManager
-        manager?.beginUndoGrouping()
-        defer { manager?.endUndoGrouping() }
-        for target in targets { target.closeTabImmediately(registerRedo: false) }
-        guard let manager else { return }
-        manager.setActionName(scope.actionName)
-        manager.registerUndo(withTarget: self, expiresAfter: undoExpiration) { target in
-            DispatchQueue.main.async { [weak target] in
-                guard let target, target.ghostty.windowRegistry.all.contains(where: { $0 === target }) else { return }
-                target.window?.makeKeyAndOrderFront(nil)
-            }
-            manager.registerUndo(withTarget: target, expiresAfter: target.undoExpiration) { target in
-                target.closeTabsImmediately(scope)
-            }
-        }
+        Self.closeControllerSnapshot(targets, actionName: scope.actionName)
     }
 }
