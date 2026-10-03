@@ -167,4 +167,55 @@ extension SurfaceView_SearchStateTests {
         try await Task.sleep(for: .milliseconds(350))
         #expect(calls.isEmpty)
     }
+
+    @Test func pendingCloseAndResultsDoNotAffectReopenedSearch() async throws {
+        let app = Ghostty.App(configPath: "/dev/null")
+        var config = Ghostty.SurfaceConfiguration()
+        config.command = "/bin/cat"
+        config.workingDirectory = FileManager.default.temporaryDirectory.path
+        let view = Ghostty.SurfaceView(app, baseConfig: config)
+        let old = SearchState(from: StartSearch(c: .init(needle: nil)), pasteboard: pasteboard)
+        old.setNeedle("old query")
+        view.searchState = old
+        view.receiveSearchTotal(99)
+        view.receiveSearchSelected(98)
+        view.receiveEndSearch()
+        "new query".withCString { needle in
+            view.receiveStartSearch(StartSearch(c: .init(needle: needle)))
+        }
+        try await NativeTestWait.until("replacement search", timeout: .seconds(2), polling: .milliseconds(5),
+                                      diagnostics: { view.searchState?.needle.text ?? "closed" }, {
+            view.searchState?.needle.text == "new query"
+        })
+        #expect(view.searchState !== old)
+        #expect(old.total == nil && old.selected == nil)
+        #expect(view.searchState?.total != 99 && view.searchState?.selected != 98)
+        view.receiveEndSearch()
+        try await NativeTestWait.until("applied search close", timeout: .seconds(2), polling: .milliseconds(5),
+                                      diagnostics: { view.searchState?.needle.text ?? "closed" }, { view.searchState == nil })
+    }
+
+    @Test func resultsImmediatelyFollowingStartReachReservedSearchIdentity() async {
+        let app = Ghostty.App(configPath: "/dev/null")
+        var config = Ghostty.SurfaceConfiguration()
+        config.command = "/bin/cat"
+        config.workingDirectory = FileManager.default.temporaryDirectory.path
+        let view = Ghostty.SurfaceView(app, baseConfig: config)
+        // This test delivers native UI callbacks explicitly; prevent real core
+        // results from competing with its synthetic total and selected values.
+        view.lifecycle.release()
+        "new query".withCString { needle in
+            view.receiveStartSearch(StartSearch(c: .init(needle: needle)))
+        }
+        view.receiveSearchTotal(7)
+        view.receiveSearchSelected(3)
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            DispatchQueue.main.async {
+                #expect(view.searchState?.needle.text == "new query")
+                #expect(view.searchState?.total == 7)
+                #expect(view.searchState?.selected == 3)
+                continuation.resume()
+            }
+        }
+    }
 }

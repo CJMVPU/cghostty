@@ -135,9 +135,63 @@ extension Ghostty {
                     search.startSearching { [weak self] needle in
                         self?.surfaceModel?.search(needle)
                     }
-                } else if previous != nil {
-                    surfaceModel?.endSearch()
                 }
+            }
+        }
+
+        private var searchDeliveryRevision: UInt64 = 0
+        private var searchEndPending = false
+        private var pendingSearchState: SearchState?
+
+        func receiveStartSearch(_ start: Ghostty.Action.StartSearch) {
+            searchDeliveryRevision &+= 1
+            let revision = searchDeliveryRevision
+            let replace = searchEndPending
+            searchEndPending = false
+            // Reserve the identity before dispatching so result callbacks that
+            // immediately follow start can target the not-yet-visible state.
+            let search = !replace ? pendingSearchState ?? searchState : nil
+            let target = search ?? Ghostty.SearchState(from: start)
+            pendingSearchState = target
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.searchDeliveryRevision == revision else { return }
+                if let needle = start.needle, !needle.isEmpty { target.setNeedle(needle) }
+                if self.searchState !== target { self.searchState = target }
+                self.pendingSearchState = nil
+                target.requestFocus()
+            }
+        }
+
+        func receiveEndSearch() {
+            searchDeliveryRevision &+= 1
+            let revision = searchDeliveryRevision
+            searchEndPending = true
+            pendingSearchState = nil
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.searchDeliveryRevision == revision else { return }
+                self.searchEndPending = false
+                Ghostty.moveFocus(to: self)
+                self.searchState = nil
+            }
+        }
+
+        func receiveSearchTotal(_ total: UInt?) {
+            let revision = searchDeliveryRevision
+            let search = pendingSearchState ?? searchState
+            DispatchQueue.main.async { [weak self, weak search] in
+                guard let self, self.searchDeliveryRevision == revision,
+                      let search, self.searchState === search else { return }
+                search.total = total
+            }
+        }
+
+        func receiveSearchSelected(_ selected: UInt?) {
+            let revision = searchDeliveryRevision
+            let search = pendingSearchState ?? searchState
+            DispatchQueue.main.async { [weak self, weak search] in
+                guard let self, self.searchDeliveryRevision == revision,
+                      let search, self.searchState === search else { return }
+                search.selected = selected
             }
         }
 
@@ -438,8 +492,7 @@ extension Ghostty {
         }
 
         func endSearch() {
-            Ghostty.moveFocus(to: self)
-            searchState = nil
+            surfaceModel?.endSearch()
         }
 
         func focusDidChange(_ focused: Bool) {

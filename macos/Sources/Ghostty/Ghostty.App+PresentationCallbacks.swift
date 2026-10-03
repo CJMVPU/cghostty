@@ -290,17 +290,7 @@ extension Ghostty.App {
         guard let surfaceView = self.surfaceView(for: target) else { return }
 
         let startSearch = Ghostty.Action.StartSearch(c: v)
-        DispatchQueue.main.async {
-            if let searchState = surfaceView.searchState {
-                if let needle = startSearch.needle, !needle.isEmpty {
-                    searchState.setNeedle(needle)
-                }
-            } else {
-                surfaceView.searchState = Ghostty.SearchState(from: startSearch)
-            }
-
-            surfaceView.searchState?.requestFocus()
-        }
+        surfaceView.receiveStartSearch(startSearch)
     }
 
     static func endSearch(
@@ -308,9 +298,7 @@ extension Ghostty.App {
         target: ghostty_target_s) -> Bool {
         guard let surfaceView = self.surfaceView(for: target) else { return false }
 
-        DispatchQueue.main.async {
-            surfaceView.endSearch()
-        }
+        surfaceView.receiveEndSearch()
         return true
     }
 
@@ -321,9 +309,7 @@ extension Ghostty.App {
         guard let surfaceView = self.surfaceView(for: target) else { return }
 
         let total: UInt? = v.total >= 0 ? UInt(v.total) : nil
-        DispatchQueue.main.async {
-            surfaceView.searchState?.total = total
-        }
+        surfaceView.receiveSearchTotal(total)
     }
 
     static func searchSelected(
@@ -333,9 +319,7 @@ extension Ghostty.App {
         guard let surfaceView = self.surfaceView(for: target) else { return }
 
         let selected: UInt? = v.selected >= 0 ? UInt(v.selected) : nil
-        DispatchQueue.main.async {
-            surfaceView.searchState?.selected = selected
-        }
+        surfaceView.receiveSearchSelected(selected)
     }
 
     static func applyTheme(
