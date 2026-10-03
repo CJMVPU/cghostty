@@ -747,6 +747,77 @@ import Testing
         #expect(model.record?.current == SettingsStore.Input())
     }
 
+    @Test func discardingBeforeCancelledQuitReloadsLatestRevisionAndVisibleFields() async throws {
+        try await withStoreAsync("font-size = 17") { store, _ in
+            _ = store.load(cli: false)
+            let controller = SettingsController(store: store)
+            defer { controller.window?.close() }
+            let root = try #require(controller.window?.contentView)
+            func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
+            try await NativeTestWait.until("settings loaded", timeout: .seconds(3), polling: .milliseconds(5),
+                                           diagnostics: { controller.model.status }, { controller.model.record != nil && !controller.model.isBusy })
+            let model = controller.model
+            let original = try #require(model.record)
+            let field = try #require(SettingsField.byKey["font-size"])
+            let search = try #require(descendants(root).first { $0.accessibilityIdentifier() == "settings.search" } as? NSTextField)
+            search.stringValue = field.key
+            controller.controlTextDidChange(Notification(name: NSText.didChangeNotification, object: search))
+            model.edit(field, value: "19", deferred: true)
+            let competingStore = SettingsStore(legacySource: store.legacySource, directory: store.directory)
+            var competingInput = original.current
+            competingInput.values[field.key] = "23"
+            let competing = try competingStore.save(competingInput, revision: original.revision)
+            var continued = false
+            #expect(!controller.confirmClose(runModal: { _ in .alertSecondButtonReturn }) {
+                // The terminal confirmation cancels quit: keep this controller open.
+                // Both the revision and visible editor must be current before it runs.
+                #expect(model.record?.revision == competing.revision)
+                #expect(model.displayed[field.key] == "23")
+                let editor = descendants(root).first { $0.accessibilityIdentifier() == "settings.font-size" } as? NSTextField
+                #expect(editor?.stringValue == "23")
+                #expect(!model.isBusy && !model.dirty && !model.validationPending)
+                #expect(controller.window?.isDocumentEdited == false)
+                continued = true
+            })
+            #expect(!continued)
+            try await NativeTestWait.until("discard continuation", timeout: .seconds(3), polling: .milliseconds(5),
+                                           diagnostics: { model.status }, { continued })
+            #expect(model.savedValues[field.key] == "23")
+            model.edit(field, value: "25")
+            #expect(await model.saveAsync())
+            #expect(try store.read().current.values[field.key] == "25")
+        }
+    }
+
+    @Test func unreadableDiscardStopsQuitAndShowsReadFailure() async throws {
+        try await withStoreAsync { store, _ in
+            _ = store.load(cli: false)
+            let controller = SettingsController(store: store)
+            defer { controller.window?.close() }
+            try await NativeTestWait.until("settings loaded", timeout: .seconds(3), polling: .milliseconds(5),
+                                           diagnostics: { controller.model.status }, { controller.model.record != nil && !controller.model.isBusy })
+            let model = controller.model
+            let original = try Data(contentsOf: store.url)
+            model.edit(try #require(SettingsField.byKey["title"]), value: "Unsaved title")
+            try Data("invalid settings".utf8).write(to: store.url, options: .atomic)
+            var continued = false
+            #expect(!controller.confirmClose(runModal: { _ in .alertSecondButtonReturn }) { continued = true })
+            try await NativeTestWait.until("discard read failure", timeout: .seconds(3), polling: .milliseconds(5),
+                                           diagnostics: { model.status }, { model.record == nil && !model.isBusy })
+            #expect(!continued && !model.canSave)
+            #expect(model.status == "Unable to read settings. Retry or restore defaults.")
+            #expect(model.diagnostics.contains { $0.kind == .storage })
+            let root = try #require(controller.window?.contentView)
+            func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
+            let errors = try #require(descendants(root).first { $0.accessibilityIdentifier() == "settings.errors" } as? NSTextField)
+            #expect(!errors.isHidden && !errors.stringValue.isEmpty)
+            // Retry recovers from the read error without retaining a stale revision.
+            try original.write(to: store.url, options: .atomic)
+            #expect(await model.discardDraft())
+            #expect(model.record != nil && model.errors.isEmpty && !model.dirty)
+        }
+    }
+
     @Test func settingsInputsHaveNoFocusRingAndFooterSharesOneRow() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

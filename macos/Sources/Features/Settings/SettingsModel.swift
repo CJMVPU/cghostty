@@ -72,9 +72,10 @@ import Foundation
         }
     }
 
-    func discardDraft() {
-        cancelValidation()
-        if let record { apply(record) }
+    /// Discard against the latest persisted revision, which another instance
+    /// may have changed since this window loaded its original record.
+    func discardDraft() async -> Bool {
+        await reloadAsync()
     }
 
     private func apply(_ loaded: SettingsStore.Record) {

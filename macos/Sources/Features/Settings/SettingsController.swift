@@ -96,7 +96,10 @@ private final class SettingsList: NSStackView {
         confirmClose { sender.close() }
     }
 
-    func confirmClose(afterSave: @escaping () -> Void) -> Bool {
+    func confirmClose(
+        runModal: (NSAlert) -> NSApplication.ModalResponse = { $0.runModal() },
+        afterSave: @escaping () -> Void
+    ) -> Bool {
         guard !model.isBusy else { return false }
         guard model.dirty else { return true }
         if model.validationPending { model.flushValidation() }
@@ -107,11 +110,17 @@ private final class SettingsList: NSStackView {
         alert.addButton(withTitle: "Discard Changes")
         alert.addButton(withTitle: "Keep Editing")
         alert.buttons[0].isEnabled = model.canSave
-        switch alert.runModal() {
+        switch runModal(alert) {
         case .alertFirstButtonReturn:
             Task { if await model.saveAsync() { afterSave() } }
             return false
-        case .alertSecondButtonReturn: model.discardDraft(); return true
+        case .alertSecondButtonReturn:
+            Task {
+                guard await model.discardDraft() else { return }
+                refreshLoadedRows()
+                afterSave()
+            }
+            return false
         default: return false
         }
     }
@@ -366,10 +375,14 @@ private final class SettingsList: NSStackView {
             guard let self else { return }
             defer { self.loadTask = nil }
             guard await self.model.reloadAsync(reset: reset) else { return }
-            self.listStates = [:]
-            self.cachedRows = [:]
-            self.renderRows()
+            self.refreshLoadedRows()
         }
+    }
+
+    private func refreshLoadedRows() {
+        listStates = [:]
+        cachedRows = [:]
+        renderRows()
     }
 
     private func reload() {
