@@ -468,6 +468,9 @@ pub const TerminalSearch = struct {
         }
 
         screen.scroll(.{ .pin = flattened.startPin() });
+        // Navigation can cross page boundaries after the pre-selection feed.
+        // Refresh the viewport cache now, even if no further output arrives.
+        self.feed(t, false);
         return true;
     }
 };
@@ -565,7 +568,7 @@ test "select scrolls the viewport only when needed" {
     var stream = t.vtStream();
     defer stream.deinit();
     stream.nextSlice("Fizz\r\n");
-    for (0..30) |_| stream.nextSlice("\r\n");
+    for (0..4000) |_| stream.nextSlice("\r\n");
     stream.nextSlice("Fizz");
 
     var search: TerminalSearch = try .init(alloc, "Fizz");
@@ -605,6 +608,12 @@ test "select scrolls the viewport only when needed" {
     // viewport so it becomes visible.
     try testing.expect(try search.select(&t, .next, .if_needed));
     try testing.expect(Visible.check(&t, &search));
+    // A completed, idle search must publish matches for the viewport that
+    // navigation just revealed, without requiring a later external feed.
+    const matches = try search.viewportMatches();
+    try testing.expect(matches.len > 0);
+    const match_pin = matches[0].startPin();
+    try testing.expect(t.screens.active.pages.pointFromPin(.viewport, match_pin) != null);
 
     // With scrolling disabled the viewport must stay where it is even
     // though the next selection (wrap back to the bottom) is not
