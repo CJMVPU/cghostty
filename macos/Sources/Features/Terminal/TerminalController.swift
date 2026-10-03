@@ -278,6 +278,8 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
                     _ = TerminalController.newWindow(
                         ghostty,
                         tree: tree,
+                        position: position,
+                        confirmUndo: confirmUndo,
                         inheritBackgroundOpacity: inheritBackgroundOpacity
                     )
                 }
