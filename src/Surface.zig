@@ -59,6 +59,9 @@ pub const min_window_height_cells: u32 = 4;
 /// values.
 id: u64,
 
+/// Cancels only this surface's producers in the shared app mailbox.
+mailbox_cancel: App.Mailbox.Queue.Cancel = .{},
+
 /// Allocator
 alloc: Allocator,
 
@@ -507,7 +510,7 @@ pub fn init(
         .font_grid = font_grid,
         .size = size,
         .terminal = &io.termio.terminal,
-        .surface_mailbox = .{ .surface = self, .app = app_mailbox },
+        .surface_mailbox = .{ .surface = self, .app = app_mailbox, .cancel_scope = &self.mailbox_cancel },
         .rt_surface = rt_surface,
     });
     errdefer render.destroy();
@@ -561,7 +564,7 @@ pub fn init(
         .surface_id = self.id,
         .size = size,
         .render = render,
-        .surface_mailbox = .{ .surface = self, .app = app_mailbox },
+        .surface_mailbox = .{ .surface = self, .app = app_mailbox, .cancel_scope = &self.mailbox_cancel },
     });
 
     // Report initial cell size on surface creation
@@ -592,10 +595,16 @@ pub fn init(
 
     // Rollback must join rendering before releasing the borrowed terminal.
     try self.render.start();
-    errdefer self.render.stop();
+    errdefer {
+        self.app.mailbox.cancel(global.io(), &self.mailbox_cancel);
+        self.render.stop();
+    }
 
     try io.start();
-    errdefer io.stop();
+    errdefer {
+        self.app.mailbox.cancel(global.io(), &self.mailbox_cancel);
+        io.stop();
+    }
 
     // Determine our initial window size if configured. We need to do this
     // quite late in the process because our height/width are in grid dimensions,
@@ -638,6 +647,7 @@ pub fn init(
 }
 
 pub fn deinit(self: *Surface) void {
+    self.app.mailbox.cancel(global.io(), &self.mailbox_cancel);
     // Stop search thread
     if (self.search) |session| session.destroy();
 
@@ -673,6 +683,7 @@ inline fn surfaceMailbox(self: *Surface) Mailbox {
     return .{
         .surface = self,
         .app = .{ .rt_app = self.rt_app, .mailbox = &self.app.mailbox },
+        .cancel_scope = &self.mailbox_cancel,
     };
 }
 
@@ -1509,22 +1520,27 @@ pub fn updateConfig(
         break :font_size size;
     });
 
-    // We need to store our configs in a heap-allocated pointer so that
-    // our messages aren't huge.
-    var renderer_message = try rendererpkg.Message.initChangeConfig(self.alloc, config);
-    errdefer renderer_message.deinit();
-    var termio_config_ptr = try self.alloc.create(termio.Termio.DerivedConfig);
-    errdefer self.alloc.destroy(termio_config_ptr);
-    termio_config_ptr.* = try termio.Termio.DerivedConfig.init(self.alloc, config);
-    errdefer termio_config_ptr.deinit();
+    // End rollback ownership at the handoff. Later native action failures
+    // must not free messages already owned (or discarded) by their queues.
+    {
+        // We need to store our configs in a heap-allocated pointer so that
+        // our messages aren't huge.
+        var renderer_message = try rendererpkg.Message.initChangeConfig(self.alloc, config);
+        errdefer renderer_message.deinit();
+        var termio_config_ptr = try self.alloc.create(termio.Termio.DerivedConfig);
+        errdefer self.alloc.destroy(termio_config_ptr);
+        termio_config_ptr.* = try termio.Termio.DerivedConfig.init(self.alloc, config);
+        errdefer termio_config_ptr.deinit();
 
-    _ = self.render.thread.mailbox.push(global.io(), renderer_message, .{ .forever = {} });
-    self.queueIo(.{
-        .change_config = .{
-            .alloc = self.alloc,
-            .ptr = termio_config_ptr,
-        },
-    }, .unlocked);
+        if (self.render.thread.mailbox.push(global.io(), renderer_message, .{ .forever = {} }) == 0)
+            return error.RendererStopped;
+        self.queueIo(.{
+            .change_config = .{
+                .alloc = self.alloc,
+                .ptr = termio_config_ptr,
+            },
+        }, .unlocked);
+    }
 
     // With mailbox messages sent, we have to wake them up so they process it.
     self.queueRender() catch |err| {
@@ -2166,14 +2182,14 @@ pub fn setFontSize(self: *Surface, size: font.face.DesiredSize) !void {
 
     // Notify our render thread of the new font stack. The renderer
     // MUST accept the new font grid and deref the old.
-    _ = self.render.thread.mailbox.push(global.io(), .{
+    if (self.render.thread.mailbox.push(global.io(), .{
         .font_grid = .{
             .grid = font_grid,
             .set = &self.app.font_grid_set,
             .old_key = self.font_grid_key,
             .new_key = font_grid_key,
         },
-    }, .{ .forever = {} });
+    }, .{ .forever = {} }) == 0) return error.RendererStopped;
 
     // Once we've sent the key we can replace our key
     self.font_grid_key = font_grid_key;

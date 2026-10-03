@@ -192,6 +192,8 @@ pub fn deinit(self: *Thread) void {
 
 /// The main entrypoint for the thread.
 pub fn threadMain(self: *Thread) void {
+    // Failed consumers must also release IO/reader producers.
+    defer self.mailbox.close(global.io());
     // Call child function so we can use errors...
     self.threadMain_() catch |err| {
         // In the future, we should expose this on the thread struct.

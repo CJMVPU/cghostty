@@ -123,9 +123,12 @@ pub fn init(
 }
 
 pub fn deinit(self: *App) void {
+    // No producer may wait for the main thread while it joins surfaces.
+    self.mailbox.close(global.io());
     // Clean up all our surfaces
     for (self.surfaces.items) |surface| surface.deinit();
     self.surfaces.deinit(self.alloc);
+    while (self.mailbox.pop(global.io())) |message| message.deinit();
 
     // Clean up our font group cache
     // We should have zero items in the grid set at this point because
@@ -281,7 +284,7 @@ fn drainMailbox(self: *App, rt_app: *apprt.App) !void {
             ),
             .new_window => |msg| try self.newWindow(rt_app, msg),
             .close => |surface| self.closeSurface(surface),
-            .surface_message => |msg| try self.surfaceMessage(msg.surface, msg.message),
+            .surface_message => |msg| try self.surfaceMessage(msg.surface, msg.surface_id, msg.message),
 
             // If we're quitting, then we set the quit flag and stop
             // draining the mailbox immediately. This lets us defer
@@ -510,13 +513,17 @@ pub fn performAllAction(
 }
 
 /// Handle a window message
-fn surfaceMessage(self: *App, surface: *Surface, msg: apprt.surface.Message) !void {
+fn surfaceMessage(self: *App, surface: *Surface, surface_id: u64, msg: apprt.surface.Message) !void {
     // We want to ensure our window is still active. Window messages
     // are quite rare and we normally don't have many windows so we do
     // a simple linear search here.
-    if (self.hasSurface(surface)) {
-        try surface.handleMessage(msg);
+    if (self.findSurfaceByID(surface_id)) |live| {
+        if (live == surface) {
+            try live.handleMessage(msg);
+            return;
+        }
     }
+    msg.deinit();
 
     // Window was not found, it probably quit before we handled the message.
     // Not a problem.
@@ -558,8 +565,16 @@ pub const Message = union(enum) {
     /// A message for a specific surface.
     surface_message: struct {
         surface: *Surface,
+        surface_id: u64,
         message: apprt.surface.Message,
     },
+
+    pub fn deinit(self: *const Message) void {
+        switch (self.*) {
+            .surface_message => |v| v.message.deinit(),
+            else => {},
+        }
+    }
 
     const NewWindow = struct {
         /// The parent surface
@@ -584,7 +599,11 @@ pub const Mailbox = struct {
 
     /// Send a message to the surface.
     pub fn push(self: Mailbox, msg: Message, timeout: Queue.Timeout) Queue.Size {
-        const result = self.mailbox.push(global.io(), msg, timeout);
+        return self.pushWithCancel(msg, timeout, null);
+    }
+
+    pub fn pushWithCancel(self: Mailbox, msg: Message, timeout: Queue.Timeout, cancel_scope: ?*const Queue.Cancel) Queue.Size {
+        const result = self.mailbox.pushWithCancel(global.io(), msg, timeout, cancel_scope);
 
         // Wake up our app loop
         self.rt_app.wakeup();

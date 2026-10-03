@@ -129,6 +129,7 @@ pub fn deinit(self: *Thread) void {
 
 /// The main entrypoint for the thread.
 pub fn threadMain(self: *Thread, io: *termio.Termio) void {
+    defer io.mailbox.close();
     // Call child function so we can use errors...
     self.threadMain_(io) catch |err| {
         log.warn("error in io thread err={}", .{err});
@@ -190,6 +191,9 @@ fn threadMain_(self: *Thread, io: *termio.Termio) !void {
     try io.threadEnter(self, &cb.data);
     defer cb.data.deinit();
     defer io.threadExit(&cb.data);
+    // The reader may finish parsing a buffered DSR after the loop stops.
+    // Cancel its sends before threadExit joins it, including error unwinds.
+    defer io.mailbox.close();
 
     // Start the async handlers.
     mailbox.wakeup.wait(&self.loop, &self.wakeup_c, CallbackData, &cb, wakeupCallback);

@@ -138,7 +138,7 @@ pub const StreamHandler = struct {
         if (self.surface_mailbox.push(msg, .{ .instant = {} }) == 0) {
             self.renderer_state.mutex.unlock(global.io());
             defer self.renderer_state.mutex.lockUncancelable(global.io());
-            _ = self.surface_mailbox.push(msg, .{ .forever = {} });
+            if (self.surface_mailbox.push(msg, .{ .forever = {} }) == 0) msg.deinit();
         }
     }
 
@@ -176,7 +176,7 @@ pub const StreamHandler = struct {
                 .{err},
             );
         };
-        _ = self.renderer_mailbox.push(msg, .{ .forever = {} });
+        if (self.renderer_mailbox.push(msg, .{ .forever = {} }) == 0) msg.deinit();
     }
 
     pub fn vt(
@@ -2048,4 +2048,66 @@ test "kitty clipboard write: oversized text replies EFBIG" {
     // Teardown leaves no transaction that could be committed and
     // forwarded to the macOS clipboard path.
     try testing.expect(mailbox.spsc.queue.pop(global.io()) == null);
+}
+
+test "GUI buffered DSR parsing finishes after full IO queue closes" {
+    const t = std.testing;
+    var term = try terminal.Terminal.init(t.io, t.allocator, .{ .cols = 10, .rows = 3 });
+    defer term.deinit(t.allocator);
+    var mutex: std.Io.Mutex = .init;
+    var shared: renderer.State = .{ .mutex = &mutex, .terminal = &term };
+    var mailbox = try termio.Mailbox.initSPSC(t.allocator);
+    defer mailbox.deinit(t.allocator);
+    for (0..64) |_| mailbox.send(.{ .write_stable = "pending" }, null);
+    var handler: StreamHandler = undefined;
+    handler.alloc = t.allocator;
+    handler.terminal = &term;
+    handler.renderer_state = &shared;
+    handler.termio_mailbox = &mailbox;
+    handler.termio_messaged = false;
+    const Parser = struct {
+        gui: *StreamHandler,
+        done: std.Io.Event = .unset,
+        pub fn vt(self: *@This(), comptime action: StreamHandler.Stream.Action.Tag, value: StreamHandler.Stream.Action.Value(action)) void {
+            switch (action) {
+                .device_status => self.gui.vt(action, value),
+                else => {},
+            }
+        }
+        pub fn deinit(_: *@This()) void {}
+        fn run(self: *@This()) void {
+            self.gui.renderer_state.mutex.lockUncancelable(global.io());
+            defer self.gui.renderer_state.mutex.unlock(global.io());
+            var stream: terminal.Stream(*@This()) = .init(.{ .allocator = std.testing.allocator, .handler = self });
+            defer stream.deinit();
+            // More replies than the stopped consumer's complete queue capacity.
+            stream.nextSlice("\x1b[5n\x1b[6n" ** 128);
+            self.done.set(std.testing.io);
+        }
+    };
+    var parser: Parser = .{ .gui = &handler };
+    const thread = try std.Thread.spawn(.{}, Parser.run, .{&parser});
+    const queue = mailbox.spsc.queue;
+    defer {
+        queue.mutex.lockUncancelable(t.io);
+        queue.closed = true;
+        queue.cond_not_full.broadcast(t.io);
+        queue.mutex.unlock(t.io);
+        thread.join();
+    }
+    const start = std.Io.Timestamp.now(t.io, .awake);
+    var blocked = false;
+    while (start.untilNow(t.io, .awake).toMilliseconds() < 1000) {
+        queue.mutex.lockUncancelable(t.io);
+        blocked = queue.not_full_waiters == 1;
+        queue.mutex.unlock(t.io);
+        if (blocked) break;
+        try std.Io.sleep(t.io, .fromMilliseconds(1), .awake);
+    }
+    try t.expect(blocked);
+    mailbox.close();
+    try parser.done.waitTimeout(t.io, .{ .duration = .{ .raw = .fromMilliseconds(1000), .clock = .awake } });
+    // No original pending message was consumed to unblock the parser.
+    for (0..64) |_| try t.expectEqualStrings("pending", queue.pop(t.io).?.write_stable);
+    try t.expect(queue.pop(t.io) == null);
 }

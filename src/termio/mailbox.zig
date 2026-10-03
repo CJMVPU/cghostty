@@ -54,6 +54,13 @@ pub const Mailbox = union(enum) {
         }
     }
 
+    /// Release blocked senders before the consumer stops or joins its reader.
+    pub fn close(self: *Mailbox) void {
+        switch (self.*) {
+            .spsc => |*v| v.queue.close(global.io()),
+        }
+    }
+
     /// Sends the given message without notifying there are messages.
     ///
     /// If the optional mutex is given, it must already be LOCKED. If the
@@ -107,3 +114,61 @@ pub const Mailbox = union(enum) {
         }
     }
 };
+
+test "termio mailbox close releases blocked owning sends and rejects later writes" {
+    const t = std.testing;
+    var mailbox = try Mailbox.initSPSC(t.allocator);
+    defer mailbox.deinit(t.allocator);
+    for (0..64) |_| mailbox.send(.{ .write_stable = "pending" }, null);
+    const Producer = struct {
+        mailbox: *Mailbox,
+        done: std.Io.Event = .unset,
+        fn run(self: *@This()) void {
+            const msg = termio.Message.writeReq(std.testing.allocator, @as([]const u8, "x" ** 300)) catch unreachable;
+            self.mailbox.send(msg, null);
+            self.done.set(std.testing.io);
+        }
+    };
+    var producer: Producer = .{ .mailbox = &mailbox };
+    const thread = try std.Thread.spawn(.{}, Producer.run, .{&producer});
+    defer {
+        const queue = mailbox.spsc.queue;
+        queue.mutex.lockUncancelable(t.io);
+        queue.closed = true;
+        queue.cond_not_full.broadcast(t.io);
+        queue.mutex.unlock(t.io);
+        thread.join();
+    }
+    const queue = mailbox.spsc.queue;
+    const start = std.Io.Timestamp.now(t.io, .awake);
+    var blocked = false;
+    while (start.untilNow(t.io, .awake).toMilliseconds() < 1000) {
+        queue.mutex.lockUncancelable(t.io);
+        blocked = queue.not_full_waiters == 1;
+        queue.mutex.unlock(t.io);
+        if (blocked) break;
+        try std.Io.sleep(t.io, .fromMilliseconds(1), .awake);
+    }
+    try t.expect(blocked);
+    mailbox.close();
+    try producer.done.waitTimeout(t.io, .{ .duration = .{ .raw = .fromMilliseconds(1000), .clock = .awake } });
+    mailbox.send(try termio.Message.writeReq(t.allocator, @as([]const u8, "y" ** 300)), null);
+    for (0..64) |_| try t.expect(queue.pop(t.io).? == .write_stable);
+    try t.expect(queue.pop(t.io) == null);
+}
+
+test "termio mailbox closed and pending owning messages release configurations and grants" {
+    const t = std.testing;
+    var config = try @import("../config.zig").Config.default(t.allocator);
+    defer config.deinit();
+    for ([_]bool{ false, true }) |closed| {
+        var mailbox = try Mailbox.initSPSC(t.allocator);
+        defer mailbox.deinit(t.allocator);
+        if (closed) mailbox.close();
+        const derived = try t.allocator.create(termio.Termio.DerivedConfig);
+        derived.* = try termio.Termio.DerivedConfig.init(t.allocator, &config);
+        mailbox.send(.{ .change_config = .{ .alloc = t.allocator, .ptr = derived } }, null);
+        mailbox.send(.{ .kitty_clipboard_grant_read = .{ .alloc = t.allocator, .pw = try t.allocator.dupe(u8, "read grant") } }, null);
+        mailbox.send(.{ .kitty_clipboard_grant_write = .{ .alloc = t.allocator, .pw = try t.allocator.dupe(u8, "write grant") } }, null);
+    }
+}

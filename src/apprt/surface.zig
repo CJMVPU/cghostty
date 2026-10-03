@@ -155,6 +155,17 @@ pub const Message = union(enum) {
     /// Renderer pushed a new frame, redraw this surface.
     redraw,
 
+    /// Dispose an owning message that never reaches a live surface.
+    pub fn deinit(self: *const Message) void {
+        switch (self.*) {
+            .clipboard_write => |v| v.req.deinit(),
+            .pwd_change => |v| v.deinit(),
+            .kitty_clipboard_read => |v| v.destroy(),
+            .kitty_clipboard_write => |v| v.destroy(),
+            else => {},
+        }
+    }
+
     pub const ReportTitleStyle = enum {
         csi_21_t,
 
@@ -171,6 +182,7 @@ pub const Message = union(enum) {
 pub const Mailbox = struct {
     surface: *Surface,
     app: App.Mailbox,
+    cancel_scope: ?*App.Mailbox.Queue.Cancel = null,
 
     /// Send a message to the surface.
     pub fn push(
@@ -181,12 +193,13 @@ pub const Mailbox = struct {
         // Surface message sending is actually implemented on the app
         // thread, so we have to rewrap the message with our surface
         // pointer and send it to the app thread.
-        return self.app.push(.{
+        return self.app.pushWithCancel(.{
             .surface_message = .{
                 .surface = self.surface,
+                .surface_id = self.surface.id,
                 .message = msg,
             },
-        }, timeout);
+        }, timeout, self.cancel_scope);
     }
 };
 
@@ -305,4 +318,42 @@ test "copyUtf8Z preserves UTF-8 that fits" {
     Message.DesktopNotification.copyUtf8Z(dst.len, &dst, "abcЯ");
 
     try std.testing.expectEqualStrings("abcЯ", std.mem.sliceTo(&dst, 0));
+}
+
+test "surface mailbox dropped messages release all owned payloads" {
+    const t = std.testing;
+    for ([_]bool{ false, true }) |clipboard| {
+        const data = try Message.WriteReq.init(t.allocator, @as([]const u8, "x" ** 300));
+        const msg: Message = if (clipboard) .{ .clipboard_write = .{ .clipboard_type = .standard, .req = data } } else .{ .pwd_change = data };
+        msg.deinit();
+    }
+    var read_arena: std.heap.ArenaAllocator = .init(t.allocator);
+    const read = try read_arena.allocator().create(apprt.ClipboardRequest.KittyRead);
+    _ = try read_arena.allocator().dupe(u8, "owned MIME types and request metadata");
+    read.* = undefined;
+    read.arena = read_arena;
+    const read_msg: Message = .{ .kitty_clipboard_read = read };
+    read_msg.deinit();
+    var write_arena: std.heap.ArenaAllocator = .init(t.allocator);
+    const write = try write_arena.allocator().create(apprt.ClipboardRequest.KittyWrite);
+    _ = try write_arena.allocator().dupe(u8, "owned clipboard representations");
+    write.* = undefined;
+    write.arena = write_arena;
+    const write_msg: Message = .{ .kitty_clipboard_write = write };
+    write_msg.deinit();
+}
+
+test "app shutdown queue discards surface messages with owned data" {
+    const t = std.testing;
+    var queue: App.Mailbox.Queue = .{};
+    for (0..64) |i| {
+        const message: App.Message = .{ .surface_message = .{
+            .surface = undefined,
+            .surface_id = i + 1,
+            .message = .{ .pwd_change = try Message.WriteReq.init(t.allocator, @as([]const u8, "x" ** 300)) },
+        } };
+        try t.expect(queue.push(t.io, message, .instant) > 0);
+    }
+    queue.close(t.io);
+    while (queue.pop(t.io)) |message| message.deinit();
 }

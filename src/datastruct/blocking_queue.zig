@@ -53,6 +53,12 @@ pub fn BlockingQueue(
             ns: u64,
         };
 
+        /// A producer cancellation scope, guarded by this queue's mutex.
+        /// Keep it alive until all scoped producers have stopped.
+        pub const Cancel = struct { cancelled: bool = false };
+
+        closed: bool = false,
+
         /// Our data. The values are undefined until they are written.
         data: [bounds]T = undefined,
 
@@ -100,41 +106,38 @@ pub fn BlockingQueue(
         /// queue (unread items) after the push. A return value of zero
         /// means that the push failed.
         pub fn push(self: *Self, io: std.Io, value: T, timeout: Timeout) Size {
+            return self.pushWithCancel(io, value, timeout, null);
+        }
+
+        /// Rejected values remain owned by the caller. Cancellation only
+        /// affects the supplied scope; other producers can keep using the queue.
+        pub fn pushWithCancel(self: *Self, io: std.Io, value: T, timeout: Timeout, cancel_scope: ?*const Cancel) Size {
             self.mutex.lockUncancelable(io);
             defer self.mutex.unlock(io);
 
-            // The
-            if (self.full()) {
+            const deadline: std.Io.Timeout = switch (timeout) {
+                .ns => |ns| (std.Io.Timeout{ .duration = .{
+                    .raw = .fromNanoseconds(ns),
+                    .clock = .awake,
+                } }).toDeadline(io),
+                else => .none,
+            };
+            while (true) {
+                if (self.closed or (if (cancel_scope) |scope| scope.cancelled else false)) return 0;
+                if (!self.full()) break;
                 switch (timeout) {
-                    // If we're not waiting, then we failed to write.
                     .instant => return 0,
-
                     .forever => {
                         self.not_full_waiters += 1;
                         defer self.not_full_waiters -= 1;
                         self.cond_not_full.waitUncancelable(io, &self.mutex);
                     },
-
-                    .ns => |ns| {
+                    .ns => {
                         self.not_full_waiters += 1;
                         defer self.not_full_waiters -= 1;
-                        compat_thread.waitTimeout(
-                            &self.cond_not_full,
-                            io,
-                            &self.mutex,
-                            .{
-                                .duration = .{
-                                    .raw = .fromNanoseconds(ns),
-                                    .clock = .awake,
-                                },
-                            },
-                        ) catch return 0;
+                        compat_thread.waitTimeout(&self.cond_not_full, io, &self.mutex, deadline) catch return 0;
                     },
                 }
-
-                // If we're still full, then we failed to write. This can
-                // happen in situations where we are interrupted.
-                if (self.full()) return 0;
             }
 
             // Add our data and update our accounting
@@ -144,6 +147,22 @@ pub fn BlockingQueue(
             self.len += 1;
 
             return self.len;
+        }
+
+        /// Reject future pushes and release every blocked producer. Pending
+        /// values remain available for the consumer or shutdown disposal.
+        pub fn close(self: *Self, io: std.Io) void {
+            self.mutex.lockUncancelable(io);
+            defer self.mutex.unlock(io);
+            self.closed = true;
+            self.cond_not_full.broadcast(io);
+        }
+
+        pub fn cancel(self: *Self, io: std.Io, scope: *Cancel) void {
+            self.mutex.lockUncancelable(io);
+            defer self.mutex.unlock(io);
+            scope.cancelled = true;
+            self.cond_not_full.broadcast(io);
         }
 
         /// Pop a value from the queue without blocking.
@@ -193,7 +212,7 @@ pub fn BlockingQueue(
 
             pub fn deinit(self: *DrainIterator, io: std.Io) void {
                 // If we have consumers waiting on a full queue, notify.
-                if (self.queue.not_full_waiters > 0) self.queue.cond_not_full.signal(io);
+                if (self.queue.not_full_waiters > 0) self.queue.cond_not_full.broadcast(io);
 
                 // Unlock
                 self.queue.mutex.unlock(io);
@@ -258,4 +277,106 @@ test "timed push" {
 
     // Timed push should fail
     try testing.expectEqual(@as(Q.Size, 0), q.push(io, 2, .{ .ns = 1000 }));
+}
+
+fn testWaitForBlocked(queue: anytype, count: usize) !void {
+    const io = std.testing.io;
+    const start = std.Io.Timestamp.now(io, .awake);
+    while (start.untilNow(io, .awake).toMilliseconds() < 1000) {
+        queue.mutex.lockUncancelable(io);
+        const blocked = queue.not_full_waiters;
+        queue.mutex.unlock(io);
+        if (blocked == count) return;
+        try std.Io.sleep(io, .fromMilliseconds(1), .awake);
+    }
+    return error.Timeout;
+}
+
+// Cleanup must remain bounded even if close/cancel stops releasing waiters.
+fn testForceClose(queue: anytype) void {
+    queue.mutex.lockUncancelable(std.testing.io);
+    defer queue.mutex.unlock(std.testing.io);
+    queue.closed = true;
+    queue.cond_not_full.broadcast(std.testing.io);
+}
+
+test "BlockingQueue close releases all blocked producers without consuming" {
+    const t = std.testing;
+    const Q = BlockingQueue(u64, 1);
+    var queue: Q = .{};
+    try t.expectEqual(1, queue.push(t.io, 1, .instant));
+    const Producer = struct {
+        queue: *Q,
+        done: std.Io.Event = .unset,
+        result: Q.Size = 99,
+        fn run(self: *@This()) void {
+            self.result = self.queue.push(std.testing.io, 2, .forever);
+            self.done.set(std.testing.io);
+        }
+    };
+    var producers = [_]Producer{.{ .queue = &queue }} ** 3;
+    var threads: [3]std.Thread = undefined;
+    var spawned: usize = 0;
+    defer {
+        testForceClose(&queue);
+        for (threads[0..spawned]) |thread| thread.join();
+    }
+    for (&producers, &threads) |*producer, *thread| {
+        thread.* = try std.Thread.spawn(.{}, Producer.run, .{producer});
+        spawned += 1;
+    }
+    try testWaitForBlocked(&queue, 3);
+    queue.close(t.io);
+    queue.close(t.io);
+    for (&producers) |*producer| {
+        try producer.done.waitTimeout(t.io, .{ .duration = .{ .raw = .fromMilliseconds(1000), .clock = .awake } });
+        try t.expectEqual(0, producer.result);
+    }
+    try t.expectEqual(0, queue.push(t.io, 3, .forever));
+    try t.expectEqual(1, queue.pop(t.io).?);
+    try t.expect(queue.pop(t.io) == null);
+}
+
+test "BlockingQueue cancelling one surface preserves other blocked producers" {
+    const t = std.testing;
+    const Q = @import("../App.zig").Mailbox.Queue;
+    var queue: Q = .{};
+    var cancelled: Q.Cancel = .{};
+    var other: Q.Cancel = .{};
+    for (0..64) |_| try t.expect(queue.push(t.io, .quit, .instant) > 0);
+    const Producer = struct {
+        queue: *Q,
+        scope: *Q.Cancel,
+        done: std.Io.Event = .unset,
+        result: Q.Size = 99,
+        fn run(self: *@This()) void {
+            self.result = self.queue.pushWithCancel(std.testing.io, .quit, .forever, self.scope);
+            self.done.set(std.testing.io);
+        }
+    };
+    var a: Producer = .{ .queue = &queue, .scope = &cancelled };
+    var b: Producer = .{ .queue = &queue, .scope = &other };
+    const a_thread = try std.Thread.spawn(.{}, Producer.run, .{&a});
+    defer {
+        testForceClose(&queue);
+        a_thread.join();
+    }
+    const b_thread = try std.Thread.spawn(.{}, Producer.run, .{&b});
+    defer {
+        testForceClose(&queue);
+        b_thread.join();
+    }
+    try testWaitForBlocked(&queue, 2);
+    queue.cancel(t.io, &cancelled);
+    try a.done.waitTimeout(t.io, .{ .duration = .{ .raw = .fromMilliseconds(1000), .clock = .awake } });
+    try t.expectEqual(0, a.result);
+    try testWaitForBlocked(&queue, 1);
+    try t.expect(!b.done.isSet());
+    try t.expect(queue.pop(t.io) != null);
+    try b.done.waitTimeout(t.io, .{ .duration = .{ .raw = .fromMilliseconds(1000), .clock = .awake } });
+    try t.expectEqual(64, b.result);
+    // Cancellation is permanent even when capacity subsequently becomes free.
+    try t.expect(queue.pop(t.io) != null);
+    try t.expectEqual(0, queue.pushWithCancel(t.io, .quit, .instant, &cancelled));
+    try t.expect(queue.push(t.io, .quit, .instant) > 0);
 }

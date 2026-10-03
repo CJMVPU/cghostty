@@ -78,6 +78,7 @@ fn startWith(self: *Self, spawn: *const fn (*rendererpkg.Thread) std.Thread.Spaw
 /// Idempotent. Joining also waits for threadExit/loopExit to release GPU work
 /// and stop DisplayLink. Shared state and queues remain alive for IO teardown.
 pub fn stop(self: *Self) void {
+    self.thread.mailbox.close(global.io());
     if (self.os_thread) |thread| {
         self.thread.stop.notify() catch |err| log.err(
             "error notifying renderer thread to stop, may stall err={}",

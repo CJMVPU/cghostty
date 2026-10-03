@@ -99,6 +99,7 @@ fn startWith(self: *Self, spawn: *const fn (*termiopkg.Thread, *termiopkg.Termio
 
 /// Idempotent; terminal state remains available to borrowers after joining.
 pub fn stop(self: *Self) void {
+    if (self.phase != .empty) self.termio.mailbox.close();
     if (self.os_thread) |thread| {
         self.thread.stop.notify() catch |err|
             log.err("error notifying io thread to stop, may stall err={}", .{err});
@@ -148,8 +149,10 @@ test "IOSession failed spawn preserves ready state and joins exactly once" {
         }
     };
     const session = try create(std.testing.allocator);
+    session.termio.mailbox = try termiopkg.Mailbox.initSPSC(std.testing.allocator);
     defer {
         session.stop();
+        session.termio.mailbox.deinit(std.testing.allocator);
         // This test exercises worker ownership without constructing a terminal.
         session.phase = .empty;
         session.destroy();
@@ -163,4 +166,68 @@ test "IOSession failed spawn preserves ready state and joins exactly once" {
     session.stop();
     try std.testing.expect(session.phase == .stopped and session.os_thread == null);
     try std.testing.expectError(error.InvalidIOSessionState, session.startWith(Worker.spawn));
+}
+
+test "IOSession stop joins a worker blocked on a full IO queue within deadline" {
+    const t = std.testing;
+    const Worker = struct {
+        fn spawn(worker: *termiopkg.Thread, io: *termiopkg.Termio) std.Thread.SpawnError!std.Thread {
+            return std.Thread.spawn(.{}, run, .{ worker, io });
+        }
+        fn run(_: *termiopkg.Thread, io: *termiopkg.Termio) void {
+            // The consumer has stopped; this is the reader's final response.
+            io.mailbox.send(.{ .write_stable = "\x1b[0n" }, null);
+        }
+    };
+    const session = try create(t.allocator);
+    session.termio.mailbox = try termiopkg.Mailbox.initSPSC(t.allocator);
+    session.phase = .ready;
+    defer {
+        session.stop();
+        session.termio.mailbox.deinit(t.allocator);
+        session.phase = .empty;
+        session.destroy();
+    }
+    const queue = session.termio.mailbox.spsc.queue;
+    for (0..64) |_| session.termio.mailbox.send(.{ .write_stable = "pending" }, null);
+    try session.startWith(Worker.spawn);
+    // Force cleanup independently of IOSession.stop so a regression reports
+    // Timeout instead of hanging the test runner in a join.
+    defer {
+        queue.mutex.lockUncancelable(t.io);
+        queue.closed = true;
+        queue.cond_not_full.broadcast(t.io);
+        queue.mutex.unlock(t.io);
+    }
+    const wait_started = std.Io.Timestamp.now(t.io, .awake);
+    var blocked = false;
+    while (wait_started.untilNow(t.io, .awake).toMilliseconds() < 1000) {
+        queue.mutex.lockUncancelable(t.io);
+        blocked = queue.not_full_waiters == 1;
+        queue.mutex.unlock(t.io);
+        if (blocked) break;
+        try std.Io.sleep(t.io, .fromMilliseconds(1), .awake);
+    }
+    try t.expect(blocked);
+    const Stopper = struct {
+        session: *Self,
+        done: std.Io.Event = .unset,
+        fn run(self: *@This()) void {
+            self.session.stop();
+            self.done.set(std.testing.io);
+        }
+    };
+    var stopper: Stopper = .{ .session = session };
+    const thread = try std.Thread.spawn(.{}, Stopper.run, .{&stopper});
+    defer {
+        queue.mutex.lockUncancelable(t.io);
+        queue.closed = true;
+        queue.cond_not_full.broadcast(t.io);
+        queue.mutex.unlock(t.io);
+        thread.join();
+    }
+    try stopper.done.waitTimeout(t.io, .{ .duration = .{ .raw = .fromMilliseconds(1000), .clock = .awake } });
+    try t.expect(session.phase == .stopped and session.os_thread == null);
+    for (0..64) |_| try t.expectEqualStrings("pending", queue.pop(t.io).?.write_stable);
+    try t.expect(queue.pop(t.io) == null);
 }
