@@ -36,7 +36,12 @@ extension Ghostty {
         }
 
         func formattedEntry(_ key: String) -> String {
-            key.withCString { Ghostty.AllocatedString(ghostty_config_format_entry(value, $0, key.utf8.count)).string }
+            let entry = key.withCString { ghostty_config_format_entry(value, $0, key.utf8.count) }
+            guard entry.ptr != nil else {
+                settingsDiagnostics.append(SettingsDiagnostic(key: key, kind: .core, message: "Unable to read the setting value."))
+                return ""
+            }
+            return Ghostty.AllocatedString(entry).string
         }
 
         func hasSameSettings(as other: ConfigHandle) -> Bool { ghostty_settings_equal(value, other.value) }

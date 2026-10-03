@@ -152,6 +152,9 @@ import Darwin
 
     func evaluate(_ input: Input) -> Evaluation {
         let config = parse(input)
+        // Formatting failures must block editing/saving instead of becoming an
+        // empty repeatable value that can overwrite inherited settings.
+        _ = Self.values(config)
         var errors = fieldDiagnostics(input)
         let explainedKeys = Set(errors.compactMap(\.key))
         let coreErrors = config?.settingsDiagnostics ?? [SettingsDiagnostic(kind: .core, message: "Unable to create the settings parser.")]

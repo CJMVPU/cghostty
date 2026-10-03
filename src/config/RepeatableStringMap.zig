@@ -113,11 +113,11 @@ pub fn formatEntry(self: RepeatableStringMap, formatter: formatterpkg.EntryForma
 
     var it = self.map.iterator();
     while (it.next()) |entry| {
-        var buf: [256]u8 = undefined;
-        const value = std.fmt.bufPrint(&buf, "{s}={s}", .{ entry.key_ptr.*, entry.value_ptr.* }) catch |err| switch (err) {
-            error.NoSpaceLeft => return error.OutOfMemory,
-        };
-        try formatter.formatEntry([]const u8, value);
+        try formatter.writer.print("{s} = {s}={s}\n", .{
+            formatter.name,
+            entry.key_ptr.*,
+            entry.value_ptr.*,
+        });
     }
 }
 
@@ -195,4 +195,19 @@ test "RepeatableStringMap: formatConfig multiple items" {
         try list.formatEntry(formatterpkg.entryFormatter("a", &buf.writer));
         try std.testing.expectEqualSlices(u8, "a = A=B\na = B=C\n", buf.written());
     }
+}
+
+test "RepeatableStringMap: formatConfig long value" {
+    const testing = std.testing;
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+    const value = "TOKEN=" ++ "a" ** 300;
+    var map: RepeatableStringMap = .{};
+    try map.parseCLI(alloc, value);
+    try map.parseCLI(alloc, "MODE=after");
+    var output: std.Io.Writer.Allocating = .init(testing.allocator);
+    defer output.deinit();
+    try map.formatEntry(formatterpkg.entryFormatter("env", &output.writer));
+    try testing.expectEqualStrings("env = " ++ value ++ "\nenv = MODE=after\n", output.written());
 }
