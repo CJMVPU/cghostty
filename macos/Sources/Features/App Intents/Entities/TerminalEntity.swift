@@ -38,7 +38,7 @@ struct TerminalEntity: AppEntity {
     /// Returns the view associated with this entity. This may no longer exist.
     @MainActor
     var surfaceView: Ghostty.SurfaceView? {
-        Self.defaultQuery.all.first { $0.id == self.id }
+        Self.defaultQuery.surface(for: id)
     }
 
     @MainActor
@@ -104,8 +104,33 @@ extension TerminalEntity {
 }
 
 struct TerminalQuery: EntityStringQuery, EnumerableEntityQuery {
+    private let permission: @MainActor () async -> Bool
+    private let application: @MainActor () -> Ghostty.App?
+
+    init() {
+        self.init(
+            permission: { await requestIntentPermission() },
+            application: { (NSApp.delegate as? AppDelegate)?.ghostty }
+        )
+    }
+
+    init(
+        permission: @escaping @MainActor () async -> Bool,
+        application: @escaping @MainActor () -> Ghostty.App?
+    ) {
+        self.permission = permission
+        self.application = application
+    }
+
+    /// Internal lookup is independent of Shortcuts enumeration and never prompts.
+    @MainActor
+    func surface(for identifier: UUID) -> Ghostty.SurfaceView? {
+        application()?.windowRegistry.surface(id: identifier)
+    }
+
     @MainActor
     func entities(for identifiers: [TerminalEntity.ID]) async throws -> [TerminalEntity] {
+        guard await permission() else { return [] }
         return all.filter {
             identifiers.contains($0.id)
         }.map {
@@ -115,6 +140,7 @@ struct TerminalQuery: EntityStringQuery, EnumerableEntityQuery {
 
     @MainActor
     func entities(matching string: String) async throws -> [TerminalEntity] {
+        guard await permission() else { return [] }
         return all.filter {
             $0.title.localizedCaseInsensitiveContains(string)
         }.map {
@@ -124,6 +150,7 @@ struct TerminalQuery: EntityStringQuery, EnumerableEntityQuery {
 
     @MainActor
     func allEntities() async throws -> [TerminalEntity] {
+        guard await permission() else { return [] }
         return all.map { TerminalEntity($0, includeThumbnail: true) }
     }
 
@@ -133,10 +160,10 @@ struct TerminalQuery: EntityStringQuery, EnumerableEntityQuery {
     }
 
     @MainActor
-    var all: [Ghostty.SurfaceView] {
+    private var all: [Ghostty.SurfaceView] {
         // Find all of our terminal windows. This will include the quick terminal
         // but only if it was previously opened.
-        guard let app = (NSApp.delegate as? AppDelegate)?.ghostty else { return [] }
+        guard let app = application() else { return [] }
         let controllers = app.windowRegistry.windowControllers
 
         // Get all our surfaces
