@@ -2,6 +2,7 @@ import AppKit
 
 class HiddenTitlebarTerminalWindow: TerminalWindow {
     override var usesToolbarForAccessories: Bool { true }
+    override var usesTransparentWindowBackground: Bool { true }
     var chrome: TerminalChromeView? { contentView as? TerminalChromeView }
 
     var chromeEdgeInset: CGFloat {

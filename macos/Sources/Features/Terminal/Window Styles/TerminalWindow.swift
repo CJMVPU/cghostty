@@ -7,6 +7,10 @@ import Observation
 class TerminalWindow: NSWindow {
     static let maximumTabs = 5
 
+    /// Nonrectangular chrome keeps its transparent window shape throughout
+    /// appearance updates, including the superclass background assignments.
+    var usesTransparentWindowBackground: Bool { false }
+
     static func canAddTab(to window: NSWindow?) -> Bool {
         (window?.tabGroup?.windows.count ?? 1) < maximumTabs
     }
@@ -532,20 +536,19 @@ class TerminalWindow: NSWindow {
             (surfaceConfig.backgroundOpacity < 1 || surfaceConfig.backgroundBlur.isGlassStyle) {
             isOpaque = false
 
-            // This is weird, but we don't use ".clear" because this creates a look that
-            // matches Terminal.app much more closer. This lets users transition from
-            // Terminal.app more easily.
-            backgroundColor = .white.withAlphaComponent(0.001)
+            // Standard windows keep the nearly transparent Terminal.app-like
+            // backing. Custom chrome preserves the alpha of its cutout regions.
+            backgroundColor = usesTransparentWindowBackground ? .clear : .white.withAlphaComponent(0.001)
 
             // We don't need to set blur when using glass
             if !surfaceConfig.backgroundBlur.isGlassStyle {
                 terminalController?.ghostty.applyBackgroundBlur(to: self)
             }
         } else {
-            isOpaque = true
+            isOpaque = !usesTransparentWindowBackground
 
             let backgroundColor = preferredBackgroundColor ?? NSColor(surfaceConfig.backgroundColor)
-            self.backgroundColor = backgroundColor.withAlphaComponent(1)
+            self.backgroundColor = usesTransparentWindowBackground ? .clear : backgroundColor.withAlphaComponent(1)
         }
     }
 
