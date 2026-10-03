@@ -57,14 +57,15 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
     init(_ ghostty: Ghostty.App,
          withBaseConfig base: Ghostty.SurfaceConfiguration? = nil,
          withSurfaceTree tree: SplitTree<Ghostty.SurfaceView>? = nil,
-         parent: NSWindow? = nil
+         parent: NSWindow? = nil,
+         restorable: Bool? = nil
     ) {
         // The window we manage is not restorable if we've specified a command
         // to execute. We do this because the restored window is meaningless at the
         // time of writing this: it'd just restore to a shell in the same directory
         // as the script. We may want to revisit this behavior when we have scrollback
         // restoration.
-        self.restorable = (base?.command ?? "") == ""
+        self.restorable = restorable ?? ((base?.command ?? "") == "")
 
         // Setup our initial derived config based on the current app config
         self.derivedConfig = DerivedConfig(ghostty.config.snapshot)
@@ -705,13 +706,19 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         let tabIndex: Int?
         weak var tabGroup: NSWindowTabGroup?
         let tabColor: TerminalTabColor
+        let titleOverride: String?
+        let isBackgroundOpaque: Bool
+        let restorable: Bool
     }
 
     convenience init(_ ghostty: Ghostty.App, with undoState: UndoState) {
-        self.init(ghostty, withSurfaceTree: undoState.surfaceTree)
+        self.init(ghostty, withSurfaceTree: undoState.surfaceTree, restorable: undoState.restorable)
+        isBackgroundOpaque = undoState.isBackgroundOpaque
+        titleOverride = undoState.titleOverride
 
         // Restore placement while keeping the configured content size
         showWindow(nil)
+        syncAppearance()
         if let window {
             window.setFrameOrigin(undoState.frame.origin)
             if let terminalWindow = window as? TerminalWindow {
@@ -760,7 +767,10 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
             focusedSurface: focusedSurface?.id,
             tabIndex: window.tabGroup?.windows.firstIndex(of: window),
             tabGroup: window.tabGroup,
-            tabColor: (window as? TerminalWindow)?.tabColor ?? .none)
+            tabColor: (window as? TerminalWindow)?.tabColor ?? .none,
+            titleOverride: titleOverride,
+            isBackgroundOpaque: isBackgroundOpaque,
+            restorable: restorable)
     }
 
     // MARK: - NSWindowController
