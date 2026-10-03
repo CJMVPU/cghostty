@@ -94,6 +94,15 @@ export fn ghostty_config_set_initial_theme(self: *Config, dark: bool) void {
     self._conditional_state.theme = if (dark) .dark else .light;
 }
 
+/// Owned JSON array of the exact source bytes read, including sources removed
+/// from the final config-file list. The caller frees the result string.
+export fn ghostty_config_source_files(self: *Config) String {
+    var output: std.Io.Writer.Allocating = .init(global.alloc());
+    defer output.deinit();
+    std.json.Stringify.value(self._source_files.items, .{}, &output.writer) catch return .empty;
+    return .fromSlice(global.alloc().dupeZ(u8, output.written()) catch return .empty);
+}
+
 export fn ghostty_config_default_path() String {
     const path = @import("file_load.zig").defaultPath(global.alloc()) catch return .empty;
     return .fromSlice(path);

@@ -46,6 +46,15 @@ extension Ghostty {
 
         func hasSameSettings(as other: ConfigHandle) -> Bool { ghostty_settings_equal(value, other.value) }
 
+        /// Exact bytes captured by the parser, not paths reconstructed from the
+        /// final config-file value or files reopened after validation.
+        func sourceFiles() throws -> [SettingsStore.Layer] {
+            let json = ghostty_config_source_files(value)
+            guard json.ptr != nil else { throw SettingsStore.Failure.unreadable }
+            let text = Ghostty.AllocatedString(json).string
+            return try JSONDecoder().decode([SettingsStore.Layer].self, from: Data(text.utf8))
+        }
+
         static var defaultPath: String {
             Ghostty.AllocatedString(ghostty_config_default_path()).string
         }

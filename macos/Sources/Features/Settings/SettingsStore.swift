@@ -240,22 +240,22 @@ import Darwin
             data = saved
             checked = recovered
         }
-        guard let text = String(data: data, encoding: .utf8) else { throw Failure.unreadable }
-        var input = Input(layers: text.isEmpty ? [] : [Layer(text: text, source: legacySource)])
-        // The core has already resolved the include graph, in its actual load
-        // order, including paths relative to each source and optional includes.
-        for value in SettingsField.values(from: checked.formattedEntry("config-file")) where !value.isEmpty {
-            let optional = value.hasPrefix("?")
-            let path = optional ? String(value.dropFirst()) : value
-            let source = URL(fileURLWithPath: path)
-            if optional && !FileManager.default.fileExists(atPath: source.path) { continue }
-            input.layers.append(Layer(text: try String(contentsOf: source, encoding: .utf8), source: source))
-        }
+        let layers = try checked.sourceFiles()
+        guard let darkChecked = Ghostty.ConfigHandle.load(data: data, source: legacySource, dark: true) else { throw Failure.unreadable }
+        guard darkChecked.errors.isEmpty else { throw Failure.invalid(darkChecked.settingsDiagnostics) }
+        // User includes currently have no conditional syntax. Require identical
+        // source graphs rather than merging branches that could change meaning.
+        guard try darkChecked.sourceFiles() == layers else { throw Failure.changed }
+        let input = Input(layers: layers)
         // Compare against the bytes that will be imported before committing.
         if exists, try Data(contentsOf: legacySource) != original { throw Failure.changed }
+        for layer in layers where layer.source != legacySource {
+            if try Data(contentsOf: layer.source) != Data(layer.text.utf8) { throw Failure.changed }
+        }
         let evaluation = evaluate(input)
         guard evaluation.diagnostics.isEmpty else { throw Failure.invalid(evaluation.diagnostics) }
-        guard let imported = evaluation.config, imported.hasSameSettings(as: checked) else { throw Failure.changed }
+        guard let imported = evaluation.config, imported.hasSameSettings(as: checked),
+              let darkImported = evaluation.darkConfig, darkImported.hasSameSettings(as: darkChecked) else { throw Failure.changed }
         let record = Record(current: input)
         try disk.write(record)
         return record

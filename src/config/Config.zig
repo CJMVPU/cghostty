@@ -2943,8 +2943,22 @@ _conditional_set: std.EnumSet(conditional.Key) = .{},
 /// as loadTheme which has more details on why.
 _replay_steps: std.ArrayList(Replay.Step) = .empty,
 
+/// Immutable bytes of user input sources in the order they were read. This is
+/// independent of config-file, which a later source can reset or replace.
+/// Theme resources are deliberately excluded from legacy input migration.
+_source_files: std.ArrayList(SourceFile) = .empty,
+
 // Only theme file parsing may populate the internal palette.
 _loading_theme: bool = false,
+
+pub const SourceFile = struct {
+    text: []const u8,
+    source: []const u8,
+
+    fn clone(self: SourceFile, alloc: Allocator) Allocator.Error!SourceFile {
+        return .{ .text = try alloc.dupe(u8, self.text), .source = try alloc.dupe(u8, self.source) };
+    }
+};
 
 /// Fields exposed in user configuration, documentation and shell completion.
 pub fn isUserConfigKey(name: []const u8) bool {
@@ -3048,12 +3062,18 @@ fn loadFsFile(self: *Config, alloc: Allocator, file: *std.Io.File, path: []const
     var buf: [2048]u8 = undefined;
     var file_reader = file.reader(global.io(), &buf);
     const reader = &file_reader.interface;
-    try self.loadReader(alloc, reader, path);
+    const data = try reader.allocRemaining(alloc, .unlimited);
+    defer alloc.free(data);
+    try self.loadData(alloc, data, path);
 }
 
 /// Load saved user configuration bytes using the original path for diagnostics
 /// and relative resources. The input bytes are borrowed for this call only.
 pub fn loadData(self: *Config, alloc: Allocator, data: []const u8, path: []const u8) !void {
+    if (!self._loading_theme) {
+        const arena = self.arenaAlloc();
+        try self._source_files.append(arena, try (SourceFile{ .text = data, .source = path }).clone(arena));
+    }
     var reader: std.Io.Reader = .fixed(data);
     try self.loadReader(alloc, &reader, path);
 }
@@ -3116,6 +3136,40 @@ test "handle bom in config files" {
             cfg.@"abnormal-command-exit-runtime",
         );
     }
+}
+
+test "source files own bytes and survive clone and conditional replay" {
+    const t = std.testing;
+    const data = try t.allocator.dupe(u8, "font-size = 19\n");
+    defer t.allocator.free(data);
+    const path = "/tmp/config.ghostty";
+    var cfg = try Config.default(t.allocator);
+    defer cfg.deinit();
+    try cfg.loadData(t.allocator, data, path);
+    data[0] = '#';
+    try t.expectEqualStrings("font-size = 19\n", cfg._source_files.items[0].text);
+
+    var cloned = try cfg.clone(t.allocator);
+    defer cloned.deinit();
+    try t.expectEqualStrings(path, cloned._source_files.items[0].source);
+    try t.expect(cloned._source_files.items[0].text.ptr != cfg._source_files.items[0].text.ptr);
+    try t.expectEqualStrings(cfg._source_files.items[0].text, cloned._source_files.items[0].text);
+
+    // Source metadata does not participate in public configuration comparison.
+    try cloned.loadData(t.allocator, "", "/tmp/another.conf");
+    var changes = cfg.changeIterator(&cloned);
+    try t.expect(changes.next() == null);
+
+    cfg._conditional_set.insert(.theme);
+    var dark = (try cfg.changeConditionalState(.{ .theme = .dark })).?;
+    defer dark.deinit();
+    try t.expectEqual(@as(usize, 1), dark._source_files.items.len);
+    try t.expectEqualStrings("font-size = 19\n", dark._source_files.items[0].text);
+
+    cfg._loading_theme = true;
+    defer cfg._loading_theme = false;
+    try cfg.loadData(t.allocator, "background = #123456\n", "/tmp/theme");
+    try t.expectEqual(@as(usize, 1), cfg._source_files.items.len);
 }
 
 /// Load the single Application Support user configuration, when present.
@@ -3368,6 +3422,7 @@ pub fn changeConditionalState(
     // Replay all of our steps to rebuild the configuration
     var it = Replay.iterator(self._replay_steps.items, &new_config);
     try new_config.loadIter(alloc_gpa, &it);
+    try self.cloneSourceFiles(&new_config);
     try new_config.finalize();
 
     return new_config;
@@ -3526,6 +3581,7 @@ fn loadTheme(self: *Config, theme: Theme) !void {
     // from the theme.
     var slice_it = Replay.iterator(self._replay_steps.items, &new_config);
     try new_config.loadIter(alloc_gpa, &slice_it);
+    try self.cloneSourceFiles(&new_config);
 
     // Success, swap our new config in and free the old.
     self.deinit();
@@ -3803,6 +3859,7 @@ pub fn clone(
     var result = try self.cloneEmpty(alloc_gpa);
     errdefer result.deinit();
     const alloc_arena = result._arena.?.allocator();
+    try self.cloneSourceFiles(&result);
 
     // Copy our values
     inline for (@typeInfo(Config).@"struct".fields) |field| {
@@ -3834,6 +3891,14 @@ pub fn clone(
     result._conditional_set = self._conditional_set;
 
     return result;
+}
+
+fn cloneSourceFiles(self: *const Config, result: *Config) Allocator.Error!void {
+    const alloc = result.arenaAlloc();
+    try result._source_files.ensureTotalCapacity(alloc, self._source_files.items.len);
+    for (self._source_files.items) |source| {
+        result._source_files.appendAssumeCapacity(try source.clone(alloc));
+    }
 }
 
 fn cloneValue(
