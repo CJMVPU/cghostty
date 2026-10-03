@@ -1066,65 +1066,103 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
         // Kept for old keybindings; window size is controlled by startup configuration.
     }
 
+    /// A close request owns every original tab until review finishes, including idle
+    /// tabs. Mark all participants so another tab cannot start an overlapping review.
+    private var windowCloseInFlight = false
+
     @IBAction override func closeWindow(_ sender: Any?) {
-        guard let window = window else { return }
+        startCloseWindow()
+    }
 
-        // We need to check all the windows in our tab group for confirmation
-        // if we're closing the window. If we don't have a tabgroup for any
-        // reason we check ourselves.
-        let windows: [NSWindow] = window.tabGroup?.windows ?? [window]
-        let confirmControllers = windows
-            .compactMap({ $0.windowController as? TerminalController })
-            .filter({ $0.surfaceTree.contains(where: { $0.needsConfirmQuit }) })
-        guard
-            !confirmControllers.isEmpty
-        else {
-            closeWindowImmediately()
-            return
-        }
-        if confirmControllers.count == 1 {
-            // We call confirmClose on the proper controller so the alert is
-            // attached to the window that needs confirmation.
-            confirmControllers[0].confirmClose(
-                messageText: "Close Window?",
-                informativeText: "All terminal sessions in this window will be terminated.",
-            ) {
-                self.closeWindowImmediately()
-            }
-            return
-        }
-
-        Task {
+    /// The async decisions are injectable so tests can change tab membership while
+    /// a review is suspended without presenting interactive sheets.
+    @discardableResult
+    func startCloseWindow(
+        needsConfirmation: (TerminalController) -> Bool = {
+            $0.surfaceTree.contains(where: { $0.needsConfirmQuit })
+        },
+        review: @escaping @MainActor (NSWindow, Int) async -> NSApplication.ModalResponse = { window, count in
             let alert = NSAlert.reviewWindowsAlert(
-                messageText: "You have \(confirmControllers.count) windows with running processes. Do you want to review these windows before closing?",
+                messageText: "You have \(count) windows with running processes. Do you want to review these windows before closing?",
                 terminateNowButtonTitle: "Close"
             )
-            switch await alert.beginSheetModal(for: window) {
-            case .alertFirstButtonReturn:
-                await reviewWindows(confirmControllers, window: window)
-            case .alertSecondButtonReturn:
-                closeWindowImmediately()
-            default:
-                break
+            return await alert.beginSheetModal(for: window)
+        },
+        confirm: @escaping @MainActor (TerminalController) async -> CloseConfirmationResult = { controller in
+            await controller.confirmCloseAsync(
+                messageText: "Close Window?",
+                informativeText: "All terminal sessions in this window will be terminated."
+            )
+        }
+    ) -> Task<Void, Never>? {
+        guard let window else { return nil }
+        let targets = (window.tabGroup?.windows ?? [window]).compactMap { window -> WindowCloseTarget? in
+            guard let controller = window.windowController as? TerminalController else { return nil }
+            return WindowCloseTarget(controller: controller, window: window)
+        }
+        guard !targets.isEmpty, !targets.contains(where: { $0.controller.windowCloseInFlight }) else { return nil }
+        let confirmations = targets.filter { needsConfirmation($0.controller) }
+        guard !confirmations.isEmpty else {
+            closeWindowImmediately()
+            return nil
+        }
+
+        targets.forEach { $0.controller.windowCloseInFlight = true }
+        return Task {
+            defer { targets.forEach { $0.controller.windowCloseInFlight = false } }
+            guard !Task.isCancelled else { return }
+            if confirmations.count > 1 {
+                let response = await review(window, confirmations.count)
+                guard !Task.isCancelled else { return }
+                switch response {
+                case .alertFirstButtonReturn:
+                    break
+                case .alertSecondButtonReturn:
+                    closeWindowTargets(targets)
+                    return
+                default:
+                    return
+                }
             }
+
+            for target in confirmations where target.isOpen {
+                guard await confirm(target.controller) == .allowed, !Task.isCancelled else { return }
+            }
+            closeWindowTargets(targets)
         }
     }
 
-    private func reviewWindows(_ controllers: [TerminalController], window: NSWindow) async {
-        for controller in controllers {
-            let response = await controller.confirmCloseAsync(
-                messageText: "Close Window?",
-                informativeText: "All terminal sessions in this window will be terminated.",
-            )
+    @MainActor private struct WindowCloseTarget {
+        let controller: TerminalController
+        let window: NSWindow
 
-            if response == .allowed {
-                // Close this tab
-                controller.closeTabImmediately()
-                continue
-            } else {
-                // Cancel the review
-                return
-            }
+        var isOpen: Bool {
+            controller.isWindowLoaded && controller.window === window &&
+                controller.ghostty.windowRegistry.windowControllers.contains { $0 === controller }
+        }
+    }
+
+    private func closeWindowTargets(_ targets: [WindowCloseTarget]) {
+        let remaining = targets.filter(\.isOpen)
+        guard let first = remaining.first else { return }
+        let currentWindows = first.window.tabGroup?.windows ?? [first.window]
+        if currentWindows.count == remaining.count,
+           currentWindows.allSatisfy({ window in remaining.contains { $0.window === window } }) {
+            // Keep the existing whole-window undo when membership is unchanged.
+            first.controller.closeWindowImmediately()
+            return
+        }
+
+        // Never expand the approved snapshot to the current tab group. Original
+        // tabs can have moved, closed, or acquired new siblings during a sheet.
+        let undoManager = ghostty.undoManager
+        undoManager.beginUndoGrouping()
+        defer {
+            undoManager.setActionName("Close Window")
+            undoManager.endUndoGrouping()
+        }
+        for target in remaining where target.isOpen {
+            target.controller.closeTabImmediately()
         }
     }
 
