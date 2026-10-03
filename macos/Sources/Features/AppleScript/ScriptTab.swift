@@ -145,6 +145,11 @@ final class ScriptTab: NSObject {
             return nil
         }
 
+        if let quickController = tabController as? QuickTerminalController {
+            quickController.closeWindow(self)
+            return nil
+        }
+
         guard let tabContainerWindow = parentWindow else {
             command.scriptErrorNumber = errAEEventFailed
             command.scriptErrorString = "Tab container window is no longer available."

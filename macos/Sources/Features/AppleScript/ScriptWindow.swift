@@ -200,6 +200,11 @@ final class ScriptWindow: NSObject {
             return nil
         }
 
+        if let quickController = preferredController as? QuickTerminalController {
+            quickController.closeWindow(self)
+            return nil
+        }
+
         guard let windowContainer = preferredParentWindow else {
             command.scriptErrorNumber = errAEEventFailed
             command.scriptErrorString = "Window is no longer available."

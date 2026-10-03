@@ -1145,26 +1145,29 @@ extension AppDelegate {
 
     private func reviewWindows(_ controllers: [BaseTerminalController]) {
         Task {
-            for controller in controllers {
-                let response = await controller.confirmCloseAsync(
-                    messageText: "Quit cghostty?",
-                    informativeText: "The terminal still has a running process. If you quit, the process will be killed.",
-                    confirmButtonTitle: "Terminate",
-                )
-
-                if response == .allowed {
-                    // Close this window and until next review is cancelled
-                    controller.window?.close()
-                    continue
-                } else {
-                    NSApp.reply(toApplicationShouldTerminate: false)
-                    // Cancel the review
-                    return
-                }
-            }
-            NSApp.reply(toApplicationShouldTerminate: true)
+            let approved = await Self.approveTerminationReview(controllers)
+            NSApp.reply(toApplicationShouldTerminate: approved)
         }
     }
+
+    /// Review is an approval phase. A later cancellation leaves every terminal
+    /// and the reusable Quick Terminal intact; application termination commits it.
+    static func approveTerminationReview(
+        _ controllers: [BaseTerminalController],
+        confirm: @MainActor (BaseTerminalController) async -> BaseTerminalController.CloseConfirmationResult = { controller in
+            await controller.confirmCloseAsync(
+                messageText: "Quit cghostty?",
+                informativeText: "The terminal still has a running process. If you quit, the process will be killed.",
+                confirmButtonTitle: "Terminate"
+            )
+        }
+    ) async -> Bool {
+        for controller in controllers {
+            guard !Task.isCancelled, await confirm(controller) == .allowed else { return false }
+        }
+        return !Task.isCancelled
+    }
+
 }
 
 /// Represents the state of the quick terminal controller.
