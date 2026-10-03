@@ -692,9 +692,12 @@ pub fn processOutput(self: *Termio, buf: []const u8) void {
 
 /// Process output from readdata but the lock is already held.
 fn processOutputLocked(self: *Termio, buf: []const u8) void {
-    // Schedule a render. We can call this first because we have the lock.
-    self.terminal_stream.handler.queueRender() catch unreachable;
+    self.processOutputLockedWith(buf, &self.terminal_stream);
+}
 
+// Tests select VT actions that do not require a native application runtime;
+// batch completion and notifications still execute the production code here.
+fn processOutputLockedWith(self: *Termio, buf: []const u8, stream: anytype) void {
     // Whenever a character is typed, we ensure the cursor is in the
     // non-blink state so it is rendered if visible. If we're under
     // HEAVY read load, we don't want to send a ton of these so we
@@ -713,8 +716,12 @@ fn processOutputLocked(self: *Termio, buf: []const u8) void {
         }, .{ .instant = {} });
     }
 
-    self.terminal_stream.nextSlice(buf);
+    stream.nextSlice(buf);
     self.renderer_state.output_revision +%= 1;
+    // Parsing can temporarily release the terminal mutex to deliver messages.
+    // Publish after the whole batch so a refresh during that gap cannot consume
+    // the only notification before the remaining bytes have been applied.
+    self.terminal_stream.handler.queueRender() catch unreachable;
 
     // If our stream handling caused messages to be sent to the mailbox
     // thread, then we need to wake it up so that it processes them.
@@ -819,4 +826,105 @@ pub const ThreadData = struct {
 /// not available on a particular platform.
 pub fn getProcessInfo(self: *Termio, comptime info: ProcessInfo) ?ProcessInfo.Type(info) {
     return self.backend.getProcessInfo(info);
+}
+
+test "Termio output completion republishes after parser releases mutex" {
+    const t = std.testing;
+    var terminal = try terminalpkg.Terminal.init(t.io, t.allocator, .{ .cols = 32, .rows = 3 });
+    defer terminal.deinit(t.allocator);
+    var mutex: std.Io.Mutex = .init;
+    var shared: renderer.State = .{ .mutex = &mutex, .terminal = &terminal, .output_revision = 40 };
+    var render_wakeup = try xev.Async.init();
+    defer render_wakeup.deinit();
+    var search_wakeup = try xev.Async.init();
+    defer search_wakeup.deinit();
+    shared.search_changes.attach(&search_wakeup);
+    defer shared.search_changes.detach();
+    // Preserve the initial pending change until the observer snapshots the
+    // partial batch. This models search consuming an already scheduled wake.
+    try t.expect(shared.search_changes.pending());
+    const render_queue = try renderer.Thread.Mailbox.create(t.allocator);
+    defer render_queue.destroy(t.allocator);
+    var io: Termio = undefined;
+    io.renderer_state = &shared;
+    io.renderer_mailbox = render_queue;
+    io.last_cursor_reset = null;
+    io.mailbox = try termio.Mailbox.initSPSC(t.allocator);
+    defer io.mailbox.deinit(t.allocator);
+    for (0..64) |_| io.mailbox.send(.{ .write_stable = "pending" }, null);
+    io.terminal_stream.handler = undefined;
+    io.terminal_stream.handler.alloc = t.allocator;
+    io.terminal_stream.handler.terminal = &terminal;
+    io.terminal_stream.handler.renderer_state = &shared;
+    io.terminal_stream.handler.renderer_wakeup = render_wakeup;
+    io.terminal_stream.handler.termio_mailbox = &io.mailbox;
+    io.terminal_stream.handler.termio_messaged = false;
+    const Parser = struct {
+        io: *Termio,
+        done: std.Io.Event = .unset,
+        pub fn vt(self: *@This(), comptime action: StreamHandler.Stream.Action.Tag, value: StreamHandler.Stream.Action.Value(action)) void {
+            switch (action) {
+                .print, .print_slice, .device_status => self.io.terminal_stream.handler.vt(action, value),
+                else => {},
+            }
+        }
+        pub fn deinit(_: *@This()) void {}
+        fn run(self: *@This()) void {
+            self.io.renderer_state.mutex.lockUncancelable(global.io());
+            defer self.io.renderer_state.mutex.unlock(global.io());
+            var stream: terminalpkg.Stream(*@This()) = .init(.{ .allocator = std.testing.allocator, .handler = self });
+            defer stream.deinit();
+            self.io.processOutputLockedWith("prefix\x1b[5nTAIL", &stream);
+            self.done.set(std.testing.io);
+        }
+    };
+    var parser: Parser = .{ .io = &io };
+    const thread = try std.Thread.spawn(.{}, Parser.run, .{&parser});
+    const queue = io.mailbox.spsc.queue;
+    defer {
+        // Release blocked parsing independently of the behavior under test so
+        // a failure reports Timeout instead of hanging the runner in join.
+        queue.mutex.lockUncancelable(t.io);
+        queue.closed = true;
+        queue.cond_not_full.broadcast(t.io);
+        queue.mutex.unlock(t.io);
+        thread.join();
+    }
+    const wait_started = std.Io.Timestamp.now(t.io, .awake);
+    var blocked = false;
+    while (wait_started.untilNow(t.io, .awake).toMilliseconds() < 1000) {
+        queue.mutex.lockUncancelable(t.io);
+        blocked = queue.not_full_waiters == 1;
+        queue.mutex.unlock(t.io);
+        if (blocked) break;
+        try std.Io.sleep(t.io, .fromMilliseconds(1), .awake);
+    }
+    try t.expect(blocked);
+    {
+        // The real GUI handler must have released this mutex while waiting
+        // for its DSR reply to enter the full IO queue.
+        mutex.lockUncancelable(t.io);
+        defer mutex.unlock(t.io);
+        try t.expectEqual(40, shared.output_revision);
+        const partial = try terminal.plainString(t.allocator);
+        defer t.allocator.free(partial);
+        try t.expectEqualStrings("prefix", partial);
+        try t.expect(shared.search_changes.consume());
+        try t.expect(!shared.search_changes.pending());
+    }
+    try t.expectEqualStrings("pending", queue.pop(t.io).?.write_stable);
+    try parser.done.waitTimeout(t.io, .{ .duration = .{ .raw = .fromMilliseconds(1000), .clock = .awake } });
+    {
+        mutex.lockUncancelable(t.io);
+        defer mutex.unlock(t.io);
+        try t.expectEqual(41, shared.output_revision);
+        const complete = try terminal.plainString(t.allocator);
+        defer t.allocator.free(complete);
+        try t.expectEqualStrings("prefixTAIL", complete);
+        // A notification before nextSlice would already have been consumed
+        // at the pause above, leaving this completed revision unannounced.
+        try t.expect(shared.search_changes.consume());
+        try t.expect(!shared.search_changes.consume());
+        try t.expect(!io.terminal_stream.handler.termio_messaged);
+    }
 }
