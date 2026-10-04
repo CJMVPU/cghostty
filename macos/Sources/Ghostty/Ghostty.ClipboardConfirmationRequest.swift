@@ -76,7 +76,9 @@ extension Ghostty {
         /// The textual preview of the clipboard contents shown in the
         /// confirmation dialog. The actual representations served on
         /// confirmation are held by the completion.
-        let contents: String
+        var contents: String { preview.contents }
+
+        let preview: ClipboardConfirmationPreview
 
         let kind: ClipboardRequest
 
@@ -88,11 +90,6 @@ extension Ghostty {
         /// grant, showing a remember option in the prompt.
         let canRemember: Bool
 
-        /// An image decoded from the request contents, previewed scaled
-        /// in the dialog when the request carries an image
-        /// representation.
-        let previewImage: NSImage?
-
         /// Called exactly once with whether the user confirmed the
         /// request and whether their decision should be remembered.
         private var completion: ((SurfaceView, Bool, Bool) -> Void)?
@@ -103,17 +100,18 @@ extension Ghostty {
             kind: ClipboardRequest,
             programName: String? = nil,
             canRemember: Bool = false,
-            previewImage: NSImage? = nil,
+            preview: ClipboardConfirmationPreview? = nil,
             completion: @escaping (SurfaceView, Bool, Bool) -> Void
         ) {
             self.surface = surface
-            self.contents = contents
+            self.preview = preview ?? ClipboardConfirmationPreview(text: contents)
             self.kind = kind
             self.programName = programName
             self.canRemember = canRemember
-            self.previewImage = previewImage
             self.completion = completion
         }
+
+        var isPending: Bool { completion != nil }
 
         isolated deinit {
             guard let surface, let completion else { return }

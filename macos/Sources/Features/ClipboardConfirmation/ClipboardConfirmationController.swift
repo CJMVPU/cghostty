@@ -5,7 +5,7 @@ import SwiftUI
 /// This initializes a clipboard confirmation warning window. The window itself
 /// WILL NOT show automatically and the caller must show the window via
 /// showWindow, beginSheet, etc.
-class ClipboardConfirmationController: NSWindowController {
+class ClipboardConfirmationController: NSWindowController, NSWindowDelegate {
     private var windowCreated = false
     override var isWindowLoaded: Bool { windowCreated }
 
@@ -32,6 +32,7 @@ class ClipboardConfirmationController: NSWindowController {
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
+        window.delegate = self
         self.window = window
     }
 
@@ -70,6 +71,12 @@ class ClipboardConfirmationController: NSWindowController {
         configure(window)
     }
 
+    func windowWillClose(_ notification: Notification) {
+        guard confirmation.isPending else { return }
+        confirmation.cancel()
+        delegate?.clipboardConfirmationComplete(.cancel, remember: false)
+    }
+
     private func configure(_ window: NSWindow) {
         switch confirmation.kind {
         case .paste:
@@ -79,11 +86,10 @@ class ClipboardConfirmationController: NSWindowController {
         }
 
         window.contentView = NSHostingView(rootView: ClipboardConfirmationView(
-            contents: confirmation.contents,
+            preview: confirmation.preview,
             request: confirmation.kind,
             programName: confirmation.programName,
             canRemember: confirmation.canRemember,
-            previewImage: confirmation.previewImage,
             delegate: delegate
         ))
     }

@@ -28,7 +28,9 @@ struct ClipboardConfirmationView: View {
     }
 
     /// The contents of the paste.
-    let contents: String
+    let preview: ClipboardConfirmationPreview
+
+    var contents: String { preview.contents }
 
     /// The type of the clipboard request
     let request: Ghostty.ClipboardRequest
@@ -40,10 +42,6 @@ struct ClipboardConfirmationView: View {
     /// True when the user's decision may be remembered as a session
     /// grant, showing the remember toggle.
     var canRemember: Bool = false
-
-    /// An image decoded from the request contents, shown scaled in
-    /// place of most of the text area when present.
-    var previewImage: NSImage?
 
     /// Optional delegate to get results. If this is nil, then this view will never close on its own.
     weak var delegate: ClipboardConfirmationViewDelegate?
@@ -68,17 +66,42 @@ struct ClipboardConfirmationView: View {
                     .padding()
             }
 
-            if let previewImage {
-                Image(nsImage: previewImage)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(.horizontal)
-            } else {
-                TextEditor(text: .constant(contents))
-                    .focusable(false)
-                    .font(.system(.body, design: .monospaced))
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(preview.items) { item in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(item.summary)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                            if let text = item.text {
+                                TextEditor(text: .constant(text))
+                                    .focusable(false)
+                                    .font(.system(.body, design: .monospaced))
+                                    .frame(height: 120)
+                            }
+                            if let image = item.image {
+                                Image(nsImage: image)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 160)
+                            }
+                        }
+                    }
+                    if !preview.availableMimes.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Available types")
+                                .font(.caption.bold())
+                            Text(preview.availableMimes.joined(separator: "\n"))
+                                .font(.caption)
+                                .textSelection(.enabled)
+                        }
+                    }
+                }
+                .padding(.horizontal)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             if canRemember {
                 Toggle("Remember this choice for the session", isOn: $remember)

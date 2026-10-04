@@ -101,29 +101,18 @@ extension Ghostty.App {
             }
         }
 
-        // The dialog can only display text: show the text
-        // representation when there is one and summarize the rest.
-        let display = reps.first(where: { $0.mime == "text/plain" })
-            .flatMap { String(data: $0.data, encoding: .utf8) }
-            ?? reps.map { "\($0.mime) (\($0.data.count) bytes)" }.joined(separator: "\n")
-
-        // Decode an image representation so the dialog can preview
-        // exactly what would be disclosed rather than a byte count.
-        let previewImage: NSImage? = reps.lazy
-            .filter { $0.mime.hasPrefix("image/") }
-            .compactMap { NSImage(data: $0.data) }
-            .first
+        let preview = ClipboardConfirmationPreview(contents: reps, availableMimes: avail)
 
         // libghostty reaches this callback only when the request attempted
         // by readClipboard requires confirmation. Reads allowed by policy
         // complete immediately and never become pending Swift state.
         let request = Ghostty.ClipboardConfirmationRequest(
             surface: surfaceView,
-            contents: display,
+            contents: preview.contents,
             kind: kind,
             programName: c.name.map { String(cString: $0) },
             canRemember: c.can_remember,
-            previewImage: previewImage
+            preview: preview
         ) { _, confirmed, remember in
             if confirmed {
                 pending.complete(
