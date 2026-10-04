@@ -107,8 +107,8 @@ extension Ghostty {
             progressStyle = reader.progressStyle
         }
 
-        /// Temporary decoder borrowing a live handle during snapshot creation only.
-        @MainActor private struct Reader {
+        /// Temporary decoder borrowing core storage during native projection creation only.
+        @MainActor struct Reader {
             let config: ghostty_config_t?
 
             private func value<Value>(
@@ -204,6 +204,10 @@ extension Ghostty {
 
             var windowTheme: String? {
                 string(ConfigSchema.windowTheme)
+            }
+
+            var windowTitleFontFamily: String? {
+                string(ConfigSchema.windowTitleFontFamily)
             }
 
             var dragHandle: Config.DragHandle {

@@ -352,12 +352,6 @@ extension Ghostty.App {
         v: ghostty_action_config_change_s) {
             Ghostty.logger.info("config change notification")
 
-            // Clone the config so we own the memory. It'd be nicer to not have to do
-            // this but since we async send the config out below we have to own the lifetime.
-            // A future improvement might be to add reference counting to config or
-            // something so apprt's do not have to do this.
-            let config = Ghostty.Config(clone: v.config)
-
             switch target.tag {
             case GHOSTTY_TARGET_APP:
                 // We also REPLACE our app-level config when this happens. This lets
@@ -365,6 +359,7 @@ extension Ghostty.App {
                 // such as split border color work.
                 guard let app_ud = ghostty_app_userdata(app) else { return }
                 let ghostty = Unmanaged<Ghostty.App>.fromOpaque(app_ud).takeUnretainedValue()
+                let config = Ghostty.Config(clone: v.config)
                 ghostty.acceptConfiguration(config)
 
                 return
@@ -372,7 +367,9 @@ extension Ghostty.App {
             case GHOSTTY_TARGET_SURFACE:
                 guard let surface = target.target.surface else { return }
                 guard let surfaceView = self.surfaceView(from: surface) else { return }
-                surfaceView.acceptConfiguration(config)
+                // Own only the native display values before the borrowed core
+                // config expires. Deferred presentation never needs its handle.
+                surfaceView.acceptConfiguration(.init(borrowing: v.config))
 
             default:
                 assertionFailure()

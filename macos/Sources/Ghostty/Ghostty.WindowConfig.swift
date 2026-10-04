@@ -26,14 +26,6 @@ extension Ghostty {
                 return key.read(from: config, into: &value) ? value : nil
             }
 
-            func string(_ key: ConfigSchema.Key<UnsafePointer<CChar>?>) -> String? {
-                guard let config else { return nil }
-                var value: UnsafePointer<CChar>?
-                guard key.read(from: config, into: &value),
-                      let value else { return nil }
-                return String(cString: value)
-            }
-
             positionX = position(ConfigSchema.windowPositionX)
             positionY = position(ConfigSchema.windowPositionY)
             // Preserve the existing unloaded-config fallback, distinct from
@@ -41,7 +33,7 @@ extension Ghostty {
             stepResize = boolean(ConfigSchema.windowStepResize, unloaded: true)
             focusFollowsMouse = boolean(ConfigSchema.focusFollowsMouse)
             maximize = boolean(ConfigSchema.maximize, unloaded: true)
-            titleFontFamily = string(ConfigSchema.windowTitleFontFamily)
+            titleFontFamily = ConfigSnapshot.Reader(config: config).windowTitleFontFamily
         }
     }
 }

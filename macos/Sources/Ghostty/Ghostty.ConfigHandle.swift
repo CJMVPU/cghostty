@@ -10,6 +10,7 @@ extension Ghostty {
 
         #if CGHOSTTY_TESTING
         static var formattedEntryCallsForTesting = 0
+        static var cloneCallsForTesting = 0
         #endif
 
         private init(adopting value: ghostty_config_t) {
@@ -18,6 +19,9 @@ extension Ghostty {
         }
 
         convenience init?(cloning value: ghostty_config_t) {
+            #if CGHOSTTY_TESTING
+            Self.cloneCallsForTesting += 1
+            #endif
             guard let clone = ghostty_config_clone(value) else { return nil }
             self.init(adopting: clone)
         }

@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 
 extension NSAppearance {
     /// Returns true if the appearance is some kind of dark.
@@ -8,7 +9,11 @@ extension NSAppearance {
 
     /// Initialize a desired NSAppearance for the Ghostty configuration.
     convenience init?(ghosttyConfig config: Ghostty.ConfigSnapshot) {
-        guard let theme = config.windowTheme else { return nil }
+        self.init(windowTheme: config.windowTheme, backgroundColor: config.backgroundColor)
+    }
+
+    convenience init?(windowTheme: String?, backgroundColor: Color) {
+        guard let theme = windowTheme else { return nil }
         switch theme {
         case "dark":
             self.init(named: .darkAqua)
@@ -17,7 +22,7 @@ extension NSAppearance {
             self.init(named: .aqua)
 
         case "auto":
-            let color = NSColor(config.backgroundColor)
+            let color = NSColor(backgroundColor)
             if color.isLightColor {
                 self.init(named: .aqua)
             } else {

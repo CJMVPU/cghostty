@@ -1,4 +1,5 @@
 import AppKit
+import GhosttyKit
 import SwiftUI
 import CoreText
 import UserNotifications
@@ -783,11 +784,11 @@ extension Ghostty {
 
         // MARK: - Notifications
 
-        func acceptConfiguration(_ config: Ghostty.Config) {
+        func acceptConfiguration(_ config: DerivedConfig) {
             // Update our derived config
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
-                self.derivedConfig = DerivedConfig(config.snapshot)
+                self.derivedConfig = config
 
                 // If the cached OSC 11 background color disagrees with the new
                 // config-derived background, drop it so window chrome follows
@@ -1365,6 +1366,19 @@ extension Ghostty {
                 self.windowTitleFontFamily = config.window.titleFontFamily
                 self.windowAppearance = .init(ghosttyConfig: config)
                 self.scrollbar = config.scrollbar
+            }
+
+            /// Copies the surface display projection while core storage is live.
+            /// Borrowed strings and the core handle never escape this initializer.
+            init(borrowing config: ghostty_config_t?) {
+                let reader = Ghostty.ConfigSnapshot.Reader(config: config)
+                self.backgroundColor = reader.backgroundColor
+                self.backgroundOpacity = reader.backgroundOpacity
+                self.backgroundBlur = reader.backgroundBlur
+                self.macosWindowShadow = reader.macosWindowShadow
+                self.windowTitleFontFamily = reader.windowTitleFontFamily
+                self.windowAppearance = .init(windowTheme: reader.windowTheme, backgroundColor: self.backgroundColor)
+                self.scrollbar = reader.scrollbar
             }
         }
 
