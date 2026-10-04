@@ -68,6 +68,11 @@ pub const LocationIterator = struct {
     }
 };
 
+const OpenedTheme = struct {
+    path: []const u8,
+    file: std.Io.File,
+};
+
 /// Open the given named theme. If there are any errors then messages
 /// will be appended to the given error list and null is returned. If
 /// a non-null return value is returned, there are never any errors added.
@@ -86,10 +91,7 @@ pub fn open(
     arena_alloc: Allocator,
     theme: []const u8,
     diags: *cli.DiagnosticList,
-) error{ OutOfMemory, Unexpected }!?struct {
-    path: []const u8,
-    file: std.Io.File,
-} {
+) error{ OutOfMemory, Unexpected }!?OpenedTheme {
     // Absolute themes are loaded a different path.
     if (std.fs.path.isAbsolute(theme)) {
         const file: std.Io.File = try openAbsolute(
@@ -97,32 +99,7 @@ pub fn open(
             theme,
             diags,
         ) orelse return null;
-        const stat = file.stat(global.io()) catch |err| {
-            try diags.append(arena_alloc, .{
-                .message = try std.fmt.allocPrintSentinel(
-                    arena_alloc,
-                    "not reading theme from \"{s}\": {}",
-                    .{ theme, err },
-                    0,
-                ),
-            });
-            return null;
-        };
-        switch (stat.kind) {
-            .file => {},
-            else => {
-                try diags.append(arena_alloc, .{
-                    .message = try std.fmt.allocPrintSentinel(
-                        arena_alloc,
-                        "not reading theme from \"{s}\": it is a {s}",
-                        .{ theme, @tagName(stat.kind) },
-                        0,
-                    ),
-                });
-                return null;
-            },
-        }
-        return .{ .path = theme, .file = file };
+        return validateOpenedFile(arena_alloc, theme, theme, diags, file, file.stat(global.io()));
     }
 
     const basename = std.fs.path.basename(theme);
@@ -145,35 +122,7 @@ pub fn open(
     while (try it.next()) |loc| {
         const path = try std.fs.path.join(arena_alloc, &.{ loc.dir, theme });
         if (cwd.openFile(global.io(), path, .{})) |file| {
-            const stat = file.stat(global.io()) catch |err| {
-                try diags.append(arena_alloc, .{
-                    .message = try std.fmt.allocPrintSentinel(
-                        arena_alloc,
-                        "not reading theme from \"{s}\": {}",
-                        .{ theme, err },
-                        0,
-                    ),
-                });
-                return null;
-            };
-            switch (stat.kind) {
-                .file => {},
-                else => {
-                    try diags.append(arena_alloc, .{
-                        .message = try std.fmt.allocPrintSentinel(
-                            arena_alloc,
-                            "not reading theme from \"{s}\": it is a {s}",
-                            .{ theme, @tagName(stat.kind) },
-                            0,
-                        ),
-                    });
-                    return null;
-                },
-            }
-            return .{
-                .path = path,
-                .file = file,
-            };
+            return validateOpenedFile(arena_alloc, theme, path, diags, file, file.stat(global.io()));
         } else |err| switch (err) {
             // Not an error, just continue to the next location.
             error.FileNotFound => {},
@@ -214,6 +163,48 @@ pub fn open(
     return null;
 }
 
+// This helper owns the descriptor until it returns a validated theme. Every
+// failed validation, including failure to allocate its diagnostic, closes it.
+fn validateOpenedFile(
+    arena_alloc: Allocator,
+    theme: []const u8,
+    path: []const u8,
+    diags: *cli.DiagnosticList,
+    file: std.Io.File,
+    stat_result: std.Io.File.StatError!std.Io.File.Stat,
+) error{OutOfMemory}!?OpenedTheme {
+    var transferred = false;
+    defer if (!transferred) file.close(global.io());
+
+    const stat = stat_result catch |err| {
+        try diags.append(arena_alloc, .{
+            .message = try std.fmt.allocPrintSentinel(
+                arena_alloc,
+                "not reading theme from \"{s}\": {}",
+                .{ theme, err },
+                0,
+            ),
+        });
+        return null;
+    };
+    switch (stat.kind) {
+        .file => {},
+        else => {
+            try diags.append(arena_alloc, .{
+                .message = try std.fmt.allocPrintSentinel(
+                    arena_alloc,
+                    "not reading theme from \"{s}\": it is a {s}",
+                    .{ theme, @tagName(stat.kind) },
+                    0,
+                ),
+            });
+            return null;
+        },
+    }
+    transferred = true;
+    return .{ .path = path, .file = file };
+}
+
 /// Open the given theme from an absolute path. If there are any errors
 /// then messages will be appended to the given error list and null is
 /// returned. If a non-null return value is returned, there are never any
@@ -249,4 +240,85 @@ pub fn openAbsolute(
 
         return null;
     };
+}
+
+fn testDescriptorOpen(file: std.Io.File) bool {
+    return std.c.fcntl(file.handle, std.c.F.GETFD) != -1;
+}
+
+fn testRejectDirectory(symlink: bool) !void {
+    const testing = std.testing;
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.createDir(testing.io, "directory", .default_dir);
+    if (symlink) try tmp.dir.symLink(testing.io, "directory", "symlink", .{});
+
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+    var path_buffer: [std.fs.max_path_bytes]u8 = undefined;
+    const root = path_buffer[0..try tmp.dir.realPath(testing.io, &path_buffer)];
+    const path = try std.fs.path.join(alloc, &.{ root, if (symlink) "symlink" else "directory" });
+    const file = try std.Io.Dir.openFileAbsolute(testing.io, path, .{});
+    // The old implementation leaks this descriptor. Reclaim it even when
+    // the regression assertion fails so the test cannot affect later tests.
+    defer if (testDescriptorOpen(file)) file.close(testing.io);
+    var diags: cli.DiagnosticList = .{};
+    try testing.expect(try validateOpenedFile(alloc, path, path, &diags, file, file.stat(testing.io)) == null);
+    try testing.expectEqual(@as(usize, 1), diags.items().len);
+    try testing.expect(!testDescriptorOpen(file));
+}
+
+test "theme file ownership rejects directories" {
+    try testRejectDirectory(false);
+}
+
+test "theme file ownership rejects symlink directories" {
+    try testRejectDirectory(true);
+}
+
+test "theme file ownership closes on stat failure" {
+    const testing = std.testing;
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "theme", .data = "background = #112233\n" });
+    const file = try tmp.dir.openFile(testing.io, "theme", .{});
+    defer if (testDescriptorOpen(file)) file.close(testing.io);
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    var diags: cli.DiagnosticList = .{};
+    try testing.expect(try validateOpenedFile(arena.allocator(), "theme", "theme", &diags, file, error.PermissionDenied) == null);
+    try testing.expectEqual(@as(usize, 1), diags.items().len);
+    try testing.expect(!testDescriptorOpen(file));
+}
+
+test "theme file ownership closes on diagnostic allocation failure" {
+    const testing = std.testing;
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.createDir(testing.io, "directory", .default_dir);
+    const file = try tmp.dir.openFile(testing.io, "directory", .{});
+    defer if (testDescriptorOpen(file)) file.close(testing.io);
+    var failing = testing.FailingAllocator.init(testing.allocator, .{ .fail_index = 0 });
+    var diags: cli.DiagnosticList = .{};
+    try testing.expectError(error.OutOfMemory, validateOpenedFile(failing.allocator(), "directory", "directory", &diags, file, file.stat(testing.io)));
+    try testing.expect(failing.has_induced_failure);
+    try testing.expect(!testDescriptorOpen(file));
+}
+
+test "theme file ownership transfers regular files to the caller" {
+    const testing = std.testing;
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "theme", .data = "background = #112233\n" });
+    const file = try tmp.dir.openFile(testing.io, "theme", .{});
+    defer if (testDescriptorOpen(file)) file.close(testing.io);
+    var diags: cli.DiagnosticList = .{};
+    const result = (try validateOpenedFile(testing.allocator, "theme", "theme", &diags, file, file.stat(testing.io))).?;
+    try testing.expectEqual(file.handle, result.file.handle);
+    try testing.expect(testDescriptorOpen(result.file));
+    try testing.expectEqualStrings("theme", result.path);
+    try testing.expect(diags.empty());
+    result.file.close(testing.io);
+    try testing.expect(!testDescriptorOpen(file));
 }
