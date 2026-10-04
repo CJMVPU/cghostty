@@ -86,18 +86,25 @@ import Darwin
         startupValues = [:]
         do {
             let record = try FileManager.default.fileExists(atPath: url.path) ? read() : migrate()
+            let source = try Ghostty.ConfigHandle.settingsRecoverySource(record, source: validationSource)
             let evaluation = evaluate(record.current)
-            if let result = evaluation.config, evaluation.diagnostics.isEmpty {
+            switch source {
+            case .current:
+                guard let result = evaluation.config, evaluation.diagnostics.isEmpty else { throw Failure.invalid(evaluation.diagnostics) }
                 startupValues = evaluation.values
                 result.report(startupErrors)
                 return applyCLI(record.current, checked: result, cli: cli)
-            }
-            startupErrors = evaluation.diagnostics.map(\.rawMessage)
-            if let previous = record.previous, let recovered = validatedEvaluation(previous), let config = recovered.config {
+            case .previous:
+                guard let previous = record.previous else { throw Failure.unreadable }
+                let recovered = evaluate(previous)
+                guard let config = recovered.config, recovered.diagnostics.isEmpty else { throw Failure.invalid(recovered.diagnostics) }
+                startupErrors = evaluation.diagnostics.map(\.rawMessage)
                 startupErrors.insert("Invalid settings. The last valid settings were restored. Open Settings to correct the errors.", at: 0)
                 startupValues = recovered.values
                 config.report(startupErrors)
                 return applyCLI(previous, checked: config, cli: cli)
+            case .defaults:
+                startupErrors = evaluation.diagnostics.map(\.rawMessage)
             }
         } catch {
             startupErrors = [error.localizedDescription]
@@ -131,11 +138,6 @@ import Darwin
         let values: [String: String]
         let darkValues: [String: String]
         let diagnostics: [SettingsDiagnostic]
-    }
-
-    private func validatedEvaluation(_ input: Input) -> Evaluation? {
-        let result = evaluate(input)
-        return result.diagnostics.isEmpty ? result : nil
     }
 
     func diagnostics(_ input: Input) -> [SettingsDiagnostic] { evaluate(input).diagnostics }

@@ -252,42 +252,87 @@ pub fn loadStored(config: *Config, alloc: std.mem.Allocator) !bool {
     return true;
 }
 
-pub fn loadRecord(config: *Config, alloc: std.mem.Allocator, data: []const u8, source: []const u8) !void {
+/// Shared by CLI loading and native startup. Invalid denotes a malformed
+/// record or allocation failure at the C boundary, not a recovery choice.
+pub const RecoverySource = enum(c_int) {
+    invalid = -1,
+    current = 0,
+    previous = 1,
+    defaults = 2,
+};
+
+const Selection = struct { source: RecoverySource, config: ?Config = null };
+
+fn selectRecord(alloc: std.mem.Allocator, data: []const u8, source: []const u8) !Selection {
     const Record = struct { schema: u32, current: Input, previous: ?Input = null };
     const parsed = try std.json.parseFromSlice(Record, alloc, data, .{ .ignore_unknown_fields = true });
     defer parsed.deinit();
     if (parsed.value.schema != 1) return error.UnsupportedSettingsVersion;
     if (try checkedInput(alloc, parsed.value.current, source)) |candidate| {
-        config.deinit();
-        config.* = candidate;
-        return;
+        return .{ .source = .current, .config = candidate };
     }
     if (parsed.value.previous) |previous| {
         if (try checkedInput(alloc, previous, source)) |candidate| {
-            config.deinit();
-            config.* = candidate;
-            try config.addDiagnosticFmt("Invalid settings; using the previous successful settings.", .{});
-            return;
+            return .{ .source = .previous, .config = candidate };
         }
     }
-    try config.addDiagnosticFmt("Invalid settings; using built-in defaults. Open Settings to repair.", .{});
+    return .{ .source = .defaults };
+}
+
+/// Inspect the supplied immutable record; never reopen its storage path.
+pub fn recoverySource(alloc: std.mem.Allocator, data: []const u8, source: []const u8) !RecoverySource {
+    var selection = try selectRecord(alloc, data, source);
+    defer if (selection.config) |*config| config.deinit();
+    return selection.source;
+}
+
+pub fn loadRecord(config: *Config, alloc: std.mem.Allocator, data: []const u8, source: []const u8) !void {
+    const selection = try selectRecord(alloc, data, source);
+    if (selection.config) |candidate| {
+        config.deinit();
+        config.* = candidate;
+    }
+    switch (selection.source) {
+        .current => {},
+        .previous => try addRecoveryDiagnostic(config, "Invalid settings; using the previous successful settings."),
+        .defaults => try addRecoveryDiagnostic(config, "Invalid settings; using built-in defaults. Open Settings to repair."),
+        .invalid => unreachable,
+    }
+}
+
+fn addRecoveryDiagnostic(config: *Config, comptime message: []const u8) !void {
+    try config.addDiagnosticFmt(message, .{});
+    const diagnostics = config._diagnostics.items();
+    // Recovery warnings cannot be repaired by replaying the chosen input. Keep
+    // them when finalization loads a theme and when appearance changes replay.
+    try config._replay_steps.append(config.arenaAlloc(), .{ .diagnostic = diagnostics[diagnostics.len - 1] });
 }
 
 fn checkedInput(alloc: std.mem.Allocator, input: Input, source: []const u8) !?Config {
     var candidate = try Config.default(alloc);
     errdefer candidate.deinit();
-    applyInput(&candidate, alloc, input, source) catch {
+    applyInput(&candidate, alloc, input, source) catch |err| {
+        if (err == error.OutOfMemory) return err;
         candidate.deinit();
         return null;
     };
-    // Validate a clone: callers still finalize after their CLI overrides and
-    // must not load a theme twice into the configuration that they will use.
-    var checked = try candidate.clone(alloc);
-    defer checked.deinit();
-    try checked.finalize();
-    if (!checked._diagnostics.empty()) {
-        candidate.deinit();
-        return null;
+    // Validate both appearances with the conditional state set before parsing.
+    // A fresh parse also covers conditional values in imported layers. Keep
+    // the selected input unfinalized so CLI overrides precede theme loading.
+    for ([_]@import("conditional.zig").State.Theme{ .light, .dark }) |theme| {
+        var checked = try Config.default(alloc);
+        defer checked.deinit();
+        checked._conditional_state.theme = theme;
+        applyInput(&checked, alloc, input, source) catch |err| {
+            if (err == error.OutOfMemory) return err;
+            candidate.deinit();
+            return null;
+        };
+        try checked.finalize();
+        if (!checked._diagnostics.empty()) {
+            candidate.deinit();
+            return null;
+        }
     }
     return candidate;
 }
@@ -370,4 +415,29 @@ test "settings numeric constraints preserve inclusive boundaries and CLI clampin
     try t.expectEqual(@as(f64, 21), config.@"minimum-contrast");
     try t.expectEqual(@as(f64, 0.01), config.@"mouse-scroll-multiplier".precision);
     try t.expectEqual(@as(f64, 10000), config.@"mouse-scroll-multiplier".discrete);
+}
+
+test {
+    _ = @import("settings_recovery_tests.zig");
+}
+
+test "settings recovery propagates allocation failure before choosing defaults" {
+    const t = std.testing;
+    const parsed = try std.json.parseFromSlice(Input, t.allocator, "{\"values\":{\"title\":\"Current\"}}", .{});
+    defer parsed.deinit();
+    // Measure default initialization separately. With no imported layers, the
+    // next allocation in checkedInput is applyInput's owned key-order copy.
+    var probe = t.FailingAllocator.init(t.allocator, .{});
+    var defaults = try Config.default(probe.allocator());
+    const default_allocations = probe.alloc_index;
+    try applyInput(&defaults, probe.allocator(), parsed.value, "/tmp/settings.json");
+    const candidate_allocations = probe.alloc_index;
+    defaults.deinit();
+    // Fail the key-order copy in both the selected input and a validation
+    // appearance, checking each catch without probing unrelated parser paths.
+    for ([_]usize{ default_allocations, candidate_allocations + default_allocations }) |index| {
+        var failing = t.FailingAllocator.init(t.allocator, .{ .fail_index = index });
+        try t.expectError(error.OutOfMemory, checkedInput(failing.allocator(), parsed.value, "/tmp/settings.json"));
+        try t.expect(failing.has_induced_failure);
+    }
 }

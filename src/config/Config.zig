@@ -4142,6 +4142,10 @@ const Replay = struct {
                             log.warn("error appending diagnostic err={}", .{err});
                             break :diag;
                         };
+                        self.config._replay_steps.append(arena_alloc, .{ .diagnostic = cloned }) catch |err| {
+                            log.warn("error retaining replay diagnostic err={}", .{err});
+                            break :diag;
+                        };
                     },
 
                     .conditional_arg => |v| conditional: {

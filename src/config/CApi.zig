@@ -191,6 +191,10 @@ export fn ghostty_settings_load(self: *Config, data: [*]const u8, len: usize, so
     return true;
 }
 
+export fn ghostty_settings_recovery_source(data: [*]const u8, len: usize, source: [*:0]const u8) @import("settings.zig").RecoverySource {
+    return @import("settings.zig").recoverySource(global.alloc(), data[0..len], std.mem.span(source)) catch .invalid;
+}
+
 /// Verify migration preserved every public setting after detaching includes.
 export fn ghostty_settings_equal(a: *Config, b: *Config) bool {
     @setEvalBranchQuota(100_000);
