@@ -1,5 +1,4 @@
 import AppKit
-import GhosttyKit
 import SwiftUI
 import CoreText
 import UserNotifications
@@ -1368,18 +1367,6 @@ extension Ghostty {
                 self.scrollbar = config.scrollbar
             }
 
-            /// Copies the surface display projection while core storage is live.
-            /// Borrowed strings and the core handle never escape this initializer.
-            init(borrowing config: ghostty_config_t?) {
-                let reader = Ghostty.ConfigSnapshot.Reader(config: config)
-                self.backgroundColor = reader.backgroundColor
-                self.backgroundOpacity = reader.backgroundOpacity
-                self.backgroundBlur = reader.backgroundBlur
-                self.macosWindowShadow = reader.macosWindowShadow
-                self.windowTitleFontFamily = reader.windowTitleFontFamily
-                self.windowAppearance = .init(windowTheme: reader.windowTheme, backgroundColor: self.backgroundColor)
-                self.scrollbar = reader.scrollbar
-            }
         }
 
     }

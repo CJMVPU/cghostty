@@ -1,6 +1,21 @@
 import SwiftUI
 import GhosttyKit
 
+extension Ghostty.SurfaceView.DerivedConfig {
+    /// Copies the surface display projection while core storage is live.
+    /// Borrowed strings and the core handle never escape this initializer.
+    @MainActor init(borrowing config: ghostty_config_t?) {
+        let reader = Ghostty.ConfigSnapshot.Reader(config: config)
+        self.backgroundColor = reader.backgroundColor
+        self.backgroundOpacity = reader.backgroundOpacity
+        self.backgroundBlur = reader.backgroundBlur
+        self.macosWindowShadow = reader.macosWindowShadow
+        self.windowTitleFontFamily = reader.windowTitleFontFamily
+        self.windowAppearance = .init(windowTheme: reader.windowTheme, backgroundColor: self.backgroundColor)
+        self.scrollbar = reader.scrollbar
+    }
+}
+
 extension Ghostty {
     /// One immutable native projection of an effective configuration.
     /// No handles, borrowed strings or mutable core storage escape into this value.
