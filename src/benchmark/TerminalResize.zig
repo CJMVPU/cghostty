@@ -1,16 +1,21 @@
 //! This benchmark tests the performance of Terminal.resize, with a
 //! primary focus on column resizes that reflow soft-wrapped text.
-//! Resize happens on the IO thread while holding the terminal lock,
-//! so a slow resize directly translates into dropped input and a
-//! frozen-feeling UI while the user drags the window edge (which
-//! produces a rapid stream of resizes).
+//! Production resize happens on the IO thread while holding the terminal lock.
+//! This benchmark measures direct resize wall time; it does not measure lock
+//! contention, input latency, or UI frames.
 //!
 //! The terminal is populated once during setup (synthetic fill and/or
 //! a data file replayed through the VT stream) and then each step
 //! ping-pongs the terminal between two sizes. A full cycle returns the
-//! terminal to its original dimensions so the state reaches a steady
-//! state after the first cycle and every iteration performs
-//! equivalent work.
+//! terminal to its original dimensions. Shrinking full history can discard
+//! rows under the scrollback limit, so reported cycles also include their
+//! before/after row counts rather than assuming every cycle does equal work.
+//!
+//! Use --report=true for individual cycle times, excluding corpus replay.
+//! --cold=true compresses history before every cycle, outside those times,
+//! and requires at least one compressed page. Use the same pre-generated
+//! corpus and dimensions for resident/cold comparisons; do not pipe a generator
+//! into the benchmark. Memory output estimates page backing, not process RSS.
 const TerminalResize = @This();
 
 const std = @import("std");
@@ -27,6 +32,16 @@ const log = std.log.scoped(.@"terminal-resize-bench");
 opts: Options,
 alloc: Allocator,
 terminal: Terminal,
+samples: std.ArrayList(Sample) = .empty,
+before_memory: terminalpkg.PageList.MemoryStats = .{},
+
+const Sample = struct {
+    duration_ns: u64,
+    compressed_pages: usize,
+    raw_bytes_before: usize,
+    rows_before: usize,
+    rows_after: usize,
+};
 
 pub const Options = struct {
     /// The resize pattern to benchmark. See Mode.
@@ -35,6 +50,17 @@ pub const Options = struct {
     /// Multiplier on the number of resize cycles each step runs. This
     /// is useful to make a benchmark run long enough for profiling.
     loops: u32 = 1,
+
+    /// Print each column resize cycle's wall time, excluding setup, file
+    /// replay, and cold-page compression. Only cols, cols-no-reflow, and both
+    /// support reporting. Memory values describe page backing, not process RSS.
+    report: bool = false,
+
+    /// Compress eligible cold history before every column resize cycle.
+    /// Compression is outside the reported resize time. A cold run requires
+    /// at least one compressed page before each cycle so it cannot silently
+    /// measure an entirely resident corpus.
+    cold: bool = false,
 
     /// The initial size of the terminal. This is also the size that
     /// every resize cycle returns to.
@@ -96,6 +122,14 @@ pub fn create(
     alloc: Allocator,
     opts: Options,
 ) !*TerminalResize {
+    if (opts.report or opts.cold) {
+        switch (opts.mode) {
+            .cols, .@"cols-no-reflow", .both => {},
+            else => return error.InvalidMeasurementMode,
+        }
+        if (opts.loops == 0) return error.InvalidLoops;
+    }
+
     const ptr = try alloc.create(TerminalResize);
     errdefer alloc.destroy(ptr);
 
@@ -113,6 +147,7 @@ pub fn create(
 }
 
 pub fn destroy(self: *TerminalResize, alloc: Allocator) void {
+    self.samples.deinit(alloc);
     self.terminal.deinit(alloc);
     alloc.destroy(self);
 }
@@ -143,6 +178,7 @@ fn targetRows(self: *const TerminalResize) u16 {
 
 fn setup(ptr: *anyopaque) Benchmark.Error!void {
     const self: *TerminalResize = @ptrCast(@alignCast(ptr));
+    self.samples.clearRetainingCapacity();
 
     // Always reset our terminal state. Note this doesn't resize, but
     // create initializes (and steps return) the terminal to the
@@ -303,8 +339,10 @@ fn stepCols(ptr: *anyopaque) Benchmark.Error!void {
     // Each cycle shrinks (rewrapping long lines) and grows back
     // (unwrapping them), ending at the original size.
     for (0..cycles * @as(u64, self.opts.loops)) |_| {
+        const measurement = try self.beginCycle();
         try self.resizeTerminal(target, rows);
         try self.resizeTerminal(cols, rows);
+        try self.endCycle(measurement);
     }
 }
 
@@ -333,8 +371,78 @@ fn stepBoth(ptr: *anyopaque) Benchmark.Error!void {
     const target_rows = self.targetRows();
 
     for (0..25 * @as(u64, self.opts.loops)) |_| {
+        const measurement = try self.beginCycle();
         try self.resizeTerminal(target_cols, target_rows);
         try self.resizeTerminal(cols, rows);
+        try self.endCycle(measurement);
+    }
+}
+
+const CycleMeasurement = struct {
+    start: std.Io.Timestamp,
+    compressed_pages: usize,
+    raw_bytes_before: usize,
+    rows_before: usize,
+};
+
+/// Preparation and the metadata-only memory snapshot are deliberately before
+/// the clock. Recompressing each cycle prevents a cold run from timing one
+/// restoration followed by many entirely resident cycles.
+fn beginCycle(self: *TerminalResize) Benchmark.Error!?CycleMeasurement {
+    if (!self.opts.report and !self.opts.cold) return null;
+    const pages = &self.terminal.screens.get(.primary).?.pages;
+    if (self.opts.cold) _ = pages.compress(.full);
+
+    const memory = pages.memoryStats();
+    if (self.opts.cold and memory.compressed_pages == 0) {
+        log.warn("cold resize requires a corpus with compressible history pages", .{});
+        return error.BenchmarkFailed;
+    }
+    if (!self.opts.report) return null;
+
+    if (self.samples.items.len == 0) self.before_memory = memory;
+    return .{
+        .start = .now(global.io(), .awake),
+        .compressed_pages = memory.compressed_pages,
+        .raw_bytes_before = memory.raw_bytes,
+        .rows_before = pages.total_rows,
+    };
+}
+
+fn endCycle(self: *TerminalResize, measurement_: ?CycleMeasurement) Benchmark.Error!void {
+    const measurement = measurement_ orelse return;
+    const elapsed = measurement.start.durationTo(.now(global.io(), .awake)).nanoseconds;
+    self.samples.append(self.alloc, .{
+        .duration_ns = @intCast(elapsed),
+        .compressed_pages = measurement.compressed_pages,
+        .raw_bytes_before = measurement.raw_bytes_before,
+        .rows_before = measurement.rows_before,
+        .rows_after = self.terminal.screens.get(.primary).?.pages.total_rows,
+    }) catch return error.BenchmarkFailed;
+}
+
+/// Called by the CLI after Benchmark.run so printing and traversing memory
+/// metadata do not contribute to the benchmark's step or per-cycle timing.
+pub fn reportResult(self: *TerminalResize, _: Benchmark.RunResult) void {
+    if (!self.opts.report) return;
+    std.debug.print("terminal-resize mode={s} cold={} cycles={d}\n", .{
+        @tagName(self.opts.mode), self.opts.cold, self.samples.items.len,
+    });
+    for (self.samples.items, 0..) |sample, i| {
+        std.debug.print(
+            "terminal-resize cycle={d} resize_ns={d} compressed_pages={d} " ++
+                "raw_bytes_before={d} rows_before={d} rows_after={d}\n",
+            .{ i, sample.duration_ns, sample.compressed_pages, sample.raw_bytes_before, sample.rows_before, sample.rows_after },
+        );
+    }
+
+    const after = self.terminal.screens.get(.primary).?.pages.memoryStats();
+    for ([_]terminalpkg.PageList.MemoryStats{ self.before_memory, after }, [_][]const u8{ "before", "after" }) |memory, stage| {
+        std.debug.print(
+            "terminal-resize memory={s} resident_pages={d} compressed_pages={d} " ++
+                "raw_bytes={d} encoded_bytes={d} estimated_page_backing_bytes={d}\n",
+            .{ stage, memory.resident_pages, memory.compressed_pages, memory.raw_bytes, memory.encoded_bytes, memory.estimatedResidentBytes() },
+        );
     }
 }
 
@@ -354,4 +462,37 @@ test TerminalResize {
 
     const bench = impl.benchmark();
     _ = try bench.run(.once);
+}
+
+test "TerminalResize reports each cold cycle separately" {
+    const testing = std.testing;
+    const impl: *TerminalResize = try .create(testing.allocator, .{
+        .report = true,
+        .cold = true,
+        .@"terminal-rows" = 4,
+        .@"terminal-cols" = 215,
+        .@"fill-lines" = 256,
+        .@"scrollback-bytes" = 1_000_000,
+    });
+    defer impl.destroy(testing.allocator);
+
+    _ = try impl.benchmark().run(.once);
+    try testing.expectEqual(25, impl.samples.items.len);
+    for (impl.samples.items) |sample| {
+        try testing.expect(sample.compressed_pages > 0);
+        try testing.expect(sample.duration_ns > 0);
+    }
+    // Column reflow restores cold pages. The next cycle must recompress them.
+    try testing.expectEqual(0, impl.terminal.screens.get(.primary).?.pages.memoryStats().compressed_pages);
+}
+
+test "TerminalResize rejects cold timing without cold history" {
+    const testing = std.testing;
+    const impl: *TerminalResize = try .create(testing.allocator, .{
+        .report = true,
+        .cold = true,
+        .@"fill-lines" = 0,
+    });
+    defer impl.destroy(testing.allocator);
+    try testing.expectError(error.BenchmarkFailed, impl.benchmark().run(.once));
 }

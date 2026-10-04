@@ -110,5 +110,6 @@ fn mainActionImpl(
 
     // Initialize our benchmark
     const b = impl.benchmark();
-    _ = try b.run(.once);
+    const result = try b.run(.once);
+    if (@hasDecl(BenchmarkImpl, "reportResult")) impl.reportResult(result);
 }
