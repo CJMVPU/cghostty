@@ -834,6 +834,94 @@ pub const Shaper = struct {
     }
 };
 
+test "run iterator tail scan probe remains linear across short runs" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    var testdata = try testShaper(alloc);
+    defer testdata.deinit();
+
+    // Setup/parsing is outside the measured counter. This probe reports actual
+    // cell checks, not elapsed shaping time or renderer frame performance.
+    var exceeded_linear_bound = false;
+    for ([_]u16{ 80, 240, 1000 }) |cols| {
+        for ([_]usize{ 0, cols / 2 }) |trailing| {
+            const populated: usize = cols - trailing;
+            for ([_]usize{ 1, 10, populated }) |run_cells| {
+                var t = try terminal.Terminal.init(testing.io, alloc, .{ .cols = cols, .rows = 1 });
+                defer t.deinit(alloc);
+                var stream = t.vtStream();
+                defer stream.deinit();
+                for (0..populated) |x| {
+                    if (x % run_cells == 0) stream.nextSlice(if ((x / run_cells) % 2 == 0)
+                        "\x1b[31m"
+                    else
+                        "\x1b[32m");
+                    stream.nextSlice("A");
+                }
+
+                var state: terminal.RenderState = .empty;
+                defer state.deinit(alloc);
+                try state.update(alloc, &t);
+                var it = testdata.shaper.runIterator(.{
+                    .grid = testdata.grid,
+                    .cells = state.row_data.get(0).cells.slice(),
+                });
+                var runs: usize = 0;
+                var first_hash: ?u64 = null;
+                var fingerprint = std.hash.Wyhash.init(0);
+                while (try it.next(alloc)) |run| {
+                    const offset = runs * run_cells;
+                    try testing.expectEqual(offset, run.offset);
+                    const length = @min(run_cells, populated - offset);
+                    try testing.expectEqual(length, run.cells);
+                    // Equal text/font/length must keep its position-independent hash.
+                    if (length == run_cells) {
+                        if (first_hash) |hash| {
+                            try testing.expectEqual(hash, run.hash);
+                        } else first_hash = run.hash;
+                    }
+                    // Fingerprint only stable run values, never pointers or the
+                    // test counter. Keep this probe identical before and after.
+                    std.hash.autoHash(&fingerprint, run.hash);
+                    std.hash.autoHash(&fingerprint, run.offset);
+                    std.hash.autoHash(&fingerprint, run.cells);
+                    std.hash.autoHash(&fingerprint, run.font_index);
+                    runs += 1;
+                }
+                try testing.expectEqual((populated + run_cells - 1) / run_cells, runs);
+                std.debug.print("SHAPER_TAIL_SCAN cols={d} populated={d} run_cells={d} runs={d} tail_scan_cells={d} run_fingerprint={x:0>16}\n", .{
+                    cols, populated, run_cells, runs, it.testing_stats.tail_scan_cells, fingerprint.final(),
+                });
+                exceeded_linear_bound = exceeded_linear_bound or it.testing_stats.tail_scan_cells > cols;
+            }
+        }
+    }
+    // Assert after reporting every case, so the same probe yields a complete
+    // before/after comparison even when the original algorithm fails.
+    try testing.expect(!exceeded_linear_bound);
+}
+
+test "run iterator caches empty row tail bounds" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    var testdata = try testShaper(alloc);
+    defer testdata.deinit();
+    var t = try terminal.Terminal.init(testing.io, alloc, .{ .cols = 80, .rows = 1 });
+    defer t.deinit(alloc);
+    var state: terminal.RenderState = .empty;
+    defer state.deinit(alloc);
+    try state.update(alloc, &t);
+    var it = testdata.shaper.runIterator(.{
+        .grid = testdata.grid,
+        .cells = state.row_data.get(0).cells.slice(),
+    });
+    try testing.expect(try it.next(alloc) == null);
+    try testing.expectEqual(@as(usize, 80), it.testing_stats.tail_scan_cells);
+    // Cached zero must be distinguishable from an uncomputed bound.
+    try testing.expect(try it.next(alloc) == null);
+    try testing.expectEqual(@as(usize, 80), it.testing_stats.tail_scan_cells);
+}
+
 test "run iterator" {
     const testing = std.testing;
     const alloc = testing.allocator;

@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const assert = @import("../../quirks.zig").inlineAssert;
 const Allocator = std.mem.Allocator;
 const font = @import("../main.zig");
@@ -38,11 +39,18 @@ pub const TextRun = struct {
     font_index: font.Collection.Index,
 };
 
-/// RunIterator is an iterator that yields text runs.
+/// RunIterator is an iterator that yields text runs. The borrowed row cells
+/// must remain immutable throughout this iterator's lifetime.
 pub const RunIterator = struct {
     hooks: font.Shaper.RunIteratorHook,
     opts: shape.RunOptions,
     i: usize = 0,
+    max: ?usize = null,
+    testing_stats: TestingStats = .{},
+
+    const TestingStats = if (builtin.is_test) struct {
+        tail_scan_cells: usize = 0,
+    } else struct {};
 
     pub fn next(self: *RunIterator, alloc: Allocator) !?TextRun {
         const slice = &self.opts.cells;
@@ -50,14 +58,20 @@ pub const RunIterator = struct {
         const graphemes: []const []const u21 = slice.items(.grapheme);
         const styles: []const terminal.Style = slice.items(.style);
 
-        // Trim the right side of a row that might be empty
-        const max: usize = max: {
+        // Trim the immutable row only once, including a fully empty row.
+        const max: usize = self.max orelse max: {
+            var end: usize = 0;
             for (0..cells.len) |i| {
+                if (comptime builtin.is_test) self.testing_stats.tail_scan_cells += 1;
                 const rev_i = cells.len - i - 1;
-                if (!cells[rev_i].isEmpty()) break :max rev_i + 1;
+                if (!cells[rev_i].isEmpty()) {
+                    end = rev_i + 1;
+                    break;
+                }
             }
 
-            break :max 0;
+            self.max = end;
+            break :max end;
         };
 
         // Invisible cells don't have any glyphs rendered,
