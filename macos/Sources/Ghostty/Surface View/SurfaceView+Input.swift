@@ -293,49 +293,8 @@ extension Ghostty.SurfaceView {
     }
 
     override func flagsChanged(with event: NSEvent) {
-        let mod: UInt32
-        switch event.keyCode {
-        case 0x39: mod = Ghostty.Input.Mods.caps.rawValue
-        case 0x38, 0x3C: mod = Ghostty.Input.Mods.shift.rawValue
-        case 0x3B, 0x3E: mod = Ghostty.Input.Mods.ctrl.rawValue
-        case 0x3A, 0x3D: mod = Ghostty.Input.Mods.alt.rawValue
-        case 0x37, 0x36: mod = Ghostty.Input.Mods.super.rawValue
-        default: return
-        }
-
-        // If we're in the middle of a preedit, don't do anything with mods.
-        if hasMarkedText() { return }
-
-        // The keyAction function will do this AGAIN below which sucks to repeat
-        // but this is super cheap and flagsChanged isn't that common.
-        let mods = Ghostty.Input.Mods(nsFlags: event.modifierFlags)
-
-        // If the key that pressed this is active, its a press, else release.
-        var action: Ghostty.Input.Action = .release
-        if mods.rawValue & mod != 0 {
-            // If the key is pressed, its slightly more complicated, because we
-            // want to check if the pressed modifier is the correct side. If the
-            // correct side is pressed then its a press event otherwise its a release
-            // event with the opposite modifier still held.
-            let sidePressed: Bool
-            switch event.keyCode {
-            case 0x3C:
-                sidePressed = event.modifierFlags.rawValue & UInt(NX_DEVICERSHIFTKEYMASK) != 0
-            case 0x3E:
-                sidePressed = event.modifierFlags.rawValue & UInt(NX_DEVICERCTLKEYMASK) != 0
-            case 0x3D:
-                sidePressed = event.modifierFlags.rawValue & UInt(NX_DEVICERALTKEYMASK) != 0
-            case 0x36:
-                sidePressed = event.modifierFlags.rawValue & UInt(NX_DEVICERCMDKEYMASK) != 0
-            default:
-                sidePressed = true
-            }
-
-            if sidePressed {
-                action = .press
-            }
-        }
-
+        guard let action = Ghostty.Input.modifierAction(
+            keyCode: event.keyCode, flags: event.modifierFlags, composing: hasMarkedText()) else { return }
         _ = keyAction(action, event: event)
     }
 

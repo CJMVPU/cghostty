@@ -1406,3 +1406,63 @@ nonisolated extension Ghostty.Input.Key: AppEnum {
         .contextMenu: "Context Menu"
     ]
 }
+
+extension Ghostty.Input {
+    /// Classifies one native modifier transition; composing keeps ownership in the IME.
+    nonisolated static func modifierAction(
+        keyCode: UInt16,
+        flags: NSEvent.ModifierFlags,
+        composing: Bool
+    ) -> Action? {
+        let mod: UInt32
+        switch keyCode {
+        case 0x39: mod = Ghostty.Input.Mods.caps.rawValue
+        case 0x38, 0x3C: mod = Ghostty.Input.Mods.shift.rawValue
+        case 0x3B, 0x3E: mod = Ghostty.Input.Mods.ctrl.rawValue
+        case 0x3A, 0x3D: mod = Ghostty.Input.Mods.alt.rawValue
+        case 0x37, 0x36: mod = Ghostty.Input.Mods.super.rawValue
+        default: return nil
+        }
+
+        // If we're in the middle of a preedit, don't do anything with mods.
+        if composing { return nil }
+
+        let mods = Ghostty.Input.Mods(nsFlags: flags)
+
+        // If the key that pressed this is active, its a press, else release.
+        var action: Ghostty.Input.Action = .release
+        if mods.rawValue & mod != 0 {
+            // If the key is pressed, its slightly more complicated, because we
+            // want to check if the pressed modifier is the correct side. If the
+            // correct side is pressed then its a press event otherwise its a release
+            // event with the opposite modifier still held.
+            let sidePressed: Bool
+            switch keyCode {
+            case 0x38:
+                sidePressed = flags.rawValue & UInt(NX_DEVICELSHIFTKEYMASK) != 0
+            case 0x3C:
+                sidePressed = flags.rawValue & UInt(NX_DEVICERSHIFTKEYMASK) != 0
+            case 0x3B:
+                sidePressed = flags.rawValue & UInt(NX_DEVICELCTLKEYMASK) != 0
+            case 0x3E:
+                sidePressed = flags.rawValue & UInt(NX_DEVICERCTLKEYMASK) != 0
+            case 0x3A:
+                sidePressed = flags.rawValue & UInt(NX_DEVICELALTKEYMASK) != 0
+            case 0x3D:
+                sidePressed = flags.rawValue & UInt(NX_DEVICERALTKEYMASK) != 0
+            case 0x37:
+                sidePressed = flags.rawValue & UInt(NX_DEVICELCMDKEYMASK) != 0
+            case 0x36:
+                sidePressed = flags.rawValue & UInt(NX_DEVICERCMDKEYMASK) != 0
+            default:
+                sidePressed = true
+            }
+
+            if sidePressed {
+                action = .press
+            }
+        }
+
+        return action
+    }
+}
