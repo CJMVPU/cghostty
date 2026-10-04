@@ -378,12 +378,27 @@ pub fn completeClipboardPaste(
         self.alloc.free(v);
     };
 
-    for (vecs) |vec| if (vec.len > 0) {
-        ctx.queue_io(self, try termio.Message.writeReq(
-            self.alloc,
-            vec,
-        ), .unlocked);
+    // Build the entire paste before publishing any part of it. This keeps
+    // the bracketed frame together on allocation failure and prevents other
+    // producers' replies from being inserted between its prefix and suffix.
+    var len: usize = 0;
+    for (vecs) |vec| len = std.math.add(usize, len, vec.len) catch
+        return error.OutOfMemory;
+    var message: termio.Message = if (len <= termio.Message.WriteReq.Small.Max)
+        .{ .write_small = .{ .len = @intCast(len) } }
+    else
+        .{ .write_alloc = .{ .alloc = self.alloc, .data = try self.alloc.alloc(u8, len) } };
+    const dest = switch (message) {
+        .write_small => |*v| v.data[0..v.len],
+        .write_alloc => |v| v.data,
+        else => unreachable,
     };
+    var offset: usize = 0;
+    for (vecs) |vec| {
+        @memcpy(dest[offset..][0..vec.len], vec);
+        offset += vec.len;
+    }
+    ctx.queue_io(self, message, .unlocked);
 }
 
 /// Send a Kitty clipboard-protocol paste event when mode 5522 is enabled.
@@ -746,4 +761,123 @@ test "clipboard denied OSC52 read does not access runtime" {
     surface.config.clipboard_read = .deny;
     const ctx = TestHost.context(surface);
     try testing.expectEqual(apprt.ClipboardReadResult.unsupported, try ctx.startClipboardRequest(.standard, .{ .osc_52_read = .standard }));
+}
+
+const PasteTest = struct {
+    surface: Surface = undefined,
+    io: @import("IOSession.zig") = undefined,
+    render: @import("RenderSession.zig") = undefined,
+    mutex: std.Io.Mutex = .init,
+    messages: [4]termio.Message = undefined,
+    count: usize = 0,
+
+    fn create(alloc: std.mem.Allocator, bracketed: bool) !*PasteTest {
+        const t = std.testing;
+        const self = try t.allocator.create(PasteTest);
+        errdefer t.allocator.destroy(self);
+        self.* = .{};
+        self.io.termio.terminal = try terminal.Terminal.init(t.io, t.allocator, .{ .cols = 20, .rows = 3 });
+        self.io.termio.terminal.modes.set(.bracketed_paste, bracketed);
+        self.render.state = .{ .mutex = &self.mutex, .terminal = &self.io.termio.terminal };
+        self.surface.alloc = alloc;
+        self.surface.io = &self.io;
+        self.surface.render = &self.render;
+        self.surface.config.clipboard_paste_protection = false;
+        return self;
+    }
+
+    fn destroy(self: *PasteTest) void {
+        for (self.messages[0..self.count]) |*msg| msg.deinit();
+        self.io.termio.terminal.deinit(std.testing.allocator);
+        std.testing.allocator.destroy(self);
+    }
+
+    fn context(self: *PasteTest) Self {
+        return .{
+            .surface = &self.surface,
+            .queue_io = queue,
+            .scroll_bottom = scroll,
+            .set_clipboard = TestHost.set,
+            .request_clipboard = TestHost.requestClipboard,
+        };
+    }
+
+    fn queue(surface: *Surface, msg: termio.Message, _: termio.Termio.MutexState) void {
+        const self: *PasteTest = @fieldParentPtr("surface", surface);
+        std.debug.assert(self.count < self.messages.len);
+        self.messages[self.count] = msg;
+        self.count += 1;
+    }
+
+    fn scroll(_: *Surface) !void {}
+
+    fn expectBytes(self: *PasteTest, expected: []const u8) !void {
+        var output: std.Io.Writer.Allocating = .init(std.testing.allocator);
+        defer output.deinit();
+        for (self.messages[0..self.count]) |*msg| {
+            try output.writer.writeAll(switch (msg.*) {
+                .write_small => |*v| v.data[0..v.len],
+                .write_stable => |v| v,
+                .write_alloc => |v| v.data,
+                else => unreachable,
+            });
+        }
+        try std.testing.expectEqualStrings(expected, output.written());
+    }
+};
+
+test "clipboard paste allocation failure submits no partial bracketed frame" {
+    const t = std.testing;
+    var failing = t.FailingAllocator.init(t.allocator, .{ .fail_index = 0 });
+    const host = try PasteTest.create(failing.allocator(), true);
+    defer host.destroy();
+    try t.expectError(error.OutOfMemory, host.context().completeClipboardPaste("safe" ** 32, true));
+    try t.expectEqual(@as(usize, 0), host.count);
+}
+
+test "clipboard paste preserves ASCII LF ESC encoding with and without framing" {
+    const cases = [_]struct { input: []const u8, plain: []const u8, framed: []const u8 }{
+        .{ .input = "ASCII", .plain = "ASCII", .framed = "\x1b[200~ASCII\x1b[201~" },
+        .{ .input = "a\nb", .plain = "a\rb", .framed = "\x1b[200~a\nb\x1b[201~" },
+        .{ .input = "a\x1bb", .plain = "a b", .framed = "\x1b[200~a b\x1b[201~" },
+        .{ .input = "safe" ** 64, .plain = "safe" ** 64, .framed = "\x1b[200~" ++ "safe" ** 64 ++ "\x1b[201~" },
+    };
+    for ([_]bool{ false, true }) |bracketed| {
+        for (cases) |case| {
+            const host = try PasteTest.create(std.testing.allocator, bracketed);
+            defer host.destroy();
+            try host.context().completeClipboardPaste(case.input, true);
+            const expected = if (bracketed) case.framed else case.plain;
+            try std.testing.expectEqual(@as(usize, 1), host.count);
+            try std.testing.expect(if (expected.len <= termio.Message.WriteReq.Small.Max)
+                host.messages[0] == .write_small
+            else
+                host.messages[0] == .write_alloc);
+            try host.expectBytes(expected);
+        }
+    }
+}
+
+test "clipboard paste short ASCII remains inline without allocation" {
+    const t = std.testing;
+    for ([_]bool{ false, true }) |bracketed| {
+        var failing = t.FailingAllocator.init(t.allocator, .{ .fail_index = 0 });
+        const host = try PasteTest.create(failing.allocator(), bracketed);
+        defer host.destroy();
+        try host.context().completeClipboardPaste("small", true);
+        try t.expectEqual(@as(usize, 1), host.count);
+        try t.expect(host.messages[0] == .write_small);
+        try t.expect(!failing.has_induced_failure);
+        try host.expectBytes(if (bracketed) "\x1b[200~small\x1b[201~" else "small");
+    }
+}
+
+test "clipboard paste allocation failures release owners exactly once" {
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, struct {
+        fn run(alloc: std.mem.Allocator) !void {
+            const host = try PasteTest.create(alloc, true);
+            defer host.destroy();
+            try host.context().completeClipboardPaste("a\n\x1bb" ** 64, true);
+        }
+    }.run, .{});
 }
