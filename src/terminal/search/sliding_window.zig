@@ -58,6 +58,10 @@ pub const SlidingWindow = struct {
     /// to never fail allocation.
     chunk_buf: std.MultiArrayList(FlattenedHighlight.Chunk),
 
+    /// Reusable page encoding scratch. Encoded bytes are copied into `data`
+    /// before this is cleared; each Meta still owns its independent cell map.
+    encoding: std.Io.Writer.Allocating,
+
     /// Offset into data for our current state. This handles the
     /// situation where our search moved through meta[0] but didn't
     /// do enough to prune it.
@@ -134,6 +138,7 @@ pub const SlidingWindow = struct {
             .data = data,
             .meta = meta,
             .chunk_buf = .empty,
+            .encoding = .init(alloc),
             .needle = needle,
             .direction = direction,
             .overlap_buf = overlap_buf,
@@ -144,6 +149,7 @@ pub const SlidingWindow = struct {
         self.alloc.free(self.overlap_buf);
         self.alloc.free(self.needle);
         self.chunk_buf.deinit(self.alloc);
+        self.encoding.deinit();
         self.data.deinit(self.alloc);
 
         var meta_it = self.meta.iterator(.forward);
@@ -620,12 +626,12 @@ pub const SlidingWindow = struct {
         };
         errdefer meta.deinit(self.alloc);
 
-        // This is suboptimal but we need to encode the page once to
-        // temporary memory, and then copy it into our circular buffer.
-        // In the future, we should benchmark and see if we can encode
-        // directly into the circular buffer.
-        var encoded: std.Io.Writer.Allocating = .init(self.alloc);
-        defer encoded.deinit();
+        // Encode into retained scratch before copying into the circular
+        // buffer. Clear even after a partial formatting/allocation failure so
+        // subsequent pages never inherit stale bytes or reversed contents.
+        const encoded = &self.encoding;
+        encoded.clearRetainingCapacity();
+        defer encoded.clearRetainingCapacity();
 
         // Encode the page into the buffer.
         const formatter: PageFormatter = formatter: {
@@ -1917,6 +1923,7 @@ test "SlidingWindow prepend allocation failures preserve existing data and metad
                 const data_len = window.data.len();
                 const meta_len = window.meta.len();
                 _ = window.prependIfWrapped(&fixture_.nodes[i]) catch |err| {
+                    try testing.expectEqual(@as(usize, 0), window.encoding.written().len);
                     try testing.expectEqual(data_len, window.data.len());
                     try testing.expectEqual(meta_len, window.meta.len());
                     var data_it = window.data.iterator(.forward);
@@ -1932,6 +1939,40 @@ test "SlidingWindow prepend allocation failures preserve existing data and metad
                 };
             }
             try fixture_.expectMatch(&window);
+            try testing.expectEqual(@as(usize, 0), window.encoding.written().len);
         }
     }.run, .{&fixture});
+}
+
+test "SlidingWindow repeated refresh allocation resource probe" {
+    const testing = std.testing;
+    var fixture = try PrependTestFixture.init();
+    defer fixture.deinit();
+    var counter = testing.FailingAllocator.init(testing.allocator, .{});
+    var window: SlidingWindow = try .init(counter.allocator(), .forward, "漢defg");
+    defer window.deinit();
+
+    const refresh = struct {
+        fn run(w: *SlidingWindow, pages: *PrependTestFixture) !void {
+            w.clearAndRetainCapacity();
+            _ = try w.append(&pages.nodes[2]);
+            _ = try w.prependIfWrapped(&pages.nodes[1]);
+            _ = try w.prependIfWrapped(&pages.nodes[0]);
+            try pages.expectMatch(w);
+        }
+    }.run;
+
+    // Warm the retained data/meta/chunk buffers before counting. The fixed
+    // resident pages are constructed outside the measured allocator.
+    try refresh(&window, &fixture);
+    const allocations_before = counter.allocations;
+    const bytes_before = counter.allocated_bytes;
+    for (0..100) |_| try refresh(&window, &fixture);
+    std.debug.print(
+        "\nRESOURCE_METRIC search_refreshes=100 search_pages=3 additional_allocations={d} allocated_bytes={d}\n",
+        .{ counter.allocations - allocations_before, counter.allocated_bytes - bytes_before },
+    );
+    // The remaining allocations belong to independent per-page coordinate
+    // maps. Encoding scratch must not add allocations after the warmup.
+    try testing.expect(counter.allocations - allocations_before <= 100 * fixture.nodes.len);
 }
