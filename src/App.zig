@@ -16,6 +16,7 @@ const BlockingQueue = @import("datastruct/main.zig").BlockingQueue;
 const renderer = @import("renderer.zig");
 const font = @import("font/main.zig");
 const global = @import("global.zig");
+const SurfaceBroadcast = @import("apprt/SurfaceBroadcast.zig");
 
 const log = std.log.scoped(.app);
 
@@ -501,16 +502,38 @@ pub fn performAllAction(
 
         // Surface-scoped actions are performed on all surfaces. Errors
         // are logged but processing continues.
-        .surface => for (self.surfaces.items) |surface| {
-            _ = surface.core().performBindingAction(action) catch |err| {
-                log.warn("error performing binding action on surface id={x} err={}", .{
-                    surface.core().id,
-                    err,
-                });
-            };
-        },
+        .surface => try SurfaceBroadcast.perform(SurfaceRegistry{ .app = self }, action, struct {
+            fn apply(binding: input.Binding.Action, surface: *apprt.Surface) !void {
+                _ = try surface.core().performBindingAction(binding);
+            }
+        }.apply),
     }
 }
+
+const SurfaceRegistry = struct {
+    app: *App,
+
+    pub fn items(self: SurfaceRegistry) []const *apprt.Surface {
+        return self.app.surfaces.items;
+    }
+
+    pub fn allocator(self: SurfaceRegistry) Allocator {
+        return self.app.alloc;
+    }
+
+    pub fn id(_: SurfaceRegistry, surface: *apprt.Surface) u64 {
+        return surface.core().id;
+    }
+
+    pub fn find(self: SurfaceRegistry, surface_id: u64) ?*apprt.Surface {
+        const surface = self.app.findSurfaceByID(surface_id) orelse return null;
+        return surface.rt_surface;
+    }
+
+    pub fn reportError(_: SurfaceRegistry, surface_id: u64, err: anyerror) void {
+        log.warn("error performing binding action on surface id={x} err={}", .{ surface_id, err });
+    }
+};
 
 /// Handle a window message
 fn surfaceMessage(self: *App, surface: *Surface, surface_id: u64, msg: apprt.surface.Message) !void {
@@ -611,3 +634,7 @@ pub const Mailbox = struct {
         return result;
     }
 };
+
+test {
+    _ = SurfaceBroadcast;
+}
