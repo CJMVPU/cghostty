@@ -1,6 +1,22 @@
 import Cocoa
 
 class QuickTerminalWindow: NSPanel {
+    /// Quick terminals follow the same system-shadow policy as normal terminals.
+    override var hasShadow: Bool {
+        get { super.hasShadow }
+        // swiftlint:disable:next unused_setter_value
+        set { super.hasShadow = false }
+    }
+
+    override init(contentRect: NSRect, styleMask: NSWindow.StyleMask, backing: NSWindow.BackingStoreType, defer flag: Bool) {
+        super.init(contentRect: contentRect, styleMask: styleMask, backing: backing, defer: flag)
+        hasShadow = false
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
     /// Updated only by the controller when selecting a screen for presentation.
     var configuredFrameSize: NSSize?
 

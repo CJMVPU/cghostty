@@ -7,6 +7,15 @@ import Observation
 class TerminalWindow: NSWindow {
     static let maximumTabs = 5
 
+    /// System shadows outline the transparent header as a rectangle during
+    /// Stage Manager transitions. Keep them off for every terminal style,
+    /// including configuration refreshes and AppKit tab/restoration writes.
+    override var hasShadow: Bool {
+        get { super.hasShadow }
+        // swiftlint:disable:next unused_setter_value
+        set { super.hasShadow = false }
+    }
+
     /// Nonrectangular chrome keeps its transparent window shape throughout
     /// appearance updates, including the superclass background assignments.
     var usesTransparentWindowBackground: Bool { false }
@@ -36,6 +45,7 @@ class TerminalWindow: NSWindow {
 
     required override init(contentRect: NSRect, styleMask: NSWindow.StyleMask, backing: NSWindow.BackingStoreType, defer flag: Bool) {
         super.init(contentRect: contentRect, styleMask: styleMask.subtracting(.resizable), backing: backing, defer: flag)
+        hasShadow = false
         collectionBehavior.insert([.fullScreenNone, .fullScreenDisallowsTiling])
     }
 
@@ -528,7 +538,6 @@ class TerminalWindow: NSWindow {
 
         // Basic properties
         appearance = surfaceConfig.windowAppearance
-        hasShadow = surfaceConfig.macosWindowShadow
 
         // Respect the user's temporary opacity override.
         let forceOpaque = terminalController?.isBackgroundOpaque ?? false

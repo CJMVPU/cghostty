@@ -67,6 +67,6 @@ import Testing
         #expect(window.backgroundAlphaWrites.allSatisfy { $0 == 0 })
         #expect(!window.isOpaque)
         #expect(window.backgroundColor?.alphaComponent == 0)
-        #expect(window.hasShadow == surface.derivedConfig.macosWindowShadow)
+        #expect(!window.hasShadow)
     }
 }
