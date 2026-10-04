@@ -5,6 +5,46 @@ const Config = @import("Config.zig");
 const metadata = @import("template_metadata.zig");
 const formatter = @import("formatter.zig");
 
+/// Application settings reject values that normal CLI finalization clamps.
+/// The catalog exports these same bounds to native editors.
+const NumericConstraint = struct {
+    minimum: ?f64 = null,
+    maximum: ?f64 = null,
+    exclusiveMinimum: bool = false,
+    allowZero: bool = false,
+    components: []const []const u8 = &.{},
+
+    fn validate(self: NumericConstraint, value: f64) !void {
+        if (!std.math.isFinite(value)) return error.NonFiniteNumber;
+        if (self.allowZero and value == 0) return;
+        if (self.minimum) |minimum| {
+            if (value < minimum or (self.exclusiveMinimum and value == minimum)) return error.NumberBelowMinimum;
+        }
+        if (self.maximum) |maximum| {
+            if (value > maximum) return error.NumberAboveMaximum;
+        }
+    }
+};
+
+fn numericConstraint(key: []const u8) ?NumericConstraint {
+    const constraints = [_]struct { key: []const u8, bounds: NumericConstraint }{
+        .{ .key = "font-size", .bounds = .{ .minimum = 0, .exclusiveMinimum = true } },
+        .{ .key = "window-width", .bounds = .{ .minimum = 10, .allowZero = true } },
+        .{ .key = "window-height", .bounds = .{ .minimum = 4, .allowZero = true } },
+        .{ .key = "background-opacity", .bounds = .{ .minimum = 0, .maximum = 1 } },
+        .{ .key = "cursor-opacity", .bounds = .{ .minimum = 0, .maximum = 1 } },
+        .{ .key = "faint-opacity", .bounds = .{ .minimum = 0, .maximum = 1 } },
+        .{ .key = "unfocused-split-opacity", .bounds = .{ .minimum = 0.15, .maximum = 1 } },
+        .{ .key = "font-thicken-strength", .bounds = .{ .minimum = 0, .maximum = 255 } },
+        .{ .key = "minimum-contrast", .bounds = .{ .minimum = 1, .maximum = 21 } },
+        .{ .key = "mouse-scroll-multiplier", .bounds = .{ .minimum = 0.01, .maximum = 10000, .components = &.{ "precision", "discrete" } } },
+    };
+    for (constraints) |entry| {
+        if (std.mem.eql(u8, key, entry.key)) return entry.bounds;
+    }
+    return null;
+}
+
 pub fn catalog(alloc: std.mem.Allocator) ![:0]const u8 {
     @setEvalBranchQuota(200_000);
     var config = try Config.default(alloc);
@@ -44,6 +84,7 @@ pub fn catalog(alloc: std.mem.Allocator) ![:0]const u8 {
             .multiline = std.mem.indexOf(u8, @typeName(T), "Repeatable") != null or std.mem.eql(u8, name, "keybind") or std.mem.eql(u8, name, "key-remap"),
             .defaults = value.written(),
             .example = entry.example orelse "",
+            .numericConstraint = numericConstraint(name),
         }, .{}, &output.writer);
     }
     try output.writer.writeByte(']');
@@ -121,7 +162,7 @@ fn applyInput(config: *Config, alloc: std.mem.Allocator, input: Input, source: [
                 if (std.mem.indexOfScalar(u8, trimmed, '=')) |equal| {
                     const key = std.mem.trim(u8, trimmed[0..equal], " \t");
                     if (std.mem.eql(u8, key, "config-file") or std.mem.eql(u8, key, "config-default-files") or input.values.map.contains(key)) continue;
-                    validateScalar(key, trimmed[equal + 1 ..]) catch |err| {
+                    validateScalar(alloc, key, trimmed[equal + 1 ..]) catch |err| {
                         try config.addDiagnosticFmt("{s}: {s}", .{ key, @errorName(err) });
                         continue;
                     };
@@ -152,7 +193,7 @@ fn applyInput(config: *Config, alloc: std.mem.Allocator, input: Input, source: [
         var lines = std.mem.splitScalar(u8, value, '\n');
         while (lines.next()) |line| {
             if (line.len + key.len + 3 > @import("../cli/args.zig").LineIterator.MAX_LINE_SIZE - 2) return error.SettingTooLong;
-            validateScalar(key, line) catch |err| {
+            validateScalar(alloc, key, line) catch |err| {
                 try config.addDiagnosticFmt("{s}: {s}", .{ key, @errorName(err) });
                 continue;
             };
@@ -164,11 +205,19 @@ fn applyInput(config: *Config, alloc: std.mem.Allocator, input: Input, source: [
 
 /// Reject values that finalization would otherwise silently clamp. This also
 /// keeps CLI readers and recovery of a damaged internal record safe.
-fn validateScalar(key: []const u8, raw: []const u8) !void {
+fn validateScalar(alloc: std.mem.Allocator, key: []const u8, raw: []const u8) !void {
     @setEvalBranchQuota(100_000);
     var value = std.mem.trim(u8, raw, " \t");
     if (value.len >= 2 and value[0] == '"' and value[value.len - 1] == '"') value = value[1 .. value.len - 1];
     if (value.len == 0) return;
+    const bounds = numericConstraint(key);
+    if (std.mem.eql(u8, key, "mouse-scroll-multiplier")) {
+        var multiplier: Config.MouseScrollMultiplier = .default;
+        try multiplier.parseCLI(alloc, value);
+        try bounds.?.validate(multiplier.precision);
+        try bounds.?.validate(multiplier.discrete);
+        return;
+    }
     inline for (metadata.entries) |entry| {
         const name = @tagName(entry.key);
         const Original = @FieldType(Config, name);
@@ -181,21 +230,7 @@ fn validateScalar(key: []const u8, raw: []const u8) !void {
                     else => unreachable,
                 };
                 if (!std.math.isFinite(number)) return error.NonFiniteNumber;
-                if (comptime std.mem.eql(u8, name, "font-size")) {
-                    if (number <= 0) return error.FontSizeMustBePositive;
-                }
-                if (comptime std.mem.eql(u8, name, "window-width")) {
-                    if (number != 0 and number < 10) return error.WindowWidthMustBeAtLeast10;
-                }
-                if (comptime std.mem.eql(u8, name, "window-height")) {
-                    if (number != 0 and number < 4) return error.WindowHeightMustBeAtLeast4;
-                }
-                if (comptime std.mem.eql(u8, name, "background-opacity") or std.mem.eql(u8, name, "cursor-opacity") or std.mem.eql(u8, name, "faint-opacity")) {
-                    if (number < 0 or number > 1) return error.OpacityMustBeBetweenZeroAndOne;
-                }
-                if (comptime std.mem.eql(u8, name, "unfocused-split-opacity")) {
-                    if (number < 0.15 or number > 1) return error.SplitOpacityMustBeBetweenPoint15AndOne;
-                }
+                if (bounds) |constraint| try constraint.validate(number);
                 return;
             }
         }
@@ -296,4 +331,43 @@ test "settings storage CLI uses previous record on invalid current input" {
     try t.expectEqualStrings("Previous", config.title.?);
     try t.expectEqual(@as(f64, 0.7), config.@"background-opacity");
     try t.expect(!config._diagnostics.empty());
+}
+
+test "settings numeric constraints reject clamped contrast and scroll values" {
+    const t = std.testing;
+    for ([_][]const u8{ "0.99", "21.01", "100", "nan", "inf" }) |value| {
+        var config = try Config.default(t.allocator);
+        defer config.deinit();
+        const data = try std.json.Stringify.valueAlloc(t.allocator, .{ .values = .{ .@"minimum-contrast" = value } }, .{});
+        defer t.allocator.free(data);
+        try loadInput(&config, t.allocator, data, "/tmp/settings");
+        try t.expect(!config._diagnostics.empty());
+    }
+    for ([_][]const u8{ "0.009", "10001", "nan", "inf", "precision:0.009", "discrete:10001", "precision:nan", "discrete:inf" }) |value| {
+        var config = try Config.default(t.allocator);
+        defer config.deinit();
+        const data = try std.json.Stringify.valueAlloc(t.allocator, .{ .values = .{ .@"mouse-scroll-multiplier" = value } }, .{});
+        defer t.allocator.free(data);
+        try loadInput(&config, t.allocator, data, "/tmp/settings");
+        try t.expect(!config._diagnostics.empty());
+    }
+}
+
+test "settings numeric constraints preserve inclusive boundaries and CLI clamping" {
+    const t = std.testing;
+    for ([_][]const u8{ "1", "21" }) |value| {
+        try validateScalar(t.allocator, "minimum-contrast", value);
+    }
+    for ([_][]const u8{ "0.01", "10000", "precision:0.01,discrete:10000", "precision:10000,discrete:0.01" }) |value| {
+        try validateScalar(t.allocator, "mouse-scroll-multiplier", value);
+    }
+    try validateScalar(t.allocator, "background-image-opacity", "2");
+    var config = try Config.default(t.allocator);
+    defer config.deinit();
+    try config.loadData(t.allocator, "minimum-contrast = 100\nmouse-scroll-multiplier = precision:0.001,discrete:20000", "/tmp/explicit-cli.conf");
+    try config.finalize();
+    try t.expect(config._diagnostics.empty());
+    try t.expectEqual(@as(f64, 21), config.@"minimum-contrast");
+    try t.expectEqual(@as(f64, 0.01), config.@"mouse-scroll-multiplier".precision);
+    try t.expectEqual(@as(f64, 10000), config.@"mouse-scroll-multiplier".discrete);
 }

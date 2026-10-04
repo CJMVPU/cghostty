@@ -1,6 +1,46 @@
 import Foundation
 
 struct SettingsField: Decodable {
+    /// Bounds come from the core catalog. Compound syntax still receives final
+    /// validation by the core parser; this provides immediate editor feedback.
+    struct NumericConstraint: Decodable {
+        let minimum: Double?
+        let maximum: Double?
+        let exclusiveMinimum: Bool
+        let allowZero: Bool
+        let components: [String]
+
+        func error(_ number: Double) -> String? {
+            guard number.isFinite else { return "Enter a finite number. NaN and Infinity are not allowed." }
+            if allowZero && number == 0 { return nil }
+            if let minimum, number < minimum || (exclusiveMinimum && number == minimum) {
+                if allowZero { return "Enter at least \(minimum.formatted()), or 0 for automatic sizing." }
+                return "Enter a number \(exclusiveMinimum ? "greater than" : "at least") \(minimum.formatted())."
+            }
+            if let maximum, number > maximum { return "Enter a number no greater than \(maximum.formatted())." }
+            return nil
+        }
+
+        func compoundError(_ value: String) -> String? {
+            // Bare values apply to both components. Named values may repeat;
+            // mirror the parser's last-value-wins behavior before checking.
+            if !value.contains(":") {
+                guard let number = Double(value) else { return nil }
+                return error(number)
+            }
+            var values: [String: Double] = [:]
+            for part in value.components(separatedBy: ",") {
+                guard let colon = part.firstIndex(of: ":") else { return nil }
+                let name = String(part[..<colon]).trimmingCharacters(in: .whitespaces)
+                var raw = String(part[part.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
+                if raw.hasPrefix("\"") && raw.hasSuffix("\"") && raw.count >= 2 { raw = String(raw.dropFirst().dropLast()) }
+                guard components.contains(name), let number = Double(raw) else { return nil }
+                values[name] = number
+            }
+            return components.compactMap { values[$0].flatMap(error) }.first
+        }
+    }
+
     let key: String
     let group: Int
     let title: String
@@ -11,6 +51,7 @@ struct SettingsField: Decodable {
     let multiline: Bool
     let defaults: String
     let example: String
+    let numericConstraint: NumericConstraint?
 
     @MainActor static let catalogResult = Result { try decodeCatalog(Ghostty.SettingsBridge.catalogData) }
     @MainActor static let catalog: [SettingsField] = (try? catalogResult.get()) ?? []
@@ -73,8 +114,9 @@ struct SettingsField: Decodable {
         if kind == "integer" || kind == "number" {
             guard let number = Double(value), number.isFinite else { return "Enter a finite number. NaN and Infinity are not allowed." }
             if kind == "integer" && Int64(value) == nil { return "Enter a valid whole number." }
-            return presentation.numericRule?.error(number)
+            return numericConstraint?.error(number)
         }
+        if let numericConstraint, !numericConstraint.components.isEmpty { return numericConstraint.compoundError(value) }
         return nil
     }
 }

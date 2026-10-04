@@ -3,19 +3,6 @@ import AppKit
 /// UI policy is centralized here; parsing and final validation stay in the core.
 struct SettingsPresentation {
     enum Editor { case scalar, theme, fontFamily, fontStyle, color, path, duration, limit, quickSize, blur, flags, list }
-    enum NumericRule {
-        case positive, minimumOrZero(Double, String), range(ClosedRange<Double>)
-
-        func error(_ value: Double) -> String? {
-            switch self {
-            case .positive: return value > 0 ? nil : "Enter a number greater than 0."
-            case .minimumOrZero(let minimum, let unit):
-                return value == 0 || value >= minimum ? nil : "Enter at least \(Int(minimum)) \(unit), or 0 for automatic sizing."
-            case .range(let range):
-                return range.contains(value) ? nil : "Enter a number from \(range.lowerBound.formatted()) to \(range.upperBound.formatted())."
-            }
-        }
-    }
 
     let editor: Editor
     let inline: Bool
@@ -26,7 +13,6 @@ struct SettingsPresentation {
     let pairList: Bool
     let directory: Bool
     let colorModes: [String]
-    let numericRule: NumericRule?
 
     private static let colors: Set<String> = [
         "background", "foreground", "cursor-color", "cursor-text", "selection-foreground", "selection-background",
@@ -45,11 +31,6 @@ struct SettingsPresentation {
         "abnormal-command-exit-runtime": "ms", "click-repeat-interval": "ms",
         "quick-terminal-animation-duration": "seconds", "image-storage-limit": "bytes"
     ]
-    private static let numericRules: [String: NumericRule] = [
-        "font-size": .positive, "window-width": .minimumOrZero(10, "columns"), "window-height": .minimumOrZero(4, "rows"),
-        "background-opacity": .range(0...1), "cursor-opacity": .range(0...1), "faint-opacity": .range(0...1),
-        "unfocused-split-opacity": .range(0.15...1), "font-thicken-strength": .range(0...255)
-    ]
 
     init(_ field: SettingsField) {
         let key = field.key
@@ -59,7 +40,6 @@ struct SettingsPresentation {
         width = editor == .scalar && (field.kind == "integer" || field.kind == "number" || key.hasPrefix("adjust-") ||
             ["window-padding-x", "window-padding-y"].contains(key)) ? 160 : nil
         unit = Self.units[key]
-        numericRule = Self.numericRules[key]
         visible = !["maximize", "fullscreen"].contains(key)
         directory = key == "working-directory" || key == "render-trace-directory"
         if key == "bold-color" { colorModes = ["", "bright"] } else if key.hasPrefix("cursor-") || key.hasPrefix("selection-") || key.hasPrefix("search-") {
