@@ -21,6 +21,7 @@ const ClipboardCompletion = @import("ClipboardCompletion.zig");
 const configpkg = @import("../config.zig");
 const Config = configpkg.Config;
 const String = @import("../main_c.zig").String;
+const InheritedSurfaceConfig = @import("InheritedSurfaceConfig.zig");
 
 const log = std.log.scoped(.embedded_window);
 
@@ -962,7 +963,7 @@ pub const Surface = struct {
         };
     }
 
-    pub fn newSurfaceOptions(self: *const Surface, context: apprt.surface.NewSurfaceContext) apprt.Surface.Options {
+    pub fn newSurfaceOptions(self: *const Surface, context: apprt.surface.NewSurfaceContext) Surface.Options {
         const font_size: f32 = font_size: {
             if (!self.app.config.@"window-inherit-font-size") break :font_size 0;
             break :font_size self.core_surface.font_size.points;
@@ -972,7 +973,7 @@ pub const Surface = struct {
             if (!apprt.surface.shouldInheritWorkingDirectory(context, &self.app.config)) break :wd null;
             const cwd = self.core_surface.pwd(self.app.core_app.alloc) catch null orelse break :wd null;
             defer self.app.core_app.alloc.free(cwd);
-            break :wd self.app.core_app.alloc.dupeZ(u8, cwd) catch null;
+            break :wd InheritedSurfaceConfig.copyWorkingDirectory(self.app.core_app.alloc, cwd);
         };
 
         return .{
@@ -1334,12 +1335,22 @@ pub const CAPI = struct {
         return surface.app;
     }
 
-    /// Returns the config to use for surfaces that inherit from this one.
+    /// Returns owned inherited values. Release them with
+    /// ghostty_surface_inherited_config_free while the source is still alive.
     export fn ghostty_surface_inherited_config(
         surface: *Surface,
         source: apprt.surface.NewSurfaceContext,
     ) Surface.Options {
         return surface.newSurfaceOptions(source);
+    }
+
+    /// Only accepts values returned by ghostty_surface_inherited_config for
+    /// this source surface, never borrowed options passed to surface_new.
+    export fn ghostty_surface_inherited_config_free(
+        surface: *Surface,
+        config: *Surface.Options,
+    ) void {
+        InheritedSurfaceConfig.freeWorkingDirectory(surface.app.core_app.alloc, &config.working_directory);
     }
 
     /// Update the configuration to the provided config for only this surface.

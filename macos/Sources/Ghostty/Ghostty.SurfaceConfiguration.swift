@@ -34,6 +34,15 @@ extension Ghostty {
 
         init() {}
 
+        /// Copy inherited values synchronously, then release the core's owned
+        /// strings while the source surface and its allocator are still alive.
+        init(inheriting surface: ghostty_surface_t, context: ghostty_surface_context_e) {
+            var config = ghostty_surface_inherited_config(surface, context)
+            defer { ghostty_surface_inherited_config_free(surface, &config) }
+            self.init(from: config)
+        }
+
+        /// Copy a borrowed C value without assuming ownership of its pointers.
         init(from config: ghostty_surface_config_s) {
             self.fontSize = config.font_size
             if let workingDirectory = config.working_directory {
@@ -117,4 +126,3 @@ extension Ghostty {
     }
 
 }
-

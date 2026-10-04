@@ -54,7 +54,7 @@ extension Ghostty.App {
             _ = TerminalController.newWindow(appState)
         case GHOSTTY_TARGET_SURFACE:
             guard let surface = target.target.surface else { return }
-            let config = Ghostty.SurfaceConfiguration(from: ghostty_surface_inherited_config(surface, GHOSTTY_SURFACE_CONTEXT_WINDOW))
+            let config = Ghostty.SurfaceConfiguration(inheriting: surface, context: GHOSTTY_SURFACE_CONTEXT_WINDOW)
             _ = TerminalController.newWindow(appState, withBaseConfig: config)
         default:
             assertionFailure()
@@ -80,7 +80,7 @@ extension Ghostty.App {
                 return
             }
 
-            let config = Ghostty.SurfaceConfiguration(from: ghostty_surface_inherited_config(surface, GHOSTTY_SURFACE_CONTEXT_TAB))
+            let config = Ghostty.SurfaceConfiguration(inheriting: surface, context: GHOSTTY_SURFACE_CONTEXT_TAB)
             surfaceView.windowRegistry.owner(of: surfaceView)?.requestNewTab(from: surfaceView, baseConfig: config)
 
         default:
@@ -110,7 +110,7 @@ extension Ghostty.App {
             case GHOSTTY_SPLIT_DIRECTION_UP: splitDirection = .up
             default: return
             }
-            let config = Ghostty.SurfaceConfiguration(from: ghostty_surface_inherited_config(surface, GHOSTTY_SURFACE_CONTEXT_SPLIT))
+            let config = Ghostty.SurfaceConfiguration(inheriting: surface, context: GHOSTTY_SURFACE_CONTEXT_SPLIT)
             surfaceView.windowRegistry.owner(of: surfaceView)?.newSplit(at: surfaceView, direction: splitDirection, baseConfig: config)
 
         default:
