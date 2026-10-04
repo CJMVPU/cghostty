@@ -60,11 +60,15 @@ extension Ghostty.SurfaceView {
 
     /// Handle a user notification click
     func handleUserNotification(notification: UNNotification, focus: Bool) {
-        let id = notification.request.identifier
-        guard self.notificationIdentifiers.remove(id) != nil else { return }
+        handleUserNotification(identifier: notification.request.identifier, focus: focus)
+    }
+
+    /// Resolve the delivered identifier without requiring a notification-center
+    /// request. This also lets native tests exercise clicks without permission UI.
+    func handleUserNotification(identifier: String, focus: Bool) {
+        guard self.notificationIdentifiers.remove(identifier) != nil else { return }
         if focus {
-            self.window?.makeKeyAndOrderFront(self)
-            Ghostty.moveFocus(to: self)
+            windowRegistry.owner(of: self)?.focusSurface(self)
         }
     }
 
