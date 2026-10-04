@@ -113,6 +113,20 @@ pub fn CircBuf(comptime T: type, comptime default: T) type {
             fastmem.copy(T, storage[1], slice[storage[0].len..]);
         }
 
+        /// Prepend a slice without moving the existing elements.
+        pub fn prependSliceAssumeCapacity(self: *Self, slice: []const T) void {
+            assert(slice.len <= self.capacity() - self.len());
+            if (slice.len == 0) return;
+            self.tail = if (slice.len > self.tail)
+                self.capacity() - (slice.len - self.tail)
+            else
+                self.tail - slice.len;
+            self.full = self.head == self.tail;
+            const storage = self.getPtrSlice(0, slice.len);
+            fastmem.copy(T, storage[0], slice[0..storage[0].len]);
+            fastmem.copy(T, storage[1], slice[storage[0].len..]);
+        }
+
         /// Clear the buffer.
         pub fn clear(self: *Self) void {
             self.head = 0;
@@ -308,6 +322,23 @@ pub fn CircBuf(comptime T: type, comptime default: T) type {
             return fits_offset - self.storage.len;
         }
     };
+}
+
+test "CircBuf prepend keeps ordering through wrap full and growth" {
+    const testing = std.testing;
+    var buf = try CircBuf(u8, 0).init(testing.allocator, 8);
+    defer buf.deinit(testing.allocator);
+    buf.appendSliceAssumeCapacity("de");
+    buf.prependSliceAssumeCapacity("abc");
+    buf.appendSliceAssumeCapacity("fgh");
+    buf.deleteOldest(4);
+    buf.prependSliceAssumeCapacity("abcd");
+    try buf.ensureUnusedCapacity(testing.allocator, 1);
+    buf.prependSliceAssumeCapacity("z");
+    buf.prependSliceAssumeCapacity("");
+    var it = buf.iterator(.forward);
+    for ("zabcdefgh") |expected| try testing.expectEqual(expected, it.next().?.*);
+    try testing.expect(it.next() == null);
 }
 
 test {

@@ -129,7 +129,7 @@ pub const ViewportSearch = struct {
             // We could be more accurate here and count bytes since the
             // last wrap but its complicated and unlikely multiple pages
             // wrap so this should be fine.
-            const appended = try self.window.appendIfWrapped(node) orelse break;
+            const appended = try self.window.prependIfWrapped(node) orelse break;
             added += appended.content_len;
             if (added >= overlap_len) break;
         }

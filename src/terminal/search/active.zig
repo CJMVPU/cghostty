@@ -60,12 +60,11 @@ pub const ActiveSearch = struct {
         // or history to load.
         if (self.window.needle.len == 0) return null;
 
-        // First up, add enough pages to cover the active area.
+        // Find the first active page without encoding pages in reverse order.
         var rem: usize = list.rows;
         var node_ = list.pages.last;
         var last_node: ?*PageList.List.Node = null;
         while (node_) |node| : (node_ = node.prev) {
-            _ = try self.window.append(node);
             last_node = node;
 
             // If we reached our target amount, then this is the last
@@ -82,12 +81,20 @@ pub const ActiveSearch = struct {
 
         // Next, add enough overlap to cover needle.len - 1 bytes (if it
         // exists) so we can cover the overlap.
+        var overlap_remaining = self.window.needle.len - 1;
         while (node_) |node| : (node_ = node.prev) {
             // We could be more accurate here and count bytes since the
             // last wrap but its complicated and unlikely multiple pages
             // wrap so this should be fine.
-            const appended = try self.window.appendIfWrapped(node) orelse break;
-            if (appended.content_len >= self.window.needle.len - 1) break;
+            const appended = try self.window.prependIfWrapped(node) orelse break;
+            overlap_remaining -|= appended.content_len;
+            if (overlap_remaining == 0) break;
+        }
+
+        // Forward matching and its byte-to-cell map require chronological pages.
+        node_ = last_node;
+        while (node_) |node| : (node_ = node.next) {
+            _ = try self.window.append(node);
         }
 
         // Return the last node we added to our window.
@@ -174,4 +181,55 @@ test "clear screen and search" {
         } }, t.screens.active.pages.pointFromPin(.active, sel.end).?);
     }
     try testing.expect(search.next() == null);
+}
+
+test "active search finds a soft-wrapped match across page boundaries" {
+    const alloc = testing.allocator;
+    var t: Terminal = try .init(testing.io, alloc, .{ .cols = 10, .rows = 2 });
+    defer t.deinit(alloc);
+    var stream = t.vtStream();
+    defer stream.deinit();
+
+    const first = t.screens.active.pages.pages.first.?;
+    for (0..first.capacity().rows - 1) |_| stream.nextSlice("\r\n");
+    try testing.expect(first == t.screens.active.pages.pages.last);
+    stream.nextSlice("xxxxxxxABCDEF");
+    try testing.expect(first != t.screens.active.pages.pages.last);
+
+    var search: ActiveSearch = try .init(alloc, "ABCDEF");
+    defer search.deinit();
+    _ = try search.update(&t.screens.active.pages);
+    const match = search.next();
+    try testing.expect(match != null);
+    const sel = match.?.untracked();
+    try testing.expectEqual(point.Point{ .active = .{ .x = 7, .y = 0 } }, t.screens.active.pages.pointFromPin(.active, sel.start).?);
+    try testing.expectEqual(point.Point{ .active = .{ .x = 2, .y = 1 } }, t.screens.active.pages.pointFromPin(.active, sel.end).?);
+    try testing.expect(search.next() == null);
+
+    var screen_search = try @import("screen.zig").ScreenSearch.init(alloc, t.screens.active, "ABCDEF");
+    defer screen_search.deinit();
+    try screen_search.searchAll();
+    try testing.expectEqual(@as(usize, 1), screen_search.active_results.items.len);
+    try testing.expectEqual(@as(usize, 0), screen_search.history_results.items.len);
+}
+
+test "active search keeps multipage results in chronological order" {
+    const alloc = testing.allocator;
+    var t: Terminal = try .init(testing.io, alloc, .{ .cols = 10, .rows = 2 });
+    defer t.deinit(alloc);
+    var stream = t.vtStream();
+    defer stream.deinit();
+    const first = t.screens.active.pages.pages.first.?;
+    for (0..first.capacity().rows - 1) |_| stream.nextSlice("\r\n");
+    stream.nextSlice("hit\r\nhit");
+    try testing.expect(first != t.screens.active.pages.pages.last);
+
+    var search = try @import("screen.zig").ScreenSearch.init(alloc, t.screens.active, "hit");
+    defer search.deinit();
+    try search.searchAll();
+    try testing.expectEqual(@as(usize, 2), search.active_results.items.len);
+    for (0..2) |idx| {
+        const sel = search.matchAt(idx).?.untracked();
+        try testing.expectEqual(point.Point{ .active = .{ .x = 0, .y = @intCast(1 - idx) } }, t.screens.active.pages.pointFromPin(.active, sel.start).?);
+    }
 }

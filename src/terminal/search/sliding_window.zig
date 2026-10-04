@@ -558,7 +558,7 @@ pub const SlidingWindow = struct {
 
         const page = preserved.page();
         const last_row_wrapped = page.getRow(page.size.rows - 1).wrap;
-        return self.appendPage(node, page, last_row_wrapped);
+        return self.appendPage(node, page, last_row_wrapped, .append);
     }
 
     /// Append a node only when its last row is soft wrapped.
@@ -570,13 +570,33 @@ pub const SlidingWindow = struct {
         self: *SlidingWindow,
         node: *PageList.List.Node,
     ) Allocator.Error!?AppendResult {
+        return self.addIfWrapped(node, .append);
+    }
+
+    /// Load older overlap before a forward search's existing pages.
+    pub fn prependIfWrapped(
+        self: *SlidingWindow,
+        node: *PageList.List.Node,
+    ) Allocator.Error!?AppendResult {
+        assert(self.direction == .forward);
+        assert(self.data_offset == 0);
+        return self.addIfWrapped(node, .prepend);
+    }
+
+    const Placement = enum { append, prepend };
+
+    fn addIfWrapped(
+        self: *SlidingWindow,
+        node: *PageList.List.Node,
+        placement: Placement,
+    ) Allocator.Error!?AppendResult {
         var preserved = try node.pagePreservingState(self.alloc);
         defer preserved.deinit();
 
         const page = preserved.page();
         const last_row_wrapped = page.getRow(page.size.rows - 1).wrap;
         if (!last_row_wrapped) return null;
-        return try self.appendPage(node, page, last_row_wrapped);
+        return try self.appendPage(node, page, last_row_wrapped, placement);
     }
 
     /// Copy one preserved page into the window's owned search buffers.
@@ -589,6 +609,7 @@ pub const SlidingWindow = struct {
         node: *PageList.List.Node,
         page: *const terminal.Page,
         last_row_wrapped: bool,
+        placement: Placement,
     ) Allocator.Error!AppendResult {
         // Initialize our metadata for the node.
         var meta: Meta = .{
@@ -665,8 +686,16 @@ pub const SlidingWindow = struct {
         try self.chunk_buf.ensureTotalCapacity(self.alloc, self.meta.capacity());
 
         // Append our new node to the circular buffer.
-        self.data.appendSliceAssumeCapacity(written);
-        self.meta.appendAssumeCapacity(meta);
+        switch (placement) {
+            .append => {
+                self.data.appendSliceAssumeCapacity(written);
+                self.meta.appendAssumeCapacity(meta);
+            },
+            .prepend => {
+                self.data.prependSliceAssumeCapacity(written);
+                self.meta.prependSliceAssumeCapacity(&.{meta});
+            },
+        }
 
         self.assertIntegrity();
         return .{
@@ -1795,4 +1824,114 @@ test "SlidingWindow append whitespace only node" {
 
     // No matches expected
     try testing.expect(w.next() == null);
+}
+
+// Small resident pages keep prepend tests independent of terminal page-pool
+// sizing, and allow allocation failures to target only the search window.
+const PrependTestFixture = struct {
+    nodes: [3]PageList.List.Node,
+
+    fn init() !PrependTestFixture {
+        const Page = terminal.Page;
+        const Cell = terminal.page.Cell;
+        var result: PrependTestFixture = undefined;
+        var initialized: usize = 0;
+        errdefer for (result.nodes[0..initialized]) |*node| node.page().deinit();
+        for (&result.nodes, 0..) |*node, i| {
+            var page = try Page.init(.{
+                .cols = 3,
+                .rows = 1,
+                .styles = 0,
+                .grapheme_bytes = 0,
+                .hyperlink_bytes = 0,
+                .string_bytes = 0,
+            });
+            const row = page.getRow(0);
+            const cells = page.getCells(row);
+            for (cells, 0..) |*cell, x| {
+                cell.* = .{
+                    .content_tag = .codepoint,
+                    .content = .{ .codepoint = .{ .data = @intCast('a' + i * 3 + x) } },
+                };
+            }
+            if (i == 0) {
+                cells[1].content.codepoint.data = '漢';
+                cells[1].wide = .wide;
+                cells[2].content.codepoint.data = 0;
+                cells[2].wide = Cell.Wide.spacer_tail;
+            }
+            row.wrap = i < result.nodes.len - 1;
+            row.wrap_continuation = i > 0;
+            node.* = .{ .data = .{ .resident = page }, .serial = i + 1, .owned = .heap };
+            initialized += 1;
+        }
+        return result;
+    }
+
+    fn deinit(self: *PrependTestFixture) void {
+        for (&self.nodes) |*node| node.page().deinit();
+    }
+
+    fn expectMatch(self: *PrependTestFixture, window: *SlidingWindow) !void {
+        const testing = std.testing;
+        const match = window.next();
+        try testing.expect(match != null);
+        const sel = match.?.untracked();
+        try testing.expectEqual(Pin{ .node = &self.nodes[0], .x = 1, .y = 0 }, sel.start);
+        try testing.expectEqual(Pin{ .node = &self.nodes[2], .x = 0, .y = 0 }, sel.end);
+        const chunks = match.?.chunks.slice();
+        try testing.expectEqual(@as(usize, 3), chunks.len);
+        for (chunks.items(.node), chunks.items(.serial), chunks.items(.start), chunks.items(.end), 0..) |node, serial, start, end, i| {
+            try testing.expect(node == &self.nodes[i]);
+            try testing.expectEqual(@as(u64, i + 1), serial);
+            try testing.expectEqual(@as(size.CellCountInt, 0), start);
+            try testing.expectEqual(@as(size.CellCountInt, 1), end);
+        }
+        try testing.expect(window.next() == null);
+    }
+};
+
+test "SlidingWindow repeated prepend preserves cross-page UTF-8 coordinates" {
+    const alloc = std.testing.allocator;
+    var fixture = try PrependTestFixture.init();
+    defer fixture.deinit();
+    var window: SlidingWindow = try .init(alloc, .forward, "漢defg");
+    defer window.deinit();
+    _ = try window.append(&fixture.nodes[2]);
+    _ = try window.prependIfWrapped(&fixture.nodes[1]);
+    _ = try window.prependIfWrapped(&fixture.nodes[0]);
+    try fixture.expectMatch(&window);
+}
+
+test "SlidingWindow prepend allocation failures preserve existing data and metadata" {
+    const testing = std.testing;
+    var fixture = try PrependTestFixture.init();
+    defer fixture.deinit();
+    try testing.checkAllAllocationFailures(testing.allocator, struct {
+        fn run(alloc: Allocator, fixture_: *PrependTestFixture) !void {
+            var window: SlidingWindow = try .init(alloc, .forward, "漢defg");
+            defer window.deinit();
+            defer window.assertIntegrity();
+            _ = try window.append(&fixture_.nodes[2]);
+            for ([_]usize{ 1, 0 }) |i| {
+                const data_len = window.data.len();
+                const meta_len = window.meta.len();
+                _ = window.prependIfWrapped(&fixture_.nodes[i]) catch |err| {
+                    try testing.expectEqual(data_len, window.data.len());
+                    try testing.expectEqual(meta_len, window.meta.len());
+                    var data_it = window.data.iterator(.forward);
+                    const expected: []const u8 = if (i == 1) "ghi\n" else "defghi\n";
+                    for (expected) |byte| try testing.expectEqual(byte, data_it.next().?.*);
+                    try testing.expect(data_it.next() == null);
+                    var meta_it = window.meta.iterator(.forward);
+                    for (fixture_.nodes[i + 1 ..], i + 1..) |_, idx| {
+                        try testing.expect(meta_it.next().?.node == &fixture_.nodes[idx]);
+                    }
+                    try testing.expect(meta_it.next() == null);
+                    return err;
+                };
+            }
+            try fixture_.expectMatch(&window);
+        }
+    }.run, .{&fixture});
 }
