@@ -557,7 +557,8 @@ pub fn printSlice(self: *Terminal, cps: []const u32) !void {
     // When grapheme clustering is enabled and a left margin is set,
     // print() consults the cell left of the margin after wrapping,
     // which we can't reason about here. Restrict the fast path to
-    // the [0x10, 0xFF] range in that case (those never cluster).
+    // the [0x10, 0xFF] range in that case. Copyright and registered signs
+    // still fall back to print() when grapheme clustering is enabled.
     const charset = self.screens.active.charset;
     const allow_unicode = switch (charset.charsets.get(charset.gl)) {
         .utf8, .ascii => !grapheme_cluster or self.scrolling_region.left == 0,
@@ -606,8 +607,8 @@ fn printSliceFast(
     const screen: *Screen = self.screens.active;
 
     // Codepoints in [0x10, 0xFF] are always narrow (width 1, matching
-    // the c <= 0xFF fast path in print) and can never interact with
-    // grapheme clustering (which requires a codepoint > 0xFF).
+    // the c <= 0xFF width fast path in print). Copyright and registered
+    // signs can nevertheless continue a grapheme when mode 2027 is enabled.
     //
     // Codepoints above 0xFF are batchable if their width is 1 or 2
     // (excluding zero-width characters such as combining marks, ZWJ,
@@ -618,16 +619,15 @@ fn printSliceFast(
 
     // Codepoints in [0x10, 0xFF] are always narrow: print()
     // hardcodes width 1 for c <= 0xFF (no width table lookup).
-    // They also can never interact with grapheme clustering,
-    // which print() only performs for c > 0xFF, so they're
-    // immediately eligible for the narrow fill with no further
-    // checks.
+    // Except for copyright and registered signs in mode 2027, they are
+    // immediately eligible for the narrow fill with no further checks.
     const cp0 = cps[0];
     if (cp0 <= 0xFF) {
         // C0 control characters (0x00-0x0F) aren't printable. The
         // stream never sends these (they're routed to execute), but
         // printSlice is a public API so defer to print() for safety.
         if (cp0 < 0x10) return 0;
+        if (grapheme_cluster and (cp0 == 0xA9 or cp0 == 0xAE)) return 0;
         return self.printSliceFill(
             .narrow,
             cps,
@@ -856,9 +856,9 @@ fn printSliceFill(
         var idx: usize = 1;
 
         // Vectorized scan for the narrow class: codepoints in
-        // [0x10, 0xFF] are always eligible with no further checks
-        // and dominate real-world input, so scan for the first
-        // codepoint outside that range several lanes at a time.
+        // [0x10, 0xFF], except copyright and registered signs with mode
+        // 2027 enabled, dominate real-world input. Scan for the first
+        // ineligible codepoint several lanes at a time.
         // Anything else (including eligible unicode) proceeds via
         // the scalar loop below.
         if (comptime width == .narrow) {
@@ -868,7 +868,11 @@ fn printSliceFill(
                 const hi: V = @splat(0xFF);
                 while (idx + lanes <= cps.len) {
                     const v: V = cps[idx..][0..lanes].*;
-                    const in_range = (v >= lo) & (v <= hi);
+                    var in_range = (v >= lo) & (v <= hi);
+                    if (grapheme_cluster) {
+                        in_range &= (v != @as(V, @splat(0xA9))) &
+                            (v != @as(V, @splat(0xAE)));
+                    }
                     if (!@reduce(.And, in_range)) {
                         const bits: std.meta.Int(.unsigned, lanes) = @bitCast(in_range);
                         idx += @ctz(~bits);
@@ -882,7 +886,10 @@ fn printSliceFill(
         while (idx < cps.len) : (idx += 1) {
             const cp = cps[idx];
             if (comptime width == .narrow) {
-                if (cp >= 0x10 and cp <= 0xFF) continue;
+                if (cp >= 0x10 and cp <= 0xFF) {
+                    if (grapheme_cluster and (cp == 0xA9 or cp == 0xAE)) break :run idx;
+                    continue;
+                }
             }
             if (cp > 0xFF and allow_unicode and printSliceEligible(cp, width)) {
                 if (!grapheme_cluster) continue;
@@ -1221,7 +1228,9 @@ pub fn print(self: *Terminal, c: u21) !void {
     // This is MUCH slower than the normal path so the conditional below is
     // purposely ordered in least-likely to most-likely so we can drop out
     // as quickly as possible.
-    if (c > 255 and
+    // Copyright and registered signs are Latin-1 Extended_Pictographic
+    // codepoints, so they can continue a ZWJ cluster despite fitting in a byte.
+    if ((c > 255 or c == 0xA9 or c == 0xAE) and
         self.modes.get(.grapheme_cluster) and
         self.screens.active.cursor.x > 0)
     grapheme: {

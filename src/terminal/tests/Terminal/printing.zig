@@ -369,6 +369,182 @@ test "Terminal: graphemeWidth parity" {
     try expectGraphemeWidthParity(&.{ 0x0301, 0x0302 });
 }
 
+test "Terminal: Latin-1 emoji ZWJ graphemeWidth parity" {
+    // U+00A9 and U+00AE are Extended_Pictographic despite fitting in a byte.
+    // GB11 keeps each ZWJ sequence in one cluster, including mixed bases.
+    const sequences = [_][5]u21{
+        .{ 0xA9, 0xFE0F, 0x200D, 0xA9, 0xFE0F },
+        .{ 0xAE, 0xFE0F, 0x200D, 0xAE, 0xFE0F },
+        .{ 0xA9, 0xFE0F, 0x200D, 0xAE, 0xFE0F },
+        .{ 0xAE, 0xFE0F, 0x200D, 0xA9, 0xFE0F },
+        .{ 0x2764, 0xFE0F, 0x200D, 0xA9, 0xFE0F },
+        .{ 0xA9, 0xFE0F, 0x200D, 0x2764, 0xFE0F },
+    };
+    for (sequences) |cps| {
+        const measured = support.unicode.graphemeWidth(u21, &cps);
+        try testing.expectEqual(@as(usize, cps.len), measured.len);
+        try testing.expectEqual(@as(u2, 2), measured.width);
+        try expectGraphemeWidthParity(&cps);
+    }
+}
+
+test "Terminal: Latin-1 emoji ZWJ at right edge retains one wide cluster" {
+    for ([_]bool{ true, false }) |wraparound| {
+        for ([_]u21{ 0xA9, 0xAE }) |cp| {
+            var t = try init(testing.io, testing.allocator, .{ .cols = 3, .rows = 3 });
+            defer t.deinit(testing.allocator);
+            t.modes.set(.grapheme_cluster, true);
+            t.modes.set(.wraparound, wraparound);
+            try t.print('A');
+            for ([_]u21{ cp, 0xFE0F, 0x200D, cp, 0xFE0F }) |c| try t.print(c);
+
+            try testing.expectEqual(@as(usize, 0), t.screens.active.cursor.y);
+            try testing.expectEqual(@as(usize, 2), t.screens.active.cursor.x);
+            try testing.expect(t.screens.active.cursor.pending_wrap);
+            const base = t.screens.active.pages.getCell(.{ .screen = .{ .x = 1, .y = 0 } }).?;
+            try testing.expectEqual(cp, base.cell.codepoint());
+            try testing.expectEqual(Cell.Wide.wide, base.cell.wide);
+            try testing.expectEqualSlices(
+                u21,
+                &.{ 0xFE0F, 0x200D, cp, 0xFE0F },
+                base.node.page().lookupGrapheme(base.cell).?,
+            );
+            const tail = t.screens.active.pages.getCell(.{ .screen = .{ .x = 2, .y = 0 } }).?;
+            try testing.expectEqual(Cell.Wide.spacer_tail, tail.cell.wide);
+
+            // A continuation must not consume the pending wrap. Ordinary text
+            // still wraps on the next print when wraparound is enabled.
+            if (wraparound) {
+                try t.print('X');
+                try testing.expectEqual(@as(usize, 1), t.screens.active.cursor.y);
+                try testing.expectEqual(@as(usize, 1), t.screens.active.cursor.x);
+            }
+        }
+    }
+}
+
+test "Terminal: Latin-1 emoji ZWJ single column remains narrow" {
+    // A one-column screen cannot contain a wide cell or a spacer tail. Keep
+    // its existing narrow printing fallback in both wraparound modes.
+    for ([_]bool{ true, false }) |wraparound| {
+        for ([_]u21{ 0xA9, 0xAE }) |cp| {
+            var t = try init(testing.io, testing.allocator, .{ .cols = 1, .rows = 3 });
+            defer t.deinit(testing.allocator);
+            t.modes.set(.grapheme_cluster, true);
+            t.modes.set(.wraparound, wraparound);
+            for ([_]u21{ cp, 0xFE0F, 0x200D, cp, 0xFE0F }) |c| try t.print(c);
+
+            try testing.expectEqual(@as(usize, 0), t.screens.active.cursor.x);
+            try testing.expectEqual(@as(usize, @intFromBool(wraparound)), t.screens.active.cursor.y);
+            const base = t.screens.active.cursor.page_cell;
+            try testing.expectEqual(cp, base.codepoint());
+            try testing.expectEqual(Cell.Wide.narrow, base.wide);
+            try testing.expect(!base.hasGrapheme());
+            t.screens.active.assertIntegrity();
+        }
+    }
+}
+
+fn printLatin1EmojiBatch(t: *Terminal, cps: []const u32, via_stream: bool) !void {
+    if (!via_stream) return t.printSlice(cps);
+
+    var bytes: [512]u8 = undefined;
+    var len: usize = 0;
+    for (cps) |cp| {
+        len += try std.unicode.utf8Encode(@intCast(cp), bytes[len..][0..4]);
+    }
+    var stream = t.vtStream();
+    defer stream.deinit();
+    stream.nextSlice(bytes[0..len]);
+    try testing.expect(!stream.handler.semantic_failure);
+}
+
+test "Terminal: Latin-1 emoji ZWJ batch prefixes and mode parity" {
+    for ([_]bool{ false, true }) |via_stream| {
+        for ([_]bool{ false, true }) |grapheme_cluster| {
+            for ([_]usize{ 0, 1, 3, 17, 32 }) |prefix_len| {
+                for ([_]u32{ 0xA9, 0xAE }) |first| {
+                    for ([_]u32{ 0xA9, 0xAE }) |last| {
+                        var cps: [64]u32 = undefined;
+                        @memset(cps[0..prefix_len], 'A');
+                        @memcpy(cps[prefix_len..][0..5], &[_]u32{ first, 0xFE0F, 0x200D, last, 0xFE0F });
+                        @memset(cps[prefix_len + 5 ..][0..17], 'B');
+                        var t = try init(testing.io, testing.allocator, .{ .cols = 80, .rows = 3 });
+                        defer t.deinit(testing.allocator);
+                        t.modes.set(.grapheme_cluster, grapheme_cluster);
+                        try printLatin1EmojiBatch(&t, cps[0 .. prefix_len + 22], via_stream);
+
+                        try testing.expectEqual(@as(usize, 0), t.screens.active.cursor.y);
+                        try testing.expectEqual(prefix_len + 2 + 17, t.screens.active.cursor.x);
+                        const base = t.screens.active.pages.getCell(.{ .screen = .{ .x = @intCast(prefix_len), .y = 0 } }).?;
+                        try testing.expectEqual(@as(u21, @intCast(first)), base.cell.codepoint());
+                        try testing.expectEqual(if (grapheme_cluster) Cell.Wide.wide else Cell.Wide.narrow, base.cell.wide);
+                        const suffix = base.node.page().lookupGrapheme(base.cell).?;
+                        if (grapheme_cluster) {
+                            try testing.expectEqualSlices(u21, &.{ 0xFE0F, 0x200D, @intCast(last), 0xFE0F }, suffix);
+                        } else {
+                            try testing.expectEqualSlices(u21, &.{ 0xFE0F, 0x200D }, suffix);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+test "Terminal: Latin-1 emoji ZWJ batch run scans preserve Prepend emoji clusters" {
+    // Unlike the intentionally separate Prepend + ASCII case, copyright and
+    // registered signs now use grapheme rules. Put them inside a narrow run:
+    // the short case reaches its scalar tail, the long case the vector scan.
+    for ([_]bool{ false, true }) |via_stream| {
+        for ([_]bool{ false, true }) |grapheme_cluster| {
+            for ([_]usize{ 0, 32 }) |tail_len| {
+                for ([_]u32{ 0xA9, 0xAE }) |cp| {
+                    var cps: [34]u32 = undefined;
+                    cps[0] = 0x0600;
+                    cps[1] = cp;
+                    @memset(cps[2..][0..tail_len], 'B');
+                    var t = try init(testing.io, testing.allocator, .{ .cols = 80, .rows = 3 });
+                    defer t.deinit(testing.allocator);
+                    t.modes.set(.grapheme_cluster, grapheme_cluster);
+                    try printLatin1EmojiBatch(&t, cps[0 .. 2 + tail_len], via_stream);
+
+                    try testing.expectEqual(tail_len + 2, t.screens.active.cursor.x);
+                    const base = t.screens.active.pages.getCell(.{ .screen = .{ .x = 0, .y = 0 } }).?;
+                    try testing.expectEqual(@as(u21, 0x0600), base.cell.codepoint());
+                    try testing.expectEqual(if (grapheme_cluster) Cell.Wide.wide else Cell.Wide.narrow, base.cell.wide);
+                    if (grapheme_cluster) {
+                        try testing.expectEqualSlices(u21, &.{@intCast(cp)}, base.node.page().lookupGrapheme(base.cell).?);
+                    } else {
+                        try testing.expect(!base.cell.hasGrapheme());
+                    }
+                }
+            }
+        }
+    }
+}
+
+test "Terminal: Latin-1 emoji ZWJ batch right edge mode parity" {
+    for ([_]bool{ false, true }) |via_stream| {
+        for ([_]bool{ true, false }) |wraparound| {
+            for ([_]u32{ 0xA9, 0xAE }) |cp| {
+                var t = try init(testing.io, testing.allocator, .{ .cols = 3, .rows = 3 });
+                defer t.deinit(testing.allocator);
+                t.modes.set(.grapheme_cluster, true);
+                t.modes.set(.wraparound, wraparound);
+                try printLatin1EmojiBatch(&t, &.{ 'A', cp, 0xFE0F, 0x200D, cp, 0xFE0F }, via_stream);
+
+                try testing.expectEqual(@as(usize, 0), t.screens.active.cursor.y);
+                try testing.expectEqual(@as(usize, 2), t.screens.active.cursor.x);
+                try testing.expect(t.screens.active.cursor.pending_wrap);
+                const base = t.screens.active.pages.getCell(.{ .screen = .{ .x = 1, .y = 0 } }).?;
+                try testing.expectEqual(Cell.Wide.wide, base.cell.wide);
+                try testing.expectEqualSlices(u21, &.{ 0xFE0F, 0x200D, @intCast(cp), 0xFE0F }, base.node.page().lookupGrapheme(base.cell).?);
+            }
+        }
+    }
+}
+
 test "Terminal: VS16 doesn't make character with 2027 disabled" {
     var t = try init(testing.io, testing.allocator, .{ .rows = 5, .cols = 5 });
     defer t.deinit(testing.allocator);
