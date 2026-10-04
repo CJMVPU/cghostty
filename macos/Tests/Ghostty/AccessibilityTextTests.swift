@@ -50,4 +50,23 @@ struct AccessibilityTextTests {
         #expect(cache.get() == 2)
         #expect(reads == 2)
     }
+
+    @MainActor @Test func invalidatingCacheRefreshesImmediatelyAndPreservesPriorSnapshot() {
+        var reads = 0
+        var previousValues: [Int?] = []
+        let cache = CachedValue(duration: .seconds(30), refresh: { previous in
+            previousValues.append(previous)
+            reads += 1
+            return reads
+        })
+        #expect(cache.get() == 1)
+        #expect(cache.get() == 1)
+        cache.invalidate()
+        #expect(cache.get() == 2)
+        #expect(cache.get() == 2)
+        cache.invalidate()
+        cache.invalidate()
+        #expect(cache.get() == 3)
+        #expect(previousValues == [nil, 1, 2])
+    }
 }

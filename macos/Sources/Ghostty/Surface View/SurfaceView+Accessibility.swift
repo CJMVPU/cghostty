@@ -217,6 +217,12 @@ class CachedValue<T> {
         expires = now() + duration
         return result
     }
+
+    /// Refresh on the next read while keeping the prior snapshot available for
+    /// readers that reuse immutable text and indexes across metadata changes.
+    func invalidate() {
+        expires = nil
+    }
 }
 
 /// Check if a UTF16 text is a single lead surrogate character

@@ -820,7 +820,7 @@ extension Ghostty {
         }
 
         func selectionDidChange() {
-            highlightTask?.cancel()
+            cachedScreenContents.invalidate()
             accessibilitySelectionTask?.cancel()
             accessibilitySelectionTask = Task { [weak self] in
                 do { try await Task.sleep(for: .milliseconds(100)) } catch { return }

@@ -42,6 +42,55 @@ struct SurfaceViewAppKitTests {
             ) == false
         )
     }
+
+    @MainActor @Test func selectionChangeRefreshesAccessibilityWithinCacheLifetime() async throws {
+        let app = Ghostty.App(configPath: "/dev/null")
+        var base = Ghostty.SurfaceConfiguration()
+        base.command = "/bin/sh -c 'printf selection-ready; exec /bin/cat'"
+        base.workingDirectory = FileManager.default.temporaryDirectory.path
+        let view = Ghostty.SurfaceView(app, baseConfig: base)
+        let surface = try #require(view.surfaceModel)
+        try await NativeTestWait.until("selection text readiness", timeout: .seconds(5), polling: .milliseconds(10),
+            diagnostics: { NativeTestWait.surfaceState(surface) }, {
+                surface.readContents(viewport: false).contains("selection-ready")
+            })
+
+        // Prime the 500 ms view cache before changing only selection metadata.
+        let original = view.cachedScreenContents.get()
+        let captures = surface.accessibilityCaptureCount
+        #expect(original.selectedRanges.isEmpty)
+        #expect(surface.perform(.selectAll))
+        view.selectionDidChange()
+        let selected = try #require(surface.readAccessibility())
+        #expect(view.accessibilitySelectedTextRange() == selected.selectedRanges.first)
+        #expect(view.accessibilitySelectedText() == selected.text)
+        #expect(view.cachedScreenContents.get().textRevision == original.textRevision)
+        #expect(surface.accessibilityCaptureCount == captures)
+
+        // A cleared selection must also replace the cached selected metadata,
+        // including the text snapshot changed by reset, without waiting for TTL.
+        #expect(surface.perform(.reset))
+        view.selectionDidChange()
+        #expect(view.accessibilitySelectedTextRange().location == NSNotFound)
+        #expect(view.accessibilitySelectedText() == nil)
+        #expect(view.cachedScreenContents.get().selectedRanges.isEmpty)
+    }
+
+    @MainActor @Test func selectionNotificationDoesNotCancelHighlightExpiry() async throws {
+        let app = Ghostty.App(configPath: "/dev/null")
+        var base = Ghostty.SurfaceConfiguration()
+        base.command = "/bin/cat"
+        base.workingDirectory = FileManager.default.temporaryDirectory.path
+        let view = Ghostty.SurfaceView(app, baseConfig: base)
+        view.highlight()
+        view.selectionDidChange()
+        #expect(view.highlighted)
+        try await NativeTestWait.until("highlight expiry after selection notification", timeout: .seconds(2),
+            polling: .milliseconds(20), diagnostics: { "highlighted=\(view.highlighted)" }, {
+                !view.highlighted
+            })
+    }
+
     @MainActor @Test func repeatedHighlightExtendsVisibilityAndDoesNotRetainSurface() async throws {
         let app = Ghostty.App(configPath: "/dev/null")
         var base = Ghostty.SurfaceConfiguration()
