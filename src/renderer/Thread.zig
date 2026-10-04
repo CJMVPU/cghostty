@@ -360,10 +360,7 @@ fn drainMailbox(self: *Thread) !void {
             .resize => |v| self.renderer.setScreenSize(v),
 
             .change_config => |config| {
-                defer config.alloc.destroy(config.thread);
-                defer config.alloc.destroy(config.impl);
-                try self.changeConfig(config.thread);
-                try self.renderer.changeConfig(config.impl);
+                try applyConfig(self, config);
 
                 // The config affects what animation wakes the
                 // renderer needs (smooth cursor, animation mode).
@@ -373,7 +370,22 @@ fn drainMailbox(self: *Thread) !void {
     }
 }
 
-fn changeConfig(self: *Thread, config: *const DerivedConfig) !void {
+// Keep the ownership handoff together. The owner parameter permits exercising
+// this mailbox path without creating a Metal renderer.
+fn applyConfig(self: anytype, config: @FieldType(rendererpkg.Message, "change_config")) !void {
+    defer config.alloc.destroy(config.thread);
+    defer config.alloc.destroy(config.impl);
+    // The renderer consumes the arena only after all fallible preparation
+    // succeeds. Rejected transfers still belong to this message consumer.
+    self.renderer.changeConfig(config.impl) catch |err| {
+        config.impl.deinit();
+        return err;
+    };
+    // Thread state is infallible and follows successful renderer adoption.
+    self.changeConfig(config.thread);
+}
+
+fn changeConfig(self: *Thread, config: *const DerivedConfig) void {
     // A newly enabled scheduler must reconsider existing history even when no
     // terminal activity occurred while compression was disabled.
     if (comptime terminalpkg.compression_enabled) {
@@ -829,3 +841,60 @@ const Compression = struct {
         };
     }
 };
+
+const ConfigFailureTest = struct {
+    const Impl = struct {
+        config: rendererpkg.Renderer.DerivedConfig,
+        fail_shaper: bool = true,
+        adopted: bool = false,
+
+        fn changeConfig(self: *Impl, config: *rendererpkg.Renderer.DerivedConfig) !void {
+            if (self.fail_shaper) {
+                // Exercise the real shaper's allocation failure before adoption.
+                var failure = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+                var shaper = try @import("../font/main.zig").Shaper.init(failure.allocator(), .{ .features = config.font_features.items });
+                defer shaper.deinit();
+                unreachable;
+            }
+            self.config.deinit();
+            self.config = config.*;
+            self.adopted = true;
+        }
+    };
+    const Owner = struct {
+        renderer: *Impl,
+        config: DerivedConfig,
+
+        fn changeConfig(self: *Owner, config: *const DerivedConfig) void {
+            self.config = config.*;
+        }
+    };
+};
+
+test "renderer config failure before shaper adoption frees message and preserves active config" {
+    const t = std.testing;
+    var source = try configpkg.Config.default(t.allocator);
+    defer source.deinit();
+    var impl: ConfigFailureTest.Impl = .{ .config = try rendererpkg.Renderer.DerivedConfig.init(t.allocator, &source) };
+    defer impl.config.deinit();
+    var owner: ConfigFailureTest.Owner = .{ .renderer = &impl, .config = .{ .scrollback_compression = false } };
+    source.@"scrollback-compression" = true;
+    try source.@"font-feature".list.append(source._arena.?.allocator(), "calt=0");
+    var counter = t.FailingAllocator.init(t.allocator, .{});
+    const message = try rendererpkg.Message.initChangeConfig(counter.allocator(), &source);
+    var unadopted = message.change_config.impl.*;
+    // The old consumer leaks the arena; retain a copy only to clean the red test.
+    defer if (counter.allocated_bytes != counter.freed_bytes) unadopted.deinit();
+    try t.expectError(error.OutOfMemory, applyConfig(&owner, message.change_config));
+    try t.expectEqual(counter.allocated_bytes, counter.freed_bytes);
+    try t.expect(!owner.config.scrollback_compression);
+    try t.expectEqual(@as(usize, 0), impl.config.font_features.items.len);
+
+    // A later update still adopts and owns its arena exactly once.
+    impl.fail_shaper = false;
+    const next = try rendererpkg.Message.initChangeConfig(t.allocator, &source);
+    try applyConfig(&owner, next.change_config);
+    try t.expect(impl.adopted);
+    try t.expect(owner.config.scrollback_compression);
+    try t.expectEqualStrings("calt=0", impl.config.font_features.items[0]);
+}

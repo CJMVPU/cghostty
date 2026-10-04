@@ -17,6 +17,7 @@ const renderer = @import("../renderer.zig");
 const terminal = @import("../terminal/main.zig");
 const CoreApp = @import("../App.zig");
 const CoreSurface = @import("../Surface.zig");
+const ClipboardCompletion = @import("ClipboardCompletion.zig");
 const configpkg = @import("../config.zig");
 const Config = configpkg.Config;
 const String = @import("../main_c.zig").String;
@@ -776,88 +777,7 @@ pub const Surface = struct {
         complete: *const CAPI.ClipboardComplete,
         state: *apprt.ClipboardRequest,
     ) void {
-        const alloc = self.app.core_app.alloc;
-
-        // Convert the C representations to the core types. Everything
-        // remains borrowed from the caller for the duration of the call.
-        var stack = std.heap.stackFallback(1024, alloc);
-        const conv_alloc = stack.get();
-
-        const raw_contents: []const CAPI.ClipboardContent =
-            if (complete.contents) |v| v[0..complete.contents_len] else &.{};
-        const contents = conv_alloc.alloc(
-            terminal.clipboard.Content,
-            raw_contents.len,
-        ) catch |err| {
-            log.err("error completing clipboard request err={}", .{err});
-            alloc.destroy(state);
-            return;
-        };
-        defer conv_alloc.free(contents);
-        for (raw_contents, contents) |raw, *content| content.* = .{
-            .mime = std.mem.sliceTo(raw.mime, 0),
-            .data = raw.data[0..raw.len],
-        };
-
-        const raw_available: []const [*:0]const u8 =
-            if (complete.available) |v| v[0..complete.available_len] else &.{};
-        const available = conv_alloc.alloc(
-            []const u8,
-            raw_available.len,
-        ) catch |err| {
-            log.err("error completing clipboard request err={}", .{err});
-            alloc.destroy(state);
-            return;
-        };
-        defer conv_alloc.free(available);
-        for (raw_available, available) |raw, *mime| {
-            mime.* = std.mem.sliceTo(raw, 0);
-        }
-
-        // Attempt to complete the request, but we may request
-        // confirmation.
-        self.core_surface.completeClipboardRequest(state.*, .{
-            .contents = contents,
-            .available = available,
-            .confirmed = complete.confirmed,
-            .remember = complete.remember,
-        }) catch |err| switch (err) {
-            error.UnsafePaste,
-            error.UnauthorizedPaste,
-            => {
-                // Session grant information for the permission prompt,
-                // carried only by Kitty clipboard protocol requests.
-                const name: ?[*:0]const u8, const can_remember: bool = switch (state.*) {
-                    inline .kitty_read, .kitty_write => |kitty| .{
-                        if (kitty.name.len > 0) kitty.name.ptr else null,
-                        kitty.pw.len > 0,
-                    },
-                    else => .{ null, false },
-                };
-
-                self.app.opts.confirm_read_clipboard(
-                    self.userdata,
-                    &.{
-                        .contents = complete.contents,
-                        .contents_len = complete.contents_len,
-                        .available = complete.available,
-                        .available_len = complete.available_len,
-                        .name = name,
-                        .can_remember = can_remember,
-                    },
-                    state,
-                    state.*,
-                );
-
-                return;
-            },
-
-            else => log.err("error completing clipboard request err={}", .{err}),
-        };
-
-        // We don't defer this because the clipboard confirmation route
-        // preserves the clipboard request.
-        alloc.destroy(state);
+        ClipboardCompletion.completeRequest(self, complete, state);
     }
 
     fn denyClipboardRequest(
@@ -1144,46 +1064,9 @@ pub const CAPI = struct {
     //
     // One representation of clipboard contents. The data is binary-safe
     // and its length is explicit; it is not sentinel-terminated.
-    const ClipboardContent = extern struct {
-        mime: [*:0]const u8,
-        data: [*]const u8,
-        len: usize,
-    };
-
-    // ghostty_clipboard_complete_s
-    //
-    // The payload for completing a clipboard read request. See
-    // Surface.CompleteClipboard for the field documentation.
-    const ClipboardComplete = extern struct {
-        contents: ?[*]const ClipboardContent,
-        contents_len: usize,
-        available: ?[*]const [*:0]const u8,
-        available_len: usize,
-        confirmed: bool,
-        remember: bool,
-    };
-
-    // ghostty_clipboard_confirm_s
-    //
-    // The payload of a clipboard read confirmation request: the
-    // would-be completion contents plus the information shown in the
-    // permission prompt. All memory is borrowed for the duration of
-    // the confirm_read_clipboard callback.
-    const ClipboardConfirm = extern struct {
-        contents: ?[*]const ClipboardContent,
-        contents_len: usize,
-        available: ?[*]const [*:0]const u8,
-        available_len: usize,
-
-        /// The human friendly name of the requesting program for the
-        /// prompt, null when the protocol doesn't carry one.
-        name: ?[*:0]const u8,
-
-        /// True when the user's decision may be remembered as a
-        /// session grant, reported back through the completion's
-        /// remember field.
-        can_remember: bool,
-    };
+    const ClipboardContent = ClipboardCompletion.Content;
+    const ClipboardComplete = ClipboardCompletion.Complete;
+    const ClipboardConfirm = ClipboardCompletion.Confirm;
 
     // ghostty_text_s
     const Text = extern struct {

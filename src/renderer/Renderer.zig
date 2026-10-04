@@ -1805,7 +1805,9 @@ fn uploadBackgroundImage(self: *Self) !void {
     }
 }
 
-/// Update the configuration.
+/// Update the configuration, consuming the derived arena only on success.
+/// The caller must deinitialize a rejected config; the active config stays owned
+/// by the renderer if fallible shaper preparation fails.
 pub fn changeConfig(self: *Self, config: *DerivedConfig) !void {
     self.link_cache.invalidate(self.alloc);
     // Config updates are serialized by renderer.Thread. Drawing may continue

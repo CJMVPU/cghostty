@@ -41,6 +41,7 @@ pub const Surface = runtime.Surface;
 
 test {
     _ = runtime;
+    _ = @import("apprt/ClipboardCompletion.zig");
     _ = action;
     _ = structs;
 }
