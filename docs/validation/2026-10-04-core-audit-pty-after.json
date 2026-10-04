@@ -1,0 +1,785 @@
+{
+  "phase": "after",
+  "revision": "3c89129d40096b505deab23b391c5967479865ee",
+  "branch": "audit-core-followups",
+  "worktree_status": "M macos/Sources/Ghostty/Ghostty.App+PresentationCallbacks.swift\n M macos/Sources/Ghostty/Ghostty.ConfigHandle.swift\n M macos/Sources/Ghostty/Ghostty.ConfigSnapshot.swift\n M macos/Sources/Ghostty/Ghostty.WindowConfig.swift\n M \"macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift\"\n M macos/Sources/Helpers/Extensions/NSAppearance+Extension.swift\n M src/benchmark/TerminalResize.zig\n M src/benchmark/cli.zig\n M src/termio.zig\n M src/termio/Exec.zig\n?? docs/validation/2026-10-04-core-audit-pty-baseline.json\n?? macos/Tests/Ghostty/SurfaceDisplayConfigTests.swift\n?? scripts/benchmark-pty-write.py\n?? scripts/benchmark-reflow.py\n?? src/termio/pty_write_probe.zig",
+  "source_sha256": {
+    "src/termio/Exec.zig": "944fc68fcb9a8e27c2bb0ba8c6774fa4dd2e84c894b3dadfab8e623e24f76bbe",
+    "src/termio/pty_write_probe.zig": "4765ff0bc8357788b9841738610eb3cf5e8c5091b965e847b5a740805b47b6c1"
+  },
+  "platform": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+  "command": [
+    "/opt/homebrew/opt/python@3.14/bin/python3.14",
+    "scripts/build.py",
+    "test",
+    "-Doptimize=ReleaseFast",
+    "-Dtest-optimize=ReleaseFast",
+    "-Dtest-filter=PTY write pressure probe"
+  ],
+  "warmups": 1,
+  "repeats": 3,
+  "timing_limit": "Resource-count probe; three samples do not support precise timing claims.",
+  "cases": [
+    {
+      "mib": 1,
+      "mode": "fast",
+      "runs": [
+        {
+          "warmup": true,
+          "returncode": 0,
+          "log": "1mib-fast-00.log",
+          "wrapper_wall_seconds": 50.294995874981396,
+          "metrics": {
+            "pty_bytes": 1048576,
+            "mode": "fast",
+            "initial_requests": 1,
+            "paused_requests": 0,
+            "write_allocated_bytes": 1049164,
+            "retained_bytes": 588,
+            "enqueue_ns": 113750,
+            "drain_ns": 47029625,
+            "paused_loop_tick_max_ns": 0
+          }
+        },
+        {
+          "warmup": false,
+          "returncode": 0,
+          "log": "1mib-fast-01.log",
+          "wrapper_wall_seconds": 0.596163832989987,
+          "metrics": {
+            "pty_bytes": 1048576,
+            "mode": "fast",
+            "initial_requests": 1,
+            "paused_requests": 0,
+            "write_allocated_bytes": 1049164,
+            "retained_bytes": 588,
+            "enqueue_ns": 95000,
+            "drain_ns": 44584875,
+            "paused_loop_tick_max_ns": 0
+          }
+        },
+        {
+          "warmup": false,
+          "returncode": 0,
+          "log": "1mib-fast-02.log",
+          "wrapper_wall_seconds": 0.5827100419555791,
+          "metrics": {
+            "pty_bytes": 1048576,
+            "mode": "fast",
+            "initial_requests": 1,
+            "paused_requests": 0,
+            "write_allocated_bytes": 1049164,
+            "retained_bytes": 588,
+            "enqueue_ns": 94042,
+            "drain_ns": 44515541,
+            "paused_loop_tick_max_ns": 0
+          }
+        },
+        {
+          "warmup": false,
+          "returncode": 0,
+          "log": "1mib-fast-03.log",
+          "wrapper_wall_seconds": 0.5910087920492515,
+          "metrics": {
+            "pty_bytes": 1048576,
+            "mode": "fast",
+            "initial_requests": 1,
+            "paused_requests": 0,
+            "write_allocated_bytes": 1049164,
+            "retained_bytes": 588,
+            "enqueue_ns": 76291,
+            "drain_ns": 44982917,
+            "paused_loop_tick_max_ns": 0
+          }
+        }
+      ],
+      "medians": {
+        "pty_bytes": 1048576,
+        "initial_requests": 1,
+        "paused_requests": 0,
+        "write_allocated_bytes": 1049164,
+        "retained_bytes": 588,
+        "enqueue_ns": 94042,
+        "drain_ns": 44584875,
+        "paused_loop_tick_max_ns": 0
+      }
+    },
+    {
+      "mib": 1,
+      "mode": "slow",
+      "runs": [
+        {
+          "warmup": true,
+          "returncode": 0,
+          "log": "1mib-slow-00.log",
+          "wrapper_wall_seconds": 0.9985906659858301,
+          "metrics": {
+            "pty_bytes": 1048576,
+            "mode": "slow",
+            "initial_requests": 1,
+            "paused_requests": 0,
+            "write_allocated_bytes": 1049164,
+            "retained_bytes": 588,
+            "enqueue_ns": 88583,
+            "drain_ns": 446568667,
+            "paused_loop_tick_max_ns": 0
+          }
+        },
+        {
+          "warmup": false,
+          "returncode": 0,
+          "log": "1mib-slow-01.log",
+          "wrapper_wall_seconds": 1.0197580410167575,
+          "metrics": {
+            "pty_bytes": 1048576,
+            "mode": "slow",
+            "initial_requests": 1,
+            "paused_requests": 0,
+            "write_allocated_bytes": 1049164,
+            "retained_bytes": 588,
+            "enqueue_ns": 101333,
+            "drain_ns": 448947500,
+            "paused_loop_tick_max_ns": 0
+          }
+        },
+        {
+          "warmup": false,
+          "returncode": 0,
+          "log": "1mib-slow-02.log",
+          "wrapper_wall_seconds": 0.9953511660569347,
+          "metrics": {
+            "pty_bytes": 1048576,
+            "mode": "slow",
+            "initial_requests": 1,
+            "paused_requests": 0,
+            "write_allocated_bytes": 1049164,
+            "retained_bytes": 588,
+            "enqueue_ns": 101625,
+            "drain_ns": 444157083,
+            "paused_loop_tick_max_ns": 0
+          }
+        },
+        {
+          "warmup": false,
+          "returncode": 0,
+          "log": "1mib-slow-03.log",
+          "wrapper_wall_seconds": 1.015178375004325,
+          "metrics": {
+            "pty_bytes": 1048576,
+            "mode": "slow",
+            "initial_requests": 1,
+            "paused_requests": 0,
+            "write_allocated_bytes": 1049164,
+            "retained_bytes": 588,
+            "enqueue_ns": 94375,
+            "drain_ns": 449902417,
+            "paused_loop_tick_max_ns": 0
+          }
+        }
+      ],
+      "medians": {
+        "pty_bytes": 1048576,
+        "initial_requests": 1,
+        "paused_requests": 0,
+        "write_allocated_bytes": 1049164,
+        "retained_bytes": 588,
+        "enqueue_ns": 101333,
+        "drain_ns": 448947500,
+        "paused_loop_tick_max_ns": 0
+      }
+    },
+    {
+      "mib": 1,
+      "mode": "paused",
+      "runs": [
+        {
+          "warmup": true,
+          "returncode": 0,
+          "log": "1mib-paused-00.log",
+          "wrapper_wall_seconds": 0.6668842919752933,
+          "metrics": {
+            "pty_bytes": 1048576,
+            "mode": "paused",
+            "initial_requests": 1,
+            "paused_requests": 1,
+            "write_allocated_bytes": 1049164,
+            "retained_bytes": 588,
+            "enqueue_ns": 102833,
+            "drain_ns": 46278500,
+            "paused_loop_tick_max_ns": 46792
+          }
+        },
+        {
+          "warmup": false,
+          "returncode": 0,
+          "log": "1mib-paused-01.log",
+          "wrapper_wall_seconds": 0.6767923749866895,
+          "metrics": {
+            "pty_bytes": 1048576,
+            "mode": "paused",
+            "initial_requests": 1,
+            "paused_requests": 1,
+            "write_allocated_bytes": 1049164,
+            "retained_bytes": 588,
+            "enqueue_ns": 87916,
+            "drain_ns": 47397125,
+            "paused_loop_tick_max_ns": 53250
+          }
+        },
+        {
+          "warmup": false,
+          "returncode": 0,
+          "log": "1mib-paused-02.log",
+          "wrapper_wall_seconds": 0.6656464579864405,
+          "metrics": {
+            "pty_bytes": 1048576,
+            "mode": "paused",
+            "initial_requests": 1,
+            "paused_requests": 1,
+            "write_allocated_bytes": 1049164,
+            "retained_bytes": 588,
+            "enqueue_ns": 71334,
+            "drain_ns": 46041167,
+            "paused_loop_tick_max_ns": 48459
+          }
+        },
+        {
+          "warmup": false,
+          "returncode": 0,
+          "log": "1mib-paused-03.log",
+          "wrapper_wall_seconds": 0.6652208750019781,
+          "metrics": {
+            "pty_bytes": 1048576,
+            "mode": "paused",
+            "initial_requests": 1,
+            "paused_requests": 1,
+            "write_allocated_bytes": 1049164,
+            "retained_bytes": 588,
+            "enqueue_ns": 88709,
+            "drain_ns": 46227209,
+            "paused_loop_tick_max_ns": 57542
+          }
+        }
+      ],
+      "medians": {
+        "pty_bytes": 1048576,
+        "initial_requests": 1,
+        "paused_requests": 1,
+        "write_allocated_bytes": 1049164,
+        "retained_bytes": 588,
+        "enqueue_ns": 87916,
+        "drain_ns": 46227209,
+        "paused_loop_tick_max_ns": 53250
+      }
+    },
+    {
+      "mib": 8,
+      "mode": "fast",
+      "runs": [
+        {
+          "warmup": true,
+          "returncode": 0,
+          "log": "8mib-fast-00.log",
+          "wrapper_wall_seconds": 0.9011460000183433,
+          "metrics": {
+            "pty_bytes": 8388608,
+            "mode": "fast",
+            "initial_requests": 1,
+            "paused_requests": 0,
+            "write_allocated_bytes": 8389196,
+            "retained_bytes": 588,
+            "enqueue_ns": 564208,
+            "drain_ns": 358773542,
+            "paused_loop_tick_max_ns": 0
+          }
+        },
+        {
+          "warmup": false,
+          "returncode": 0,
+          "log": "8mib-fast-01.log",
+          "wrapper_wall_seconds": 0.9142429580097087,
+          "metrics": {
+            "pty_bytes": 8388608,
+            "mode": "fast",
+            "initial_requests": 1,
+            "paused_requests": 0,
+            "write_allocated_bytes": 8389196,
+            "retained_bytes": 588,
+            "enqueue_ns": 588334,
+            "drain_ns": 358674792,
+            "paused_loop_tick_max_ns": 0
+          }
+        },
+        {
+          "warmup": false,
+          "returncode": 0,
+          "log": "8mib-fast-02.log",
+          "wrapper_wall_seconds": 0.9064388750120997,
+          "metrics": {
+            "pty_bytes": 8388608,
+            "mode": "fast",
+            "initial_requests": 1,
+            "paused_requests": 0,
+            "write_allocated_bytes": 8389196,
+            "retained_bytes": 588,
+            "enqueue_ns": 591125,
+            "drain_ns": 359376583,
+            "paused_loop_tick_max_ns": 0
+          }
+        },
+        {
+          "warmup": false,
+          "returncode": 0,
+          "log": "8mib-fast-03.log",
+          "wrapper_wall_seconds": 0.9092635839479044,
+          "metrics": {
+            "pty_bytes": 8388608,
+            "mode": "fast",
+            "initial_requests": 1,
+            "paused_requests": 0,
+            "write_allocated_bytes": 8389196,
+            "retained_bytes": 588,
+            "enqueue_ns": 663042,
+            "drain_ns": 358045042,
+            "paused_loop_tick_max_ns": 0
+          }
+        }
+      ],
+      "medians": {
+        "pty_bytes": 8388608,
+        "initial_requests": 1,
+        "paused_requests": 0,
+        "write_allocated_bytes": 8389196,
+        "retained_bytes": 588,
+        "enqueue_ns": 591125,
+        "drain_ns": 358674792,
+        "paused_loop_tick_max_ns": 0
+      }
+    },
+    {
+      "mib": 8,
+      "mode": "slow",
+      "runs": [
+        {
+          "warmup": true,
+          "returncode": 0,
+          "log": "8mib-slow-00.log",
+          "wrapper_wall_seconds": 4.24596616596682,
+          "metrics": {
+            "pty_bytes": 8388608,
+            "mode": "slow",
+            "initial_requests": 1,
+            "paused_requests": 0,
+            "write_allocated_bytes": 8389196,
+            "retained_bytes": 588,
+            "enqueue_ns": 562542,
+            "drain_ns": 3695727917,
+            "paused_loop_tick_max_ns": 0
+          }
+        },
+        {
+          "warmup": false,
+          "returncode": 0,
+          "log": "8mib-slow-01.log",
+          "wrapper_wall_seconds": 4.294398750003893,
+          "metrics": {
+            "pty_bytes": 8388608,
+            "mode": "slow",
+            "initial_requests": 1,
+            "paused_requests": 0,
+            "write_allocated_bytes": 8389196,
+            "retained_bytes": 588,
+            "enqueue_ns": 549125,
+            "drain_ns": 3724152500,
+            "paused_loop_tick_max_ns": 0
+          }
+        },
+        {
+          "warmup": false,
+          "returncode": 0,
+          "log": "8mib-slow-02.log",
+          "wrapper_wall_seconds": 4.304195791017264,
+          "metrics": {
+            "pty_bytes": 8388608,
+            "mode": "slow",
+            "initial_requests": 1,
+            "paused_requests": 0,
+            "write_allocated_bytes": 8389196,
+            "retained_bytes": 588,
+            "enqueue_ns": 550250,
+            "drain_ns": 3739157625,
+            "paused_loop_tick_max_ns": 0
+          }
+        },
+        {
+          "warmup": false,
+          "returncode": 0,
+          "log": "8mib-slow-03.log",
+          "wrapper_wall_seconds": 4.311105291999411,
+          "metrics": {
+            "pty_bytes": 8388608,
+            "mode": "slow",
+            "initial_requests": 1,
+            "paused_requests": 0,
+            "write_allocated_bytes": 8389196,
+            "retained_bytes": 588,
+            "enqueue_ns": 562166,
+            "drain_ns": 3729990834,
+            "paused_loop_tick_max_ns": 0
+          }
+        }
+      ],
+      "medians": {
+        "pty_bytes": 8388608,
+        "initial_requests": 1,
+        "paused_requests": 0,
+        "write_allocated_bytes": 8389196,
+        "retained_bytes": 588,
+        "enqueue_ns": 550250,
+        "drain_ns": 3729990834,
+        "paused_loop_tick_max_ns": 0
+      }
+    },
+    {
+      "mib": 8,
+      "mode": "paused",
+      "runs": [
+        {
+          "warmup": true,
+          "returncode": 0,
+          "log": "8mib-paused-00.log",
+          "wrapper_wall_seconds": 1.0066642090096138,
+          "metrics": {
+            "pty_bytes": 8388608,
+            "mode": "paused",
+            "initial_requests": 1,
+            "paused_requests": 1,
+            "write_allocated_bytes": 8389196,
+            "retained_bytes": 588,
+            "enqueue_ns": 600750,
+            "drain_ns": 357419792,
+            "paused_loop_tick_max_ns": 54000
+          }
+        },
+        {
+          "warmup": false,
+          "returncode": 0,
+          "log": "8mib-paused-01.log",
+          "wrapper_wall_seconds": 0.9733024999732152,
+          "metrics": {
+            "pty_bytes": 8388608,
+            "mode": "paused",
+            "initial_requests": 1,
+            "paused_requests": 1,
+            "write_allocated_bytes": 8389196,
+            "retained_bytes": 588,
+            "enqueue_ns": 542333,
+            "drain_ns": 358392583,
+            "paused_loop_tick_max_ns": 52000
+          }
+        },
+        {
+          "warmup": false,
+          "returncode": 0,
+          "log": "8mib-paused-02.log",
+          "wrapper_wall_seconds": 0.9855036250082776,
+          "metrics": {
+            "pty_bytes": 8388608,
+            "mode": "paused",
+            "initial_requests": 1,
+            "paused_requests": 1,
+            "write_allocated_bytes": 8389196,
+            "retained_bytes": 588,
+            "enqueue_ns": 551375,
+            "drain_ns": 361065375,
+            "paused_loop_tick_max_ns": 50125
+          }
+        },
+        {
+          "warmup": false,
+          "returncode": 0,
+          "log": "8mib-paused-03.log",
+          "wrapper_wall_seconds": 0.9803737089969218,
+          "metrics": {
+            "pty_bytes": 8388608,
+            "mode": "paused",
+            "initial_requests": 1,
+            "paused_requests": 1,
+            "write_allocated_bytes": 8389196,
+            "retained_bytes": 588,
+            "enqueue_ns": 618125,
+            "drain_ns": 357609708,
+            "paused_loop_tick_max_ns": 52208
+          }
+        }
+      ],
+      "medians": {
+        "pty_bytes": 8388608,
+        "initial_requests": 1,
+        "paused_requests": 1,
+        "write_allocated_bytes": 8389196,
+        "retained_bytes": 588,
+        "enqueue_ns": 551375,
+        "drain_ns": 358392583,
+        "paused_loop_tick_max_ns": 52000
+      }
+    },
+    {
+      "mib": 32,
+      "mode": "fast",
+      "runs": [
+        {
+          "warmup": true,
+          "returncode": 0,
+          "log": "32mib-fast-00.log",
+          "wrapper_wall_seconds": 2.0165537919965573,
+          "metrics": {
+            "pty_bytes": 33554432,
+            "mode": "fast",
+            "initial_requests": 1,
+            "paused_requests": 0,
+            "write_allocated_bytes": 33555020,
+            "retained_bytes": 588,
+            "enqueue_ns": 2264792,
+            "drain_ns": 1444556792,
+            "paused_loop_tick_max_ns": 0
+          }
+        },
+        {
+          "warmup": false,
+          "returncode": 0,
+          "log": "32mib-fast-01.log",
+          "wrapper_wall_seconds": 1.9918087919941172,
+          "metrics": {
+            "pty_bytes": 33554432,
+            "mode": "fast",
+            "initial_requests": 1,
+            "paused_requests": 0,
+            "write_allocated_bytes": 33555020,
+            "retained_bytes": 588,
+            "enqueue_ns": 2296875,
+            "drain_ns": 1429186291,
+            "paused_loop_tick_max_ns": 0
+          }
+        },
+        {
+          "warmup": false,
+          "returncode": 0,
+          "log": "32mib-fast-02.log",
+          "wrapper_wall_seconds": 2.001302582968492,
+          "metrics": {
+            "pty_bytes": 33554432,
+            "mode": "fast",
+            "initial_requests": 1,
+            "paused_requests": 0,
+            "write_allocated_bytes": 33555020,
+            "retained_bytes": 588,
+            "enqueue_ns": 2383000,
+            "drain_ns": 1434723375,
+            "paused_loop_tick_max_ns": 0
+          }
+        },
+        {
+          "warmup": false,
+          "returncode": 0,
+          "log": "32mib-fast-03.log",
+          "wrapper_wall_seconds": 2.0287805420230143,
+          "metrics": {
+            "pty_bytes": 33554432,
+            "mode": "fast",
+            "initial_requests": 1,
+            "paused_requests": 0,
+            "write_allocated_bytes": 33555020,
+            "retained_bytes": 588,
+            "enqueue_ns": 2268167,
+            "drain_ns": 1444323416,
+            "paused_loop_tick_max_ns": 0
+          }
+        }
+      ],
+      "medians": {
+        "pty_bytes": 33554432,
+        "initial_requests": 1,
+        "paused_requests": 0,
+        "write_allocated_bytes": 33555020,
+        "retained_bytes": 588,
+        "enqueue_ns": 2296875,
+        "drain_ns": 1434723375,
+        "paused_loop_tick_max_ns": 0
+      }
+    },
+    {
+      "mib": 32,
+      "mode": "slow",
+      "runs": [
+        {
+          "warmup": true,
+          "returncode": 0,
+          "log": "32mib-slow-00.log",
+          "wrapper_wall_seconds": 15.461219332995825,
+          "metrics": {
+            "pty_bytes": 33554432,
+            "mode": "slow",
+            "initial_requests": 1,
+            "paused_requests": 0,
+            "write_allocated_bytes": 33555020,
+            "retained_bytes": 588,
+            "enqueue_ns": 2208125,
+            "drain_ns": 14890815916,
+            "paused_loop_tick_max_ns": 0
+          }
+        },
+        {
+          "warmup": false,
+          "returncode": 0,
+          "log": "32mib-slow-01.log",
+          "wrapper_wall_seconds": 15.351564207987394,
+          "metrics": {
+            "pty_bytes": 33554432,
+            "mode": "slow",
+            "initial_requests": 1,
+            "paused_requests": 0,
+            "write_allocated_bytes": 33555020,
+            "retained_bytes": 588,
+            "enqueue_ns": 2238208,
+            "drain_ns": 14772886583,
+            "paused_loop_tick_max_ns": 0
+          }
+        },
+        {
+          "warmup": false,
+          "returncode": 0,
+          "log": "32mib-slow-02.log",
+          "wrapper_wall_seconds": 15.531373833015095,
+          "metrics": {
+            "pty_bytes": 33554432,
+            "mode": "slow",
+            "initial_requests": 1,
+            "paused_requests": 0,
+            "write_allocated_bytes": 33555020,
+            "retained_bytes": 588,
+            "enqueue_ns": 2203458,
+            "drain_ns": 14942410375,
+            "paused_loop_tick_max_ns": 0
+          }
+        },
+        {
+          "warmup": false,
+          "returncode": 0,
+          "log": "32mib-slow-03.log",
+          "wrapper_wall_seconds": 15.416278916003648,
+          "metrics": {
+            "pty_bytes": 33554432,
+            "mode": "slow",
+            "initial_requests": 1,
+            "paused_requests": 0,
+            "write_allocated_bytes": 33555020,
+            "retained_bytes": 588,
+            "enqueue_ns": 2486000,
+            "drain_ns": 14830961042,
+            "paused_loop_tick_max_ns": 0
+          }
+        }
+      ],
+      "medians": {
+        "pty_bytes": 33554432,
+        "initial_requests": 1,
+        "paused_requests": 0,
+        "write_allocated_bytes": 33555020,
+        "retained_bytes": 588,
+        "enqueue_ns": 2238208,
+        "drain_ns": 14830961042,
+        "paused_loop_tick_max_ns": 0
+      }
+    },
+    {
+      "mib": 32,
+      "mode": "paused",
+      "runs": [
+        {
+          "warmup": true,
+          "returncode": 0,
+          "log": "32mib-paused-00.log",
+          "wrapper_wall_seconds": 2.0680497499997728,
+          "metrics": {
+            "pty_bytes": 33554432,
+            "mode": "paused",
+            "initial_requests": 1,
+            "paused_requests": 1,
+            "write_allocated_bytes": 33555020,
+            "retained_bytes": 588,
+            "enqueue_ns": 2388583,
+            "drain_ns": 1419081125,
+            "paused_loop_tick_max_ns": 68125
+          }
+        },
+        {
+          "warmup": false,
+          "returncode": 0,
+          "log": "32mib-paused-01.log",
+          "wrapper_wall_seconds": 2.0750080419820733,
+          "metrics": {
+            "pty_bytes": 33554432,
+            "mode": "paused",
+            "initial_requests": 1,
+            "paused_requests": 1,
+            "write_allocated_bytes": 33555020,
+            "retained_bytes": 588,
+            "enqueue_ns": 2510791,
+            "drain_ns": 1435552958,
+            "paused_loop_tick_max_ns": 70417
+          }
+        },
+        {
+          "warmup": false,
+          "returncode": 0,
+          "log": "32mib-paused-02.log",
+          "wrapper_wall_seconds": 2.05008341697976,
+          "metrics": {
+            "pty_bytes": 33554432,
+            "mode": "paused",
+            "initial_requests": 1,
+            "paused_requests": 1,
+            "write_allocated_bytes": 33555020,
+            "retained_bytes": 588,
+            "enqueue_ns": 2564500,
+            "drain_ns": 1422122208,
+            "paused_loop_tick_max_ns": 63375
+          }
+        },
+        {
+          "warmup": false,
+          "returncode": 0,
+          "log": "32mib-paused-03.log",
+          "wrapper_wall_seconds": 2.0507390839629807,
+          "metrics": {
+            "pty_bytes": 33554432,
+            "mode": "paused",
+            "initial_requests": 1,
+            "paused_requests": 1,
+            "write_allocated_bytes": 33555020,
+            "retained_bytes": 588,
+            "enqueue_ns": 2419917,
+            "drain_ns": 1426384625,
+            "paused_loop_tick_max_ns": 59583
+          }
+        }
+      ],
+      "medians": {
+        "pty_bytes": 33554432,
+        "initial_requests": 1,
+        "paused_requests": 1,
+        "write_allocated_bytes": 33555020,
+        "retained_bytes": 588,
+        "enqueue_ns": 2510791,
+        "drain_ns": 1426384625,
+        "paused_loop_tick_max_ns": 63375
+      }
+    }
+  ],
+  "complete": true,
+  "final_source_sha256": {
+    "src/termio/Exec.zig": "944fc68fcb9a8e27c2bb0ba8c6774fa4dd2e84c894b3dadfab8e623e24f76bbe",
+    "src/termio/pty_write_probe.zig": "4765ff0bc8357788b9841738610eb3cf5e8c5091b965e847b5a740805b47b6c1"
+  }
+}
