@@ -1,0 +1,219 @@
+{
+  "baseline_commit": "641d6f29fd86260afbd3ed0bf91416cd17b1aed3",
+  "measurement": "actual iterator tail cell inspections and ordered shaping-run fingerprints; no elapsed-time or FPS measurement",
+  "profiles": [
+    {
+      "profile": {
+        "cols": 80,
+        "populated": 80,
+        "run_cells": 1,
+        "runs": 80,
+        "run_fingerprint": "7a17d6af3e4be060"
+      },
+      "before_tail_scan_cells": 81,
+      "after_tail_scan_cells": 1
+    },
+    {
+      "profile": {
+        "cols": 80,
+        "populated": 80,
+        "run_cells": 10,
+        "runs": 8,
+        "run_fingerprint": "f77d5d62b44a507e"
+      },
+      "before_tail_scan_cells": 9,
+      "after_tail_scan_cells": 1
+    },
+    {
+      "profile": {
+        "cols": 80,
+        "populated": 80,
+        "run_cells": 80,
+        "runs": 1,
+        "run_fingerprint": "5200a57dd8ab64d4"
+      },
+      "before_tail_scan_cells": 2,
+      "after_tail_scan_cells": 1
+    },
+    {
+      "profile": {
+        "cols": 80,
+        "populated": 40,
+        "run_cells": 1,
+        "runs": 40,
+        "run_fingerprint": "b1a655fa8a12ab69"
+      },
+      "before_tail_scan_cells": 1681,
+      "after_tail_scan_cells": 41
+    },
+    {
+      "profile": {
+        "cols": 80,
+        "populated": 40,
+        "run_cells": 10,
+        "runs": 4,
+        "run_fingerprint": "fe7859b5fd8cfe6c"
+      },
+      "before_tail_scan_cells": 205,
+      "after_tail_scan_cells": 41
+    },
+    {
+      "profile": {
+        "cols": 80,
+        "populated": 40,
+        "run_cells": 40,
+        "runs": 1,
+        "run_fingerprint": "442513d75963373e"
+      },
+      "before_tail_scan_cells": 82,
+      "after_tail_scan_cells": 41
+    },
+    {
+      "profile": {
+        "cols": 240,
+        "populated": 240,
+        "run_cells": 1,
+        "runs": 240,
+        "run_fingerprint": "fcde0b6c226e9ae9"
+      },
+      "before_tail_scan_cells": 241,
+      "after_tail_scan_cells": 1
+    },
+    {
+      "profile": {
+        "cols": 240,
+        "populated": 240,
+        "run_cells": 10,
+        "runs": 24,
+        "run_fingerprint": "c09fb14a9fa7e496"
+      },
+      "before_tail_scan_cells": 25,
+      "after_tail_scan_cells": 1
+    },
+    {
+      "profile": {
+        "cols": 240,
+        "populated": 240,
+        "run_cells": 240,
+        "runs": 1,
+        "run_fingerprint": "393f6eb1c778a73a"
+      },
+      "before_tail_scan_cells": 2,
+      "after_tail_scan_cells": 1
+    },
+    {
+      "profile": {
+        "cols": 240,
+        "populated": 120,
+        "run_cells": 1,
+        "runs": 120,
+        "run_fingerprint": "608f080e31055f6e"
+      },
+      "before_tail_scan_cells": 14641,
+      "after_tail_scan_cells": 121
+    },
+    {
+      "profile": {
+        "cols": 240,
+        "populated": 120,
+        "run_cells": 10,
+        "runs": 12,
+        "run_fingerprint": "152cedb760aa2b86"
+      },
+      "before_tail_scan_cells": 1573,
+      "after_tail_scan_cells": 121
+    },
+    {
+      "profile": {
+        "cols": 240,
+        "populated": 120,
+        "run_cells": 120,
+        "runs": 1,
+        "run_fingerprint": "9bf727d9ef772e2b"
+      },
+      "before_tail_scan_cells": 242,
+      "after_tail_scan_cells": 121
+    },
+    {
+      "profile": {
+        "cols": 1000,
+        "populated": 1000,
+        "run_cells": 1,
+        "runs": 1000,
+        "run_fingerprint": "273330467052132a"
+      },
+      "before_tail_scan_cells": 1001,
+      "after_tail_scan_cells": 1
+    },
+    {
+      "profile": {
+        "cols": 1000,
+        "populated": 1000,
+        "run_cells": 10,
+        "runs": 100,
+        "run_fingerprint": "8e1a1c28f63a8584"
+      },
+      "before_tail_scan_cells": 101,
+      "after_tail_scan_cells": 1
+    },
+    {
+      "profile": {
+        "cols": 1000,
+        "populated": 1000,
+        "run_cells": 1000,
+        "runs": 1,
+        "run_fingerprint": "374495e033d1eaec"
+      },
+      "before_tail_scan_cells": 2,
+      "after_tail_scan_cells": 1
+    },
+    {
+      "profile": {
+        "cols": 1000,
+        "populated": 500,
+        "run_cells": 1,
+        "runs": 500,
+        "run_fingerprint": "d9e189fa598a155a"
+      },
+      "before_tail_scan_cells": 251001,
+      "after_tail_scan_cells": 501
+    },
+    {
+      "profile": {
+        "cols": 1000,
+        "populated": 500,
+        "run_cells": 10,
+        "runs": 50,
+        "run_fingerprint": "47803129382a54bc"
+      },
+      "before_tail_scan_cells": 25551,
+      "after_tail_scan_cells": 501
+    },
+    {
+      "profile": {
+        "cols": 1000,
+        "populated": 500,
+        "run_cells": 500,
+        "runs": 1,
+        "run_fingerprint": "087d7dc980aed2d5"
+      },
+      "before_tail_scan_cells": 1002,
+      "after_tail_scan_cells": 501
+    }
+  ],
+  "source_hashes": {
+    "original_run_zig": "db733c86a1c4454ee17bb838f6af889d3bffa0d693b6e09f22ab3765695462b7",
+    "instrumented_before_run_zig": "b5935305e1c8989ed20ae1f4f27a0775610f0bdbdbd17136f8e1b1dec54eeab7",
+    "cache_after_run_zig": "fc09c7ade1c2d552d2b31f9b1831470daf0c10353b3434496a989799c66988ac",
+    "before_coretext_zig": "52e6ee7708689cfe0e0e32f94d55f9f02419e373d51e72e9b60c528462815b07",
+    "after_coretext_zig": "075342865929b3b30749a2c6947b244e1d54e763ef86104a18b2fdff2a9d9227",
+    "identical_probe_block": "b207ad2f1276ae1173c0f8ac027a521f2d8ae5167aea38bdddd1d1464163da20"
+  },
+  "logs": {
+    "/tmp/cghostty-round3-shaper-and-batch-before.log": "0f318ce3743edc9c1a77ed352326f848843cadd33cbfa750b2e3a435c7bdfa48",
+    "/tmp/cghostty-round3-core-green.log": "a189ff91ab05188153bcb737f341d35092d90f85794b0d1a606a525c40dce7a2"
+  },
+  "implementation_commit": "d5376e2141f3c8d753ccac3834f3b3912a77d8e9",
+  "reconstruct_baseline": "python3 scripts/benchmark-fixtures/shaper-tail-before.py --run-output /tmp/run-before.zig --coretext-output /tmp/coretext-before.zig",
+  "comparison_scope": "Identical instrumented iterator and fingerprint probe, not an identical full tree; baseline coretext excludes the subsequent empty-row regression."
+}
