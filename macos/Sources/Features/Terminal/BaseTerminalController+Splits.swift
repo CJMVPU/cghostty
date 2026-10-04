@@ -72,11 +72,9 @@ extension BaseTerminalController {
             }
         }
 
-        // Move focus to the next surface
-        DispatchQueue.main.async {
-            guard self.surfaceTree.contains(nextSurface) else { return }
-            Ghostty.moveFocus(to: nextSurface, from: target)
-        }
+        // Register the intent now; attachment completion remains deferred so
+        // a newer responder change can cancel this request before layout settles.
+        requestFocus(to: nextSurface, from: target)
     }
 
     func toggleSplitZoom(on target: Ghostty.SurfaceView) {
@@ -99,11 +97,9 @@ extension BaseTerminalController {
         // reset zoom button in a tab bar of an unfocused tab that we become focused.
         window?.makeKeyAndOrderFront(nil)
 
-        // Ensure focus stays on the target surface. We lose focus when we do
-        // this so we need to grab it again.
-        DispatchQueue.main.async {
-            Ghostty.moveFocus(to: target)
-        }
+        // The coordinator waits for attachment and cancels this intent if the
+        // target moves or a newer responder takes focus.
+        requestFocus(to: target)
     }
 
     func resizeSplit(from target: Ghostty.SurfaceView, direction: Ghostty.SplitResizeDirection, amount: UInt16) {
@@ -261,11 +257,7 @@ extension BaseTerminalController {
         let previous = surfaceTree
         surfaceTree = tree
         if let focus {
-            DispatchQueue.main.async { [weak self] in
-                guard let self, self.surfaceTree.contains(focus),
-                      self.ghostty.windowRegistry.owner(of: focus) === self else { return }
-                Ghostty.moveFocus(to: focus, from: previousFocus)
-            }
+            requestFocus(to: focus, from: previousFocus)
         }
         guard let undoManager else { return }
         undoManager.registerUndo(withTarget: self, expiresAfter: undoExpiration) { target in
