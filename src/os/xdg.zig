@@ -1,9 +1,8 @@
-//! Implementation of the XDG Base Directory specification
+//! XDG state directories used by the SSH terminfo cache.
 //! (https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html)
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const posix = std.posix;
 const homedir = @import("homedir.zig");
 
 pub const Options = struct {
@@ -16,22 +15,6 @@ pub const Options = struct {
     /// avoid lookups.
     home: ?[]const u8 = null,
 };
-
-/// Get the XDG user config directory. The returned value is allocated.
-pub fn config(io: std.Io, alloc: Allocator, environ_map: *const std.process.Environ.Map, opts: Options) ![]u8 {
-    return try dir(io, alloc, environ_map, opts, .{
-        .env = "XDG_CONFIG_HOME",
-        .default_subdir = ".config",
-    });
-}
-
-/// Get the XDG cache directory. The returned value is allocated.
-pub fn cache(io: std.Io, alloc: Allocator, environ_map: *const std.process.Environ.Map, opts: Options) ![]u8 {
-    return try dir(io, alloc, environ_map, opts, .{
-        .env = "XDG_CACHE_HOME",
-        .default_subdir = ".cache",
-    });
-}
 
 /// Get the XDG state directory. The returned value is allocated.
 pub fn state(io: std.Io, alloc: Allocator, environ_map: *const std.process.Environ.Map, opts: Options) ![]u8 {
@@ -91,166 +74,69 @@ fn dir(
     return error.NoHomeDir;
 }
 
-/// Parses the xdg-terminal-exec specification. This expects argv[0] to
-/// be "xdg-terminal-exec".
-pub fn parseTerminalExec(argv: []const [*:0]const u8) ?[]const [*:0]const u8 {
-    if (!std.mem.eql(
-        u8,
-        std.fs.path.basename(std.mem.sliceTo(argv[0], 0)),
-        "xdg-terminal-exec",
-    )) return null;
-
-    // We expect at least one argument
-    if (argv.len < 2) return &.{};
-
-    // If the first argument is "-e" we skip it.
-    const start: usize = if (std.mem.eql(u8, std.mem.sliceTo(argv[1], 0), "-e")) 2 else 1;
-    return argv[start..];
-}
-
-test {
+test "state directory environment paths" {
     const testing = std.testing;
     const io = testing.io;
     const alloc = testing.allocator;
-    var environ_map = try testing.environ.createMap(alloc);
+    var environ_map: std.process.Environ.Map = .init(alloc);
     defer environ_map.deinit();
 
-    {
-        const value = try config(io, alloc, &environ_map, .{});
-        defer alloc.free(value);
-        try testing.expect(value.len > 0);
-    }
+    try environ_map.put("XDG_STATE_HOME", "/tmp/cghostty-state");
+
+    const base = try state(io, alloc, &environ_map, .{});
+    defer alloc.free(base);
+    try testing.expectEqualStrings("/tmp/cghostty-state", base);
+
+    const nested = try state(io, alloc, &environ_map, .{ .subdir = "cghostty" });
+    defer alloc.free(nested);
+    try testing.expectEqualStrings("/tmp/cghostty-state/cghostty", nested);
 }
 
-test "cache directory paths" {
+test "state directory explicit home paths" {
     const testing = std.testing;
     const io = testing.io;
     const alloc = testing.allocator;
     const mock_home = "/Users/test";
-    var environ_map = try testing.environ.createMap(alloc);
+    var environ_map: std.process.Environ.Map = .init(alloc);
     defer environ_map.deinit();
 
-    // Test when XDG_CACHE_HOME is not set
+    // An explicit home keeps its existing precedence over the environment.
+    try environ_map.put("XDG_STATE_HOME", "/tmp/cghostty-state");
     {
-        // Test base path
-        {
-            const cache_path = try cache(io, alloc, &environ_map, .{ .home = mock_home });
-            defer alloc.free(cache_path);
-            const expected = try std.fs.path.join(alloc, &.{ mock_home, ".cache" });
-            defer alloc.free(expected);
-            try testing.expectEqualStrings(expected, cache_path);
-        }
-
-        // Test with subdir
-        {
-            const cache_path = try cache(io, alloc, &environ_map, .{
-                .home = mock_home,
-                .subdir = "ghostty",
-            });
-            defer alloc.free(cache_path);
-            const expected = try std.fs.path.join(alloc, &.{ mock_home, ".cache", "ghostty" });
-            defer alloc.free(expected);
-            try testing.expectEqualStrings(expected, cache_path);
-        }
+        const path = try state(io, alloc, &environ_map, .{ .home = mock_home });
+        defer alloc.free(path);
+        try testing.expectEqualStrings("/Users/test/.local/state", path);
+    }
+    {
+        const path = try state(io, alloc, &environ_map, .{
+            .home = mock_home,
+            .subdir = "cghostty",
+        });
+        defer alloc.free(path);
+        try testing.expectEqualStrings("/Users/test/.local/state/cghostty", path);
     }
 }
 
-test "fallback when xdg env empty" {
+test "state directory fallback when environment missing or empty" {
     const io = std.testing.io;
     const alloc = std.testing.allocator;
 
-    const DirCase = struct {
-        name: [:0]const u8,
-        func: fn (std.Io, Allocator, *std.process.Environ.Map, Options) anyerror![]u8,
-        default_subdir: []const u8,
-    };
-
-    const cases = [_]DirCase{
-        .{ .name = "XDG_CONFIG_HOME", .func = config, .default_subdir = ".config" },
-        .{ .name = "XDG_CACHE_HOME", .func = cache, .default_subdir = ".cache" },
-        .{ .name = "XDG_STATE_HOME", .func = state, .default_subdir = ".local/state" },
-    };
-
-    inline for (cases) |case| {
-        var environ_map = try std.testing.environ.createMap(alloc);
+    for ([_]bool{ false, true }) |empty| {
+        var environ_map: std.process.Environ.Map = .init(alloc);
         defer environ_map.deinit();
         const temp_home = "/tmp/ghostty-test-home";
         try environ_map.put("HOME", temp_home);
 
-        const expected = try std.fs.path.join(alloc, &[_][]const u8{
-            temp_home,
-            case.default_subdir,
-        });
-        defer alloc.free(expected);
+        if (empty) {
+            try environ_map.put("XDG_STATE_HOME", "");
+        }
 
-        // Test with empty string - should fallback to home
-        try environ_map.put(case.name, "");
-        const actual = try case.func(io, alloc, &environ_map, .{});
-        defer alloc.free(actual);
+        const base = try state(io, alloc, &environ_map, .{});
+        defer alloc.free(base);
+        try std.testing.expectEqualStrings("/tmp/ghostty-test-home/.local/state", base);
 
-        try std.testing.expectEqualStrings(expected, actual);
-    }
-}
-
-test "fallback when xdg env empty and subdir" {
-    const io = std.testing.io;
-    const alloc = std.testing.allocator;
-
-    const DirCase = struct {
-        name: [:0]const u8,
-        func: fn (std.Io, Allocator, *const std.process.Environ.Map, Options) anyerror![]u8,
-        default_subdir: []const u8,
-    };
-
-    const cases = [_]DirCase{
-        .{ .name = "XDG_CONFIG_HOME", .func = config, .default_subdir = ".config" },
-        .{ .name = "XDG_CACHE_HOME", .func = cache, .default_subdir = ".cache" },
-        .{ .name = "XDG_STATE_HOME", .func = state, .default_subdir = ".local/state" },
-    };
-
-    inline for (cases) |case| {
-        var environ_map = try std.testing.environ.createMap(alloc);
-        defer environ_map.deinit();
-        const temp_home = "/tmp/ghostty-test-home";
-        try environ_map.put("HOME", temp_home);
-
-        const expected = try std.fs.path.join(alloc, &[_][]const u8{
-            temp_home,
-            case.default_subdir,
-            "ghostty",
-        });
-        defer alloc.free(expected);
-
-        // Test with empty string - should fallback to home
-        try environ_map.put(case.name, "");
-        const actual = try case.func(io, alloc, &environ_map, .{ .subdir = "ghostty" });
-        defer alloc.free(actual);
-
-        try std.testing.expectEqualStrings(expected, actual);
-    }
-}
-
-test parseTerminalExec {
-    const testing = std.testing;
-
-    {
-        const actual = parseTerminalExec(&.{ "a", "b", "c" });
-        try testing.expect(actual == null);
-    }
-    {
-        const actual = parseTerminalExec(&.{"xdg-terminal-exec"}).?;
-        try testing.expectEqualSlices([*:0]const u8, actual, &.{});
-    }
-    {
-        const actual = parseTerminalExec(&.{ "xdg-terminal-exec", "a", "b", "c" }).?;
-        try testing.expectEqualSlices([*:0]const u8, actual, &.{ "a", "b", "c" });
-    }
-    {
-        const actual = parseTerminalExec(&.{ "xdg-terminal-exec", "-e", "a", "b", "c" }).?;
-        try testing.expectEqualSlices([*:0]const u8, actual, &.{ "a", "b", "c" });
-    }
-    {
-        const actual = parseTerminalExec(&.{ "xdg-terminal-exec", "a", "-e", "b", "c" }).?;
-        try testing.expectEqualSlices([*:0]const u8, actual, &.{ "a", "-e", "b", "c" });
+        const nested = try state(io, alloc, &environ_map, .{ .subdir = "cghostty" });
+        defer alloc.free(nested);
+        try std.testing.expectEqualStrings("/tmp/ghostty-test-home/.local/state/cghostty", nested);
     }
 }

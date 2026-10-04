@@ -1,13 +1,15 @@
 # FILES
 
-_\$XDG_CONFIG_HOME/cghostty/config.ghostty_
+_\$HOME/Library/Application Support/com.cjmvpu.cghostty/Settings/settings.json_
 
-: Location of the default configuration file.
+: Application-managed settings. Use Settings (Cmd+,) to edit them; restart after
+saving. Debug builds use `com.cjmvpu.cghostty.debug` instead of `com.cjmvpu.cghostty`.
 
 _\$HOME/Library/Application Support/com.cjmvpu.cghostty/config.ghostty_
 
-: **On macOS**, location of the default configuration file. This location takes
-precedence over the XDG environment locations.
+: Legacy configuration imported on the first application launch without stored
+settings, together with its referenced files. The import leaves the source files
+unchanged; subsequent launches use the application-managed settings.
 
 
 # ENVIRONMENT
@@ -20,14 +22,10 @@ precedence over the XDG environment locations.
 
 : Where the cghostty resources can be found.
 
-**XDG_CONFIG_HOME**
+**XDG_STATE_HOME**
 
-: Default location for configuration files.
-
-**$HOME/Library/Application Support/com.cjmvpu.cghostty**
-
-: **MACOS ONLY** default location for configuration files. This location takes
-precedence over the XDG environment locations.
+: Base directory for the SSH terminfo cache; defaults to `$HOME/.local/state`.
+This does not select a configuration directory.
 
 
 **CGHOSTTY_LOG**

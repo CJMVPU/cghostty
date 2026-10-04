@@ -12,7 +12,6 @@ const pipepkg = @import("pipe.zig");
 const resourcesdir = @import("resourcesdir.zig");
 
 // Namespaces
-pub const edit = @import("edit.zig");
 pub const hostname = @import("hostname.zig");
 pub const mach = @import("mach.zig");
 pub const path = @import("path.zig");
@@ -40,14 +39,12 @@ pub const pipe = pipepkg.pipe;
 pub const resourcesDir = resourcesdir.resourcesDir;
 pub const ResourcesDir = resourcesdir.ResourcesDir;
 pub const ShellEscapeWriter = shell.ShellEscapeWriter;
-pub const getConfigEditCommand = edit.getConfigEditCommand;
 
 test {
     _ = file;
     _ = hostname;
     _ = openpkg;
     _ = stderr;
-    _ = edit;
     _ = path;
     _ = uri;
     _ = shell;

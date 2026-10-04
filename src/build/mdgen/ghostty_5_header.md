@@ -6,18 +6,20 @@
 
 # DESCRIPTION
 
-To configure cghostty, you must use a configuration file. GUI-based configuration
-is on the roadmap but not yet supported. The configuration file must be placed
-at `$XDG_CONFIG_HOME/cghostty/config.ghostty`, which defaults to `~/.config/cghostty/config.ghostty`
-if the [XDG environment is not set](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html).
-
-**The configuration file can also be placed at
-`$HOME/Library/Application Support/com.cjmvpu.cghostty/config.ghostty`.** This is the
-default configuration location. It is loaded after the XDG configuration and
-takes precedence when both define the same setting. Debug builds use
+Configure cghostty in the Settings window (Cmd+,). The application saves settings
+to `$HOME/Library/Application Support/com.cjmvpu.cghostty/Settings/settings.json`.
+Restart cghostty after saving to apply the changes. Debug builds use
 `com.cjmvpu.cghostty.debug` instead of `com.cjmvpu.cghostty`.
 
-The file format is documented below as an example:
+On the first launch without stored settings, the application imports the old
+`$HOME/Library/Application Support/com.cjmvpu.cghostty/config.ghostty` file and its
+referenced configuration files. The import leaves those files unchanged;
+subsequent launches use the stored settings. XDG configuration directories are
+not searched.
+
+Explicit command-line configuration files (`--config-file=/absolute/path/file`)
+and theme files continue to use the `key = value` syntax below. These examples
+describe that text format, not the application's settings JSON:
 
     # The syntax is "key = value". The whitespace around the equals doesn't matter.
     background = 282c34
@@ -28,8 +30,11 @@ The file format is documented below as an example:
     keybind = ctrl+z=close_surface
     keybind = ctrl+d=new_split:right
 
-    # Colors can be changed by setting the 16 colors of `palette`, which each color
-    # being defined as regular and bold.
+Theme files can set any of the 256 indexed colors in `palette`. The first 16
+entries contain eight regular and eight bright colors, illustrated below.
+The `palette` key is only accepted in theme files:
+
+    # The first 16 palette entries define the regular and bright ANSI colors.
     #
     # black
     palette = 0=#1d2021
@@ -73,8 +78,10 @@ public Ghostty configuration files for compatible examples and inspiration.
 
 ## Configuration Errors
 
-If your configuration file has any errors, cghostty does its best to ignore
-them and move on. Configuration errors will be logged.
+The Settings window validates changes before saving. If stored settings cannot
+be loaded, cghostty reports the problem and attempts to recover the previous
+valid settings. Errors in explicitly loaded text configuration files are
+reported as configuration diagnostics.
 
 ## Debugging Configuration
 
