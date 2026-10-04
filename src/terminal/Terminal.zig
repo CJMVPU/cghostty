@@ -2919,11 +2919,6 @@ fn invalidateFullWidthRowRange(
     }
 }
 
-// TODO(qwerasd): `insertLines` and `deleteLines` are 99% identical,
-// the majority of their logic can (and should) be abstracted in to
-// a single shared helper function, probably on `Screen` not here.
-// I'm just too lazy to do that rn :p
-
 /// Insert amount lines at the current cursor row. The contents of the line
 /// at the current cursor row and below (to the bottom-most line in the
 /// scrolling region) are shifted down by amount lines. The contents of the
@@ -2943,163 +2938,7 @@ fn invalidateFullWidthRowRange(
 ///
 /// Moves the cursor to the left margin.
 pub fn insertLines(self: *Terminal, count: usize) void {
-    self.accessibility_revision +%= 1;
-    // Rare, but happens
-    if (count == 0) return;
-
-    // If the cursor is outside the scroll region we do nothing.
-    if (self.screens.active.cursor.y < self.scrolling_region.top or
-        self.screens.active.cursor.y > self.scrolling_region.bottom or
-        self.screens.active.cursor.x < self.scrolling_region.left or
-        self.screens.active.cursor.x > self.scrolling_region.right) return;
-
-    {
-        // Scrolling dirties the images because it updates their placements pins.
-        self.screens.active.kitty_images.dirty = true;
-    }
-
-    // At the end we need to return the cursor to the row it started on.
-    const start_y = self.screens.active.cursor.y;
-    defer {
-        self.screens.active.cursorAbsolute(self.scrolling_region.left, start_y);
-
-        // Always unset pending wrap
-        self.screens.active.cursor.pending_wrap = false;
-    }
-
-    // We have a slower path if we have left or right scroll margins.
-    const left_right = self.scrolling_region.left > 0 or
-        self.scrolling_region.right < self.cols - 1;
-
-    // Remaining rows from our cursor to the bottom of the scroll region.
-    const rem = self.scrolling_region.bottom - self.screens.active.cursor.y + 1;
-
-    // We can only insert lines up to our remaining lines in the scroll
-    // region. So we take whichever is smaller.
-    const adjusted_count = @min(count, rem);
-    self.recordScroll(start_y, @intCast(adjusted_count));
-
-    // Create a new tracked pin which we'll use to navigate the page list
-    // so that if we need to adjust capacity it will be properly tracked.
-    var cur_p = self.screens.active.pages.trackPin(
-        self.screens.active.cursor.page_pin.down(rem - 1).?,
-    ) catch |err| {
-        comptime assert(@TypeOf(err) == error{OutOfMemory});
-
-        // This error scenario means that our GPA is OOM. This is not a
-        // situation we can gracefully handle. We can't just ignore insertLines
-        // because it'll result in a corrupted screen. Ideally in the future
-        // we flag the state as broken and show an error message to the user.
-        // For now, we panic.
-        log.err("insertLines trackPin error err={}", .{err});
-        @panic("insertLines trackPin OOM");
-    };
-    defer self.screens.active.pages.untrackPin(cur_p);
-
-    // Partial-width margins edit cells in stable rows; full-width moves rows.
-    if (!left_right) self.invalidateFullWidthRowRange(
-        self.screens.active.cursor.page_pin.node,
-        cur_p.node,
-    );
-
-    // Our current y position relative to the cursor
-    var y: usize = rem;
-
-    // Traverse from the bottom up
-    while (y > 0) {
-        const cur_rac = cur_p.rowAndCell();
-        const cur_row: *Row = cur_rac.row;
-
-        // If this is one of the lines we need to shift, do so
-        if (y > adjusted_count) {
-            const off_p = cur_p.up(adjusted_count).?;
-            const off_rac = off_p.rowAndCell();
-            const off_row: *Row = off_rac.row;
-
-            self.rowWillBeShifted(cur_p.node.page(), cur_row);
-            self.rowWillBeShifted(off_p.node.page(), off_row);
-
-            // If our scrolling region is full width, then we unset wrap.
-            if (!left_right) {
-                off_row.wrap = false;
-                cur_row.wrap = false;
-                off_row.wrap_continuation = false;
-                cur_row.wrap_continuation = false;
-            }
-
-            const src_p = off_p;
-            const src_row = off_row;
-            const dst_p = cur_p;
-            const dst_row = cur_row;
-
-            // If our page doesn't match, then we need to do a copy from
-            // one page to another. This is the slow path.
-            if (src_p.node != dst_p.node) {
-                // The copy may replace the destination node in order
-                // to increase its capacity. Our pins are tracked so
-                // they update automatically; we can discard the
-                // replacement because the remainder of this iteration
-                // only accesses rows through the pins.
-                _ = self.screens.active.clonePartialRowGrowCapacity(
-                    dst_p.node,
-                    dst_p.y,
-                    src_p.node.page(),
-                    src_row,
-                    self.scrolling_region.left,
-                    self.scrolling_region.right + 1,
-                );
-            } else {
-                if (!left_right) {
-                    // Swap the src/dst cells. This ensures that our dst gets the
-                    // proper shifted rows and src gets non-garbage cell data that
-                    // we can clear.
-                    const dst = dst_row.*;
-                    dst_row.* = src_row.*;
-                    src_row.* = dst;
-
-                    // Ensure what we did didn't corrupt the page
-                    cur_p.node.page().assertIntegrity();
-                } else {
-                    // Left/right scroll margins we have to
-                    // copy cells, which is much slower...
-                    const page = cur_p.node.page();
-                    page.moveCells(
-                        src_row,
-                        self.scrolling_region.left,
-                        dst_row,
-                        self.scrolling_region.left,
-                        (self.scrolling_region.right - self.scrolling_region.left) + 1,
-                    );
-                }
-            }
-        } else {
-            // Clear the cells for this row, it has been shifted.
-            self.rowWillBeShifted(cur_p.node.page(), cur_row);
-            const page = cur_p.node.page();
-            const cells = page.getCells(cur_row);
-            self.screens.active.clearCells(
-                page,
-                cur_row,
-                cells[self.scrolling_region.left .. self.scrolling_region.right + 1],
-            );
-
-            // With a full-width scroll region the entire row is a
-            // fresh blank row: reset the metadata so nothing (wrap
-            // state, semantic prompt) is retained from the row whose
-            // storage it recycles. With left/right margins the row
-            // keeps content outside the margins so the metadata is
-            // preserved, matching the shift case above.
-            if (!left_right) cur_row.reset();
-        }
-
-        // Mark the row as dirty
-        cur_p.markDirty();
-
-        // We have successfully processed a line.
-        y -= 1;
-        // Move our pin up to the next row.
-        if (cur_p.up(1)) |p| cur_p.* = p;
-    }
+    self.shiftLines(count, .down);
 }
 
 /// Removes amount lines from the current cursor row down. The remaining lines
@@ -3119,6 +2958,12 @@ pub fn insertLines(self: *Terminal, count: usize) void {
 ///
 /// Moves the cursor to the left margin.
 pub fn deleteLines(self: *Terminal, count: usize) void {
+    self.shiftLines(count, .up);
+}
+
+/// Shift the cursor-to-bottom region, visiting destinations before their sources
+/// so overlapping row moves remain safe. Direction describes content movement.
+fn shiftLines(self: *Terminal, count: usize, comptime direction: enum { up, down }) void {
     self.accessibility_revision +%= 1;
     // Rare, but happens
     if (count == 0) return;
@@ -3138,6 +2983,7 @@ pub fn deleteLines(self: *Terminal, count: usize) void {
     const start_y = self.screens.active.cursor.y;
     defer {
         self.screens.active.cursorAbsolute(self.scrolling_region.left, start_y);
+
         // Always unset pending wrap
         self.screens.active.cursor.pending_wrap = false;
     }
@@ -3149,40 +2995,49 @@ pub fn deleteLines(self: *Terminal, count: usize) void {
     // Remaining rows from our cursor to the bottom of the scroll region.
     const rem = self.scrolling_region.bottom - self.screens.active.cursor.y + 1;
 
-    // We can only insert lines up to our remaining lines in the scroll
-    // region. So we take whichever is smaller.
+    // Clamp movement to the rows remaining in the scrolling region.
     const adjusted_count = @min(count, rem);
-    self.recordScroll(start_y, -@as(i32, @intCast(adjusted_count)));
+    const scroll_rows: i32 = @intCast(adjusted_count);
+    self.recordScroll(start_y, if (direction == .down) scroll_rows else -scroll_rows);
 
     // Create a new tracked pin which we'll use to navigate the page list
     // so that if we need to adjust capacity it will be properly tracked.
+    const cursor_pin = self.screens.active.cursor.page_pin.*;
     var cur_p = self.screens.active.pages.trackPin(
-        self.screens.active.cursor.page_pin.*,
+        if (direction == .down) cursor_pin.down(rem - 1).? else cursor_pin,
     ) catch |err| {
-        // See insertLines
         comptime assert(@TypeOf(err) == error{OutOfMemory});
-        log.err("deleteLines trackPin error err={}", .{err});
-        @panic("deleteLines trackPin OOM");
+
+        // This error scenario means that our GPA is OOM. This is not a
+        // situation we can gracefully handle. We can't just ignore line movement
+        // because it'll result in a corrupted screen. Ideally in the future
+        // we flag the state as broken and show an error message to the user.
+        // For now, we panic.
+        const operation = if (direction == .down) "insertLines" else "deleteLines";
+        log.err(operation ++ " trackPin error err={}", .{err});
+        @panic(operation ++ " trackPin OOM");
     };
     defer self.screens.active.pages.untrackPin(cur_p);
 
     // Partial-width margins edit cells in stable rows; full-width moves rows.
     if (!left_right) self.invalidateFullWidthRowRange(
-        cur_p.node,
-        cur_p.down(rem - 1).?.node,
+        cursor_pin.node,
+        cursor_pin.down(rem - 1).?.node,
     );
 
-    // Our current y position relative to the cursor
-    var y: usize = 0;
-
-    // Traverse from the top down
-    while (y < rem) {
+    // Insert visits bottom-to-top; delete visits top-to-bottom. In either
+    // direction the last adjusted_count destinations become blank rows.
+    var remaining: usize = rem;
+    while (remaining > 0) {
         const cur_rac = cur_p.rowAndCell();
         const cur_row: *Row = cur_rac.row;
 
         // If this is one of the lines we need to shift, do so
-        if (y < rem - adjusted_count) {
-            const off_p = cur_p.down(adjusted_count).?;
+        if (remaining > adjusted_count) {
+            const off_p = if (direction == .down)
+                cur_p.up(adjusted_count).?
+            else
+                cur_p.down(adjusted_count).?;
             const off_rac = off_p.rowAndCell();
             const off_row: *Row = off_rac.row;
 
@@ -3243,7 +3098,7 @@ pub fn deleteLines(self: *Terminal, count: usize) void {
                 }
             }
         } else {
-            // Clear the cells for this row, it's from out of bounds.
+            // Clear the vacated destination row.
             self.rowWillBeShifted(cur_p.node.page(), cur_row);
             const page = cur_p.node.page();
             const cells = page.getCells(cur_row);
@@ -3266,9 +3121,10 @@ pub fn deleteLines(self: *Terminal, count: usize) void {
         cur_p.markDirty();
 
         // We have successfully processed a line.
-        y += 1;
-        // Move our pin down to the next row.
-        if (cur_p.down(1)) |p| cur_p.* = p;
+        remaining -= 1;
+        // Keep navigating through the tracked pin after capacity changes.
+        const next = if (direction == .down) cur_p.up(1) else cur_p.down(1);
+        if (next) |p| cur_p.* = p;
     }
 }
 
