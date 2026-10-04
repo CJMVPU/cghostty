@@ -350,10 +350,9 @@ inline fn doAction(self: *Parser, action: TransitionAction, c: u8) ?Action {
             self.param_acc *|= 10;
             self.param_acc +|= c - '0';
 
-            // Increment our accumulator index. If we overflow then
-            // we're out of bounds and we exit immediately.
-            self.param_acc_idx, const overflow = @addWithOverflow(self.param_acc_idx, 1);
-            if (overflow > 0) break :param null;
+            // Finalization only needs to know whether a digit was read.
+            // Counting digits can wrap to zero and drop a valid parameter.
+            self.param_acc_idx |= 1;
 
             // The client is expected to perform no action.
             break :param null;
@@ -1105,4 +1104,108 @@ test "dcs: too many params" {
     try testing.expect(a[0] == null);
     try testing.expect(a[1] == null);
     try testing.expect(a[2] == null);
+}
+
+/// Exercise the same Stream -> DCS handler hook used by terminal IO, rather
+/// than only observing the lower-level parser action. Keep a copy of hook
+/// parameters because the parser owns their storage.
+const DcsParamTestHandler = struct {
+    dcs: @import("dcs.zig").Handler = .{},
+    hooks: usize = 0,
+    params_len: usize = 0,
+    param: ?u16 = null,
+    enters: usize = 0,
+    exits: usize = 0,
+
+    pub fn deinit(self: *@This()) void {
+        self.dcs.deinit();
+    }
+
+    pub fn vt(
+        self: *@This(),
+        comptime action: @import("stream.zig").Action.Tag,
+        value: @import("stream.zig").Action.Value(action),
+    ) void {
+        switch (action) {
+            .dcs_hook => {
+                self.hooks += 1;
+                self.params_len = value.params.len;
+                self.param = if (value.params.len > 0) value.params[0] else null;
+                self.command(self.dcs.hook(testing.allocator, value));
+            },
+            .dcs_put => self.command(self.dcs.put(value)),
+            .dcs_unhook => self.command(self.dcs.unhook()),
+            else => {},
+        }
+    }
+
+    fn command(self: *@This(), maybe_cmd: ?@import("dcs.zig").Command) void {
+        var cmd = maybe_cmd orelse return;
+        defer cmd.deinit();
+        switch (cmd) {
+            .tmux => |notification| switch (notification) {
+                .enter => self.enters += 1,
+                .exit => self.exits += 1,
+                else => {},
+            },
+            else => {},
+        }
+    }
+};
+
+fn expectDcsParamStream(
+    input: []const u8,
+    split: ?usize,
+    expected: u16,
+) !void {
+    const Stream = @import("stream.zig").Stream(DcsParamTestHandler);
+    var stream: Stream = .init(.{ .handler = .{} });
+    defer stream.deinit();
+    if (split) |offset| {
+        stream.nextSlice(input[0..offset]);
+        stream.nextSlice(input[offset..]);
+    } else {
+        for (input) |byte| stream.next(byte);
+    }
+
+    try testing.expectEqual(@as(usize, 1), stream.handler.hooks);
+    try testing.expectEqual(@as(usize, 1), stream.handler.params_len);
+    try testing.expectEqual(@as(?u16, expected), stream.handler.param);
+    const expected_sessions: usize = @intFromBool(expected == 1000);
+    try testing.expectEqual(expected_sessions, stream.handler.enters);
+    try testing.expectEqual(expected_sessions, stream.handler.exits);
+    try testing.expect(stream.ground());
+}
+
+test "dcs: long parameter leading zeros enter tmux across stream chunks" {
+    var input: [2 + 257 + 1 + 2]u8 = undefined;
+    @memcpy(input[0..2], "\x1bP");
+    for ([_]usize{ 255, 256, 257 }) |digits| {
+        @memset(input[2..][0 .. digits - 4], '0');
+        @memcpy(input[2 + digits - 4 ..][0..4], "1000");
+        @memcpy(input[2 + digits ..][0..3], "p\x1b\\");
+        const bytes = input[0 .. 2 + digits + 3];
+
+        // Every two-slice boundary, including inside the DCS introducer,
+        // accumulated parameter, final byte, and string terminator.
+        for (0..bytes.len + 1) |split| {
+            try expectDcsParamStream(bytes, split, 1000);
+        }
+        try expectDcsParamStream(bytes, null, 1000);
+    }
+}
+
+test "dcs: long parameter numeric overflow remains saturated" {
+    var input: [2 + 257 + 1 + 2]u8 = undefined;
+    @memcpy(input[0..2], "\x1bP");
+    for ([_]usize{ 255, 256, 257 }) |digits| {
+        @memset(input[2..][0..digits], '9');
+        @memcpy(input[2 + digits ..][0..3], "p\x1b\\");
+        const bytes = input[0 .. 2 + digits + 3];
+
+        for ([_]usize{ 0, 2, 255, 256, bytes.len - 1, bytes.len }) |split| {
+            try expectDcsParamStream(bytes, split, std.math.maxInt(u16));
+        }
+        try expectDcsParamStream(bytes, null, std.math.maxInt(u16));
+    }
 }
