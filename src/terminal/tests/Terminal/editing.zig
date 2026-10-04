@@ -217,6 +217,96 @@ test "Terminal: eraseChars protected attributes respected with iso" {
     }
 }
 
+test "Terminal: eraseChars ISO protected wide tail preserves grapheme" {
+    const alloc = testing.allocator;
+    var t = try init(testing.io, alloc, .{ .rows = 2, .cols = 5 });
+    defer t.deinit(alloc);
+
+    var stream = t.vtStream();
+    defer stream.deinit();
+    // SPA/EPA leave the last protection mode as ISO. ECH starts on the
+    // protected wide character's tail and also covers the unprotected X.
+    stream.nextSlice("\x1bV橋\u{0301}\x1bWXY\x1b[2G\x1b[2X");
+
+    const str = try t.plainString(alloc);
+    defer alloc.free(str);
+    try testing.expectEqualStrings("橋\u{0301} Y", str);
+
+    const head = t.screens.active.pages.getCell(.{ .active = .{ .x = 0, .y = 0 } }).?;
+    const tail = t.screens.active.pages.getCell(.{ .active = .{ .x = 1, .y = 0 } }).?;
+    try testing.expectEqual(Cell.Wide.wide, head.cell.wide);
+    try testing.expectEqual(Cell.Wide.spacer_tail, tail.cell.wide);
+    try testing.expect(head.cell.protected);
+    try testing.expect(tail.cell.protected);
+    try testing.expectEqualSlices(u21, &.{0x0301}, head.node.page().lookupGrapheme(head.cell).?);
+    head.node.page().assertIntegrity();
+}
+
+test "Terminal: eraseChars ISO protected wide head preserves character" {
+    const alloc = testing.allocator;
+    var t = try init(testing.io, alloc, .{ .rows = 2, .cols = 5 });
+    defer t.deinit(alloc);
+
+    t.setProtectedMode(.iso);
+    try t.print('橋');
+    t.setProtectedMode(.off);
+    try t.printString("XY");
+    t.setCursorPos(1, 1);
+    // Include both protected cells and an unprotected neighbor.
+    t.eraseChars(3);
+
+    const str = try t.plainString(alloc);
+    defer alloc.free(str);
+    try testing.expectEqualStrings("橋 Y", str);
+
+    const head = t.screens.active.pages.getCell(.{ .active = .{ .x = 0, .y = 0 } }).?;
+    const tail = t.screens.active.pages.getCell(.{ .active = .{ .x = 1, .y = 0 } }).?;
+    try testing.expectEqual(Cell.Wide.wide, head.cell.wide);
+    try testing.expectEqual(Cell.Wide.spacer_tail, tail.cell.wide);
+    try testing.expect(head.cell.protected);
+    try testing.expect(tail.cell.protected);
+    head.node.page().assertIntegrity();
+}
+
+test "Terminal: eraseChars ISO protected wrapped wide boundaries preserve spacer" {
+    const alloc = testing.allocator;
+    // Exercise both the wrapped character's head and tail boundary.
+    for ([_]u16{ 1, 2 }) |column| {
+        var t = try init(testing.io, alloc, .{ .rows = 3, .cols = 5 });
+        defer t.deinit(alloc);
+
+        try t.printString("ABCD");
+        t.setProtectedMode(.iso);
+        try t.printString("字\u{0301}");
+        t.setProtectedMode(.off);
+        try t.print('X');
+
+        const spacer = t.screens.active.pages.getCell(.{ .active = .{ .x = 4, .y = 0 } }).?;
+        try testing.expectEqual(Cell.Wide.spacer_head, spacer.cell.wide);
+        try testing.expect(spacer.cell.protected);
+        try testing.expect(spacer.row.wrap);
+
+        t.setCursorPos(2, column);
+        t.eraseChars(1);
+
+        const str = try t.plainStringUnwrapped(alloc);
+        defer alloc.free(str);
+        try testing.expectEqualStrings("ABCD字\u{0301}X", str);
+        try testing.expectEqual(Cell.Wide.spacer_head, spacer.cell.wide);
+        try testing.expect(spacer.cell.protected);
+        try testing.expect(spacer.row.wrap);
+
+        const head = t.screens.active.pages.getCell(.{ .active = .{ .x = 0, .y = 1 } }).?;
+        const tail = t.screens.active.pages.getCell(.{ .active = .{ .x = 1, .y = 1 } }).?;
+        try testing.expectEqual(Cell.Wide.wide, head.cell.wide);
+        try testing.expectEqual(Cell.Wide.spacer_tail, tail.cell.wide);
+        try testing.expect(head.cell.protected);
+        try testing.expect(tail.cell.protected);
+        try testing.expectEqualSlices(u21, &.{0x0301}, head.node.page().lookupGrapheme(head.cell).?);
+        head.node.page().assertIntegrity();
+    }
+}
+
 test "Terminal: eraseChars protected attributes ignored with dec most recent" {
     const alloc = testing.allocator;
     const io_impl = testing.io;

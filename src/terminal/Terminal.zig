@@ -3400,9 +3400,9 @@ pub fn deleteChars(self: *Terminal, count_req: usize) void {
     // We can only insert blanks up to our remaining cols
     const count = @min(count_req, rem);
 
-    self.screens.active.splitCellBoundary(self.screens.active.cursor.x);
-    self.screens.active.splitCellBoundary(self.screens.active.cursor.x + count);
-    self.screens.active.splitCellBoundary(self.scrolling_region.right + 1);
+    self.screens.active.splitCellBoundary(self.screens.active.cursor.x, false);
+    self.screens.active.splitCellBoundary(self.screens.active.cursor.x + count, false);
+    self.screens.active.splitCellBoundary(self.scrolling_region.right + 1, false);
 
     // This is the amount of space at the right of the scroll region
     // that will NOT be blank, so we need to shift the correct cols right.
@@ -3448,13 +3448,11 @@ pub fn eraseChars(self: *Terminal, count_req: usize) void {
         break :end end;
     };
 
-    // Handle any boundary conditions on the edges of the erased area.
-    //
-    // TODO(qwerasd): This isn't actually correct if you take in to account
-    // protected modes. We need to figure out how to make `clearCells` or at
-    // least `clearUnprotectedCells` handle boundary conditions...
-    self.screens.active.splitCellBoundary(self.screens.active.cursor.x);
-    self.screens.active.splitCellBoundary(self.screens.active.cursor.x + count);
+    // Boundary cleanup must obey the same ISO protection policy as the
+    // erased cells, including spacer heads on the preceding wrapped row.
+    const respect_protected = self.screens.active.protected_mode == .iso;
+    self.screens.active.splitCellBoundary(self.screens.active.cursor.x, respect_protected);
+    self.screens.active.splitCellBoundary(self.screens.active.cursor.x + count, respect_protected);
 
     // Reset our row's soft-wrap.
     self.screens.active.cursorResetWrap();
@@ -3468,7 +3466,7 @@ pub fn eraseChars(self: *Terminal, count_req: usize) void {
     // If we never had a protection mode, then we can assume no cells
     // are protected and go with the fast path. If the last protection
     // mode was not ISO we also always ignore protection attributes.
-    if (self.screens.active.protected_mode != .iso) {
+    if (!respect_protected) {
         self.screens.active.clearCells(
             self.screens.active.cursor.page_pin.node.page(),
             self.screens.active.cursor.page_row,

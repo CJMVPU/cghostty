@@ -1876,6 +1876,8 @@ pub fn clearUnprotectedCells(
 /// 1, this will be interpreted correctly.
 ///
 /// DOES NOT MODIFY ROW WRAP STATE! See `cursorResetWrap` for that.
+/// When `respect_protected` is true, protected wide characters and their
+/// associated spacer heads are preserved rather than split.
 ///
 /// The following boundary conditions are handled:
 ///
@@ -1899,6 +1901,7 @@ pub fn clearUnprotectedCells(
 pub fn splitCellBoundary(
     self: *Screen,
     x: size.CellCountInt,
+    respect_protected: bool,
 ) void {
     self.accessibility_revision +%= 1;
     const page = self.cursor.page_pin.node.page();
@@ -1920,7 +1923,9 @@ pub fn splitCellBoundary(
         const cells = self.cursor.page_pin.cells(.all);
 
         // Spacer head at end of wrapped row.
-        if (cells[cols - 1].wide == .spacer_head) {
+        if (cells[cols - 1].wide == .spacer_head and
+            !(respect_protected and cells[cols - 1].protected))
+        {
             self.clearCells(
                 page,
                 self.cursor.page_row,
@@ -1946,7 +1951,9 @@ pub fn splitCellBoundary(
 
         // If the first cell in a row is wide the previous row
         // may have a spacer head which needs to be cleared.
-        if (cells[0].wide == .wide) {
+        if (cells[0].wide == .wide and
+            !(respect_protected and cells[0].protected))
+        {
             if (self.cursor.page_pin.up(1)) |p_row| {
                 const p_rac = p_row.rowAndCell();
                 const p_cells = p_row.cells(.all);
@@ -1988,6 +1995,7 @@ pub fn splitCellBoundary(
 
             // A wide char would be split, so must be cleared.
             .wide => {
+                if (respect_protected and left.protected) return;
                 self.clearCells(
                     page,
                     self.cursor.page_row,
