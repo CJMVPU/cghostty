@@ -346,61 +346,55 @@ pub fn queueWrite(
     const exec = &td.backend;
 
     // If our process is exited then we don't send any more writes.
-    if (exec.exited) return;
+    if (exec.exited or data.len == 0) return;
 
-    // We go through and chunk the data if necessary to fit into
-    // our cached buffers that we can queue to the stream.
-    var i: usize = 0;
-    while (i < data.len) {
-        const w = try exec.write_pool.create(alloc);
-        w.td = exec;
-        const buf = &w.buf;
-        const slice = slice: {
-            // The maximum end index is either the end of our data or
-            // the end of our buffer, whichever is smaller.
-            const max = @min(data.len, i + buf.len);
+    // Small input stays in the pooled inline buffer. Larger input owns one
+    // buffer until its completion: libxev handles partial writes and FIFO
+    // ordering without a separate request for each 64 bytes of a paste.
+    const len = if (linefeed)
+        std.math.add(usize, data.len, std.mem.count(u8, data, "\r")) catch
+            return error.OutOfMemory
+    else
+        data.len;
+    const owned: ?[]u8 = if (len > ThreadData.Write.inline_buffer_size)
+        try alloc.alloc(u8, len)
+    else
+        null;
+    errdefer if (owned) |buf| alloc.free(buf);
 
-            // Fast
-            if (!linefeed) {
-                fastmem.copy(u8, buf, data[i..max]);
-                const len = max - i;
-                i = max;
-                break :slice buf[0..len];
-            }
-
-            // Slow, have to replace \r with \r\n
-            var buf_i: usize = 0;
-            while (i < data.len and buf_i < buf.len - 1) {
-                const ch = data[i];
+    const w = try exec.write_pool.create(alloc);
+    w.* = .{
+        .td = exec,
+        .req = undefined,
+        .buf = undefined,
+        .owner_allocator = alloc,
+        .owned = owned,
+    };
+    const slice = owned orelse w.buf[0..len];
+    if (!linefeed or len == data.len) {
+        fastmem.copy(u8, slice, data);
+    } else {
+        var i: usize = 0;
+        for (data) |ch| {
+            slice[i] = ch;
+            i += 1;
+            if (ch == '\r') {
+                slice[i] = '\n';
                 i += 1;
-
-                if (ch != '\r') {
-                    buf[buf_i] = ch;
-                    buf_i += 1;
-                    continue;
-                }
-
-                // CRLF
-                buf[buf_i] = '\r';
-                buf[buf_i + 1] = '\n';
-                buf_i += 2;
             }
-
-            break :slice buf[0..buf_i];
-        };
-
-        //for (slice) |b| log.warn("write: {x}", .{b});
-
-        exec.write_stream.queueWrite(
-            td.loop,
-            &exec.write_queue,
-            &w.req,
-            .{ .slice = slice },
-            ThreadData.Write,
-            w,
-            ttyWrite,
-        );
+        }
+        assert(i == slice.len);
     }
+
+    exec.write_stream.queueWrite(
+        td.loop,
+        &exec.write_queue,
+        &w.req,
+        .{ .slice = slice },
+        ThreadData.Write,
+        w,
+        ttyWrite,
+    );
 }
 
 fn ttyWrite(
@@ -411,15 +405,11 @@ fn ttyWrite(
     _: xev.WriteBuffer,
     r: xev.WriteError!usize,
 ) xev.CallbackAction {
-    const w = w_.?;
-    w.td.write_pool.destroy(w);
-
-    const d = r catch |err| {
+    const d = w_.?.complete(r) catch |err| {
         log.err("write error: {}", .{err});
         return .disarm;
     };
     _ = d;
-    //log.info("WROTE: {d}", .{d});
 
     return .disarm;
 }
@@ -428,9 +418,11 @@ fn ttyWrite(
 pub const ThreadData = struct {
     /// The state for a single queued pty write. The write request and
     /// the buffer it writes from must both remain pointer-stable until
-    /// the write completes, so they're pooled together and checked out
-    /// per write.
+    /// completion. Each pooled request contains a short inline buffer
+    /// or owns a separate buffer for larger input.
     pub const Write = struct {
+        const inline_buffer_size = 64;
+
         /// Backpointer to the thread data so the write completion
         /// callback can put this back into the pool.
         td: *ThreadData,
@@ -438,8 +430,25 @@ pub const ThreadData = struct {
         /// The libxev write request.
         req: xev.WriteRequest,
 
-        /// The buffer for the data being written.
-        buf: [64]u8,
+        /// Short writes use this buffer without a separate allocation.
+        buf: [inline_buffer_size]u8,
+
+        /// Large writes own a buffer separately so completing a paste
+        /// releases its memory instead of retaining it in the request pool.
+        owner_allocator: Allocator,
+        owned: ?[]u8,
+
+        fn deinit(self: *Write) void {
+            if (self.owned) |buf| self.owner_allocator.free(buf);
+            self.owned = null;
+        }
+
+        /// Release storage before handling either completion success or error.
+        pub fn complete(self: *Write, result: xev.WriteError!usize) xev.WriteError!usize {
+            self.deinit();
+            self.td.write_pool.destroy(self);
+            return result;
+        }
     };
 
     /// Process start time and boolean of whether its already exited.
@@ -480,13 +489,21 @@ pub const ThreadData = struct {
     /// to prevent unnecessary locking of expensive mutexes.
     termios_mode: ptypkg.Mode = .{},
 
+    /// Release pending buffers and pooled requests. The caller must never
+    /// run the event loop again after this, since completions point here.
+    pub fn deinitWrites(self: *ThreadData, alloc: Allocator) void {
+        while (self.write_queue.pop()) |req| {
+            const w: *Write = @ptrCast(@alignCast(req.userdata.?));
+            w.deinit();
+        }
+        self.write_pool.deinit(alloc);
+    }
+
     pub fn deinit(self: *ThreadData, alloc: Allocator) void {
         _ = posix.system.close(self.read_thread_pipe);
 
-        // Clear our write pool. We know we aren't ever going to do
-        // any more IO since we stop our data stream below so we can just
-        // drop this.
-        self.write_pool.deinit(alloc);
+        // The IO loop has returned and must not run these callbacks again.
+        self.deinitWrites(alloc);
 
         // Stop our process watcher
         if (self.process) |*p| p.deinit();
