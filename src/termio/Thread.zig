@@ -220,7 +220,6 @@ fn drainMailbox(
     // We assert when starting the thread that this is the state
     const mailbox = cb.io.mailbox.spsc.queue;
     const io = cb.io;
-    const data = &cb.data;
 
     // If we're draining, we just drain the mailbox and return.
     if (self.flags.drain) {
@@ -228,75 +227,85 @@ fn drainMailbox(
         return;
     }
 
-    // This holds the mailbox lock for the duration of the drain. The
-    // expectation is that all our message handlers will be non-blocking
-    // ENOUGH to not mess up throughput on producers.
+    // pop releases the queue lock before handling each message. A failed
+    // message must not leave the rest waiting for an already-coalesced wakeup.
     var redraw: bool = false;
+    var first_error: ?anyerror = null;
     while (mailbox.pop(global.io())) |message| {
-        // If we have a message we always redraw
         redraw = true;
-
         log.debug("mailbox message={s}", .{@tagName(message)});
-        switch (message) {
-            .color_scheme_report => |v| try io.colorSchemeReport(data, v.force),
-            .visibility_report => |v| try io.visibilityReport(
-                data,
-                v.visible,
-                v.force,
-            ),
-            .crash => @panic("crash request, crashing intentionally"),
-            .change_config => |config| {
-                defer config.alloc.destroy(config.ptr);
-                try io.changeConfig(config.ptr);
-            },
-            .resize => |v| self.handleResize(cb, v),
-            .size_report => |v| try io.sizeReport(data, v),
-            .clear_screen => |v| try io.clearScreen(data, v.history),
-            .scroll_viewport => |v| io.scrollViewport(v),
-            .selection_scroll => |v| {
-                if (v) {
-                    self.startScrollTimer(cb);
-                } else {
-                    self.stopScrollTimer();
-                }
-            },
-            .jump_to_prompt => |v| try io.jumpToPrompt(v),
-            .kitty_clipboard_grant_read => |v| {
-                defer v.alloc.free(v.pw);
-                try io.kittyClipboardGrant(v.pw, .read);
-            },
-            .kitty_clipboard_grant_write => |v| {
-                defer v.alloc.free(v.pw);
-                try io.kittyClipboardGrant(v.pw, .write);
-            },
-            .start_synchronized_output => self.startSynchronizedOutput(cb),
-            .linefeed_mode => |v| self.flags.linefeed_mode = v,
-            .focused => |v| try io.focusGained(data, v),
-            .write_small => |v| try io.queueWrite(
-                data,
-                v.data[0..v.len],
-                self.flags.linefeed_mode,
-            ),
-            .write_stable => |v| try io.queueWrite(
-                data,
-                v,
-                self.flags.linefeed_mode,
-            ),
-            .write_alloc => |v| {
-                defer v.alloc.free(v.data);
-                try io.queueWrite(
-                    data,
-                    v.data,
-                    self.flags.linefeed_mode,
-                );
-            },
-        }
+        self.handleMailboxMessage(cb, message) catch |err| {
+            if (first_error == null) first_error = err;
+        };
     }
 
-    // Trigger a redraw after we've drained so we don't waste cyces
-    // messaging a redraw.
-    if (redraw) {
-        try io.renderer_wakeup.notify();
+    // Notify once for the batch, including changes processed after a failure.
+    if (redraw) io.renderer_wakeup.notify() catch |err| {
+        if (first_error == null) first_error = err;
+    };
+    if (first_error) |err| return err;
+}
+
+fn handleMailboxMessage(
+    self: *Thread,
+    cb: *CallbackData,
+    message: termio.Message,
+) !void {
+    const io = cb.io;
+    const data = &cb.data;
+    switch (message) {
+        .color_scheme_report => |v| try io.colorSchemeReport(data, v.force),
+        .visibility_report => |v| try io.visibilityReport(
+            data,
+            v.visible,
+            v.force,
+        ),
+        .crash => @panic("crash request, crashing intentionally"),
+        .change_config => |config| {
+            defer config.alloc.destroy(config.ptr);
+            try io.changeConfig(config.ptr);
+        },
+        .resize => |v| self.handleResize(cb, v),
+        .size_report => |v| try io.sizeReport(data, v),
+        .clear_screen => |v| try io.clearScreen(data, v.history),
+        .scroll_viewport => |v| io.scrollViewport(v),
+        .selection_scroll => |v| {
+            if (v) {
+                self.startScrollTimer(cb);
+            } else {
+                self.stopScrollTimer();
+            }
+        },
+        .jump_to_prompt => |v| try io.jumpToPrompt(v),
+        .kitty_clipboard_grant_read => |v| {
+            defer v.alloc.free(v.pw);
+            try io.kittyClipboardGrant(v.pw, .read);
+        },
+        .kitty_clipboard_grant_write => |v| {
+            defer v.alloc.free(v.pw);
+            try io.kittyClipboardGrant(v.pw, .write);
+        },
+        .start_synchronized_output => self.startSynchronizedOutput(cb),
+        .linefeed_mode => |v| self.flags.linefeed_mode = v,
+        .focused => |v| try io.focusGained(data, v),
+        .write_small => |v| try io.queueWrite(
+            data,
+            v.data[0..v.len],
+            self.flags.linefeed_mode,
+        ),
+        .write_stable => |v| try io.queueWrite(
+            data,
+            v,
+            self.flags.linefeed_mode,
+        ),
+        .write_alloc => |v| {
+            defer v.alloc.free(v.data);
+            try io.queueWrite(
+                data,
+                v.data,
+                self.flags.linefeed_mode,
+            );
+        },
     }
 }
 
@@ -467,4 +476,98 @@ fn selectionScrollCallback(
     );
 
     return .disarm;
+}
+
+/// A mailbox/loop fixture without a child or renderer. Writes are queued
+/// against an unused descriptor; these tests inspect the FIFO and never run
+/// its write completions. Only initialized resources are destroyed.
+const DrainTest = struct {
+    worker: Thread = undefined,
+    io: termio.Termio = undefined,
+    cb: CallbackData = undefined,
+
+    fn init(self: *DrainTest, write_alloc: Allocator) !void {
+        const alloc = std.testing.allocator;
+        self.worker = try Thread.init(alloc);
+        errdefer self.worker.deinit();
+        self.io.mailbox = try termio.Mailbox.initSPSC(alloc);
+        errdefer self.io.mailbox.deinit(alloc);
+        self.io.renderer_wakeup = try xev.Async.init();
+        self.io.alloc = write_alloc;
+        self.cb = .{
+            .self = &self.worker,
+            .io = &self.io,
+            .data = .{
+                .alloc = write_alloc,
+                .loop = &self.worker.loop,
+                .renderer_state = undefined,
+                .surface_mailbox = undefined,
+                .mailbox = &self.io.mailbox,
+                .backend = .{
+                    .start = undefined,
+                    .write_stream = xev.Stream.initFd(-1),
+                    .process = null,
+                    .read_thread = undefined,
+                    .read_thread_pipe = -1,
+                    .read_thread_fd = -1,
+                    .termios_timer = undefined,
+                },
+            },
+        };
+    }
+
+    fn deinit(self: *DrainTest) void {
+        self.worker.deinit();
+        self.cb.data.backend.deinitWrites(self.io.alloc);
+        self.io.renderer_wakeup.deinit();
+        self.io.mailbox.deinit(std.testing.allocator);
+    }
+};
+
+test "IO mailbox drain continues controls and releases owners after write allocation failure" {
+    const t = std.testing;
+    var failing = t.FailingAllocator.init(t.allocator, .{ .fail_index = 0 });
+    var owners = t.FailingAllocator.init(t.allocator, .{});
+    var fixture: DrainTest = .{};
+    try fixture.init(failing.allocator());
+    defer fixture.deinit();
+    for ([_]bool{ false, true }) |linefeed| {
+        fixture.io.mailbox.send(try termio.Message.writeReq(
+            owners.allocator(),
+            @as([]const u8, "pending" ** 32),
+        ), null);
+        fixture.io.mailbox.send(.{ .linefeed_mode = linefeed }, null);
+    }
+
+    // One wakeup services this batch. AsyncMachPort coalesces notifications
+    // before drainMailbox runs, so returning early cannot rely on a second
+    // wakeup to handle the remaining messages.
+    try t.expectError(error.OutOfMemory, fixture.worker.drainMailbox(&fixture.cb));
+    try t.expect(fixture.worker.flags.linefeed_mode);
+    try t.expect(fixture.io.mailbox.spsc.queue.pop(t.io) == null);
+    try t.expectEqual(owners.allocated_bytes, owners.freed_bytes);
+}
+
+test "IO mailbox drain preserves write FIFO and intervening linefeed modes" {
+    const t = std.testing;
+    var owners = t.FailingAllocator.init(t.allocator, .{});
+    var fixture: DrainTest = .{};
+    try fixture.init(t.allocator);
+    defer fixture.deinit();
+    fixture.io.mailbox.send(.{ .write_stable = "first\r" }, null);
+    fixture.io.mailbox.send(.{ .linefeed_mode = true }, null);
+    fixture.io.mailbox.send(try termio.Message.writeReq(t.allocator, @as([]const u8, "\rA")), null);
+    fixture.io.mailbox.send(try termio.Message.writeReq(
+        owners.allocator(),
+        @as([]const u8, "owned" ** 20),
+    ), null);
+
+    try fixture.worker.drainMailbox(&fixture.cb);
+    var output: std.Io.Writer.Allocating = .init(t.allocator);
+    defer output.deinit();
+    var req = fixture.cb.data.backend.write_queue.head;
+    while (req) |r| : (req = r.next) try output.writer.writeAll(r.full_write_buffer.slice);
+    try t.expectEqualStrings("first\r\r\nA" ++ "owned" ** 20, output.written());
+    try t.expectEqual(owners.allocated_bytes, owners.freed_bytes);
+    try t.expect(fixture.io.mailbox.spsc.queue.pop(t.io) == null);
 }
