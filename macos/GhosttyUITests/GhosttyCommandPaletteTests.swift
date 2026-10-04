@@ -22,7 +22,9 @@ final class GhosttyCommandPaletteTests: GhosttyCustomConfigCase {
 
     @MainActor func testDismissingCommandPalette() async throws {
         let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
+        app.launch()
         app.activate()
+        defer { app.terminate() }
 
         XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 5), "New window should appear")
 
@@ -77,7 +79,9 @@ final class GhosttyCommandPaletteTests: GhosttyCustomConfigCase {
 
     @MainActor func testSelectCommandWithMouse() async throws {
         let app = try ghosttyApplication(defaultsSuite: UUID().uuidString)
+        app.launch()
         app.activate()
+        defer { app.terminate() }
 
         XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 5), "New window should appear")
 
