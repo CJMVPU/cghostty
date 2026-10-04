@@ -201,7 +201,12 @@ import Testing
     }
 
     @Test func selectionUpdatesReuseAccessibilityDocumentAndLineIndex() async throws {
-        let view = makeView(command: "/bin/sh -c 'printf \"old\\n桥接🙂é\\nready\"; exec /bin/cat'")
+        // The DSR reply shares the IO mailbox with the initial resize. Wait
+        // for that reply before publishing ready so a delayed startup resize
+        // cannot invalidate the document during the selection assertions.
+        let command = "/bin/sh -c 'stty -echo -icanon min 1 time 0; printf \"\\033[5n\"; " +
+            "dd bs=1 count=4 >/dev/null 2>/dev/null; printf \"old\\n桥接🙂é\\nready\"; exec /bin/cat'"
+        let view = makeView(command: command)
         let surface = try #require(view.surfaceModel)
         try await waitForText("ready", in: surface)
         let initial = try #require(surface.readAccessibility())
