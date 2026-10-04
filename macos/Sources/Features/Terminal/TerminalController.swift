@@ -660,40 +660,43 @@ class TerminalController: BaseTerminalController, TabGroupCloseCoordinator.Contr
 
     /// Close all windows, asking for confirmation if necessary.
     static func closeAllWindows(_ ghostty: Ghostty.App) {
-        // The window we use for confirmations. Try to find the first window that
-        // needs quit confirmation. This lets us attach the confirmation to something
-        // that is running.
-        guard let confirmWindow = ghostty.windowRegistry.all
-            .first(where: { $0.surfaceTree.contains(where: { $0.needsConfirmQuit }) })?
-            .surfaceTree.first(where: { $0.needsConfirmQuit })?
-            .window
-        else {
-            closeAllWindowsImmediately(ghostty)
-            return
-        }
-
-        let alert = NSAlert()
-        alert.messageText = "Close All Windows?"
-        alert.informativeText = "All terminal sessions will be terminated."
-        alert.addButton(withTitle: "Close All Windows")
-        alert.addButton(withTitle: "Cancel")
-        alert.alertStyle = .warning
-        alert.beginSheetModal(for: confirmWindow, completionHandler: { response in
-            if response == .alertFirstButtonReturn {
-                // This is important so that we avoid losing focus when Stage
-                // Manager is used (#8336)
-                alert.window.orderOut(nil)
-                closeAllWindowsImmediately(ghostty)
-            }
-        })
+        startCloseAllWindows(ghostty)
     }
 
-    static private func closeAllWindowsImmediately(_ ghostty: Ghostty.App) {
-        let undoManager = ghostty.undoManager
-        undoManager.beginUndoGrouping()
-        ghostty.windowRegistry.all.forEach { $0.closeWindowImmediately() }
-        undoManager.setActionName("Close All Windows")
-        undoManager.endUndoGrouping()
+    /// Async decisions can be supplied without presenting interactive sheets.
+    @discardableResult
+    static func startCloseAllWindows(
+        _ ghostty: Ghostty.App,
+        needsConfirmation: (TerminalController) -> Bool = {
+            $0.surfaceTree.contains(where: { $0.needsConfirmQuit })
+        },
+        confirm: @escaping @MainActor (TerminalController) async -> CloseConfirmationResult = { controller in
+            await controller.confirmCloseAsync(
+                messageText: "Close All Windows?",
+                informativeText: "All terminal sessions will be terminated.",
+                confirmButtonTitle: "Close All Windows"
+            )
+        }
+    ) -> Task<Void, Never>? {
+        // Review owns normal-window identities, including idle tabs. Neither a
+        // new window nor a new sibling inherits approval from an existing tab.
+        let targets = ghostty.windowRegistry.all.compactMap { controller -> WindowCloseTarget? in
+            guard let window = controller.window else { return nil }
+            return WindowCloseTarget(controller: controller, window: window)
+        }
+        guard !targets.isEmpty, !targets.contains(where: { $0.controller.windowCloseInFlight }) else { return nil }
+        guard let confirmation = targets.first(where: { needsConfirmation($0.controller) }) else {
+            closeControllerSnapshot(targets.map(\.controller), actionName: "Close All Windows")
+            return nil
+        }
+        targets.forEach { $0.controller.windowCloseInFlight = true }
+        return Task {
+            defer { targets.forEach { $0.controller.windowCloseInFlight = false } }
+            guard !Task.isCancelled,
+                  await confirm(confirmation.controller) == .allowed,
+                  !Task.isCancelled else { return }
+            closeControllerSnapshot(targets.filter(\.isOpen).map(\.controller), actionName: "Close All Windows")
+        }
     }
 
     // MARK: Undo/Redo
