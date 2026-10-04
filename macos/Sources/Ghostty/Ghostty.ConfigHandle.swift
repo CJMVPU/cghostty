@@ -8,6 +8,10 @@ extension Ghostty {
         private(set) var settingsDiagnostics: [SettingsDiagnostic]
         var errors: [String] { settingsDiagnostics.map(\.rawMessage) }
 
+        #if CGHOSTTY_TESTING
+        static var formattedEntryCallsForTesting = 0
+        #endif
+
         private init(adopting value: ghostty_config_t) {
             self.value = value
             self.settingsDiagnostics = Self.diagnostics(value)
@@ -36,6 +40,9 @@ extension Ghostty {
         }
 
         func formattedEntry(_ key: String) -> String {
+            #if CGHOSTTY_TESTING
+            Self.formattedEntryCallsForTesting += 1
+            #endif
             let entry = key.withCString { ghostty_config_format_entry(value, $0, key.utf8.count) }
             guard entry.ptr != nil else {
                 settingsDiagnostics.append(SettingsDiagnostic(key: key, kind: .core, message: "Unable to read the setting value."))

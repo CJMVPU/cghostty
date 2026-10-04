@@ -82,7 +82,7 @@ import Foundation
         record = loaded
         input = loaded.current
         let evaluation = store.evaluate(input)
-        effectiveValues = SettingsStore.values(evaluation.config)
+        effectiveValues = evaluation.values
         savedValues = effectiveValues
         refreshDisplayed()
         originalDisplayed = displayed
@@ -131,7 +131,7 @@ import Foundation
             var inherited = input
             inherited.values[key] = original.values[key]
             let evaluation = store.evaluate(inherited)
-            if evaluation.diagnostics.isEmpty, SettingsStore.values(evaluation.config)[key] == value {
+            if evaluation.diagnostics.isEmpty, evaluation.values[key] == value {
                 input = inherited
             }
         }
@@ -156,7 +156,7 @@ import Foundation
         let evaluation = store.evaluate(input)
         diagnostics = evaluation.diagnostics
         // Keep the last coherent resolution while invalid raw edits stay visible.
-        if diagnostics.isEmpty { effectiveValues = SettingsStore.values(evaluation.config) }
+        if diagnostics.isEmpty { effectiveValues = evaluation.values }
         refreshDisplayed()
         validation = diagnostics.isEmpty ? .valid : .invalid
         failure = nil
@@ -203,7 +203,7 @@ import Foundation
 
     private func didSave(_ saved: SettingsStore.Saved) {
         record = saved.record
-        effectiveValues = SettingsStore.values(saved.evaluation.config)
+        effectiveValues = saved.evaluation.values
         savedValues = effectiveValues
         refreshDisplayed()
         diagnostics = []

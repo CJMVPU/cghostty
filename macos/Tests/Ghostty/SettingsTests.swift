@@ -858,7 +858,7 @@ import Testing
             for _ in 0..<10 {
                 let start = ContinuousClock.now
                 let evaluation = store.evaluate(input)
-                _ = SettingsStore.values(evaluation.config)
+                _ = evaluation.values
                 let duration = start.duration(to: .now).components
                 samples.append(Double(duration.seconds) * 1000 + Double(duration.attoseconds) / 1e15)
                 #expect(evaluation.diagnostics.isEmpty)

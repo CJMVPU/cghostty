@@ -88,16 +88,16 @@ import Darwin
             let record = try FileManager.default.fileExists(atPath: url.path) ? read() : migrate()
             let evaluation = evaluate(record.current)
             if let result = evaluation.config, evaluation.diagnostics.isEmpty {
-                startupValues = Self.values(result)
+                startupValues = evaluation.values
                 result.report(startupErrors)
                 return applyCLI(record.current, checked: result, cli: cli)
             }
             startupErrors = evaluation.diagnostics.map(\.rawMessage)
-            if let previous = record.previous, let recovered = validatedConfig(previous) {
+            if let previous = record.previous, let recovered = validatedEvaluation(previous), let config = recovered.config {
                 startupErrors.insert("Invalid settings. The last valid settings were restored. Open Settings to correct the errors.", at: 0)
-                startupValues = Self.values(recovered)
-                recovered.report(startupErrors)
-                return applyCLI(previous, checked: recovered, cli: cli)
+                startupValues = recovered.values
+                config.report(startupErrors)
+                return applyCLI(previous, checked: config, cli: cli)
             }
         } catch {
             startupErrors = [error.localizedDescription]
@@ -128,12 +128,14 @@ import Darwin
     struct Evaluation {
         let config: Ghostty.ConfigHandle?
         let darkConfig: Ghostty.ConfigHandle?
+        let values: [String: String]
+        let darkValues: [String: String]
         let diagnostics: [SettingsDiagnostic]
     }
 
-    private func validatedConfig(_ input: Input) -> Ghostty.ConfigHandle? {
+    private func validatedEvaluation(_ input: Input) -> Evaluation? {
         let result = evaluate(input)
-        return result.diagnostics.isEmpty ? result.config : nil
+        return result.diagnostics.isEmpty ? result : nil
     }
 
     func diagnostics(_ input: Input) -> [SettingsDiagnostic] { evaluate(input).diagnostics }
@@ -156,15 +158,16 @@ import Darwin
         let darkConfig = parse(input, dark: true)
         // Formatting failures must block editing/saving instead of becoming an
         // empty repeatable value that can overwrite inherited settings.
-        _ = Self.values(config)
-        _ = Self.values(darkConfig)
+        let values = Self.values(config)
+        let darkValues = Self.values(darkConfig)
         var errors = fieldDiagnostics(input)
         let explainedKeys = Set(errors.compactMap(\.key))
         let parserError = SettingsDiagnostic(kind: .core, message: "Unable to create the settings parser.")
         let coreErrors = (config?.settingsDiagnostics ?? [parserError]) + (darkConfig?.settingsDiagnostics ?? [parserError])
         errors += coreErrors.filter { !explainedKeys.contains($0.key ?? "") }
         var seen = Set<SettingsDiagnostic>()
-        return Evaluation(config: config, darkConfig: darkConfig, diagnostics: errors.filter { seen.insert($0).inserted })
+        return Evaluation(config: config, darkConfig: darkConfig, values: values, darkValues: darkValues,
+                          diagnostics: errors.filter { seen.insert($0).inserted })
     }
 
     @discardableResult
