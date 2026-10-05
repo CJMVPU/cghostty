@@ -1,0 +1,174 @@
+{
+  "base_commit": "9c58662f071102e822de3cf583d2eec39ab21bd5",
+  "sources": {
+    "src/termio/Thread.zig": "6819039f8c30ff73dea1f2dd627295f99fd61d5bbf8987a6baf14af9b2bf2872",
+    "src/terminal/PageList.zig": "b07e03b41ae7bdb3ac1321ba24671d9390f6ec30e54e2e977fdd9b8e4b680135",
+    "src/terminal/kitty/graphics_storage.zig": "ff5405e885739c51ff84a37a2ef6345ce8104a59f7a7ba6fb5623631fd63736b",
+    "src/terminal/kitty/graphics_exec.zig": "8a14cc2ad268431bd0412db8c1cd1a876b27e06552e3abbb967932a215d397bf",
+    "src/renderer/image.zig": "ff4f914f3aff3543b513a1d3f6658bd1038b5ee5faf56bf3ae51bbbc35f61610",
+    "src/terminal/tests/PageList/reflow_allocations.zig": "8fb1fc799c72a5a2b4b1019dc1023c7a8c9da40b5cfeda6dd12be66b4e75e18d"
+  },
+  "test_only_patch_sha256": "91fb3ac854e360db6438a0b151eb4032ccdc5e0d4e4a700add0ce9f20a32fdfa",
+  "tests_log_sha256": "c096c8c428545f10f1f03f373da7c95465e6a4624d1e417e85ea29199a569f1e",
+  "baseline_results": {
+    "core": {
+      "passed": 79,
+      "total": 88,
+      "failed": 9
+    },
+    "owned_write": {
+      "source_bytes": 1048576,
+      "linefeed": false,
+      "io_extra_allocated_bytes": 1048576
+    },
+    "reflow": {
+      "grapheme_cells": 8,
+      "grapheme_preflight_calls": 8,
+      "osc8_dupe_calls": 8
+    },
+    "native_initial": {
+      "passed": 8,
+      "total": 9,
+      "failed": 1,
+      "failure": "new static Date fixture, not product"
+    }
+  },
+  "generator_smoke": {
+    "lines": 1000,
+    "plain": {
+      "bytes": 202115,
+      "sha256": "8c2b124e50c3ef4db93e20680786914e2ca4d9bb2ee1341eccd155a36f0f866f"
+    },
+    "grapheme": {
+      "bytes": 402115,
+      "sha256": "72d27eedaa4da9c88b3268e15d215f6065cc260827afce7cbc8162bf36c8bd7d"
+    },
+    "osc8": {
+      "bytes": 202345,
+      "sha256": "37803ea23512767fb9729fa6cc47388a52f54d8044845a7b8a4cd2cbf35b9e16"
+    },
+    "timing_run": false
+  },
+  "after_sources": {
+    "src/termio/Exec.zig": "a6d417221e935ad5886152089ef289f30fd6ecbe2a706d2c32dd62a4e7317af7",
+    "src/termio/Termio.zig": "2d37f042e50ca54b882e81f7abcffe5f1d8fe2adc1781264ad1a90dc3a359e4e",
+    "src/termio/Thread.zig": "a3acd703046ebc40e3cf7b2fc0d41127e9ef1898351869230ded34179ea9fdc1",
+    "src/termio/pty_write_probe.zig": "9b68b79e86a24e81ea4b34718c8b5736b12b4fa406cd12a494e37b65b74e3c30",
+    "src/terminal/PageList.zig": "e42498a24e67ccd029333f758cd54b201d3ade5fb1d2c24b6d1cb82550d5d4a1",
+    "src/terminal/tests/PageList/reflow.zig": "380ed46664a559870c205f9367af3f3c20ec5201a9bfaa6c502f94e91b3c29c6",
+    "src/terminal/tests/PageList/reflow_allocations.zig": "292fe580c80d47010a984f354470427b46ece1828942ae43aa9721e3ddebf54b",
+    "src/terminal/kitty/graphics_storage.zig": "a18567e358b860340d68d6f590c648b3d7c47b0fd84b85db71a229439de2cd17",
+    "src/terminal/kitty/graphics_exec.zig": "d2eb84db35cba77b71f5e38ffca4097946b43dd9ba73007b9c6a858d5e2acde0",
+    "src/renderer/image.zig": "de5186eda42b68f0c5a049ab892b892f6bc0264eb3ae382996388f899d279b74",
+    "macos/Sources/Features/QuickTerminal/QuickTerminalScreenStateCache.swift": "d7884dbfef326c811793650cb7b840158133954314d21b79159bbdf657864fcd",
+    "macos/Sources/Helpers/Extensions/NSScreen+Extension.swift": "1a36f76bd7c6b541deef507e9fc0d9c1120b3372c23f54156e95da29c5f666b4",
+    "macos/Tests/QuickTerminalScreenStateCacheTests.swift": "d77a3312cbc221513bb77791f0dce0a36faaf2a1d938eeed313c01d81ff581a9",
+    "macos/Tests/Terminal/TerminalRestorableTests.swift": "6109931e926c6b3c5b30a0d136b99ae0c7ee9aa06eec8f42a802480decf84974"
+  },
+  "after_results": {
+    "targeted_core": {
+      "passed": 502,
+      "total": 503,
+      "skipped": 1,
+      "failed": 0
+    },
+    "owned_write": [
+      {
+        "source_bytes": 1048576,
+        "linefeed": false,
+        "io_extra_allocated_bytes": 0
+      },
+      {
+        "source_bytes": 1048576,
+        "linefeed": true,
+        "io_extra_allocated_bytes": 0
+      }
+    ],
+    "reflow": {
+      "grapheme_cells": 8,
+      "grapheme_preflight_calls": 0,
+      "grapheme_set_calls": 8,
+      "osc8_dupe_calls": 8
+    },
+    "native_corrected_baseline": {
+      "passed": 9,
+      "total": 9,
+      "failed": 0,
+      "skipped": 0
+    },
+    "native_contracts": {
+      "passed": 8,
+      "suites": 3,
+      "failed": 0
+    },
+    "native_full": {
+      "passed": 504,
+      "total": 505,
+      "failed": 0,
+      "skipped": 1
+    },
+    "core_full_debug": {
+      "passed": 3748,
+      "total": 3753,
+      "failed": 0,
+      "skipped": 5,
+      "build_steps_passed": 72,
+      "build_steps_total": 72
+    },
+    "core_release_fast_targeted": {
+      "passed": 501,
+      "total": 502,
+      "skipped": 1,
+      "failed": 0,
+      "build_steps_passed": 72,
+      "build_steps_total": 72
+    },
+    "release_local": "build succeeded",
+    "scope": "passed: config bridge, architecture, resources, signature",
+    "tracked_zig_fmt": {
+      "files": 510,
+      "exit": 0
+    },
+    "desktop_ui": "not attempted to avoid interference with an initially active personal app; no current authentication rejection"
+  },
+  "logs_sha256": {
+    "core-green2": "e984defd8fe3b2e61bce64dc126e03c187de982e3563b35d8fd0183b0f3a44e1",
+    "quick-before-corrected": "e493373cf47e0db9bde57b667fd9345ccb78196ef9c4024fd84015073ec98fab",
+    "contracts": "29f2a7e17bc6d2e2b04fd5e9f0a440a23be72e7f8cb6c923b136c44b81eabbaa",
+    "swiftlint-final": "d5e5d8995f3db9a40a5eead407e4e32b6473926142d37ab39745f8c262596ff2",
+    "native-full": "e5b1abbdf05f03b81e413128674b46faaf2052d8187d9b6708843eb4cf8365a7",
+    "core-full": "d3bd47123a73a0b4b87e69324482d485d498105000f3fe36881e5718fd308c37",
+    "core-release-fast": "0598405476c3a23388392e275355451d9ac1188bb3f24651976741f6f296cb20",
+    "release-local": "f07e122ea4c5b32b59c326d86b4347ea54b4046a5000c6d80c4d82146d4df398",
+    "scope": "e5130f75481cbc6fa6400209dee136f50b97b794dc757398ba8e76e7236744a5"
+  },
+  "source_commit": "a330cc2567df06d79a5011ac37c8bed6b8577f33",
+  "fix_commits": {
+    "macos: remove unused quick terminal screen cache": "a330cc2567df06d79a5011ac37c8bed6b8577f33",
+    "terminal: avoid grapheme reflow allocation probes": "22f18feab9b76944913a479bda3d4dd69c11826b",
+    "renderer: restore images pending a deferred unload": "216668b2968d6f263887adf8c1799daaafb27596",
+    "terminal/kitty: reserve image growth before mutation": "e17cf6934e2e3307e346ab0ed584ef84f06c350d",
+    "termio: adopt owned writes without copying payloads": "8036a9262691295368d0d4053855ab9a62a2a95e"
+  },
+  "generator_sha256": "9b81a8cd2194ed8480b747ca338c0ab1cadfdfb707bff7052e04f0f695af73fb",
+  "environment": {
+    "arch": "arm64",
+    "macos": "27.0.1",
+    "xcode": "27.0 (27A266a)",
+    "macos_sdk": "27.0",
+    "zig": "0.16.0",
+    "app_version": "0.5.4",
+    "app_build": "44"
+  },
+  "core_record": {
+    "schema": 1,
+    "optimize": "ReleaseFast",
+    "version": "0.5.4",
+    "inputs": "02390245dbc009ff3bbe9dfb2a399f6088e9e355319437261128385d93188db7",
+    "archive": "67ae9467e99c2609ee9182f8bd16425457f6d38f158556308c88863dd283f403",
+    "zig": "0.16.0",
+    "sdk": "26A425"
+  },
+  "app_macho_sha256": "ea68cf6f0abf503e2da235c966712b8710304fd59770cc7dfc9925452fe4f6fa",
+  "pty_hard_budget_decision": "pending in parent conversation; delegated async question is not user receipt or approval"
+}

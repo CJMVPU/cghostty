@@ -1,0 +1,636 @@
+diff --git a/src/renderer/image.zig b/src/renderer/image.zig
+index 1f169246c..f21bc8ca6 100644
+--- a/src/renderer/image.zig
++++ b/src/renderer/image.zig
+@@ -1225,6 +1225,62 @@ test "kitty renderer ignores pending payloads and removes replaced placements" {
+     try testing.expect(state.images.get(.{ .kitty = 1 }).?.image.isUnloading());
+ }
+ 
++test "kitty renderer restores visible images before a deferred unload" {
++    const testing = std.testing;
++    const alloc = testing.allocator;
++    const io = testing.io;
++
++    var t = try terminal.Terminal.init(io, alloc, .{ .rows = 3, .cols = 3 });
++    defer t.deinit(alloc);
++    t.width_px = 30;
++    t.height_px = 30;
++
++    var state: State = .empty;
++    defer state.deinit(alloc);
++
++    const storage = &t.screens.active.kitty_images;
++    try storage.addImage(io, alloc, t.screens.active, .{
++        .id = 1,
++        .width = 1,
++        .height = 1,
++        .format = .rgba,
++        .data = .{ .complete = try alloc.dupe(u8, "rgba") },
++    });
++    const pin = try t.screens.active.pages.trackPin(
++        t.screens.active.cursor.page_pin.*,
++    );
++    try storage.addPlacement(io, alloc, t.screens.active, 1, 1, .{
++        .location = .{ .pin = pin },
++        .columns = 1,
++        .rows = 1,
++    });
++
++    const cell: CellSize = .{ .width = 10, .height = 10 };
++    state.kittyUpdate(alloc, &t, cell);
++    const generation = state.images.get(.{ .kitty = 1 }).?.generation;
++    try testing.expectEqual(@as(usize, 1), state.kitty_placements.items.len);
++
++    // Updating an empty alternate screen schedules the primary image for
++    // unload. A compositor geometry mismatch can skip drawing/uploading
++    // after this update, leaving the scheduled unload in place.
++    _ = try t.switchScreen(.alternate);
++    state.kittyUpdate(alloc, &t, cell);
++    try testing.expect(state.images.get(.{ .kitty = 1 }).?.image.isUnloading());
++
++    // Returning to primary restores the same image generation. A CPU capture
++    // must contain the visible pixels again, without requiring GPU access.
++    _ = try t.switchScreen(.primary);
++    state.kittyUpdate(alloc, &t, cell);
++    try testing.expectEqual(generation, state.images.get(.{ .kitty = 1 }).?.generation);
++    try testing.expectEqual(@as(usize, 1), state.kitty_placements.items.len);
++    var captured = try state.cloneCapture(alloc);
++    defer captured.deinit(alloc);
++    try testing.expectEqual(@as(usize, 1), captured.kitty_placements.items.len);
++    const restored = captured.images.get(.{ .kitty = 1 });
++    try testing.expect(restored != null);
++    try testing.expectEqualStrings("rgba", restored.?.image.pending.dataSlice());
++}
++
+ test "kitty renderer adopts snapshots retaining identical generations" {
+     const t = std.testing;
+     const alloc = t.allocator;
+diff --git a/src/terminal/PageList.zig b/src/terminal/PageList.zig
+index 94c484b5b..e7d67903d 100644
+--- a/src/terminal/PageList.zig
++++ b/src/terminal/PageList.zig
+@@ -440,6 +440,10 @@ page_compression: IncrementalCompressionState = .{},
+ /// outside of an in-progress reflow.
+ recycle_node: ?*List.Node = null,
+ 
++/// Per-instance operation probes, absent from production storage and code.
++/// These count reflow calls, not system allocator operations or elapsed time.
++reflow_metrics: if (builtin.is_test) ReflowMetrics else void = if (builtin.is_test) .{} else {},
++
+ /// Limits for scrollback.
+ limits: Limits,
+ 
+@@ -2240,6 +2244,7 @@ const ReflowCursor = struct {
+             // for these graphemes, and if it's not available, then
+             // increase capacity. Keep trying until we succeed.
+             while (true) {
++                if (comptime builtin.is_test) list.reflow_metrics.grapheme_preflight_allocations += 1;
+                 if (self.page.grapheme_alloc.alloc(
+                     u21,
+                     self.page.memory,
+@@ -2256,6 +2261,7 @@ const ReflowCursor = struct {
+                 }
+             }
+ 
++            if (comptime builtin.is_test) list.reflow_metrics.grapheme_set_attempts += 1;
+             self.page.setGraphemes(
+                 self.page_row,
+                 self.page_cell,
+@@ -2296,6 +2302,7 @@ const ReflowCursor = struct {
+                 try self.increaseCapacity(list, .string_bytes);
+             }
+ 
++            if (comptime builtin.is_test) list.reflow_metrics.hyperlink_dupe_attempts += 1;
+             const dst_link = src_link.dupe(
+                 src_page,
+                 self.page,
+@@ -2339,6 +2346,7 @@ const ReflowCursor = struct {
+                 }
+ 
+                 // We need to recreate the link into the new page.
++                if (comptime builtin.is_test) list.reflow_metrics.hyperlink_dupe_attempts += 1;
+                 const dst_link2 = src_link.dupe(
+                     src_page,
+                     self.page,
+@@ -7011,7 +7019,14 @@ pub const Cell = struct {
+ pub const TestSupport = if (builtin.is_test) @import("tests/PageList/fixtures.zig") else struct {};
+ 
+ /// White-box regression hooks; absent from application builds.
++const ReflowMetrics = struct {
++    grapheme_preflight_allocations: usize = 0,
++    grapheme_set_attempts: usize = 0,
++    hyperlink_dupe_attempts: usize = 0,
++};
++
+ pub const TestAccess = if (builtin.is_test) struct {
++    pub const ReflowMetrics = PageList.ReflowMetrics;
+     pub const pageAllocator = PageList.pageAllocator;
+     pub const createPageExt = PageList.createPageExt;
+     pub const destroyNodeExt = PageList.destroyNodeExt;
+@@ -7053,5 +7068,6 @@ test {
+     _ = @import("tests/PageList/storage.zig");
+     _ = @import("tests/PageList/pins.zig");
+     _ = @import("tests/PageList/reflow.zig");
++    _ = @import("tests/PageList/reflow_allocations.zig");
+     _ = @import("tests/PageList/operations.zig");
+ }
+diff --git a/src/terminal/kitty/graphics_exec.zig b/src/terminal/kitty/graphics_exec.zig
+index b1b968b28..e250b8fa4 100644
+--- a/src/terminal/kitty/graphics_exec.zig
++++ b/src/terminal/kitty/graphics_exec.zig
+@@ -2703,6 +2703,59 @@ test "kittygfx uppercase delete frees image of cascaded placements" {
+ // id=1 ("/wAA" is FF0000). Composition converts images to RGBA, so
+ // after the first frame command the base data is FF0000FF.
+ 
++test "kittygfx animation: root edit cannot exceed RGB conversion budget" {
++    const testing = std.testing;
++    const alloc = testing.allocator;
++    const io = testing.io;
++    var t = try Terminal.init(io, alloc, .{ .rows = 3, .cols = 3 });
++    defer t.deinit(alloc);
++    const storage = &t.screens.active.kitty_images;
++    storage.total_limit = 3;
++    {
++        const cmd = try command.Parser.parseString(alloc, "a=t,f=24,s=1,v=1,i=1;/wAA");
++        defer cmd.deinit(alloc);
++        try testing.expect(execute(io, alloc, &t, &cmd).?.ok());
++    }
++    const generation = storage.imageById(1).?.generation;
++    const cmd = try command.Parser.parseString(alloc, "a=f,i=1,r=1,f=24,s=1,v=1;AAD/");
++    defer cmd.deinit(alloc);
++    const response = execute(io, alloc, &t, &cmd).?;
++    try testing.expectEqualStrings("ENOMEM: out of memory", response.message);
++    try testing.expectEqual(@as(usize, 3), storage.total_bytes);
++    const img = storage.imageById(1).?;
++    try testing.expectEqual(command.Transmission.Format.rgb, img.format);
++    try testing.expectEqualSlices(u8, &.{ 255, 0, 0 }, img.data.bytes().?);
++    try testing.expectEqual(generation, img.generation);
++    try testing.expect(img.animation == null);
++}
++
++test "kittygfx animation: compose cannot exceed RGB conversion budget" {
++    const testing = std.testing;
++    const alloc = testing.allocator;
++    const io = testing.io;
++    var t = try Terminal.init(io, alloc, .{ .rows = 3, .cols = 3 });
++    defer t.deinit(alloc);
++    const storage = &t.screens.active.kitty_images;
++    storage.total_limit = 6;
++    {
++        const cmd = try command.Parser.parseString(alloc, "a=t,f=24,s=2,v=1,i=1;/wAAAAD/");
++        defer cmd.deinit(alloc);
++        try testing.expect(execute(io, alloc, &t, &cmd).?.ok());
++    }
++    const generation = storage.imageById(1).?.generation;
++    // Disjoint rectangles in one root frame make this a valid composition.
++    const cmd = try command.Parser.parseString(alloc, "a=c,i=1,r=1,c=1,w=1,h=1,x=1");
++    defer cmd.deinit(alloc);
++    const response = execute(io, alloc, &t, &cmd).?;
++    try testing.expectEqualStrings("ENOMEM: out of memory", response.message);
++    try testing.expectEqual(@as(usize, 6), storage.total_bytes);
++    const img = storage.imageById(1).?;
++    try testing.expectEqual(command.Transmission.Format.rgb, img.format);
++    try testing.expectEqualSlices(u8, &.{ 255, 0, 0, 0, 0, 255 }, img.data.bytes().?);
++    try testing.expectEqual(generation, img.generation);
++    try testing.expect(img.animation == null);
++}
++
+ test "kittygfx animation: new frame with default gap responds with frame number" {
+     const testing = std.testing;
+     const alloc = testing.allocator;
+diff --git a/src/terminal/kitty/graphics_storage.zig b/src/terminal/kitty/graphics_storage.zig
+index 897c8944a..20092582a 100644
+--- a/src/terminal/kitty/graphics_storage.zig
++++ b/src/terminal/kitty/graphics_storage.zig
+@@ -3569,6 +3569,94 @@ test "storage: eviction releases placement pins" {
+     try testing.expectEqual(tracked + 1, t.screens.active.pages.countTrackedPins());
+ }
+ 
++test "storage: rgba conversion respects a three-byte image budget" {
++    const testing = std.testing;
++    const alloc = testing.allocator;
++    const io = testing.io;
++    var t = try terminal.Terminal.init(io, alloc, .{ .rows = 3, .cols = 3 });
++    defer t.deinit(alloc);
++    const s = &t.screens.active.kitty_images;
++    s.total_limit = 3;
++    try s.addImage(io, alloc, t.screens.active, .{
++        .id = 1,
++        .width = 1,
++        .height = 1,
++        .format = .rgb,
++        .data = .{ .complete = try alloc.dupe(u8, &.{ 255, 0, 0 }) },
++    });
++    const img = s.imagePtrByIdOrNumber(1, 0).?;
++    const generation = img.generation;
++    const storage_generation = s.generation;
++    s.dirty = false;
++
++    try testing.expectError(error.OutOfMemory, s.convertImageToRgba(io, alloc, img));
++    try testing.expectEqual(@as(usize, 3), s.total_bytes);
++    try testing.expectEqual(command.Transmission.Format.rgb, img.format);
++    try testing.expectEqualSlices(u8, &.{ 255, 0, 0 }, img.data.bytes().?);
++    try testing.expectEqual(generation, img.generation);
++    try testing.expectEqual(storage_generation, s.generation);
++    try testing.expect(!s.dirty);
++}
++
++test "storage: rgba conversion allocation failure preserves the image" {
++    const testing = std.testing;
++    const alloc = testing.allocator;
++    const io = testing.io;
++    var t = try terminal.Terminal.init(io, alloc, .{ .rows = 3, .cols = 3 });
++    defer t.deinit(alloc);
++    const s = &t.screens.active.kitty_images;
++    s.total_limit = 4;
++    try s.addImage(io, alloc, t.screens.active, .{
++        .id = 1,
++        .width = 1,
++        .height = 1,
++        .format = .rgb,
++        .data = .{ .complete = try alloc.dupe(u8, &.{ 255, 0, 0 }) },
++    });
++    const img = s.imagePtrByIdOrNumber(1, 0).?;
++    const generation = img.generation;
++    const storage_generation = s.generation;
++    s.dirty = false;
++    var failing: testing.FailingAllocator = .init(alloc, .{ .fail_index = 0 });
++
++    try testing.expectError(error.OutOfMemory, s.convertImageToRgba(io, failing.allocator(), img));
++    try testing.expectEqual(@as(usize, 3), s.total_bytes);
++    try testing.expectEqual(command.Transmission.Format.rgb, img.format);
++    try testing.expectEqualSlices(u8, &.{ 255, 0, 0 }, img.data.bytes().?);
++    try testing.expectEqual(generation, img.generation);
++    try testing.expectEqual(storage_generation, s.generation);
++    try testing.expect(!s.dirty);
++    try testing.expectEqual(@as(usize, 0), failing.allocated_bytes - failing.freed_bytes);
++}
++
++test "storage: impossible animation reservation does not evict other images" {
++    const testing = std.testing;
++    const alloc = testing.allocator;
++    const io = testing.io;
++    var t = try terminal.Terminal.init(io, alloc, .{ .rows = 3, .cols = 3 });
++    defer t.deinit(alloc);
++    const s = &t.screens.active.kitty_images;
++    s.total_limit = 8;
++    for ([_]u32{ 1, 2 }) |id| try s.addImage(io, alloc, t.screens.active, .{
++        .id = id,
++        .width = 1,
++        .height = 1,
++        .format = .rgba,
++        .data = .{ .complete = try alloc.dupe(u8, &.{ 255, 0, 0, 255 }) },
++    });
++    const generation = s.generation;
++    s.dirty = false;
++
++    // The target alone would need twelve bytes, so evicting the other
++    // four-byte image cannot make this request fit in the eight-byte budget.
++    try testing.expectError(error.OutOfMemory, s.reserveAnimationBytes(io, alloc, t.screens.active, 1, 8));
++    try testing.expectEqual(@as(usize, 2), s.images.count());
++    try testing.expect(s.imageById(1) != null and s.imageById(2) != null);
++    try testing.expectEqual(@as(usize, 8), s.total_bytes);
++    try testing.expectEqual(generation, s.generation);
++    try testing.expect(!s.dirty);
++}
++
+ test "storage: pending image completes once and preserves age" {
+     const testing = std.testing;
+     const io = testing.io;
+diff --git a/src/termio/Thread.zig b/src/termio/Thread.zig
+index faf693a9c..228864081 100644
+--- a/src/termio/Thread.zig
++++ b/src/termio/Thread.zig
+@@ -553,7 +553,8 @@ test "IO mailbox drain preserves write FIFO and intervening linefeed modes" {
+     var owners = t.FailingAllocator.init(t.allocator, .{});
+     var fixture: DrainTest = .{};
+     try fixture.init(t.allocator);
+-    defer fixture.deinit();
++    var live = true;
++    defer if (live) fixture.deinit();
+     fixture.io.mailbox.send(.{ .write_stable = "first\r" }, null);
+     fixture.io.mailbox.send(.{ .linefeed_mode = true }, null);
+     fixture.io.mailbox.send(try termio.Message.writeReq(t.allocator, @as([]const u8, "\rA")), null);
+@@ -568,6 +569,124 @@ test "IO mailbox drain preserves write FIFO and intervening linefeed modes" {
+     var req = fixture.cb.data.backend.write_queue.head;
+     while (req) |r| : (req = r.next) try output.writer.writeAll(r.full_write_buffer.slice);
+     try t.expectEqualStrings("first\r\r\nA" ++ "owned" ** 20, output.written());
+-    try t.expectEqual(owners.allocated_bytes, owners.freed_bytes);
+     try t.expect(fixture.io.mailbox.spsc.queue.pop(t.io) == null);
++    fixture.deinit();
++    live = false;
++    try t.expectEqual(owners.allocated_bytes, owners.freed_bytes);
++}
++
++test "IO owned write adopts large mailbox buffer without a second allocation" {
++    const t = std.testing;
++    for ([_]bool{ false, true }) |linefeed| {
++        var owners = t.FailingAllocator.init(t.allocator, .{});
++        var writes = t.FailingAllocator.init(t.allocator, .{});
++        var fixture: DrainTest = .{};
++        try fixture.init(writes.allocator());
++        defer fixture.deinit();
++
++        // Reserve all three requests before measuring payload allocations.
++        try fixture.cb.data.backend.write_pool.addCapacity(writes.allocator(), 3);
++        // Keep the first request pending to check FIFO around the frame.
++        fixture.io.mailbox.send(.{ .write_stable = "first" }, null);
++        try fixture.worker.drainMailbox(&fixture.cb);
++        const before = writes.allocated_bytes;
++        const bytes = try owners.allocator().alloc(u8, 1024 * 1024);
++        @memset(bytes, 'a');
++        @memcpy(bytes[0..6], "\x1b[200~");
++        @memcpy(bytes[bytes.len - 6 ..], "\x1b[201~");
++        fixture.io.mailbox.send(.{ .linefeed_mode = linefeed }, null);
++        fixture.io.mailbox.send(.{ .write_alloc = .{ .alloc = owners.allocator(), .data = bytes } }, null);
++        fixture.io.mailbox.send(.{ .write_stable = "\x1b[A" }, null);
++        try fixture.worker.drainMailbox(&fixture.cb);
++
++        std.debug.print("\nOWNED_WRITE_METRIC source_bytes={d} linefeed={} io_extra_allocated_bytes={d}\n", .{
++            bytes.len, linefeed, writes.allocated_bytes - before,
++        });
++        try t.expectEqual(before, writes.allocated_bytes);
++        const first = fixture.cb.data.backend.write_queue.head.?;
++        const frame = first.next.?;
++        try t.expectEqual(bytes.ptr, frame.full_write_buffer.slice.ptr);
++        try t.expectEqual(@as(usize, 0), owners.freed_bytes);
++        try t.expectEqualStrings("first", first.full_write_buffer.slice);
++        try t.expectEqualStrings("\x1b[200~", frame.full_write_buffer.slice[0..6]);
++        try t.expectEqualStrings("\x1b[201~", frame.full_write_buffer.slice[bytes.len - 6 ..]);
++        try t.expectEqualStrings("\x1b[A", frame.next.?.full_write_buffer.slice);
++        try t.expect(frame.next.?.next == null);
++    }
++}
++
++test "IO owned write CRLF expansion and inline copies release the original allocator" {
++    const t = std.testing;
++    for ([_]usize{ 39, 128 }) |len| {
++        var owners = t.FailingAllocator.init(t.allocator, .{});
++        var writes = t.FailingAllocator.init(t.allocator, .{});
++        var fixture: DrainTest = .{};
++        try fixture.init(writes.allocator());
++        defer fixture.deinit();
++        const bytes = try owners.allocator().alloc(u8, len);
++        @memset(bytes, if (len == 39) 'a' else '\r');
++        fixture.io.mailbox.send(.{ .linefeed_mode = true }, null);
++        fixture.io.mailbox.send(.{ .write_alloc = .{ .alloc = owners.allocator(), .data = bytes } }, null);
++        try fixture.worker.drainMailbox(&fixture.cb);
++        try t.expectEqual(owners.allocated_bytes, owners.freed_bytes);
++        const output = fixture.cb.data.backend.write_queue.head.?.full_write_buffer.slice;
++        try t.expectEqual(if (len == 39) len else len * 2, output.len);
++        for (output, 0..) |byte, i| try t.expectEqual(
++            if (len == 39) @as(u8, 'a') else if (i % 2 == 0) @as(u8, '\r') else @as(u8, '\n'),
++            byte,
++        );
++    }
++}
++
++test "IO owned write completion errors free the source allocator exactly once" {
++    const t = std.testing;
++    for ([_]xev.WriteError{ error.Canceled, error.Unexpected }) |err| {
++        var owners = t.FailingAllocator.init(t.allocator, .{});
++        var fixture: DrainTest = .{};
++        try fixture.init(t.allocator);
++        defer fixture.deinit();
++        fixture.io.mailbox.send(try termio.Message.writeReq(owners.allocator(), @as([]const u8, "frame" ** 128)), null);
++        try fixture.worker.drainMailbox(&fixture.cb);
++        try t.expectEqual(@as(usize, 0), owners.freed_bytes);
++        // Match libxev: pop before the shared success/error cleanup callback.
++        // No loop runs here, so it cannot later invoke this completion.
++        const req = fixture.cb.data.backend.write_queue.pop().?;
++        const w: *termio.Exec.ThreadData.Write = @ptrCast(@alignCast(req.userdata.?));
++        try t.expectError(err, w.complete(err));
++        try t.expectEqual(owners.allocated_bytes, owners.freed_bytes);
++    }
++}
++
++test "IO owned write empty exited and closed paths release mailbox ownership" {
++    const t = std.testing;
++    for (0..3) |mode| {
++        var owners = t.FailingAllocator.init(t.allocator, .{});
++        var fixture: DrainTest = .{};
++        try fixture.init(t.allocator);
++        defer fixture.deinit();
++        if (mode == 1) fixture.cb.data.backend.exited = true;
++        if (mode == 2) fixture.io.mailbox.close();
++        const bytes = try owners.allocator().alloc(u8, if (mode == 0) 0 else 128);
++        @memset(bytes, 'x');
++        fixture.io.mailbox.send(.{ .write_alloc = .{ .alloc = owners.allocator(), .data = bytes } }, null);
++        try fixture.worker.drainMailbox(&fixture.cb);
++        try t.expect(fixture.cb.data.backend.write_queue.head == null);
++        try t.expectEqual(owners.allocated_bytes, owners.freed_bytes);
++    }
++}
++
++test "IO owned write allocation failures release source and replacement buffers" {
++    try std.testing.checkAllAllocationFailures(std.testing.allocator, struct {
++        fn run(alloc: Allocator) !void {
++            var fixture: DrainTest = .{};
++            try fixture.init(alloc);
++            defer fixture.deinit();
++            for ([_][]const u8{ "owned" ** 128, "\r" ** 128, "inline" }) |input| {
++                const owner = std.testing.allocator;
++                fixture.io.mailbox.send(.{ .linefeed_mode = true }, null);
++                fixture.io.mailbox.send(.{ .write_alloc = .{ .alloc = owner, .data = try owner.dupe(u8, input) } }, null);
++                try fixture.worker.drainMailbox(&fixture.cb);
++            }
++        }
++    }.run, .{});
+ }
+diff --git a/src/terminal/tests/PageList/reflow_allocations.zig b/src/terminal/tests/PageList/reflow_allocations.zig
+new file mode 100644
+index 000000000..82983fb59
+--- /dev/null
++++ b/src/terminal/tests/PageList/reflow_allocations.zig
+@@ -0,0 +1,191 @@
++//! Controlled reflow allocation probes. Normal tests verify semantics and print
++//! baseline operation counts; opt-in negative tests express optimization targets.
++//! Counts describe page-local calls, not system heap allocations or timing.
++const std = @import("std");
++const PageList = @import("../../PageList.zig");
++const pagepkg = @import("../../page.zig");
++const stylepkg = @import("../../style.zig");
++const Metrics = PageList.TestAccess.ReflowMetrics;
++
++const text = "ABCDEFGH";
++const bold: stylepkg.Style = .{ .flags = .{ .bold = true } };
++
++fn expectTextAndMetadata(list: *PageList, graphemes: bool) !void {
++    const testing = std.testing;
++    for (text, 0..) |cp, i| {
++        const x: u16 = @intCast(i % list.cols);
++        const y: u32 = @intCast(i / list.cols);
++        const cell = list.getCell(.{ .screen = .{ .x = x, .y = y } }).?;
++        const page = cell.node.page();
++        try testing.expectEqual(@as(u21, cp), cell.cell.codepoint());
++        try testing.expectEqual(i % 2 == 0, cell.cell.protected);
++        try testing.expectEqualDeep(bold, page.styles.get(page.memory, cell.cell.style_id).*);
++        try testing.expect(cell.row.styled);
++        try testing.expectEqual(pagepkg.Row.SemanticPrompt.prompt, cell.row.semantic_prompt);
++        if (graphemes) {
++            try testing.expect(cell.row.grapheme);
++            try testing.expectEqualSlices(u21, &.{ 0x0301, 0x0327 }, page.lookupGrapheme(cell.cell).?);
++        }
++    }
++
++    const first_row = list.getCell(.{ .screen = .{} }).?.row;
++    try testing.expectEqual(list.cols < text.len, first_row.wrap);
++    try testing.expect(!first_row.wrap_continuation);
++    if (list.cols < text.len) {
++        const last_row = list.getCell(.{ .screen = .{ .y = 1 } }).?.row;
++        try testing.expect(!last_row.wrap);
++        try testing.expect(last_row.wrap_continuation);
++    }
++}
++
++fn fillText(list: *PageList) !void {
++    const page = list.pages.first.?.page();
++    for (text, 0..) |cp, x| {
++        const rac = page.getRowAndCell(@intCast(x), 0);
++        rac.cell.* = .init(cp);
++        rac.cell.protected = x % 2 == 0;
++        rac.cell.style_id = try page.styles.add(page.memory, bold);
++        rac.row.styled = true;
++        rac.row.semantic_prompt = .prompt;
++    }
++}
++
++fn graphemeProbe() !Metrics {
++    var list = try PageList.init(std.testing.allocator, .{ .cols = 8, .rows = 2 });
++    defer list.deinit();
++    try fillText(&list);
++    const page = list.pages.first.?.page();
++    for (0..text.len) |x| {
++        const rac = page.getRowAndCell(@intCast(x), 0);
++        try page.setGraphemes(rac.row, rac.cell, &.{ 0x0301, 0x0327 });
++    }
++
++    // Input construction does not contribute to the measured operation count.
++    list.reflow_metrics = .{};
++    try list.resize(.{ .cols = 4, .reflow = true });
++    const metrics = list.reflow_metrics;
++    try expectTextAndMetadata(&list, true);
++    try std.testing.expectEqual(text.len, metrics.grapheme_set_attempts);
++
++    try list.resize(.{ .cols = 8, .reflow = true });
++    try expectTextAndMetadata(&list, true);
++    return metrics;
++}
++
++fn hyperlinkProbe() !Metrics {
++    const testing = std.testing;
++    const uri = "https://example.test/reflow";
++    const explicit_id = "stable-id";
++    var list = try PageList.init(testing.allocator, .{ .cols = 8, .rows = 2 });
++    defer list.deinit();
++    try fillText(&list);
++    const source = list.pages.first.?.page();
++    const id = try source.insertHyperlink(.{
++        .id = .{ .explicit = explicit_id },
++        .uri = uri,
++    });
++    for (0..text.len) |x| {
++        const rac = source.getRowAndCell(@intCast(x), 0);
++        if (x > 0) source.hyperlink_set.use(source.memory, id);
++        try source.setHyperlink(rac.row, rac.cell, id);
++    }
++
++    list.reflow_metrics = .{};
++    try list.resize(.{ .cols = 4, .reflow = true });
++    const metrics = list.reflow_metrics;
++    try expectTextAndMetadata(&list, false);
++    try testing.expect(list.pages.first == list.pages.last);
++    const destination = list.pages.first.?.page();
++    try testing.expectEqual(text.len, destination.hyperlinkCount());
++    var first_id: ?u16 = null;
++    for (text, 0..) |_, i| {
++        const cell = list.getCell(.{ .screen = .{
++            .x = @intCast(i % list.cols),
++            .y = @intCast(i / list.cols),
++        } }).?;
++        try testing.expect(cell.row.hyperlink);
++        const dst_id = destination.lookupHyperlink(cell.cell).?;
++        if (first_id) |previous| try testing.expectEqual(previous, dst_id) else first_id = dst_id;
++        const entry = destination.hyperlink_set.get(destination.memory, dst_id);
++        try testing.expectEqualStrings(uri, entry.uri.slice(destination.memory));
++        try testing.expectEqualStrings(explicit_id, entry.id.explicit.slice(destination.memory));
++    }
++    try testing.expectEqual(text.len, destination.hyperlink_set.refCount(destination.memory, first_id.?));
++
++    // Clearing every cell must release every reference, including references
++    // which a future cache obtains with use() instead of addWithIdContext().
++    for (text, 0..) |_, i| {
++        const cell = list.getCell(.{ .screen = .{
++            .x = @intCast(i % list.cols),
++            .y = @intCast(i / list.cols),
++        } }).?;
++        destination.clearHyperlink(cell.cell);
++    }
++    try testing.expectEqual(0, destination.hyperlink_set.refCount(destination.memory, first_id.?));
++    try testing.expectEqual(0, destination.hyperlinkCount());
++    for (0..destination.size.rows) |y| {
++        const row = destination.getRowAndCell(0, @intCast(y)).row;
++        destination.updateRowHyperlinkFlag(row);
++        try testing.expect(!row.hyperlink);
++    }
++    return metrics;
++}
++
++test "PageList reflow allocation probe grapheme baseline" {
++    const metrics = try graphemeProbe();
++    std.debug.print("reflow-allocation-probe grapheme cells={d} preflight_allocations={d} set_attempts={d}\n", .{
++        text.len, metrics.grapheme_preflight_allocations, metrics.grapheme_set_attempts,
++    });
++}
++
++test "PageList reflow allocation probe hyperlink baseline" {
++    const metrics = try hyperlinkProbe();
++    std.debug.print("reflow-allocation-probe hyperlink cells={d} dupe_attempts={d}\n", .{
++        text.len, metrics.hyperlink_dupe_attempts,
++    });
++}
++
++test "PageList reflow allocation probe avoids grapheme preflight" {
++    if (!std.testing.environ.containsConstant("GHOSTTY_REFLOW_NEGATIVE")) return error.SkipZigTest;
++    const metrics = try graphemeProbe();
++    try std.testing.expectEqual(0, metrics.grapheme_preflight_allocations);
++}
++
++test "PageList reflow allocation probe maps hyperlink once" {
++    if (!std.testing.environ.containsConstant("GHOSTTY_REFLOW_NEGATIVE")) return error.SkipZigTest;
++    const metrics = try hyperlinkProbe();
++    try std.testing.expectEqual(1, metrics.hyperlink_dupe_attempts);
++}
++
++test "PageList reflow allocation probe grapheme allocation failure leaves cell unchanged" {
++    const testing = std.testing;
++    var page = try pagepkg.Page.init(.{ .cols = 2, .rows = 1 });
++    defer page.deinit();
++    const rac = page.getRowAndCell(0, 0);
++    rac.cell.* = .init('A');
++    rac.cell.protected = true;
++    rac.row.semantic_prompt = .prompt;
++    const original = rac.cell.*;
++
++    // Exhaust only byte storage, leaving the grapheme map empty. This tests
++    // the failure rollback which a direct setGraphemes retry would rely on.
++    const reserved = try page.grapheme_alloc.alloc(
++        u8,
++        page.memory,
++        page.grapheme_alloc.capacityBytes(),
++    );
++    defer page.grapheme_alloc.free(page.memory, reserved);
++    const used = page.grapheme_alloc.usedBytes(page.memory);
++    try testing.expectError(error.GraphemeAllocOutOfMemory, page.setGraphemes(
++        rac.row,
++        rac.cell,
++        &.{ 0x0301, 0x0327 },
++    ));
++    // Cell is a fully initialized packed u64. Comparing its exact bits avoids
++    // recursively inspecting the inactive fields of its untagged content union.
++    try testing.expectEqual(@as(u64, @bitCast(original)), @as(u64, @bitCast(rac.cell.*)));
++    try testing.expect(!rac.row.grapheme);
++    try testing.expectEqual(pagepkg.Row.SemanticPrompt.prompt, rac.row.semantic_prompt);
++    try testing.expectEqual(0, page.graphemeCount());
++    try testing.expectEqual(used, page.grapheme_alloc.usedBytes(page.memory));
++}
