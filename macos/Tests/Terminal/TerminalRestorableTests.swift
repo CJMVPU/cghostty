@@ -37,6 +37,31 @@ struct TerminalRestorableTests {
         #expect(state.surfaceTree.leaves.contains(where: { $0.id.uuidString == "994C673F-B4C5-49EE-B044-65006652636D" }))
     }
 
+    /// Freeze the old V1 keyed-archive schema independently of the current encoder.
+    /// Old geometry is still decodable even when displays are absent or entries are stale.
+    @MainActor
+    @Test func quickTerminalRestorableFromV1WithLegacyDisplayEntries() throws {
+        let decoded: CodableBridge<DummyQuickTerminalRestorableState> = try unarchive(
+            v1QTDisplayData, className: "CodableBridge<QuickTerminal>")
+        let state = decoded.value.internalState
+        let firstID = try #require(UUID(uuidString: "FC4F30BB-A6E4-47F3-8B1F-25A00E03C992"))
+        let secondID = try #require(UUID(uuidString: "9E6AE147-6B39-4A91-A799-6CA33C7F60B1"))
+        let first = try #require(state.screenStateEntries[firstID])
+        let second = try #require(state.screenStateEntries[secondID])
+
+        #expect(state.screenStateEntries.count == 2)
+        #expect(first.frame == NSRect(x: -1920, y: 180, width: 1920, height: 420))
+        #expect(first.screenSize == CGSize(width: 1920, height: 1080))
+        #expect(first.scale == 2)
+        #expect(first.lastSeen == Date(timeIntervalSince1970: 0))
+        #expect(second.frame == NSRect(x: 12.5, y: -982, width: 1512, height: 350.5))
+        #expect(second.screenSize == CGSize(width: 1512, height: 982))
+        #expect(second.scale == 1)
+        #expect(second.lastSeen == Date(timeIntervalSinceReferenceDate: -60))
+        #expect(state.focusedSurface == "123")
+        #expect(state.surfaceTree.leaves.count == 2)
+    }
+
     // To generate old data: created a dummy class, archive, and copy the printed result
     @MainActor
     @Test func restoreTerminal57() throws {
@@ -194,6 +219,13 @@ struct DummyQuickTerminalRestorableState: @MainActor TerminalRestorable {
 
 private let v1QTData = Data(base64Encoded: """
     YnBsaXN0MDDUAQIDBAUGBwpYJHZlcnNpb25ZJGFyY2hpdmVyVCR0b3BYJG9iamVjdHMSAAGGoF8QD05TS2V5ZWRBcmNoaXZlctEICVRyb290gAGkCwwRElUkbnVsbNINDg8QVGRhdGFWJGNsYXNzgAKAA08RA6hicGxpc3QwMNQBAgMEBQYHClgkdmVyc2lvblkkYXJjaGl2ZXJUJHRvcFgkb2JqZWN0cxIAAYagXxAPTlNLZXllZEFyY2hpdmVy0QgJVXZhbHVlgAGvECALDBkaGxwfJicvMDEyODlFRkdISU9QVldYXF1jaWpwcVUkbnVsbNMNDg8QFBhXTlMua2V5c1pOUy5vYmplY3RzViRjbGFzc6MREhOAAoADgASjFRYXgAWAB4AIgBhfEBJzY3JlZW5TdGF0ZUVudHJpZXNeZm9jdXNlZFN1cmZhY2Vbc3VyZmFjZVRyZWXSDg8dHqCABtIgISIjWiRjbGFzc25hbWVYJGNsYXNzZXNeTlNNdXRhYmxlQXJyYXmjIiQlV05TQXJyYXlYTlNPYmplY3RTMTIz0w0ODygrGKIpKoAJgAqiLC2AC4AMgBhXdmVyc2lvblRyb290EAHTDQ4PMzUYoTSADaE2gA6AGFVzcGxpdNMNDg86PxikOzw9PoAPgBCAEYASpEBBQkOAE4AZgBqAHYAYVXJpZ2h0VXJhdGlvVGxlZnRZZGlyZWN0aW9u0w0OD0pMGKFLgBShTYAVgBhUdmlld9MNDg9RUxihUoAWoVSAF4AYUmlkXxAkOTk0QzY3M0YtQjRDNS00OUVFLUIwNDQtNjUwMDY2NTI2MzZE0iAhWVpfEBNOU011dGFibGVEaWN0aW9uYXJ5o1lbJVxOU0RpY3Rpb25hcnkjP+AAAAAAAADTDQ4PXmAYoUuAFKFhgBuAGNMNDg9kZhihUoAWoWeAHIAYXxAkMkYyRjJEOTMtOTQ0Qy00NzRBLTgzQkEtNERDMTg2OEMzRUI50w0OD2ttGKFsgB6hboAfgBhaaG9yaXpvbnRhbNMNDg9ycxigoIAYAAgAEQAaACQAKQAyADcASQBMAFIAVAB3AH0AhACMAJcAngCiAKQApgCoAKwArgCwALIAtADJANgA5ADpAOoA7ADxAPwBBQEUARgBIAEpAS0BNAE3ATkBOwE+AUABQgFEAUwBUQFTAVoBXAFeAWABYgFkAWoBcQF2AXgBegF8AX4BgwGFAYcBiQGLAY0BkwGZAZ4BqAGvAbEBswG1AbcBuQG+AcUBxwHJAcsBzQHPAdIB+QH+AhQCGAIlAi4CNQI3AjkCOwI9Aj8CRgJIAkoCTAJOAlACdwJ+AoACggKEAoYCiAKTApoCmwKcAAAAAAAAAgEAAAAAAAAAdQAAAAAAAAAAAAAAAAAAAp7RExRaJGNsYXNzbmFtZV8QHENvZGFibGVCcmlkZ2U8UXVpY2tUZXJtaW5hbD4ACAARABoAJAApADIANwBJAEwAUQBTAFgAXgBjAGgAbwBxAHMEHwQiBC0AAAAAAAACAQAAAAAAAAAVAAAAAAAAAAAAAAAAAAAETA==
+    """)!
+
+// The historical V1 archive above with a populated alternating UUID/DisplayEntry array.
+// Its original class mapping and terminal tree are unchanged; geometry uses the old
+// CGRect/CGSize arrays and NSDate objects with reference-date seconds in NS.time.
+private let v1QTDisplayData = Data(base64Encoded: """
+    YnBsaXN0MDDUAQIDBAUGBwpYJHZlcnNpb25ZJGFyY2hpdmVyVCR0b3BYJG9iamVjdHMSAAGGoF8QD05TS2V5ZWRBcmNoaXZlctEICVRyb290gAGkCwwRElUkbnVsbNINDg8QVGRhdGFWJGNsYXNzgAKAA08RBflicGxpc3QwMNQBAgMEBQYHClgkdmVyc2lvblkkYXJjaGl2ZXJUJHRvcFgkb2JqZWN0cxIAAYagXxAPTlNLZXllZEFyY2hpdmVy0QgJVXZhbHVlgAGvEEULDBkaGxwjKisyMzQ1OjtGR0hJSk9QVVZXW1xgZGVqa25vcHFyc3R1ent8gXqGh4yNkZ1vcHFynp+gpaanrKWxsjS3ucVVJG51bGzTDQ4PEBQYV05TLmtleXNaTlMub2JqZWN0c1YkY2xhc3OjERITgAKAA4AEoxUWF4AFgAeACIAYXxASc2NyZWVuU3RhdGVFbnRyaWVzXmZvY3VzZWRTdXJmYWNlW3N1cmZhY2VUcmVl0g4PHSKkHh8gIYAggDGAMoBDgAbSJCUmJ1okY2xhc3NuYW1lWCRjbGFzc2VzXk5TTXV0YWJsZUFycmF5oyYoKVdOU0FycmF5WE5TT2JqZWN0UzEyM9MNDg8sLxiiLS6ACYAKojAxgAuADFd2ZXJzaW9uVHJvb3QQAdMNDg82OBihN4ANoTmADlVzcGxpdNMNDg88QRikPT4/QIAPgBCAEYASpEJDREWAE4AZgBqAHVVyaWdodFVyYXRpb1RsZWZ0WWRpcmVjdGlvbtMNDg9LTRihTIAUoU6AFVR2aWV30w0OD1FTGKFSgBahVIAXUmlkXxAkOTk0QzY3M0YtQjRDNS00OUVFLUIwNDQtNjUwMDY2NTI2MzZE0iQlWFlfEBNOU011dGFibGVEaWN0aW9uYXJ5o1haKVxOU0RpY3Rpb25hcnkjP+AAAAAAAADTDQ4PXV4YoUyhX4Ab0w0OD2FiGKFSoWOAHF8QJDJGMkYyRDkzLTk0NEMtNDc0QS04M0JBLTREQzE4NjhDM0VCOdMNDg9maBihZ4AeoWmAH1pob3Jpem9udGFs0w0OD2xtGKCgXxAkRkM0RjMwQkItQTZFNC00N0YzLThCMUYtMjVBMDBFMDNDOTkyVWZyYW1lWnNjcmVlblNpemVVc2NhbGVYbGFzdFNlZW4T////////+IAQtNIOD3Z5ond4gCWAJoAGEQeAEQGk0g4PfYCifn+AKIApgAbSDg+ChaKDhIAngCqABhEEONIOD4iLoomKgCyALYAGEALSjg+PkFdOUy50aW1lI8HNJ+RAAAAAgETTDQ4PkpecpJOUlZaAIYAigCOAJKSYmZqbgCuALoAvgDCAGF8QJDlFNkFFMTQ3LTZCMzktNEE5MS1BNzk5LTZDQTMzQzdGNjBCMSNAKQAAAAAAABP////////8KtIOD6GkoqKjgDeAOIAGEQXoI0B16AAAAAAA0g4PqKuiqaqAOoA7gAbSDg+tsKKur4A5gDyABhED1tIOD7O2orS1gD6AP4AG0o4PuJAjwE4AAAAAAADTDQ4Pur/EpLu8vb6AM4A0gDWANqTAwcLDgD2AQIBBgEKAGNIkJcbHVk5TRGF0ZaLGKQAIABEAGgAkACkAMgA3AEkATABSAFQAnACiAKkAsQC8AMMAxwDJAMsAzQDRANMA1QDXANkA7gD9AQkBDgETARUBFwEZARsBHQEiAS0BNgFFAUkBUQFaAV4BZQFoAWoBbAFvAXEBcwF7AYABggGJAYsBjQGPAZEBlwGeAaMBpQGnAakBqwGwAbIBtAG2AbgBvgHEAckB0wHaAdwB3gHgAeIB5wHuAfAB8gH0AfYB+QIgAiUCOwI/AkwCVQJcAl4CYAJiAmkCawJtAm8ClgKdAp8CoQKjAqUCsAK3ArgCuQLgAuYC8QL3AwADCQMLAxADEwMVAxcDGQMcAx8DJAMnAykDKwMtAzIDNQM3AzkDOwM+A0MDRgNIA0oDTANOA1MDWwNkA2YDbQNyA3QDdgN4A3oDfwOBA4MDhQOHA4kDsAO5A8IDxwPKA8wDzgPQA9MD3APhA+QD5gPoA+oD7wPyA/QD9gP4A/sEAAQDBAUEBwQJBA4EFwQeBCMEJQQnBCkEKwQwBDIENAQ2BDgEOgQ/BEYAAAAAAAACAQAAAAAAAADIAAAAAAAAAAAAAAAAAAAESdETFFokY2xhc3NuYW1lXxAcQ29kYWJsZUJyaWRnZTxRdWlja1Rlcm1pbmFsPgAIABEAGgAkACkAMgA3AEkATABRAFMAWABeAGMAaABvAHEAcwZwBnMGfgAAAAAAAAIBAAAAAAAAABUAAAAAAAAAAAAAAAAAAAad
     """)!
 
 // MARK: - Terminal V5 (1.2.3)

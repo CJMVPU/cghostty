@@ -6,13 +6,6 @@ extension NSScreen {
         deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32
     }
 
-    /// The stable UUID for this display, suitable for tracking across reconnects and NSScreen garbage collection.
-    var displayUUID: UUID? {
-        guard let displayID = displayID else { return nil }
-        guard let cfuuid = CGDisplayCreateUUIDFromDisplayID(displayID)?.takeRetainedValue() else { return nil }
-        return UUID(cfuuid)
-    }
-
     // Returns true if the given screen has a visible dock. This isn't
     // point-in-time visible, this is true if the dock is always visible
     // AND present on this screen.
