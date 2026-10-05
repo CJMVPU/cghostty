@@ -448,6 +448,16 @@ pub inline fn queueWrite(
     try self.backend.queueWrite(self.alloc, td, data, linefeed);
 }
 
+/// Queue an owned write from the IO thread, consuming data even on error.
+pub inline fn queueWriteOwned(
+    self: *Termio,
+    td: *ThreadData,
+    data: termio.Message.WriteReq.Alloc,
+    linefeed: bool,
+) !void {
+    try self.backend.queueWriteOwned(self.alloc, td, data, linefeed);
+}
+
 /// Update the configuration.
 pub fn changeConfig(self: *Termio, config: *DerivedConfig) !void {
     // The remainder of this function is modifying terminal state or

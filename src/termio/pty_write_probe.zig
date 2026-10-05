@@ -196,6 +196,31 @@ test "PTY write large payload remains ordered across partial writes" {
     try fixture.drain(expected.written(), false);
 }
 
+test "PTY write owned payload retains its original allocator across partial writes" {
+    const t = std.testing;
+    var owners = t.FailingAllocator.init(t.allocator, .{});
+    var fixture = try Fixture.init(t.allocator);
+    defer fixture.deinit(t.allocator);
+    const bytes = try owners.allocator().alloc(u8, 65536);
+    var transferred = false;
+    defer if (!transferred) owners.allocator().free(bytes);
+    for (bytes, 0..) |*byte, i| byte.* = @intCast(i % 251);
+    var expected: std.Io.Writer.Allocating = .init(t.allocator);
+    defer expected.deinit();
+    try expected.writer.writeAll(bytes);
+    try expected.writer.writeAll("\x1b[A");
+    fixture.td.loop = &fixture.loop;
+    var exec: termio.Exec = undefined;
+    transferred = true; // queueWriteOwned consumes input even if it fails.
+    try exec.queueWriteOwned(t.allocator, &fixture.td, .{ .alloc = owners.allocator(), .data = bytes }, false);
+    try fixture.write(t.allocator, "\x1b[A", false);
+    try t.expectEqual(@as(usize, 0), owners.freed_bytes);
+    try t.expectEqual(bytes.ptr, fixture.td.backend.write_queue.head.?.full_write_buffer.slice.ptr);
+    try t.expectEqual(@as(usize, 2), fixture.pending());
+    try fixture.drain(expected.written(), false);
+    try t.expectEqual(owners.allocated_bytes, owners.freed_bytes);
+}
+
 test "PTY write dense CRLF expands owned buffer without reordering" {
     const t = std.testing;
     var fixture = try Fixture.init(t.allocator);

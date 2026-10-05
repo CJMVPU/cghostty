@@ -342,8 +342,32 @@ pub fn queueWrite(
     data: []const u8,
     linefeed: bool,
 ) !void {
+    try self.queueWriteWithOwner(alloc, td, data, linefeed, null);
+}
+
+/// Takes ownership of data on every path, including rejection and error.
+pub fn queueWriteOwned(
+    self: *Exec,
+    alloc: Allocator,
+    td: *termio.Termio.ThreadData,
+    data: termio.Message.WriteReq.Alloc,
+    linefeed: bool,
+) !void {
+    try self.queueWriteWithOwner(alloc, td, data.data, linefeed, data);
+}
+
+fn queueWriteWithOwner(
+    self: *Exec,
+    alloc: Allocator,
+    td: *termio.Termio.ThreadData,
+    data: []const u8,
+    linefeed: bool,
+    source_owner: ?termio.Message.WriteReq.Alloc,
+) !void {
     _ = self;
     const exec = &td.backend;
+    var remaining_owner = source_owner;
+    defer if (remaining_owner) |owner| owner.alloc.free(owner.data);
 
     // If our process is exited then we don't send any more writes.
     if (exec.exited or data.len == 0) return;
@@ -356,23 +380,31 @@ pub fn queueWrite(
             return error.OutOfMemory
     else
         data.len;
-    const owned: ?[]u8 = if (len > ThreadData.Write.inline_buffer_size)
-        try alloc.alloc(u8, len)
-    else
-        null;
-    errdefer if (owned) |buf| alloc.free(buf);
+    const owned: ?termio.Message.WriteReq.Alloc = owned: {
+        if (len <= ThreadData.Write.inline_buffer_size) break :owned null;
+        if (remaining_owner) |owner| {
+            if (len == data.len) {
+                remaining_owner = null;
+                break :owned owner;
+            }
+        }
+        break :owned .{ .alloc = alloc, .data = try alloc.alloc(u8, len) };
+    };
+    errdefer if (owned) |owner| owner.alloc.free(owner.data);
 
     const w = try exec.write_pool.create(alloc);
     w.* = .{
         .td = exec,
         .req = undefined,
         .buf = undefined,
-        .owner_allocator = alloc,
-        .owned = owned,
+        .owner_allocator = if (owned) |owner| owner.alloc else alloc,
+        .owned = if (owned) |owner| owner.data else null,
     };
-    const slice = owned orelse w.buf[0..len];
+    const slice = if (owned) |owner| owner.data else w.buf[0..len];
     if (!linefeed or len == data.len) {
-        fastmem.copy(u8, slice, data);
+        // Adopted input already contains the bytes. Copy only borrowed or
+        // inline input, avoiding memcpy with identical source/destination.
+        if (slice.ptr != data.ptr) fastmem.copy(u8, slice, data);
     } else {
         var i: usize = 0;
         for (data) |ch| {

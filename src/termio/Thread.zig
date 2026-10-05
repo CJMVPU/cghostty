@@ -298,14 +298,11 @@ fn handleMailboxMessage(
             v,
             self.flags.linefeed_mode,
         ),
-        .write_alloc => |v| {
-            defer v.alloc.free(v.data);
-            try io.queueWrite(
-                data,
-                v.data,
-                self.flags.linefeed_mode,
-            );
-        },
+        .write_alloc => |v| try io.queueWriteOwned(
+            data,
+            v,
+            self.flags.linefeed_mode,
+        ),
     }
 }
 
@@ -553,7 +550,8 @@ test "IO mailbox drain preserves write FIFO and intervening linefeed modes" {
     var owners = t.FailingAllocator.init(t.allocator, .{});
     var fixture: DrainTest = .{};
     try fixture.init(t.allocator);
-    defer fixture.deinit();
+    var live = true;
+    defer if (live) fixture.deinit();
     fixture.io.mailbox.send(.{ .write_stable = "first\r" }, null);
     fixture.io.mailbox.send(.{ .linefeed_mode = true }, null);
     fixture.io.mailbox.send(try termio.Message.writeReq(t.allocator, @as([]const u8, "\rA")), null);
@@ -568,6 +566,128 @@ test "IO mailbox drain preserves write FIFO and intervening linefeed modes" {
     var req = fixture.cb.data.backend.write_queue.head;
     while (req) |r| : (req = r.next) try output.writer.writeAll(r.full_write_buffer.slice);
     try t.expectEqualStrings("first\r\r\nA" ++ "owned" ** 20, output.written());
-    try t.expectEqual(owners.allocated_bytes, owners.freed_bytes);
     try t.expect(fixture.io.mailbox.spsc.queue.pop(t.io) == null);
+    fixture.deinit();
+    live = false;
+    try t.expectEqual(owners.allocated_bytes, owners.freed_bytes);
+}
+
+test "IO owned write adopts large mailbox buffer without a second allocation" {
+    const t = std.testing;
+    for ([_]bool{ false, true }) |linefeed| {
+        var owners = t.FailingAllocator.init(t.allocator, .{});
+        var writes = t.FailingAllocator.init(t.allocator, .{});
+        var fixture: DrainTest = .{};
+        try fixture.init(writes.allocator());
+        defer fixture.deinit();
+
+        // Reserve all three requests before measuring payload allocations.
+        try fixture.cb.data.backend.write_pool.addCapacity(writes.allocator(), 3);
+        // Keep the first request pending to check FIFO around the frame.
+        fixture.io.mailbox.send(.{ .write_stable = "first" }, null);
+        try fixture.worker.drainMailbox(&fixture.cb);
+        const before = writes.allocated_bytes;
+        const bytes = try owners.allocator().alloc(u8, 1024 * 1024);
+        @memset(bytes, 'a');
+        @memcpy(bytes[0..6], "\x1b[200~");
+        @memcpy(bytes[bytes.len - 6 ..], "\x1b[201~");
+        fixture.io.mailbox.send(.{ .linefeed_mode = linefeed }, null);
+        fixture.io.mailbox.send(.{ .write_alloc = .{ .alloc = owners.allocator(), .data = bytes } }, null);
+        fixture.io.mailbox.send(.{ .write_stable = "\x1b[A" }, null);
+        try fixture.worker.drainMailbox(&fixture.cb);
+
+        std.debug.print("\nOWNED_WRITE_METRIC source_bytes={d} linefeed={} io_extra_allocated_bytes={d}\n", .{
+            bytes.len, linefeed, writes.allocated_bytes - before,
+        });
+        try t.expectEqual(before, writes.allocated_bytes);
+        const first = fixture.cb.data.backend.write_queue.head.?;
+        const frame = first.next.?;
+        try t.expectEqual(bytes.ptr, frame.full_write_buffer.slice.ptr);
+        try t.expectEqual(@as(usize, 0), owners.freed_bytes);
+        try t.expectEqualStrings("first", first.full_write_buffer.slice);
+        try t.expectEqualStrings("\x1b[200~", frame.full_write_buffer.slice[0..6]);
+        try t.expectEqualStrings("\x1b[201~", frame.full_write_buffer.slice[bytes.len - 6 ..]);
+        try t.expectEqualStrings("\x1b[A", frame.next.?.full_write_buffer.slice);
+        try t.expect(frame.next.?.next == null);
+    }
+}
+
+test "IO owned write CRLF expansion and inline copies release the original allocator" {
+    const t = std.testing;
+    for ([_]usize{ 39, 128 }) |len| {
+        var owners = t.FailingAllocator.init(t.allocator, .{});
+        var writes = t.FailingAllocator.init(t.allocator, .{});
+        var fixture: DrainTest = .{};
+        try fixture.init(writes.allocator());
+        defer fixture.deinit();
+        const bytes = try owners.allocator().alloc(u8, len);
+        @memset(bytes, if (len == 39) 'a' else '\r');
+        fixture.io.mailbox.send(.{ .linefeed_mode = true }, null);
+        fixture.io.mailbox.send(.{ .write_alloc = .{ .alloc = owners.allocator(), .data = bytes } }, null);
+        try fixture.worker.drainMailbox(&fixture.cb);
+        try t.expectEqual(owners.allocated_bytes, owners.freed_bytes);
+        const output = fixture.cb.data.backend.write_queue.head.?.full_write_buffer.slice;
+        try t.expectEqual(if (len == 39) len else len * 2, output.len);
+        for (output, 0..) |byte, i| try t.expectEqual(
+            if (len == 39) @as(u8, 'a') else if (i % 2 == 0) @as(u8, '\r') else @as(u8, '\n'),
+            byte,
+        );
+    }
+}
+
+test "IO owned write completion frees the source allocator exactly once" {
+    const t = std.testing;
+    for ([_]?xev.WriteError{ null, error.Canceled, error.Unexpected }) |err| {
+        var owners = t.FailingAllocator.init(t.allocator, .{});
+        var fixture: DrainTest = .{};
+        try fixture.init(t.allocator);
+        defer fixture.deinit();
+        fixture.io.mailbox.send(try termio.Message.writeReq(owners.allocator(), @as([]const u8, "frame" ** 128)), null);
+        try fixture.worker.drainMailbox(&fixture.cb);
+        try t.expectEqual(@as(usize, 0), owners.freed_bytes);
+        // Match libxev: pop before the shared success/error cleanup callback.
+        // No loop runs here, so it cannot later invoke this completion.
+        const req = fixture.cb.data.backend.write_queue.pop().?;
+        const w: *termio.Exec.ThreadData.Write = @ptrCast(@alignCast(req.userdata.?));
+        if (err) |failure| {
+            try t.expectError(failure, w.complete(failure));
+        } else {
+            try t.expectEqual(owners.allocated_bytes, try w.complete(owners.allocated_bytes));
+        }
+        try t.expectEqual(owners.allocated_bytes, owners.freed_bytes);
+    }
+}
+
+test "IO owned write empty exited and closed paths release mailbox ownership" {
+    const t = std.testing;
+    for (0..3) |mode| {
+        var owners = t.FailingAllocator.init(t.allocator, .{});
+        var fixture: DrainTest = .{};
+        try fixture.init(t.allocator);
+        defer fixture.deinit();
+        if (mode == 1) fixture.cb.data.backend.exited = true;
+        if (mode == 2) fixture.io.mailbox.close();
+        const bytes = try owners.allocator().alloc(u8, if (mode == 0) 0 else 128);
+        @memset(bytes, 'x');
+        fixture.io.mailbox.send(.{ .write_alloc = .{ .alloc = owners.allocator(), .data = bytes } }, null);
+        try fixture.worker.drainMailbox(&fixture.cb);
+        try t.expect(fixture.cb.data.backend.write_queue.head == null);
+        try t.expectEqual(owners.allocated_bytes, owners.freed_bytes);
+    }
+}
+
+test "IO owned write allocation failures release source and replacement buffers" {
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, struct {
+        fn run(alloc: Allocator) !void {
+            var fixture: DrainTest = .{};
+            try fixture.init(alloc);
+            defer fixture.deinit();
+            for ([_][]const u8{ "owned" ** 128, "\r" ** 128, "inline" }) |input| {
+                const owner = std.testing.allocator;
+                fixture.io.mailbox.send(.{ .linefeed_mode = true }, null);
+                fixture.io.mailbox.send(.{ .write_alloc = .{ .alloc = owner, .data = try owner.dupe(u8, input) } }, null);
+                try fixture.worker.drainMailbox(&fixture.cb);
+            }
+        }
+    }.run, .{});
 }
