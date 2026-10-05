@@ -440,6 +440,10 @@ page_compression: IncrementalCompressionState = .{},
 /// outside of an in-progress reflow.
 recycle_node: ?*List.Node = null,
 
+/// Per-instance operation probes, absent from production storage and code.
+/// These count reflow calls, not system allocator operations or elapsed time.
+reflow_metrics: if (builtin.is_test) ReflowMetrics else void = if (builtin.is_test) .{} else {},
+
 /// Limits for scrollback.
 limits: Limits,
 
@@ -2236,46 +2240,36 @@ const ReflowCursor = struct {
                 );
             }
 
-            // Attempt to allocate the space that would be required
-            // for these graphemes, and if it's not available, then
-            // increase capacity. Keep trying until we succeed.
+            // Store the graphemes directly. A failed byte allocation leaves
+            // the cell and map untouched, so grow and retry instead of doing
+            // an alloc/free capacity probe followed by another allocation.
             while (true) {
-                if (self.page.grapheme_alloc.alloc(
-                    u21,
-                    self.page.memory,
-                    cps.len,
-                )) |slice| {
-                    self.page.grapheme_alloc.free(
-                        self.page.memory,
-                        slice,
-                    );
-                    break;
-                } else |_| {
-                    // Grow our capacity until we can fit the extra bytes.
-                    try self.increaseCapacity(list, .grapheme_bytes);
-                }
+                if (comptime builtin.is_test) list.reflow_metrics.grapheme_set_attempts += 1;
+                self.page.setGraphemes(
+                    self.page_row,
+                    self.page_cell,
+                    cps,
+                ) catch |err| switch (err) {
+                    error.GraphemeAllocOutOfMemory => {
+                        if (comptime builtin.is_test) list.reflow_metrics.grapheme_allocation_retries += 1;
+                        // increaseCapacity refreshes the destination page,
+                        // row, and cell pointers before the next attempt.
+                        try self.increaseCapacity(list, .grapheme_bytes);
+                        continue;
+                    },
+                    error.GraphemeMapOutOfMemory => {
+                        // The map capacity check above should prevent this.
+                        // Preserve the existing handling for unexpected map
+                        // exhaustion: trap in safe builds, degrade otherwise.
+                        log.err("setGraphemes failed after capacity increase err={}", .{err});
+                        if (comptime std.debug.runtime_safety) unreachable;
+
+                        self.page_cell.content_tag = .codepoint;
+                        self.page_cell.content = .{ .codepoint = .{ .data = 0xFFFD } };
+                    },
+                };
+                break;
             }
-
-            self.page.setGraphemes(
-                self.page_row,
-                self.page_cell,
-                cps,
-            ) catch |err| {
-                // This shouldn't fail since we made sure we have space
-                // above. There is no reasonable behavior we can take here
-                // so we have a warn level log. This is ALMOST non-recoverable,
-                // though we choose to recover by corrupting the cell
-                // to a non-grapheme codepoint.
-                log.err("setGraphemes failed after capacity increase err={}", .{err});
-                if (comptime std.debug.runtime_safety) {
-                    // Force a crash with safe builds.
-                    unreachable;
-                }
-
-                // Unsafe builds we throw away grapheme data!
-                self.page_cell.content_tag = .codepoint;
-                self.page_cell.content = .{ .codepoint = .{ .data = 0xFFFD } };
-            };
         }
 
         // Copy hyperlink data.
@@ -2296,6 +2290,7 @@ const ReflowCursor = struct {
                 try self.increaseCapacity(list, .string_bytes);
             }
 
+            if (comptime builtin.is_test) list.reflow_metrics.hyperlink_dupe_attempts += 1;
             const dst_link = src_link.dupe(
                 src_page,
                 self.page,
@@ -2339,6 +2334,7 @@ const ReflowCursor = struct {
                 }
 
                 // We need to recreate the link into the new page.
+                if (comptime builtin.is_test) list.reflow_metrics.hyperlink_dupe_attempts += 1;
                 const dst_link2 = src_link.dupe(
                     src_page,
                     self.page,
@@ -7011,7 +7007,15 @@ pub const Cell = struct {
 pub const TestSupport = if (builtin.is_test) @import("tests/PageList/fixtures.zig") else struct {};
 
 /// White-box regression hooks; absent from application builds.
+const ReflowMetrics = struct {
+    grapheme_preflight_allocations: usize = 0,
+    grapheme_set_attempts: usize = 0,
+    grapheme_allocation_retries: usize = 0,
+    hyperlink_dupe_attempts: usize = 0,
+};
+
 pub const TestAccess = if (builtin.is_test) struct {
+    pub const ReflowMetrics = PageList.ReflowMetrics;
     pub const pageAllocator = PageList.pageAllocator;
     pub const createPageExt = PageList.createPageExt;
     pub const destroyNodeExt = PageList.destroyNodeExt;
@@ -7053,5 +7057,6 @@ test {
     _ = @import("tests/PageList/storage.zig");
     _ = @import("tests/PageList/pins.zig");
     _ = @import("tests/PageList/reflow.zig");
+    _ = @import("tests/PageList/reflow_allocations.zig");
     _ = @import("tests/PageList/operations.zig");
 }

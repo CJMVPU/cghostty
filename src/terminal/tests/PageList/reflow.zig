@@ -2832,8 +2832,34 @@ test "PageList resize reflow exceeds grapheme memory forcing capacity increase" 
         );
     }
 
-    // Resize to 1 column wider, unwrapping the row.
+    // Resize to 1 column wider, unwrapping the row. The grapheme byte storage
+    // fills before the map, forcing a real setGraphemes allocation failure.
+    // The retry must grow the current destination and preserve all suffixes.
+    s.reflow_metrics = .{};
     try s.resize(.{ .cols = s.cols + 1, .reflow = true });
+    try testing.expect(s.reflow_metrics.grapheme_allocation_retries > 0);
+    try testing.expectEqual(0, s.reflow_metrics.grapheme_preflight_allocations);
+    try testing.expectEqual(
+        @as(usize, 8) + s.reflow_metrics.grapheme_allocation_retries,
+        s.reflow_metrics.grapheme_set_attempts,
+    );
+
+    var found: usize = 0;
+    var node = s.pages.first;
+    while (node) |current| : (node = current.next) {
+        const page = current.page();
+        for (0..page.size.rows) |y| {
+            const row = page.getRow(@intCast(y));
+            for (page.getCells(row)) |*cell| {
+                if (cell.content_tag != .codepoint_grapheme) continue;
+                found += 1;
+                try testing.expectEqual(@as(u21, 'X'), cell.codepoint());
+                try testing.expectEqualSlices(u21, &suffixes, page.lookupGrapheme(cell).?);
+                try testing.expect(row.grapheme);
+            }
+        }
+    }
+    try testing.expectEqual(8, found);
 }
 
 test "PageList resize reflow exceeds style memory forcing capacity increase" {
