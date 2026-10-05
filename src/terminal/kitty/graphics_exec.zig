@@ -610,21 +610,15 @@ fn completeAnimationFrame(
         frame_img.data = .{ .complete = rgba };
         frame_img.format = .rgba;
     }
-    storage.convertImageToRgba(io, alloc, img) catch |err| {
+    const conversion_bytes = storage.rgbaConversionBytes(img) catch |err| {
         encodeError(&result, err);
         return result;
     };
-
-    const anim = ensureAnimation(alloc, img) catch |err| {
-        encodeError(&result, err);
-        return result;
-    };
-
     // Resolve the frame number: r in 1..count edits that existing
     // frame, anything else (including omitted) creates a new frame
     // appended at count+1. The resolved number is echoed in the
     // response so clients can learn assigned frame numbers.
-    const count: u32 = anim.frameCount();
+    const count: u32 = if (img.animation) |anim| anim.frameCount() else 1;
     const number: u32 = number: {
         const r = f.edit_frame;
         if (r == 0 or r > count + 1) break :number count + 1;
@@ -632,47 +626,67 @@ fn completeAnimationFrame(
     };
     result.frame = number;
 
-    const src = frame_img.data.bytes().?;
-    if (number == count + 1) {
-        // Creating a new frame. The gap defaults to 40ms when omitted
-        // and a negative gap creates a gapless (never shown) frame.
-        const gap: u32 = if (f.gap_ms > 0)
-            @intCast(f.gap_ms)
-        else if (f.gap_ms < 0)
-            0
-        else
-            animation.default_gap_ms;
-
-        // The base canvas frame must exist before we reserve space.
-        if (f.create_frame > 0 and img.frameData(f.create_frame) == null) {
-            result.message = "EINVAL: base frame not found";
-            return result;
-        }
-
-        // Reserve room for the new frame, evicting other images if
-        // needed. Eviction can remove images (never this one), so we
-        // re-resolve our pointer afterwards to be safe.
-        const frame_len: usize = @as(usize, img.width) * img.height * 4;
-        const image_id = img.id;
-        storage.reserveAnimationBytes(
-            io,
-            alloc,
-            terminal.screens.active,
-            image_id,
-            frame_len,
-        ) catch {
+    const creating = number == count + 1;
+    if (creating and f.create_frame > 0 and img.frameData(f.create_frame) == null) {
+        result.message = "EINVAL: base frame not found";
+        return result;
+    }
+    const frame_len: usize = if (creating) @as(usize, img.width) * img.height * 4 else 0;
+    const additional = std.math.add(usize, conversion_bytes, frame_len) catch {
+        result.message = "ENOSPC: animation frame storage full";
+        return result;
+    };
+    // Reject an impossible request before allocating a full-size canvas.
+    storage.checkImageGrowth(img, additional) catch |err| {
+        if (creating) {
             result.message = "ENOSPC: animation frame storage full";
-            return result;
-        };
-        img = storage.imagePtrByIdOrNumber(image_id, 0).?;
+        } else {
+            encodeError(&result, err);
+        }
+        return result;
+    };
 
-        const canvas = alloc.alloc(u8, frame_len) catch {
-            storage.releaseAnimationBytes(frame_len);
-            result.message = "ENOMEM: out of memory";
+    // Prepare every fallible allocation before reserving bytes or evicting
+    // images. Pixels, frame membership, gaps and generations remain unchanged;
+    // an existing frame list may only retain an expanded capacity on failure.
+    var base_rgba: ?[]u8 = if (img.format == .rgba) null else pixel.rgbaFromFormat(
+        alloc,
+        img.format,
+        img.data.bytes().?,
+    ) catch |err| {
+        encodeError(&result, err);
+        return result;
+    };
+    defer if (base_rgba) |data| alloc.free(data);
+    var new_anim: ?*animation.Animation = null;
+    defer if (new_anim) |anim| {
+        anim.deinit(alloc);
+        alloc.destroy(anim);
+    };
+    const anim = img.animation orelse new: {
+        const value = alloc.create(animation.Animation) catch |err| {
+            encodeError(&result, err);
             return result;
         };
+        value.* = .{};
+        new_anim = value;
+        break :new value;
+    };
+    var new_canvas: ?[]u8 = null;
+    defer if (new_canvas) |canvas| alloc.free(canvas);
+    const src = frame_img.data.bytes().?;
+    if (creating) {
+        const canvas = alloc.alloc(u8, frame_len) catch |err| {
+            encodeError(&result, err);
+            return result;
+        };
+        new_canvas = canvas;
         if (f.create_frame > 0) {
-            @memcpy(canvas, img.frameData(f.create_frame).?);
+            const base = if (f.create_frame == 1 and base_rgba != null)
+                base_rgba.?
+            else
+                img.frameData(f.create_frame).?;
+            @memcpy(canvas, base);
         } else {
             pixel.fillBackground(canvas, f.background);
         }
@@ -688,15 +702,48 @@ fn completeAnimationFrame(
             f.composition_mode,
         );
 
-        anim.frames.append(alloc, .{
-            .data = canvas,
-            .gap_ms = gap,
-        }) catch {
-            alloc.free(canvas);
-            storage.releaseAnimationBytes(frame_len);
-            result.message = "ENOMEM: out of memory";
+        anim.frames.ensureUnusedCapacity(alloc, 1) catch |err| {
+            encodeError(&result, err);
             return result;
         };
+    }
+
+    const image_id = img.id;
+    storage.reserveAnimationBytes(io, alloc, terminal.screens.active, image_id, additional) catch |err| {
+        if (creating) {
+            result.message = "ENOSPC: animation frame storage full";
+        } else {
+            encodeError(&result, err);
+        }
+        return result;
+    };
+
+    // The reservation can evict other images. Re-resolve the target before
+    // committing; nothing below this point allocates or can fail.
+    img = storage.imagePtrByIdOrNumber(image_id, 0).?;
+    if (base_rgba) |data| {
+        img.data.deinit(alloc);
+        img.data = .{ .complete = data };
+        img.format = .rgba;
+        base_rgba = null;
+        storage.markImageContentChanged(io, img);
+    }
+    if (new_anim != null) {
+        img.animation = anim;
+        new_anim = null;
+    }
+
+    if (creating) {
+        // A negative gap creates a gapless frame; the default only applies
+        // to new frames, not edits.
+        const gap: u32 = if (f.gap_ms > 0)
+            @intCast(f.gap_ms)
+        else if (f.gap_ms < 0)
+            0
+        else
+            animation.default_gap_ms;
+        anim.frames.appendAssumeCapacity(.{ .data = new_canvas.?, .gap_ms = gap });
+        new_canvas = null;
 
         // A new frame never changes the displayed frame (playback
         // reaches it later), but the storage content changed.
@@ -705,11 +752,9 @@ fn completeAnimationFrame(
         // Editing an existing frame. A nonzero gap also updates the
         // frame's gap; the 40ms default doesn't apply to edits.
         //
-        // Unlike frame creation there is no byte reservation here:
-        // frames are always stored at full image size, so the edit
-        // composes into the existing buffer in place and storage
-        // usage cannot change. Kitty likewise exempts frame edits
-        // from its quota check.
+        // Frames are stored at full image size. Edits reserve only the
+        // representation growth if the root was still RGB, never another
+        // canvas. Kitty likewise exempts the edit itself from its quota check.
         if (f.gap_ms != 0) anim.setGapAt(
             number - 1,
             if (f.gap_ms > 0) @intCast(f.gap_ms) else 0,
@@ -850,7 +895,7 @@ fn composeAnimation(
         result.message = "EINVAL: image ID or number required";
         return result;
     }
-    const img = storage.imagePtrByIdOrNumber(
+    var img = storage.imagePtrByIdOrNumber(
         c.image_id,
         c.image_number,
     ) orelse {
@@ -905,9 +950,10 @@ fn composeAnimation(
     }
 
     // All composition happens in RGBA.
-    storage.convertImageToRgba(
+    img = storage.convertImageToRgba(
         io,
         alloc,
+        terminal.screens.active,
         img,
     ) catch |err| {
         encodeError(&result, err);
@@ -2702,6 +2748,179 @@ test "kittygfx uppercase delete frees image of cascaded placements" {
 // Animation tests frequently start from a 1x1 RGB red image with
 // id=1 ("/wAA" is FF0000). Composition converts images to RGBA, so
 // after the first frame command the base data is FF0000FF.
+
+test "kittygfx animation: root edit cannot exceed RGB conversion budget" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    const io = testing.io;
+    var t = try Terminal.init(io, alloc, .{ .rows = 3, .cols = 3 });
+    defer t.deinit(alloc);
+    const storage = &t.screens.active.kitty_images;
+    storage.total_limit = 3;
+    {
+        const cmd = try command.Parser.parseString(alloc, "a=t,f=24,s=1,v=1,i=1;/wAA");
+        defer cmd.deinit(alloc);
+        try testing.expect(execute(io, alloc, &t, &cmd).?.ok());
+    }
+    const generation = storage.imageById(1).?.generation;
+    const cmd = try command.Parser.parseString(alloc, "a=f,i=1,r=1,f=24,s=1,v=1;AAD/");
+    defer cmd.deinit(alloc);
+    const response = execute(io, alloc, &t, &cmd).?;
+    try testing.expectEqualStrings("ENOMEM: out of memory", response.message);
+    try testing.expectEqual(@as(usize, 3), storage.total_bytes);
+    const img = storage.imageById(1).?;
+    try testing.expectEqual(command.Transmission.Format.rgb, img.format);
+    try testing.expectEqualSlices(u8, &.{ 255, 0, 0 }, img.data.bytes().?);
+    try testing.expectEqual(generation, img.generation);
+    try testing.expect(img.animation == null);
+}
+
+test "kittygfx animation: compose cannot exceed RGB conversion budget" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    const io = testing.io;
+    var t = try Terminal.init(io, alloc, .{ .rows = 3, .cols = 3 });
+    defer t.deinit(alloc);
+    const storage = &t.screens.active.kitty_images;
+    storage.total_limit = 6;
+    {
+        const cmd = try command.Parser.parseString(alloc, "a=t,f=24,s=2,v=1,i=1;/wAAAAD/");
+        defer cmd.deinit(alloc);
+        try testing.expect(execute(io, alloc, &t, &cmd).?.ok());
+    }
+    const generation = storage.imageById(1).?.generation;
+    // Disjoint rectangles in one root frame make this a valid composition.
+    const cmd = try command.Parser.parseString(alloc, "a=c,i=1,r=1,c=1,w=1,h=1,x=1");
+    defer cmd.deinit(alloc);
+    const response = execute(io, alloc, &t, &cmd).?;
+    try testing.expectEqualStrings("ENOMEM: out of memory", response.message);
+    try testing.expectEqual(@as(usize, 6), storage.total_bytes);
+    const img = storage.imageById(1).?;
+    try testing.expectEqual(command.Transmission.Format.rgb, img.format);
+    try testing.expectEqualSlices(u8, &.{ 255, 0, 0, 0, 0, 255 }, img.data.bytes().?);
+    try testing.expectEqual(generation, img.generation);
+    try testing.expect(img.animation == null);
+}
+
+const ImageBudgetTestOperation = enum { edit, append, append_existing, compose };
+
+fn addImageBudgetTestImage(
+    alloc: Allocator,
+    t: *Terminal,
+    id: u32,
+    width: u32,
+    format: command.Transmission.Format,
+    pixels: []const u8,
+) !void {
+    var test_image: Image = .{
+        .id = id,
+        .width = width,
+        .height = 1,
+        .format = format,
+        .data = .{ .complete = try alloc.dupe(u8, pixels) },
+    };
+    errdefer test_image.deinit(alloc);
+    try t.screens.active.kitty_images.addImage(std.testing.io, alloc, t.screens.active, test_image);
+}
+
+fn imageBudgetAllocationFailureTest(alloc: Allocator, operation: ImageBudgetTestOperation) !void {
+    const testing = std.testing;
+    const io = testing.io;
+    var t = try Terminal.init(io, alloc, .{ .rows = 3, .cols = 3 });
+    defer t.deinit(alloc);
+    const storage = &t.screens.active.kitty_images;
+    storage.total_limit = switch (operation) {
+        .edit => 7,
+        .append => 8,
+        .append_existing => 12,
+        .compose => 10,
+    };
+    // A successful command must evict the unrelated four-byte image. Until
+    // all allocations succeed it must remain, including its original pixels.
+    try addImageBudgetTestImage(alloc, &t, 1, 1, .rgba, &.{ 255, 255, 255, 255 });
+    const root: []const u8 = switch (operation) {
+        .append_existing => &.{ 255, 0, 0, 255 },
+        .compose => &.{ 255, 0, 0, 0, 0, 255 },
+        else => &.{ 255, 0, 0 },
+    };
+    const format: command.Transmission.Format = if (operation == .append_existing) .rgba else .rgb;
+    try addImageBudgetTestImage(alloc, &t, 2, if (operation == .compose) 2 else 1, format, root);
+    if (operation == .append_existing) {
+        const anim = try ensureAnimation(alloc, storage.imagePtrByIdOrNumber(2, 0).?);
+        // Exact capacity forces the next append to exercise its allocation.
+        anim.frames = try .initCapacity(alloc, 1);
+        anim.frames.appendAssumeCapacity(.{ .data = try alloc.dupe(u8, &.{ 0, 0, 255, 255 }), .gap_ms = 31 });
+        anim.root_gap_ms = 13;
+        anim.current_index = 1;
+        anim.frame_shown_at_ms = 123;
+        storage.total_bytes += 4;
+    }
+    const input: []const u8 = switch (operation) {
+        .edit => "a=f,i=2,r=1,f=24,s=1,v=1,z=17;AAD/",
+        .append => "a=f,i=2,f=24,s=1,v=1,c=1,x=1,z=23;AAD/",
+        .append_existing => "a=f,i=2,f=24,s=1,v=1,c=2,x=1,z=23;AAD/",
+        .compose => "a=c,i=2,r=1,c=1,w=1,h=1,x=1",
+    };
+    const cmd = try command.Parser.parseString(alloc, input);
+    defer cmd.deinit(alloc);
+    const before = storage.imageById(2).?;
+    const generation = storage.generation;
+    const total_bytes = storage.total_bytes;
+    storage.dirty = false;
+
+    const response = execute(io, alloc, &t, &cmd).?;
+    const img = storage.imagePtrByIdOrNumber(2, 0).?;
+    if (!response.ok()) {
+        try testing.expectEqualStrings("ENOMEM: out of memory", response.message);
+        try testing.expectEqual(@as(usize, 2), storage.images.count());
+        try testing.expectEqualSlices(u8, &.{ 255, 255, 255, 255 }, storage.imageById(1).?.data.bytes().?);
+        try testing.expectEqual(total_bytes, storage.total_bytes);
+        try testing.expectEqual(format, img.format);
+        try testing.expectEqualSlices(u8, root, img.data.bytes().?);
+        try testing.expectEqual(before.animation, img.animation);
+        try testing.expectEqual(before.generation, img.generation);
+        try testing.expectEqual(generation, storage.generation);
+        try testing.expect(!storage.dirty);
+        if (img.animation) |anim| {
+            try testing.expectEqual(@as(u32, 2), anim.frameCount());
+            try testing.expectEqual(@as(u32, 13), anim.root_gap_ms);
+            try testing.expectEqual(@as(u32, 31), anim.frames.items[0].gap_ms);
+            try testing.expectEqual(@as(u32, 1), anim.current_index);
+            try testing.expectEqual(@as(?u64, 123), anim.frame_shown_at_ms);
+            try testing.expectEqualSlices(u8, &.{ 0, 0, 255, 255 }, img.frameData(2).?);
+        }
+        // execute encodes allocator errors instead of returning them. Restore
+        // the error for checkAllAllocationFailures after checking rollback.
+        return error.OutOfMemory;
+    }
+
+    try testing.expect(storage.imageById(1) == null);
+    try testing.expectEqual(@as(usize, 1), storage.images.count());
+    try testing.expectEqual(command.Transmission.Format.rgba, img.format);
+    try testing.expect(storage.total_bytes <= storage.total_limit);
+    try testing.expectEqual(img.storageSize(), storage.total_bytes);
+    switch (operation) {
+        .edit => {
+            try testing.expectEqualSlices(u8, &.{ 0, 0, 255, 255 }, img.data.bytes().?);
+            try testing.expectEqual(@as(u32, 1), img.animation.?.frameCount());
+            try testing.expectEqual(@as(u32, 17), img.animation.?.root_gap_ms);
+        },
+        .append, .append_existing => {
+            const expected: []const u8 = if (operation == .append) &.{ 255, 0, 0, 255 } else &.{ 0, 0, 255, 255 };
+            const count: u32 = if (operation == .append) 2 else 3;
+            try testing.expectEqual(@as(u32, count), img.animation.?.frameCount());
+            try testing.expectEqualSlices(u8, expected, img.frameData(count).?);
+            try testing.expectEqual(@as(u32, 23), img.animation.?.gapAt(count - 1));
+        },
+        .compose => try testing.expectEqualSlices(u8, &.{ 255, 0, 0, 255, 255, 0, 0, 255 }, img.data.bytes().?),
+    }
+}
+
+test "kittygfx animation: allocation failures preserve image budget transactions" {
+    for ([_]ImageBudgetTestOperation{ .edit, .append, .append_existing, .compose }) |operation| {
+        try std.testing.checkAllAllocationFailures(std.testing.allocator, imageBudgetAllocationFailureTest, .{operation});
+    }
+}
 
 test "kittygfx animation: new frame with default gap responds with frame number" {
     const testing = std.testing;

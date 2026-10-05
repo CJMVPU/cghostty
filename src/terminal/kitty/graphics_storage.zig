@@ -975,28 +975,54 @@ pub const ImageStorage = struct {
         img.generation = self.generation;
     }
 
+    /// Check whether the target and its additional bytes can fit without
+    /// evicting the target itself. This does not reserve or evict anything.
+    pub fn checkImageGrowth(self: *const ImageStorage, img: *const Image, bytes: usize) Allocator.Error!void {
+        if (bytes > self.total_limit or img.storageSize() > self.total_limit - bytes) return error.OutOfMemory;
+    }
+
+    /// Bytes added by converting a stored image's base data to RGBA.
+    /// An impossible target size must fail before evicting other images.
+    pub fn rgbaConversionBytes(self: *const ImageStorage, img: *const Image) Allocator.Error!usize {
+        if (img.format == .rgba) return 0;
+        const old = img.data.bytes() orelse return 0;
+        const bpp = command.Transmission.formatBpp(img.format);
+        const new_len = std.math.mul(usize, old.len / bpp, 4) catch return error.OutOfMemory;
+        const additional = new_len - old.len;
+        try self.checkImageGrowth(img, additional);
+        return additional;
+    }
+
     /// Convert a stored image's base data to RGBA in place, adjusting
     /// byte accounting. All animation composition happens in RGBA;
     /// this is called before the first composition into an image.
     ///
     /// The pixels are unchanged visually but the stored representation
-    /// changed, so the image is stamped with a fresh generation.
+    /// changed, so the image is stamped with a fresh generation. The returned
+    /// pointer replaces the caller's pointer after eviction changes membership.
     pub fn convertImageToRgba(
         self: *ImageStorage,
         io: std.Io,
         alloc: Allocator,
+        s: *terminal.Screen,
         img: *Image,
-    ) Allocator.Error!void {
-        if (img.format == .rgba) return;
-        const old = img.data.bytes() orelse return;
+    ) Allocator.Error!*Image {
+        if (img.format == .rgba) return img;
+        const old = img.data.bytes() orelse return img;
+        const additional = try self.rgbaConversionBytes(img);
+        const image_id = img.id;
 
+        // Finish the only fallible allocation before any eviction. On error
+        // the original pixels, accounting and other images remain untouched.
         const rgba = try pixel.rgbaFromFormat(alloc, img.format, old);
-        self.total_bytes -= old.len;
-        self.total_bytes += rgba.len;
-        img.data.deinit(alloc);
-        img.data = .{ .complete = rgba };
-        img.format = .rgba;
-        self.markImageContentChanged(io, img);
+        errdefer alloc.free(rgba);
+        try self.reserveAnimationBytes(io, alloc, s, image_id, additional);
+        const stored = self.images.getPtr(image_id).?;
+        stored.data.deinit(alloc);
+        stored.data = .{ .complete = rgba };
+        stored.format = .rgba;
+        self.markImageContentChanged(io, stored);
+        return stored;
     }
 
     /// Reserve `bytes` of storage for animation frame data belonging
@@ -1014,9 +1040,10 @@ pub const ImageStorage = struct {
         image_id: u32,
         bytes: usize,
     ) Allocator.Error!void {
-        if (bytes > self.total_limit) return error.OutOfMemory;
+        const img = self.images.get(image_id) orelse return error.OutOfMemory;
+        try self.checkImageGrowth(&img, bytes);
 
-        const total_bytes = self.total_bytes + bytes;
+        const total_bytes = std.math.add(usize, self.total_bytes, bytes) catch return error.OutOfMemory;
         if (total_bytes > self.total_limit) {
             const req_bytes = total_bytes - self.total_limit;
             // Excess this large cannot be recovered by evicting other
@@ -3567,6 +3594,202 @@ test "storage: eviction releases placement pins" {
         .placement_id = .{ .tag = .external, .id = 1 },
     }));
     try testing.expectEqual(tracked + 1, t.screens.active.pages.countTrackedPins());
+}
+
+test "storage: rgba conversion respects a three-byte image budget" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    const io = testing.io;
+    var t = try terminal.Terminal.init(io, alloc, .{ .rows = 3, .cols = 3 });
+    defer t.deinit(alloc);
+    const s = &t.screens.active.kitty_images;
+    s.total_limit = 3;
+    try s.addImage(io, alloc, t.screens.active, .{
+        .id = 1,
+        .width = 1,
+        .height = 1,
+        .format = .rgb,
+        .data = .{ .complete = try alloc.dupe(u8, &.{ 255, 0, 0 }) },
+    });
+    const img = s.imagePtrByIdOrNumber(1, 0).?;
+    const generation = img.generation;
+    const storage_generation = s.generation;
+    s.dirty = false;
+
+    try testing.expectError(error.OutOfMemory, s.convertImageToRgba(io, alloc, t.screens.active, img));
+    try testing.expectEqual(@as(usize, 3), s.total_bytes);
+    try testing.expectEqual(command.Transmission.Format.rgb, img.format);
+    try testing.expectEqualSlices(u8, &.{ 255, 0, 0 }, img.data.bytes().?);
+    try testing.expectEqual(generation, img.generation);
+    try testing.expectEqual(storage_generation, s.generation);
+    try testing.expect(!s.dirty);
+}
+
+test "storage: rgba conversion allocation failure preserves the image" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    const io = testing.io;
+    var t = try terminal.Terminal.init(io, alloc, .{ .rows = 3, .cols = 3 });
+    defer t.deinit(alloc);
+    const s = &t.screens.active.kitty_images;
+    s.total_limit = 4;
+    try s.addImage(io, alloc, t.screens.active, .{
+        .id = 1,
+        .width = 1,
+        .height = 1,
+        .format = .rgb,
+        .data = .{ .complete = try alloc.dupe(u8, &.{ 255, 0, 0 }) },
+    });
+    const img = s.imagePtrByIdOrNumber(1, 0).?;
+    const generation = img.generation;
+    const storage_generation = s.generation;
+    s.dirty = false;
+    var failing: testing.FailingAllocator = .init(alloc, .{ .fail_index = 0 });
+
+    try testing.expectError(error.OutOfMemory, s.convertImageToRgba(io, failing.allocator(), t.screens.active, img));
+    try testing.expectEqual(@as(usize, 3), s.total_bytes);
+    try testing.expectEqual(command.Transmission.Format.rgb, img.format);
+    try testing.expectEqualSlices(u8, &.{ 255, 0, 0 }, img.data.bytes().?);
+    try testing.expectEqual(generation, img.generation);
+    try testing.expectEqual(storage_generation, s.generation);
+    try testing.expect(!s.dirty);
+    try testing.expectEqual(@as(usize, 0), failing.allocated_bytes - failing.freed_bytes);
+}
+
+test "storage: impossible animation reservation does not evict other images" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    const io = testing.io;
+    var t = try terminal.Terminal.init(io, alloc, .{ .rows = 3, .cols = 3 });
+    defer t.deinit(alloc);
+    const s = &t.screens.active.kitty_images;
+    s.total_limit = 8;
+    for ([_]u32{ 1, 2 }) |id| try s.addImage(io, alloc, t.screens.active, .{
+        .id = id,
+        .width = 1,
+        .height = 1,
+        .format = .rgba,
+        .data = .{ .complete = try alloc.dupe(u8, &.{ 255, 0, 0, 255 }) },
+    });
+    const generation = s.generation;
+    s.dirty = false;
+
+    // The target alone would need twelve bytes, so evicting the other
+    // four-byte image cannot make this request fit in the eight-byte budget.
+    try testing.expectError(error.OutOfMemory, s.reserveAnimationBytes(io, alloc, t.screens.active, 1, 8));
+    try testing.expectEqual(@as(usize, 2), s.images.count());
+    try testing.expect(s.imageById(1) != null and s.imageById(2) != null);
+    try testing.expectEqual(@as(usize, 8), s.total_bytes);
+    try testing.expectEqual(generation, s.generation);
+    try testing.expect(!s.dirty);
+}
+
+test "storage: rgba conversion evicts another image and returns the current target" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    const io = testing.io;
+    var t = try terminal.Terminal.init(io, alloc, .{ .rows = 3, .cols = 3 });
+    defer t.deinit(alloc);
+    const s = &t.screens.active.kitty_images;
+    s.total_limit = 7;
+    try s.addImage(io, alloc, t.screens.active, .{
+        .id = 1,
+        .width = 1,
+        .height = 1,
+        .format = .rgba,
+        .data = .{ .complete = try alloc.dupe(u8, &.{ 0, 0, 255, 255 }) },
+    });
+    try s.addImage(io, alloc, t.screens.active, .{
+        .id = 2,
+        .width = 1,
+        .height = 1,
+        .format = .rgb,
+        .data = .{ .complete = try alloc.dupe(u8, &.{ 255, 0, 0 }) },
+    });
+    const original = s.imagePtrByIdOrNumber(2, 0).?;
+    const generation = original.generation;
+    const converted = try s.convertImageToRgba(io, alloc, t.screens.active, original);
+
+    // Removing a hash-map entry need not move another entry. Check current
+    // membership and lookup, rather than assuming an address must change.
+    try testing.expectEqual(s.imagePtrByIdOrNumber(2, 0).?, converted);
+    try testing.expect(s.imageById(1) == null);
+    try testing.expectEqual(@as(usize, 1), s.images.count());
+    try testing.expectEqual(@as(usize, 4), s.total_bytes);
+    try testing.expectEqual(command.Transmission.Format.rgba, converted.format);
+    try testing.expectEqualSlices(u8, &.{ 255, 0, 0, 255 }, converted.data.bytes().?);
+    try testing.expect(converted.generation > generation);
+}
+
+test "storage: animation budget preflight includes existing frames" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    const io = testing.io;
+    var t = try terminal.Terminal.init(io, alloc, .{ .rows = 3, .cols = 3 });
+    defer t.deinit(alloc);
+    const s = &t.screens.active.kitty_images;
+    s.total_limit = 12;
+    for ([_]u32{ 1, 2 }) |id| try s.addImage(io, alloc, t.screens.active, .{
+        .id = id,
+        .width = 1,
+        .height = 1,
+        .format = .rgba,
+        .data = .{ .complete = try alloc.dupe(u8, &.{ 255, 0, 0, 255 }) },
+    });
+    const img = s.imagePtrByIdOrNumber(2, 0).?;
+    const anim = try alloc.create(animation.Animation);
+    anim.* = .{};
+    img.animation = anim;
+    try anim.frames.ensureUnusedCapacity(alloc, 1);
+    anim.frames.appendAssumeCapacity(.{ .data = try alloc.dupe(u8, &.{ 0, 0, 255, 255 }), .gap_ms = 31 });
+    s.total_bytes += 4;
+    const generation = s.generation;
+    s.dirty = false;
+
+    // The eight-byte target plus eight requested bytes cannot fit, even
+    // after evicting the other four-byte image from this twelve-byte budget.
+    try testing.expectError(error.OutOfMemory, s.reserveAnimationBytes(io, alloc, t.screens.active, 2, 8));
+    try testing.expectEqual(@as(usize, 2), s.images.count());
+    try testing.expectEqual(@as(usize, 12), s.total_bytes);
+    try testing.expectEqual(@as(u32, 2), anim.frameCount());
+    try testing.expectEqualSlices(u8, &.{ 0, 0, 255, 255 }, img.frameData(2).?);
+    try testing.expectEqual(generation, s.generation);
+    try testing.expect(!s.dirty);
+}
+
+test "storage: rgba conversion budget includes existing frames" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    const io = testing.io;
+    var t = try terminal.Terminal.init(io, alloc, .{ .rows = 3, .cols = 3 });
+    defer t.deinit(alloc);
+    const s = &t.screens.active.kitty_images;
+    s.total_limit = 7;
+    try s.addImage(io, alloc, t.screens.active, .{
+        .id = 1,
+        .width = 1,
+        .height = 1,
+        .format = .rgb,
+        .data = .{ .complete = try alloc.dupe(u8, &.{ 255, 0, 0 }) },
+    });
+    const img = s.imagePtrByIdOrNumber(1, 0).?;
+    const anim = try alloc.create(animation.Animation);
+    anim.* = .{};
+    img.animation = anim;
+    try anim.frames.ensureUnusedCapacity(alloc, 1);
+    anim.frames.appendAssumeCapacity(.{ .data = try alloc.dupe(u8, &.{ 0, 0, 255, 255 }), .gap_ms = 31 });
+    s.total_bytes += 4;
+    const generation = s.generation;
+    s.dirty = false;
+
+    try testing.expectError(error.OutOfMemory, s.convertImageToRgba(io, alloc, t.screens.active, img));
+    try testing.expectEqual(@as(usize, 7), s.total_bytes);
+    try testing.expectEqual(command.Transmission.Format.rgb, img.format);
+    try testing.expectEqualSlices(u8, &.{ 255, 0, 0 }, img.data.bytes().?);
+    try testing.expectEqual(@as(u32, 2), anim.frameCount());
+    try testing.expectEqualSlices(u8, &.{ 0, 0, 255, 255 }, img.frameData(2).?);
+    try testing.expectEqual(generation, s.generation);
+    try testing.expect(!s.dirty);
 }
 
 test "storage: pending image completes once and preserves age" {
