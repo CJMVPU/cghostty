@@ -707,11 +707,12 @@ pub const State = struct {
         generation: u64,
         pending: Image.Pending,
     ) PrepImageError!void {
-        // If this image exists and its generation is the same it is the
-        // identical image so we don't need to send it to the GPU.
+        // An identical generation can be reused unless an earlier update
+        // scheduled it for unload before drawing. Restore that image first.
         const gop = try self.images.getOrPut(alloc, id);
         if (gop.found_existing and
-            gop.value_ptr.generation == generation)
+            gop.value_ptr.generation == generation and
+            !gop.value_ptr.image.isUnloading())
         {
             return;
         }
@@ -1223,6 +1224,179 @@ test "kitty renderer ignores pending payloads and removes replaced placements" {
     try testing.expectEqual(tracked, t.screens.active.pages.countTrackedPins());
     try testing.expectEqual(@as(usize, 0), state.kitty_placements.items.len);
     try testing.expect(state.images.get(.{ .kitty = 1 }).?.image.isUnloading());
+}
+
+test "kitty renderer restores visible images before a deferred unload" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    const io = testing.io;
+
+    var t = try terminal.Terminal.init(io, alloc, .{ .rows = 3, .cols = 3 });
+    defer t.deinit(alloc);
+    t.width_px = 30;
+    t.height_px = 30;
+
+    var state: State = .empty;
+    defer state.deinit(alloc);
+
+    const storage = &t.screens.active.kitty_images;
+    try storage.addImage(io, alloc, t.screens.active, .{
+        .id = 1,
+        .width = 1,
+        .height = 1,
+        .format = .rgba,
+        .data = .{ .complete = try alloc.dupe(u8, "rgba") },
+    });
+    const pin = try t.screens.active.pages.trackPin(
+        t.screens.active.cursor.page_pin.*,
+    );
+    try storage.addPlacement(io, alloc, t.screens.active, 1, 1, .{
+        .location = .{ .pin = pin },
+        .columns = 1,
+        .rows = 1,
+    });
+
+    const cell: CellSize = .{ .width = 10, .height = 10 };
+    state.kittyUpdate(alloc, &t, cell);
+    const generation = state.images.get(.{ .kitty = 1 }).?.generation;
+    try testing.expectEqual(@as(usize, 1), state.kitty_placements.items.len);
+
+    // Updating an empty alternate screen schedules the primary image for
+    // unload. A compositor geometry mismatch can skip drawing/uploading
+    // after this update, leaving the scheduled unload in place.
+    _ = try t.switchScreen(.alternate);
+    state.kittyUpdate(alloc, &t, cell);
+    try testing.expect(state.images.get(.{ .kitty = 1 }).?.image.isUnloading());
+
+    // Returning to primary restores the same image generation. A CPU capture
+    // must contain the visible pixels again, without requiring GPU access.
+    _ = try t.switchScreen(.primary);
+    state.kittyUpdate(alloc, &t, cell);
+    try testing.expectEqual(generation, state.images.get(.{ .kitty = 1 }).?.generation);
+    try testing.expectEqual(@as(usize, 1), state.kitty_placements.items.len);
+    var captured = try state.cloneCapture(alloc);
+    defer captured.deinit(alloc);
+    try testing.expectEqual(@as(usize, 1), captured.kitty_placements.items.len);
+    const restored = captured.images.get(.{ .kitty = 1 });
+    try testing.expect(restored != null);
+    try testing.expectEqualStrings("rgba", restored.?.image.pending.dataSlice());
+}
+
+test "kitty renderer retries deferred unload restoration after allocation failure" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    const io = testing.io;
+
+    var t = try terminal.Terminal.init(io, alloc, .{ .rows = 3, .cols = 3 });
+    defer t.deinit(alloc);
+    t.width_px = 30;
+    t.height_px = 30;
+
+    var state: State = .empty;
+    defer state.deinit(alloc);
+    const storage = &t.screens.active.kitty_images;
+    try storage.addImage(io, alloc, t.screens.active, .{
+        .id = 1,
+        .width = 1,
+        .height = 1,
+        .format = .rgba,
+        .data = .{ .complete = try alloc.dupe(u8, "rgba") },
+    });
+    const pin = try t.screens.active.pages.trackPin(t.screens.active.cursor.page_pin.*);
+    try storage.addPlacement(io, alloc, t.screens.active, 1, 1, .{
+        .location = .{ .pin = pin },
+        .columns = 1,
+        .rows = 1,
+    });
+
+    const cell: CellSize = .{ .width = 10, .height = 10 };
+    state.kittyUpdate(alloc, &t, cell);
+    const generation = state.images.get(.{ .kitty = 1 }).?.generation;
+    _ = try t.switchScreen(.alternate);
+    state.kittyUpdate(alloc, &t, cell);
+    _ = try t.switchScreen(.primary);
+
+    // The existing map and placement capacities need no allocation. Fail
+    // copying the restored pixels, then verify a normal update can retry.
+    var failing = testing.FailingAllocator.init(alloc, .{ .fail_index = 0 });
+    state.kittyUpdate(failing.allocator(), &t, cell);
+    try testing.expect(failing.has_induced_failure);
+    try testing.expect(state.images.get(.{ .kitty = 1 }).?.image.isUnloading());
+    try testing.expectEqual(generation, state.images.get(.{ .kitty = 1 }).?.generation);
+    try testing.expectEqual(@as(usize, 0), state.kitty_placements.items.len);
+    try testing.expect(storage.dirty);
+    try testing.expect(state.kittyRequiresUpdate(&t, cell));
+
+    state.kittyUpdate(alloc, &t, cell);
+    try testing.expect(!state.kittyRequiresUpdate(&t, cell));
+    var captured = try state.cloneCapture(alloc);
+    defer captured.deinit(alloc);
+    const restored = captured.images.get(.{ .kitty = 1 }).?;
+    try testing.expectEqual(generation, restored.generation);
+    try testing.expectEqualStrings("rgba", restored.image.pending.dataSlice());
+    try testing.expectEqual(@as(usize, 1), captured.kitty_placements.items.len);
+}
+
+test "kitty renderer deferred unload restoration uses the replacement generation" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    const io = testing.io;
+
+    var t = try terminal.Terminal.init(io, alloc, .{ .rows = 3, .cols = 3 });
+    defer t.deinit(alloc);
+    t.width_px = 30;
+    t.height_px = 30;
+
+    var state: State = .empty;
+    defer state.deinit(alloc);
+    const storage = &t.screens.active.kitty_images;
+    try storage.addImage(io, alloc, t.screens.active, .{
+        .id = 1,
+        .width = 1,
+        .height = 1,
+        .format = .rgba,
+        .data = .{ .complete = try alloc.dupe(u8, "rgba") },
+    });
+    const pin = try t.screens.active.pages.trackPin(t.screens.active.cursor.page_pin.*);
+    try storage.addPlacement(io, alloc, t.screens.active, 1, 1, .{
+        .location = .{ .pin = pin },
+        .columns = 1,
+        .rows = 1,
+    });
+
+    const cell: CellSize = .{ .width = 10, .height = 10 };
+    state.kittyUpdate(alloc, &t, cell);
+    const old_generation = state.images.get(.{ .kitty = 1 }).?.generation;
+    _ = try t.switchScreen(.alternate);
+    state.kittyUpdate(alloc, &t, cell);
+    try testing.expect(state.images.get(.{ .kitty = 1 }).?.image.isUnloading());
+    _ = try t.switchScreen(.primary);
+
+    // Retransmission replaces the source image and its placement while the
+    // renderer still owns the old, scheduled-to-unload pixel copy.
+    try storage.addImage(io, alloc, t.screens.active, .{
+        .id = 1,
+        .width = 1,
+        .height = 1,
+        .format = .rgba,
+        .data = .{ .complete = try alloc.dupe(u8, "new!") },
+    });
+    const generation = storage.imageById(1).?.generation;
+    try testing.expect(generation != old_generation);
+    const replacement_pin = try t.screens.active.pages.trackPin(t.screens.active.cursor.page_pin.*);
+    try storage.addPlacement(io, alloc, t.screens.active, 1, 1, .{
+        .location = .{ .pin = replacement_pin },
+        .columns = 1,
+        .rows = 1,
+    });
+
+    state.kittyUpdate(alloc, &t, cell);
+    var captured = try state.cloneCapture(alloc);
+    defer captured.deinit(alloc);
+    const restored = captured.images.get(.{ .kitty = 1 }).?;
+    try testing.expectEqual(generation, restored.generation);
+    try testing.expectEqualStrings("new!", restored.image.pending.dataSlice());
+    try testing.expectEqual(@as(usize, 1), captured.kitty_placements.items.len);
 }
 
 test "kitty renderer adopts snapshots retaining identical generations" {
