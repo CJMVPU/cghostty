@@ -1,5 +1,8 @@
 # 验证记录
 
+最新资源所有权、共享 CF 释放服务及隐藏终端测量见
+[2026-10-08 资源与共享释放服务](docs/validation/2026-10-08-resource-services.md)。
+
 最新生命周期、shader 释放、输入背压、配置恢复及原生异步缩略图验证见
 [2026-10-08 生命周期与输入背压](docs/validation/2026-10-08-lifecycle-backpressure.md)。
 

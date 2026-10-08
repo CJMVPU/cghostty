@@ -1,0 +1,702 @@
+{
+  "schema": 1,
+  "base_commit": "8815d4add",
+  "source_commit": "7b24c83dc",
+  "scope": "Selected requested CPU atlas buffers and currently owned GPU atlas resources; not process RSS. Thread stages are sampled and echo latency includes 5 ms semantic polling.",
+  "window_before_lazy_queue": [
+    {
+      "codepointCapacity": 256,
+      "codepointEntries": 28,
+      "cpuColorBytes": 1048576,
+      "cpuGrayscaleBytes": 262144,
+      "cpuNodeBytes": 1536,
+      "glyphCapacity": 256,
+      "glyphEntries": 31,
+      "gpuAllocatedBytes": 2687232,
+      "gpuQueueCount": 1,
+      "gpuTexelBytes": 2621445,
+      "gpuTextureCount": 6,
+      "gridID": 4
+    },
+    {
+      "codepointCapacity": 256,
+      "codepointEntries": 28,
+      "cpuColorBytes": 1048576,
+      "cpuGrayscaleBytes": 262144,
+      "cpuNodeBytes": 1536,
+      "glyphCapacity": 256,
+      "glyphEntries": 31,
+      "gpuAllocatedBytes": 2687232,
+      "gpuQueueCount": 1,
+      "gpuTexelBytes": 2621445,
+      "gpuTextureCount": 6,
+      "gridID": 4
+    }
+  ],
+  "window_after_lazy_queue": [
+    {
+      "codepointCapacity": 256,
+      "codepointEntries": 28,
+      "cpuColorBytes": 1048576,
+      "cpuGrayscaleBytes": 262144,
+      "cpuNodeBytes": 1536,
+      "glyphCapacity": 256,
+      "glyphEntries": 31,
+      "gpuAllocatedBytes": 2687232,
+      "gpuQueueCount": 0,
+      "gpuTexelBytes": 2621445,
+      "gpuTextureCount": 6,
+      "gridID": 4
+    },
+    {
+      "codepointCapacity": 256,
+      "codepointEntries": 28,
+      "cpuColorBytes": 1048576,
+      "cpuGrayscaleBytes": 262144,
+      "cpuNodeBytes": 1536,
+      "glyphCapacity": 256,
+      "glyphEntries": 31,
+      "gpuAllocatedBytes": 2687232,
+      "gpuQueueCount": 0,
+      "gpuTexelBytes": 2621445,
+      "gpuTextureCount": 6,
+      "gridID": 4
+    }
+  ],
+  "hidden_before_shared_cf": {
+    "before": {
+      "names": {
+        "<unnamed>": 8,
+        "com.apple.NSEventThread": 1
+      },
+      "total": 9
+    },
+    "echoNanoseconds": [
+      6220958,
+      6127208,
+      6126208,
+      6114458,
+      6124083,
+      6110542,
+      6104209,
+      5797500,
+      6104292,
+      6109000,
+      6111833,
+      6062834
+    ],
+    "ownedAtlasGPUBytes": 0,
+    "ownedPrivateQueues": 0,
+    "ready": {
+      "names": {
+        "<unnamed>": 7,
+        "cf_release": 8,
+        "com.apple.NSEventThread": 1,
+        "io": 8,
+        "io-gather": 8,
+        "io-reader": 8,
+        "renderer": 8
+      },
+      "total": 48
+    },
+    "released": {
+      "names": {
+        "<unnamed>": 7,
+        "com.apple.NSEventThread": 1
+      },
+      "total": 8
+    },
+    "resources": [
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 0,
+        "gpuAllocatedBytes": 0,
+        "gpuQueueCount": 0,
+        "gpuTexelBytes": 0,
+        "gpuTextureCount": 0,
+        "gridID": 1
+      },
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 0,
+        "gpuAllocatedBytes": 0,
+        "gpuQueueCount": 0,
+        "gpuTexelBytes": 0,
+        "gpuTextureCount": 0,
+        "gridID": 1
+      },
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 0,
+        "gpuAllocatedBytes": 0,
+        "gpuQueueCount": 0,
+        "gpuTexelBytes": 0,
+        "gpuTextureCount": 0,
+        "gridID": 1
+      },
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 0,
+        "gpuAllocatedBytes": 0,
+        "gpuQueueCount": 0,
+        "gpuTexelBytes": 0,
+        "gpuTextureCount": 0,
+        "gridID": 1
+      },
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 0,
+        "gpuAllocatedBytes": 0,
+        "gpuQueueCount": 0,
+        "gpuTexelBytes": 0,
+        "gpuTextureCount": 0,
+        "gridID": 1
+      },
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 0,
+        "gpuAllocatedBytes": 0,
+        "gpuQueueCount": 0,
+        "gpuTexelBytes": 0,
+        "gpuTextureCount": 0,
+        "gridID": 1
+      },
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 0,
+        "gpuAllocatedBytes": 0,
+        "gpuQueueCount": 0,
+        "gpuTexelBytes": 0,
+        "gpuTextureCount": 0,
+        "gridID": 1
+      },
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 0,
+        "gpuAllocatedBytes": 0,
+        "gpuQueueCount": 0,
+        "gpuTexelBytes": 0,
+        "gpuTextureCount": 0,
+        "gridID": 1
+      }
+    ],
+    "sharedAtlasBytes": 1312256,
+    "surfaces": 8,
+    "uniqueGrids": 1,
+    "named_worker_threads": 40,
+    "echo_median_ns": 6111187.5
+  },
+  "hidden_after_shared_cf_8": {
+    "before": {
+      "names": {
+        "<unnamed>": 9,
+        "com.apple.NSEventThread": 1
+      },
+      "total": 10
+    },
+    "echoNanoseconds": [
+      6246708,
+      6195208,
+      6207750,
+      6209208,
+      5608666,
+      5992208,
+      5983542,
+      5476000,
+      6168375,
+      5902875,
+      6181209,
+      6214167
+    ],
+    "ownedAtlasGPUBytes": 0,
+    "ownedPrivateQueues": 0,
+    "ready": {
+      "names": {
+        "<unnamed>": 8,
+        "com.apple.NSEventThread": 1,
+        "io": 8,
+        "io-gather": 8,
+        "io-reader": 8,
+        "renderer": 8
+      },
+      "total": 41
+    },
+    "released": {
+      "names": {
+        "<unnamed>": 8,
+        "com.apple.NSEventThread": 1
+      },
+      "total": 9
+    },
+    "resources": [
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 0,
+        "gpuAllocatedBytes": 0,
+        "gpuQueueCount": 0,
+        "gpuTexelBytes": 0,
+        "gpuTextureCount": 0,
+        "gridID": 1
+      },
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 0,
+        "gpuAllocatedBytes": 0,
+        "gpuQueueCount": 0,
+        "gpuTexelBytes": 0,
+        "gpuTextureCount": 0,
+        "gridID": 1
+      },
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 0,
+        "gpuAllocatedBytes": 0,
+        "gpuQueueCount": 0,
+        "gpuTexelBytes": 0,
+        "gpuTextureCount": 0,
+        "gridID": 1
+      },
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 0,
+        "gpuAllocatedBytes": 0,
+        "gpuQueueCount": 0,
+        "gpuTexelBytes": 0,
+        "gpuTextureCount": 0,
+        "gridID": 1
+      },
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 0,
+        "gpuAllocatedBytes": 0,
+        "gpuQueueCount": 0,
+        "gpuTexelBytes": 0,
+        "gpuTextureCount": 0,
+        "gridID": 1
+      },
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 0,
+        "gpuAllocatedBytes": 0,
+        "gpuQueueCount": 0,
+        "gpuTexelBytes": 0,
+        "gpuTextureCount": 0,
+        "gridID": 1
+      },
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 0,
+        "gpuAllocatedBytes": 0,
+        "gpuQueueCount": 0,
+        "gpuTexelBytes": 0,
+        "gpuTextureCount": 0,
+        "gridID": 1
+      },
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 0,
+        "gpuAllocatedBytes": 0,
+        "gpuQueueCount": 0,
+        "gpuTexelBytes": 0,
+        "gpuTextureCount": 0,
+        "gridID": 1
+      }
+    ],
+    "sharedAtlasBytes": 1312256,
+    "surfaces": 8,
+    "uniqueGrids": 1,
+    "named_worker_threads": 32,
+    "echo_median_ns": 6174792.0
+  },
+  "hidden_after_shared_cf_16": {
+    "before": {
+      "names": {
+        "<unnamed>": 8,
+        "com.apple.NSEventThread": 1
+      },
+      "total": 9
+    },
+    "echoNanoseconds": [
+      6261000,
+      6185542,
+      6186750,
+      6194667,
+      6205417,
+      6164292,
+      5864042,
+      6187875,
+      6194083,
+      6190792,
+      6216083,
+      5831334
+    ],
+    "ownedAtlasGPUBytes": 0,
+    "ownedPrivateQueues": 0,
+    "ready": {
+      "names": {
+        "<unnamed>": 7,
+        "com.apple.NSEventThread": 1,
+        "io": 16,
+        "io-gather": 16,
+        "io-reader": 16,
+        "renderer": 16
+      },
+      "total": 72
+    },
+    "released": {
+      "names": {
+        "<unnamed>": 7,
+        "com.apple.NSEventThread": 1
+      },
+      "total": 8
+    },
+    "resources": [
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 0,
+        "gpuAllocatedBytes": 0,
+        "gpuQueueCount": 0,
+        "gpuTexelBytes": 0,
+        "gpuTextureCount": 0,
+        "gridID": 1
+      },
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 0,
+        "gpuAllocatedBytes": 0,
+        "gpuQueueCount": 0,
+        "gpuTexelBytes": 0,
+        "gpuTextureCount": 0,
+        "gridID": 1
+      },
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 0,
+        "gpuAllocatedBytes": 0,
+        "gpuQueueCount": 0,
+        "gpuTexelBytes": 0,
+        "gpuTextureCount": 0,
+        "gridID": 1
+      },
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 0,
+        "gpuAllocatedBytes": 0,
+        "gpuQueueCount": 0,
+        "gpuTexelBytes": 0,
+        "gpuTextureCount": 0,
+        "gridID": 1
+      },
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 0,
+        "gpuAllocatedBytes": 0,
+        "gpuQueueCount": 0,
+        "gpuTexelBytes": 0,
+        "gpuTextureCount": 0,
+        "gridID": 1
+      },
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 0,
+        "gpuAllocatedBytes": 0,
+        "gpuQueueCount": 0,
+        "gpuTexelBytes": 0,
+        "gpuTextureCount": 0,
+        "gridID": 1
+      },
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 0,
+        "gpuAllocatedBytes": 0,
+        "gpuQueueCount": 0,
+        "gpuTexelBytes": 0,
+        "gpuTextureCount": 0,
+        "gridID": 1
+      },
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 0,
+        "gpuAllocatedBytes": 0,
+        "gpuQueueCount": 0,
+        "gpuTexelBytes": 0,
+        "gpuTextureCount": 0,
+        "gridID": 1
+      },
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 0,
+        "gpuAllocatedBytes": 0,
+        "gpuQueueCount": 0,
+        "gpuTexelBytes": 0,
+        "gpuTextureCount": 0,
+        "gridID": 1
+      },
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 0,
+        "gpuAllocatedBytes": 0,
+        "gpuQueueCount": 0,
+        "gpuTexelBytes": 0,
+        "gpuTextureCount": 0,
+        "gridID": 1
+      },
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 0,
+        "gpuAllocatedBytes": 0,
+        "gpuQueueCount": 0,
+        "gpuTexelBytes": 0,
+        "gpuTextureCount": 0,
+        "gridID": 1
+      },
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 0,
+        "gpuAllocatedBytes": 0,
+        "gpuQueueCount": 0,
+        "gpuTexelBytes": 0,
+        "gpuTextureCount": 0,
+        "gridID": 1
+      },
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 0,
+        "gpuAllocatedBytes": 0,
+        "gpuQueueCount": 0,
+        "gpuTexelBytes": 0,
+        "gpuTextureCount": 0,
+        "gridID": 1
+      },
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 0,
+        "gpuAllocatedBytes": 0,
+        "gpuQueueCount": 0,
+        "gpuTexelBytes": 0,
+        "gpuTextureCount": 0,
+        "gridID": 1
+      },
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 0,
+        "gpuAllocatedBytes": 0,
+        "gpuQueueCount": 0,
+        "gpuTexelBytes": 0,
+        "gpuTextureCount": 0,
+        "gridID": 1
+      },
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 0,
+        "gpuAllocatedBytes": 0,
+        "gpuQueueCount": 0,
+        "gpuTexelBytes": 0,
+        "gpuTextureCount": 0,
+        "gridID": 1
+      }
+    ],
+    "sharedAtlasBytes": 1312256,
+    "surfaces": 16,
+    "uniqueGrids": 1,
+    "named_worker_threads": 64,
+    "echo_median_ns": 6189333.5
+  },
+  "native_full_locked": {
+    "totalTestCount": 510,
+    "passedTests": 487,
+    "failedTests": 21,
+    "skippedTests": 2,
+    "session": "screenLocked=1, onConsole=1; visible=false, compositor paused, submitted=0"
+  },
+  "validation": {
+    "core_debug": {
+      "passed": 3772,
+      "total": 3777,
+      "skipped": 5,
+      "failed": 0
+    },
+    "core_releasefast": {
+      "passed": 150,
+      "total": 150,
+      "failed": 0
+    },
+    "pure_swift_contracts": {
+      "tests": 8,
+      "suites": 3,
+      "failed": 0
+    },
+    "scripts": {
+      "passed": 60,
+      "failed": 0
+    },
+    "native_target_after_shared_cf": {
+      "passed": 43,
+      "failed": 0
+    },
+    "native_hidden_16_final_source": {
+      "passed": 1,
+      "failed": 0
+    }
+  }
+}

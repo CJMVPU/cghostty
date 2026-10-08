@@ -22,6 +22,9 @@ zig fmt --check build.zig build.zig.zon src pkg
 swiftlint lint --strict --no-cache
 # Pure input/bridge/transaction tests; no app or window is launched.
 python3 scripts/check-native-contracts.py
+# 显式启用隐藏终端资源/线程探针；1...32 个 surface，普通测试默认不启用。
+python3 scripts/build.py native --action test --resource-probe-surfaces 8 \
+  --only-testing GhosttyTests/RendererResourceProbeTests
 # Headless optimization probes; default core tests remain Debug.
 python3 scripts/build.py test -Doptimize=ReleaseFast -Dtest-optimize=ReleaseFast -Dtest-filter='optimization probe'
 python3 scripts/check-versions.py
