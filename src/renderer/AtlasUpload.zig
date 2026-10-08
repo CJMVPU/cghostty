@@ -9,8 +9,9 @@ pub fn sync(api: anytype, atlas: *const Atlas, texture: anytype, version: *usize
     const regions = atlas.changedRegions(version.*);
     if (regions.len == 0) return 0;
     var bytes: usize = 0;
-    if (atlas.size > texture.width) {
-        // Build and populate the replacement before releasing any live resource.
+    if (atlas.size != texture.width) {
+        // Font-grid changes can shrink an atlas. Build and populate the
+        // replacement before releasing this free slot's old texture.
         var replacement = try api.initAtlasTexture(atlas);
         errdefer replacement.deinit();
         try replacement.replaceRegionStrided(0, 0, atlas.size, atlas.size, atlas.data, @as(usize, atlas.size) * atlas.format.depth());
@@ -145,4 +146,35 @@ test "atlas upload partial failure retries every region without advancing the sl
     api.fail_write = null;
     try t.expectEqual(@as(usize, 8), try sync(&api, &atlas, &tex, &version));
     try t.expectEqualSlices(u8, atlas.data, tex.pixels[0..atlas.data.len]);
+}
+
+test "atlas upload shrinks free slots after a font grid change" {
+    const t = std.testing;
+    var old = try Atlas.init(t.allocator, 16, .bgra);
+    defer old.deinit(t.allocator);
+    var fresh = try Atlas.init(t.allocator, 8, .bgra);
+    defer fresh.deinit(t.allocator);
+    fresh.set(.{ .x = 1, .y = 1, .width = 1, .height = 1 }, &.{ 1, 2, 3, 255 });
+    var api: FakeApi = .{};
+    var slots = [_]FakeTexture{try api.initAtlasTexture(&old)} ** 3;
+    // setFontGrid resets each frame's atlas version, but does not release a
+    // texture that the GPU may still use. Each slot changes only when free.
+    var versions = [_]usize{0} ** 3;
+    api.fail = true;
+    try t.expectError(error.MetalFailed, sync(&api, &fresh, &slots[0], &versions[0]));
+    try t.expectEqual(@as(usize, 16), slots[0].width);
+    try t.expectEqual(@as(usize, 0), versions[0]);
+    api.fail = false;
+    try t.expectEqual(fresh.data.len, try sync(&api, &fresh, &slots[0], &versions[0]));
+    try t.expectEqual(@as(usize, 8), slots[0].width);
+    try t.expectEqual(@as(usize, 16), slots[1].width);
+    try t.expectEqual(@as(usize, 16), slots[2].width);
+    try t.expectEqual(@as(usize, 1), api.releases);
+    try t.expectEqualSlices(u8, fresh.data, slots[0].pixels[0..fresh.data.len]);
+    for (slots[1..], versions[1..]) |*slot, *version| {
+        _ = try sync(&api, &fresh, slot, version);
+        try t.expectEqual(@as(usize, 8), slot.width);
+        try t.expectEqualSlices(u8, fresh.data, slot.pixels[0..fresh.data.len]);
+    }
+    try t.expectEqual(@as(usize, 3), api.releases);
 }
