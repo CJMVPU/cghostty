@@ -152,6 +152,7 @@ import Testing
         #expect(hidden.gridID != 0)
         #expect(hidden.gpuTextureCount == 0)
         #expect(hidden.gpuQueueCount == 0)
+        #expect(hidden.gpuSubmittedResidencyPeakBytes == 0)
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 640, height: 240),
             styleMask: .borderless, backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
@@ -194,12 +195,24 @@ import Testing
             #expect(usage.gpuBackgroundAllocatedBytes == 0)
             #expect(usage.gpuScrollTextureCount > 0)
             #expect(usage.gpuScrollAllocatedBytes > 0)
+            #expect(usage.gpuSubmittedResidencyPeakBytes > 0)
         }
+        owner.worker.pauseUpdatesForTesting(true)
+        defer { owner.worker.pauseUpdatesForTesting(false) }
         #expect(await Task.detached { one.copySnapshot(maxDimension: 64) != nil }.value)
         #expect(await rendererResources(one).gpuQueueCount == 1)
         #expect(await rendererResources(two).gpuQueueCount == 0)
         #expect(await Task.detached { one.copySnapshot(maxDimension: 64) != nil }.value)
         #expect(await rendererResources(one).gpuQueueCount == 1)
+        let retirementDeadline = ContinuousClock.now + .seconds(5)
+        var retired = await rendererResources(one)
+        while retired.gpuSubmittedResidencyBytes > 0 && ContinuousClock.now < retirementDeadline {
+            try await Task.sleep(for: .milliseconds(10))
+            retired = await rendererResources(one)
+        }
+        #expect(retired.gpuSubmittedResidencyBytes == 0, "\(owner.worker.stateForTesting)")
+        #expect(await rendererResources(one).gpuSubmittedResidencyPeakBytes > 0)
+        owner.worker.pauseUpdatesForTesting(false)
         #expect(one.changeFontSize(by: 2))
         let deadline = ContinuousClock.now + .seconds(5)
         var changed = await rendererResources(one)

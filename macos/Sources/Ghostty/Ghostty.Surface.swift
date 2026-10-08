@@ -347,6 +347,8 @@ extension Ghostty {
             let gpuBackgroundAllocatedBytes: UInt64
             let gpuScrollAllocatedBytes: UInt64
             let gpuScrollTextureCount: UInt64
+            let gpuSubmittedResidencyBytes: UInt64
+            let gpuSubmittedResidencyPeakBytes: UInt64
         }
 
         /// Retain this surface and call from a background task; the core
@@ -367,7 +369,9 @@ extension Ghostty {
                 gpuImageTextureCount: value.gpu_image_texture_count,
                 gpuBackgroundAllocatedBytes: value.gpu_background_allocated_bytes,
                 gpuScrollAllocatedBytes: value.gpu_scroll_allocated_bytes,
-                gpuScrollTextureCount: value.gpu_scroll_texture_count)
+                gpuScrollTextureCount: value.gpu_scroll_texture_count,
+                gpuSubmittedResidencyBytes: value.gpu_submitted_residency_bytes,
+                gpuSubmittedResidencyPeakBytes: value.gpu_submitted_residency_peak_bytes)
         }
 
         /// Terminal image storage across primary and alternate screens. Capture

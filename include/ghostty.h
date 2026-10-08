@@ -1263,6 +1263,9 @@ typedef struct {
   uint64_t gpu_image_texel_bytes, gpu_image_allocated_bytes, gpu_image_texture_count;
   uint64_t gpu_background_allocated_bytes;
   uint64_t gpu_scroll_allocated_bytes, gpu_scroll_texture_count;
+  // Submitted residency footprints until retirement; overlapping sets may
+  // reference the same allocation. Includes borrowed resources/set internals.
+  uint64_t gpu_submitted_residency_bytes, gpu_submitted_residency_peak_bytes;
 } ghostty_renderer_resources_s;
 GHOSTTY_API ghostty_renderer_resources_s ghostty_surface_renderer_resources(ghostty_surface_t);
 // Aggregate all initialized terminal screens under the terminal mutex. Pixel

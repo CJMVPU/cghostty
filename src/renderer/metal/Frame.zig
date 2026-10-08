@@ -23,6 +23,7 @@ pub const Commands = struct {
     retained: objc.Object,
     health: Health = .healthy,
     completed: std.Io.Semaphore = .{ .permits = 0 },
+    submitted_residency_bytes: u64 = 0,
 
     pub fn init(device: objc.Object) !Commands {
         const buffer = device.msgSend(?*anyopaque, "newCommandBuffer", .{}) orelse return error.MetalFailed;
@@ -49,6 +50,7 @@ pub const Commands = struct {
     }
 
     pub fn deinit(self: *Commands) void {
+        std.debug.assert(self.submitted_residency_bytes == 0);
         self.buffer.release();
         self.allocator.release();
         self.arguments.release();
@@ -59,6 +61,13 @@ pub const Commands = struct {
     pub fn retainResource(self: *const Commands, resource: objc.Object, allocation: bool) void {
         self.retained.msgSend(void, "addObject:", .{resource});
         if (allocation) self.residency.msgSend(void, "addAllocation:", .{resource});
+    }
+
+    fn retire(self: *Commands, renderer: *Renderer) void {
+        self.retained.msgSend(void, "removeAllObjects", .{});
+        self.residency.msgSend(void, "removeAllAllocations", .{});
+        renderer.submission_resources.release(self.submitted_residency_bytes);
+        self.submitted_residency_bytes = 0;
     }
 };
 
@@ -111,8 +120,7 @@ fn bufferCompleted(block: *const CompletionBlock.Context, feedback_id: objc.c.id
         const message = description.msgSend([*:0]const u8, "UTF8String", .{});
         log.err("Metal 4 submission failed: {s}", .{message});
     }
-    block.commands.retained.msgSend(void, "removeAllObjects", .{});
-    block.commands.residency.msgSend(void, "removeAllAllocations", .{});
+    block.commands.retire(block.renderer);
     block.renderer.frameCompleted(health);
 }
 
@@ -132,6 +140,11 @@ pub fn complete(self: *Self, sync: bool) void {
     self.block.sync = sync;
     const c = self.commands;
     c.residency.msgSend(void, "commit", .{});
+    std.debug.assert(c.submitted_residency_bytes == 0);
+    // SDK allocatedSize is the footprint at the last commit, including set
+    // internals. One query per submission; no per-binding diagnostic storage.
+    c.submitted_residency_bytes = c.residency.getProperty(u64, "allocatedSize");
+    self.block.renderer.submission_resources.acquire(c.submitted_residency_bytes);
     c.buffer.msgSend(void, "useResidencySet:", .{c.residency});
     c.buffer.msgSend(void, "endCommandBuffer", .{});
     const options = object("MTL4CommitOptions");
@@ -142,8 +155,7 @@ pub fn complete(self: *Self, sync: bool) void {
     if (sync) {
         c.completed.waitUncancelable(global.io());
         // Snapshots never publish display history or acquire a drawable.
-        c.retained.msgSend(void, "removeAllObjects", .{});
-        c.residency.msgSend(void, "removeAllAllocations", .{});
+        c.retire(self.block.renderer);
         self.block.renderer.swap_chain.?.releaseFrame();
     }
 }

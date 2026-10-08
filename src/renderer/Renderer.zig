@@ -148,6 +148,7 @@ frame_scratch: ?ArenaAllocator = null,
 
 /// The images that we may render.
 images: ImageState = .empty,
+submission_resources: @import("SubmissionResources.zig") = .{},
 
 /// Background image, if we have one.
 bg_image: ?imagepkg.Image = null,
@@ -845,6 +846,10 @@ pub const RendererResources = extern struct {
     gpu_background_allocated_bytes: u64 = 0,
     gpu_scroll_allocated_bytes: u64 = 0,
     gpu_scroll_texture_count: u64 = 0,
+    // Residency-set footprints include shared/borrowed resources and internal
+    // Metal allocations. Do not add these to the current owner byte counts.
+    gpu_submitted_residency_bytes: u64 = 0,
+    gpu_submitted_residency_peak_bytes: u64 = 0,
 };
 
 /// Keep the surface alive and query from a background task: the draw mutex
@@ -865,6 +870,8 @@ pub fn rendererResources(self: *Self) RendererResources {
         .codepoint_capacity = grid.codepoints.capacity(),
         .glyph_entries = grid.glyphs.count(),
         .glyph_capacity = grid.glyphs.capacity(),
+        .gpu_submitted_residency_bytes = self.submission_resources.current.load(.monotonic),
+        .gpu_submitted_residency_peak_bytes = self.submission_resources.peak.load(.monotonic),
     };
     if (self.swap_chain) |*sc| for (&sc.frames) |*frame| {
         for ([_]Texture{ frame.grayscale, frame.color }) |texture| {
