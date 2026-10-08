@@ -269,6 +269,19 @@ const SwapChain = struct {
         return &self.frames[self.frame_index];
     }
 
+    /// The window clock must not wait for one pane's GPU completion. Zig's
+    /// pinned Semaphore has no tryWait; its bookkeeping stays under its mutex.
+    pub fn tryNextFrame(self: *SwapChain) ?*FrameState {
+        const semaphore = &self.frame_sema;
+        semaphore.mutex.lockUncancelable(global.io());
+        defer semaphore.mutex.unlock(global.io());
+        if (semaphore.permits == 0) return null;
+        semaphore.permits -= 1;
+        if (semaphore.permits > 0) semaphore.cond.signal(global.io());
+        self.frame_index = (self.frame_index + 1) % buf_count;
+        return &self.frames[self.frame_index];
+    }
+
     /// This should be called when the frame has completed drawing.
     pub fn releaseFrame(self: *SwapChain) void {
         self.frame_sema.post(global.io());
@@ -1366,7 +1379,10 @@ fn drawFrameLocked(
 
     // Wait for a frame to be available.
     const slot_start = if (self.trace.file != null) Trace.clock() else 0;
-    const frame = swap_chain.nextFrame();
+    const frame = if (snapshot == null and self.compositor_region != null)
+        swap_chain.tryNextFrame() orelse return error.FrameSlotUnavailable
+    else
+        swap_chain.nextFrame();
     if (slot_start != 0) self.trace.emit("frame_slot", Trace.clock() - slot_start, 0, 0);
     var submitted = false;
     errdefer if (!submitted) swap_chain.releaseFrame();
@@ -3173,4 +3189,20 @@ test "snapshot dimensions bound readback without upscaling or integer overflow" 
     try t.expectEqual([2]u32{ 100, 50 }, snapshotSize(100, 50, 256));
     try t.expectEqual([2]u32{ 100, 50 }, snapshotSize(100, 50, 0));
     try t.expectEqual([2]u32{ 256, 1 }, snapshotSize(std.math.maxInt(u32), 1, 256));
+}
+
+test "window frame slot backpressure returns without advancing or releasing ownership" {
+    const t = std.testing;
+    // This fixture never initializes or accesses GPU objects. It exercises the
+    // production slot accounting while all three prior submissions are pending.
+    var chain: SwapChain = .{ .frames = undefined, .frame_sema = .{ .permits = 0 } };
+    const original_index = chain.frame_index;
+    for (0..100) |_| try t.expect(chain.tryNextFrame() == null);
+    try t.expectEqual(original_index, chain.frame_index);
+    chain.releaseFrame();
+    const acquired = chain.tryNextFrame().?;
+    try t.expectEqual(&chain.frames[(original_index + 1) % SwapChain.buf_count], acquired);
+    try t.expect(chain.tryNextFrame() == null);
+    chain.releaseFrame();
+    try t.expect(chain.tryNextFrame() != null);
 }

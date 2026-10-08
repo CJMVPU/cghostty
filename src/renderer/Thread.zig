@@ -494,6 +494,9 @@ pub fn renderCompositor(self: *Thread, texture: @import("objc").Object, queue: @
     // another pane's window clock. Its last CPU frame must remain drawable.
     const prepare = self.renderer.cell_rebuild.begin();
     const result = self.renderCompositorAttempt(texture, queue, target_time, region, sequence, prepare) catch |err| {
+        // Backpressure is not a failed rebuild. Preserve prepared cells and
+        // retry presentation without consuming the allocation-failure budget.
+        if (err == error.FrameSlotUnavailable) return .{ .needs_frame = true };
         self.renderer.cell_rebuild.finish(true);
         log.err("window pane render failed err={}", .{err});
         return .{ .failed = true, .needs_frame = self.renderer.cell_rebuild.needsFrame() };

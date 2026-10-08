@@ -255,6 +255,7 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
     }
     private var index = 0
     private let inFlight = DispatchGroup()
+    private let retirementListener = MTLSharedEventListener(dispatchQueue: .global(qos: .userInitiated))
     private static let sequences = Mutex<UInt64>(0)
     private let statsLock = NSLock()
     private var stats = Statistics()
@@ -515,8 +516,7 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
             case .release: release(slot)
             case .drainAndRelease:
                 // The clear and any submitted pane passes still own resources.
-                drain(slot)
-                release(slot)
+                retire(slot)
             }
         }
         do {
@@ -678,6 +678,19 @@ nonisolated final class WindowCompositorWorker: NSObject, CAMetalDisplayLinkDele
         slot.retirementValue += 1
         queue.signalEvent(slot.retirement, value: slot.retirementValue)
         while !slot.retirement.wait(untilSignaledValue: slot.retirementValue, timeoutMS: 1000) {}
+    }
+
+    /// Partial submissions retire asynchronously so a failed pane never parks
+    /// the display-link callback. The slot remains unavailable until GPU safety.
+    private func retire(_ slot: Slot) {
+        slot.retirementValue += 1
+        let value = slot.retirementValue
+        inFlight.enter()
+        slot.retirement.notify(retirementListener, atValue: value) { [self, slot] _, _ in
+            release(slot)
+            inFlight.leave()
+        }
+        queue.signalEvent(slot.retirement, value: value)
     }
 
     /// Clear before pane composition, then fence all pane writes before presenting.
