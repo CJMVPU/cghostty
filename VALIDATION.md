@@ -1,5 +1,8 @@
 # 验证记录
 
+最新生命周期、shader 释放、输入背压、配置恢复及原生异步缩略图验证见
+[2026-10-08 生命周期与输入背压](docs/validation/2026-10-08-lifecycle-backpressure.md)。
+
 最新 Mac 恢复显示候选机制、队列退出、关闭撤销及设置/搜索回归见
 [2026-10-03 Mac 恢复显示与审查回归](docs/validation/2026-10-03-native-recovery-review.md)。
 
