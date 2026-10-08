@@ -200,8 +200,8 @@ extension Ghostty {
 
         /// Reapply the loaded configuration after a light/dark appearance change.
         func applyTheme() {
-            guard let app, let loadedConfig = config.config else { return }
-            ghostty_app_update_config(app, loadedConfig)
+            guard let app else { return }
+            config.withCValue { ghostty_app_update_config(app, $0) }
         }
 
         func applyTheme(surface: Surface) {

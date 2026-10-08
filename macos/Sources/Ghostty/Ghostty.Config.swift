@@ -42,6 +42,13 @@ extension Ghostty {
             state = State(handle: handle)
         }
 
+        /// Synchronous core callbacks can replace this Config or its generation.
+        /// Keep the exact borrowed allocation alive through success or failure.
+        func withCValue<Result>(_ body: (ghostty_config_t) throws -> Result) rethrows -> Result? {
+            guard let handle = state.handle else { return nil }
+            return try withExtendedLifetime(handle) { try body(handle.value) }
+        }
+
         // MARK: - Keybindings
 
         /// Return the key equivalent for the given action. The action is the name of the action

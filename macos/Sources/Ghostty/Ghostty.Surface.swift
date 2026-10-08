@@ -120,8 +120,7 @@ extension Ghostty {
         }
 
         @MainActor func updateConfig(_ config: Ghostty.Config) {
-            guard let value = config.config else { return }
-            ghostty_surface_update_config(surface, value)
+            config.withCValue { ghostty_surface_update_config(surface, $0) }
         }
 
         enum Command {

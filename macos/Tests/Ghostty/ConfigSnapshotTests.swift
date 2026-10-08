@@ -67,6 +67,43 @@ import Testing
         #expect(!snapshot.commandPaletteEntries.isEmpty)
     }
 
+    @Test func coreBorrowKeepsItsGenerationAliveAcrossSynchronousReplacement() throws {
+        var handle = Ghostty.ConfigHandle.load(at: "/dev/null", finalize: true)
+        try #require(handle != nil)
+        weak let original = handle
+        let config = Ghostty.Config(handle: handle)
+        handle = nil
+        let replacement = try #require(Ghostty.ConfigHandle.load(at: "/dev/null", finalize: true))
+        let preserved = config.withCValue { value in
+            config.replace(with: replacement)
+            #expect(original != nil, "A synchronous callback may replace the native owner")
+            return original?.value == value
+        }
+        #expect(preserved == true)
+        #expect(original == nil, "The borrow must not retain the old generation after returning")
+        #expect(config.config == replacement.value)
+    }
+
+    @Test func coreBorrowReleasesItsGenerationAfterThrowingCallback() throws {
+        var handle = Ghostty.ConfigHandle.load(at: "/dev/null", finalize: true)
+        try #require(handle != nil)
+        weak let original = handle
+        let config = Ghostty.Config(handle: handle)
+        handle = nil
+        let replacement = try #require(Ghostty.ConfigHandle.load(at: "/dev/null", finalize: true))
+        enum Failure: Error { case callback }
+        #expect(throws: Failure.callback) {
+            try config.withCValue { _ in
+                config.replace(with: replacement)
+                #expect(original != nil)
+                throw Failure.callback
+            }
+        }
+        #expect(original == nil)
+        let unloaded = Ghostty.Config(handle: nil)
+        #expect(unloaded.withCValue { _ in false } == nil)
+    }
+
     @Test func clonedConfigKeepsItsOwnHandleAndBindings() throws {
         var source: TemporaryConfig? = try TemporaryConfig("title = Original\nkeybind = clear\nkeybind = cmd+k=new_window")
         let clone = Ghostty.Config(clone: try #require(source?.config))
