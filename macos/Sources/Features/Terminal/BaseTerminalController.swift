@@ -316,8 +316,9 @@ class BaseTerminalController: NSWindowController,
     ///
     /// Subclasses should call super first.
     func surfaceTreeDidChange(from: SplitTree<Ghostty.SurfaceView>, to: SplitTree<Ghostty.SurfaceView>) {
-        if let pendingRestoredFocus, !to.contains(pendingRestoredFocus) { cancelRestoredFocus() }
-        for surfaceView in from where !to.contains(surfaceView) {
+        let newMembers = Set(to.map(ObjectIdentifier.init))
+        if let pendingRestoredFocus, !newMembers.contains(ObjectIdentifier(pendingRestoredFocus)) { cancelRestoredFocus() }
+        for surfaceView in from where !newMembers.contains(ObjectIdentifier(surfaceView)) {
             cancelPendingClipboardConfirmation(for: surfaceView)
         }
 
