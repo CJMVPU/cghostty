@@ -14,6 +14,44 @@ extension Ghostty {
         static var settingsLoadCallsForTesting = 0
         #endif
 
+        /// Temporary settings parsers are created, read and freed on the calling
+        /// executor. No raw handle leaves settingsProjection or crosses an await.
+        private nonisolated static func makeSettingsConfig(data: Data, source: URL, dark: Bool) -> ghostty_config_t? {
+            guard let config = ghostty_config_new() else { return nil }
+            ghostty_config_set_initial_theme(config, dark)
+            let loaded = data.withUnsafeBytes { bytes in
+                source.path.withCString { path in
+                    ghostty_settings_load(config, bytes.bindMemory(to: UInt8.self).baseAddress!, bytes.count, path)
+                }
+            }
+            guard loaded else { ghostty_config_free(config); return nil }
+            return config
+        }
+
+        nonisolated static func settingsProjection(_ data: Data, source: URL, fields: [SettingsField], dark: Bool) throws -> (values: [String: String], diagnostics: [SettingsDiagnostic]) {
+            try Task.checkCancellation()
+            guard let config = Self.makeSettingsConfig(data: data, source: source, dark: dark) else {
+                return ([:], [SettingsDiagnostic(kind: .core, message: "Unable to create the settings parser.")])
+            }
+            defer { ghostty_config_free(config) }
+            ghostty_config_finalize(config)
+            var values: [String: String] = [:]
+            var errors = (0..<ghostty_config_diagnostics_count(config)).map {
+                SettingsDiagnostic(core: ghostty_config_get_diagnostic(config, UInt32($0)))
+            }
+            for field in fields {
+                try Task.checkCancellation()
+                let entry = field.key.withCString { ghostty_config_format_entry(config, $0, field.key.utf8.count) }
+                guard entry.ptr != nil else {
+                    errors.append(SettingsDiagnostic(key: field.key, kind: .core, message: "Unable to read the setting value."))
+                    values[field.key] = ""
+                    continue
+                }
+                values[field.key] = SettingsField.values(from: Ghostty.AllocatedString(entry).string).joined(separator: "\n")
+            }
+            return (values, errors)
+        }
+
         private init(adopting value: ghostty_config_t) {
             self.value = value
             self.settingsDiagnostics = Self.diagnostics(value)
@@ -93,7 +131,7 @@ extension Ghostty {
             settingsLoadCallsForTesting += 1
             #endif
             guard let data = try? JSONEncoder().encode(settings),
-                  let cfg = SettingsEvaluator.makeConfig(data: data, source: source, dark: dark) else { return nil }
+                  let cfg = Self.makeSettingsConfig(data: data, source: source, dark: dark) else { return nil }
             if cli && hasCLIOverrides {
                 ghostty_config_load_cli_args(cfg)
                 ghostty_config_load_recursive_files(cfg)
