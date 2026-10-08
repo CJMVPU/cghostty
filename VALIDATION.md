@@ -1,5 +1,8 @@
 # 验证记录
 
+最新全项目主链路检查、搜索调度和配置交接重构见
+[2026-10-08 项目主链路与重构顺序](docs/architecture/2026-10-08-project-review.md)。
+
 最新图片存储、解码/背景加载峰值和 GPU 提交足迹计量见
 [2026-10-08 图片与提交资源](docs/validation/2026-10-08-image-resources.md)。
 

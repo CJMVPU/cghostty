@@ -1,0 +1,130 @@
+{
+  "schema": 1,
+  "base_commit": "be3d5ba77",
+  "source_commit": "fe24a7162",
+  "commits": [
+    "082b50664",
+    "4e1ae0690",
+    "d992c37ab",
+    "fe24a7162"
+  ],
+  "scope": {
+    "ordinary_paste_policy_preserved": true,
+    "settings_apply_after_restart_preserved": true,
+    "resource_probe_work_resumed": false,
+    "global_configuration_transaction": false
+  },
+  "negative_tests": {
+    "search_navigation_batch": {
+      "expected_pending": 48,
+      "actual_pending_before": 0,
+      "requests_enqueued": 80,
+      "batch_budget_after": 32
+    },
+    "config_borrow": {
+      "failure": "original weak handle released during synchronous callback",
+      "cases": [
+        "successful callback",
+        "throwing callback"
+      ],
+      "assertions_failed": 3
+    }
+  },
+  "validation": {
+    "core_search": {
+      "passed": 171,
+      "total": 171,
+      "failed": 0
+    },
+    "core_config_preparation": {
+      "passed": 83,
+      "total": 83,
+      "failed": 0
+    },
+    "core_config_fanout": {
+      "passed": 78,
+      "total": 78,
+      "failed": 0
+    },
+    "core_releasefast": {
+      "passed": 85,
+      "total": 85,
+      "failed": 0,
+      "test_optimize": "ReleaseFast"
+    },
+    "native_search": {
+      "passed": 20,
+      "failed": 0,
+      "skipped": 0
+    },
+    "native_config_borrow": {
+      "passed": 35,
+      "failed": 0,
+      "skipped": 0
+    },
+    "native_config_preparation": {
+      "passed": 35,
+      "failed": 0,
+      "skipped": 0
+    },
+    "native_config_fanout": {
+      "passed": 36,
+      "failed": 0,
+      "skipped": 0
+    },
+    "target_suites_overlap": true,
+    "ui_tests_enabled": false,
+    "core_debug": {
+      "passed": 3783,
+      "total": 3788,
+      "skipped": 5,
+      "failed": 0,
+      "build_steps": 72
+    },
+    "native_window_retry": {
+      "passed": 16,
+      "failed": 0,
+      "skipped": 0,
+      "source_and_assertions_unchanged": true
+    },
+    "native_full": {
+      "passed": 512,
+      "total": 514,
+      "skipped": 2,
+      "failed": 0,
+      "suites": 80
+    }
+  },
+  "native_first_attempt": {
+    "result": "Failed",
+    "totalTestCount": 514,
+    "passedTests": 511,
+    "failedTests": 1,
+    "skippedTests": 2,
+    "failed_test": "WindowCompositorTests/boundedSnapshotPreservesPixelsAndPresentation(blending:), linear",
+    "diagnostics": {
+      "panes": 0,
+      "idle": true,
+      "submitted": 6,
+      "completed": 6,
+      "presentation_callbacks": 6,
+      "gpu_failed": 0,
+      "paused": true,
+      "pending": false
+    },
+    "cause_identified": false
+  },
+  "native_final_attempt": {
+    "result": "Passed",
+    "totalTestCount": 514,
+    "passedTests": 512,
+    "failedTests": 0,
+    "skippedTests": 2,
+    "startTime": 1791452713.856,
+    "finishTime": 1791452778.364,
+    "source_commit": "fe24a7162",
+    "command": "python3 scripts/build.py native --action test --skip-core",
+    "ui_tests_enabled": false,
+    "source_and_assertions_unchanged": true
+  }
+}
