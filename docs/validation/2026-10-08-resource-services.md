@@ -74,8 +74,9 @@ python3 scripts/build.py native --action test --resource-probe-surfaces 16 \
 - Python：60/60 通过；实际 CLI 拒绝非 test action 与 33 surface。
 - scope/typed bridge、Zig fmt、Swiftlint strict、版本、Swift 6 配置和本地化通过。
 - 最终 Debug 核心全套：3772 passed / 3777 total，5 skipped，0 failed；72/72 构建步骤成功，源码修订 `7b24c83dc`。
+- 2026-10-08 桌面解锁后复跑完整原生套件：xcresult 为 508 passed / 0 failed / 2 skipped / 510 total，80 个 suite；SurfaceBridge 和 WindowCompositor 全部通过。使用 `native --action test --skip-core`，内部 archive 来源检查通过；源码保持 `7b24c83dc`，复跑时文档 HEAD 为 `468b71bab`。managed 测试验证器确认实际执行与结果通过；独立 GhosttyUITests 未启用。
 
-完整原生套件在锁屏时未通过：xcresult 为 487 passed / 21 failed / 2 skipped / 510 total。对应 36 个 issue，不能把 issue 数当失败测试数。失败集中在 SurfaceBridge 5 项和 WindowCompositor 16 项显示用例；PTY 文本已就绪、surface 健康，但 native geometry 的 visible=false、clock paused=true、submitted=0。会话读取确认 screenLocked=1, onConsole=1。需要解锁且显示器活跃后复跑，当前不记录原生全套通过。
+此前完整原生套件在锁屏时未通过：xcresult 为 487 passed / 21 failed / 2 skipped / 510 total。对应 36 个 issue，不能把 issue 数当失败测试数。失败集中在 SurfaceBridge 5 项和 WindowCompositor 16 项显示用例；PTY 文本已就绪、surface 健康，但 native geometry 的 visible=false、clock paused=true、submitted=0。会话读取确认 screenLocked=1, onConsole=1。此次复跑前读取为 screenLocked=false, onConsole=1；保持源码与断言不变，解锁后上述显示用例通过。锁屏尝试作为环境诊断保留。
 
 此前单个函数选择没有运行测试，以及外部环境变量被 env -i 清除而跳过探针，均被测试验证器拒绝。记录只包含实际执行的成功探针。锁屏完整结果与源码负测保留在 /private/tmp/cghostty-round6-*.log，临时日志/xcresult 依既有清理策略维护。
 

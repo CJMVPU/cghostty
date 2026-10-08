@@ -697,6 +697,27 @@
     "native_hidden_16_final_source": {
       "passed": 1,
       "failed": 0
+    },
+    "native_full_final_source": {
+      "passed": 508,
+      "total": 510,
+      "skipped": 2,
+      "failed": 0
     }
+  },
+  "native_full_unlocked": {
+    "result": "Passed",
+    "totalTestCount": 510,
+    "passedTests": 508,
+    "failedTests": 0,
+    "skippedTests": 2,
+    "startTime": 1791444701.382,
+    "finishTime": 1791444765.429,
+    "source_commit": "7b24c83dc",
+    "documentation_head": "468b71bab",
+    "session": "screenLocked=false, onConsole=1",
+    "command": "python3 scripts/build.py native --action test --skip-core",
+    "ui_tests_enabled": false,
+    "managed_validation": "Passed"
   }
 }
