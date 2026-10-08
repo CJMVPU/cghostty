@@ -166,10 +166,14 @@ pub fn tick(self: *App, rt_app: *apprt.App) !void {
 /// called from the main thread. The caller owns the config memory. The
 /// memory can be freed immediately when this returns.
 pub fn updateConfig(self: *App, rt_app: *apprt.App, config: *const Config) !void {
-    // Go through and update all of the surface configurations.
-    for (self.surfaces.items) |surface| {
-        try surface.core().handleMessage(.{ .change_config = config });
-    }
+    // Config callbacks have the same reentrancy as binding actions: capture
+    // identities, re-resolve each live surface, and isolate individual failures.
+    // One stopped surface must not prevent other surfaces or the app updating.
+    try SurfaceBroadcast.perform(SurfaceRegistry{ .app = self, .operation = .configuration }, config, struct {
+        fn apply(source: *const Config, surface: *apprt.Surface) !void {
+            try surface.core().handleMessage(.{ .change_config = source });
+        }
+    }.apply);
 
     // Apply our conditional state. If we fail to apply the conditional state
     // then we log and attempt to move forward with the old config.
@@ -513,6 +517,7 @@ pub fn performAllAction(
 
 const SurfaceRegistry = struct {
     app: *App,
+    operation: enum { binding, configuration } = .binding,
 
     pub fn items(self: SurfaceRegistry) []const *apprt.Surface {
         return self.app.surfaces.items;
@@ -531,8 +536,8 @@ const SurfaceRegistry = struct {
         return surface.rt_surface;
     }
 
-    pub fn reportError(_: SurfaceRegistry, surface_id: u64, err: anyerror) void {
-        log.warn("error performing binding action on surface id={x} err={}", .{ surface_id, err });
+    pub fn reportError(self: SurfaceRegistry, surface_id: u64, err: anyerror) void {
+        log.warn("error applying {s} to surface id={x} err={}", .{ @tagName(self.operation), surface_id, err });
     }
 };
 

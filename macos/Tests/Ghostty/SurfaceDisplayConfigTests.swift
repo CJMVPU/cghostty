@@ -27,6 +27,23 @@ import Testing
         }
     }
 
+    @Test func appConfigurationFanoutUpdatesEachSurfaceAndTheAppProjection() async throws {
+        let app = Ghostty.App(configPath: "/dev/null")
+        let first = makeView(app)
+        let second = makeView(app)
+        var source: TemporaryConfig? = try TemporaryConfig("background-opacity = 0.35\nscrollbar = never")
+        weak let releasedSource = source
+        let nativeApp = try #require(app.app)
+        source?.withCValue { ghostty_app_update_config(nativeApp, $0) }
+        source = nil
+        #expect(releasedSource == nil)
+        await drainQueue()
+        #expect(first.derivedConfig.backgroundOpacity == 0.35)
+        #expect(second.derivedConfig.backgroundOpacity == 0.35)
+        #expect(first.derivedConfig.scrollbar == .never && second.derivedConfig.scrollbar == .never)
+        #expect(app.config.snapshot.backgroundOpacity == 0.35)
+    }
+
     @Test func surfaceCallbackCopiesDisplayValuesWithoutCloningCoreConfig() async throws {
         let app = Ghostty.App(configPath: "/dev/null")
         let view = makeView(app)
