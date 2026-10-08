@@ -101,7 +101,7 @@ import Testing
         let hidden = await rendererResources(one)
         #expect(hidden.gridID != 0)
         #expect(hidden.gpuTextureCount == 0)
-        #expect(hidden.gpuQueueCount == 1)
+        #expect(hidden.gpuQueueCount == 0)
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 640, height: 240),
             styleMask: .borderless, backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
@@ -137,10 +137,15 @@ import Testing
         #expect(a.codepointCapacity >= a.codepointEntries && a.glyphCapacity >= a.glyphEntries)
         for usage in [a, b] {
             #expect(usage.gpuTextureCount == 6)
-            #expect(usage.gpuQueueCount == 1)
+            #expect(usage.gpuQueueCount == 0)
             #expect(usage.gpuAllocatedBytes >= usage.gpuTexelBytes)
             #expect(usage.gpuAllocatedBytes > 0)
         }
+        #expect(await Task.detached { one.copySnapshot(maxDimension: 64) != nil }.value)
+        #expect(await rendererResources(one).gpuQueueCount == 1)
+        #expect(await rendererResources(two).gpuQueueCount == 0)
+        #expect(await Task.detached { one.copySnapshot(maxDimension: 64) != nil }.value)
+        #expect(await rendererResources(one).gpuQueueCount == 1)
         #expect(one.changeFontSize(by: 2))
         let deadline = ContinuousClock.now + .seconds(5)
         var changed = await rendererResources(one)

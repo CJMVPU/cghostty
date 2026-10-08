@@ -76,7 +76,7 @@ pub fn begin(opts: Options, renderer: *Renderer, target: Target) !Self {
     c.buffer.msgSend(void, "beginCommandBufferWithAllocator:", .{c.allocator});
     if (!target.owned) renderer.api.pane.sequence +%= 1;
     return .{
-        .queue = renderer.api.pane.compositor_queue orelse opts.queue,
+        .queue = opts.queue,
         .commands = c,
         .block = CompletionBlock.init(.{ .renderer = renderer, .commands = c, .sync = false }, &bufferCompleted),
     };

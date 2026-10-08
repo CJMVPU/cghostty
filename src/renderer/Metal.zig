@@ -35,8 +35,8 @@ pane: CompositorPane,
 
 /// MTLDevice
 device: objc.Object,
-/// MTL4CommandQueue
-queue: objc.Object,
+/// Independent snapshot queue, created on demand under the draw mutex.
+queue: ?objc.Object = null,
 
 /// Alpha blending mode
 blending: configpkg.Config.AlphaBlending,
@@ -50,11 +50,10 @@ autorelease_pool: ?*objc.AutoreleasePool = null,
 pub fn init(alloc: Allocator, opts: rendererpkg.Options) !Metal {
     _ = alloc;
 
-    // Choose our MTLDevice and create a MTL4CommandQueue for that device.
+    // The window supplies its queue for normal draws. Snapshots initialize
+    // their independent queue only when the first one is requested.
     const device = try chooseDevice();
     errdefer device.release();
-    const queue = device.msgSend(objc.Object, objc.sel("newMTL4CommandQueue"), .{});
-    errdefer queue.release();
 
     // Grab metadata about the device.
     // This product only supports Apple Silicon unified-memory devices.
@@ -105,14 +104,13 @@ pub fn init(alloc: Allocator, opts: rendererpkg.Options) !Metal {
     return .{
         .pane = pane,
         .device = device,
-        .queue = queue,
         .blending = opts.config.blending,
         .max_texture_size = max_texture_size,
     };
 }
 
 pub fn deinit(self: *Metal) void {
-    self.queue.release();
+    if (self.queue) |queue| queue.release();
     self.device.release();
     self.pane.release();
 }
@@ -284,7 +282,7 @@ pub fn initAtlasTexture(
 
 /// Begin a frame.
 pub inline fn beginFrame(
-    self: *const Metal,
+    self: *Metal,
     /// Once the frame has been completed, the `frameCompleted` method
     /// on the renderer is called with the health status of the frame.
     renderer: *Renderer,
@@ -292,7 +290,19 @@ pub inline fn beginFrame(
     target: Target,
     commands: *Frame.Commands,
 ) !Frame {
-    return try Frame.begin(.{ .queue = self.queue, .commands = commands }, renderer, target);
+    const queue = self.pane.compositor_queue orelse try self.snapshotQueue();
+    return try Frame.begin(.{ .queue = queue, .commands = commands }, renderer, target);
+}
+
+/// Caller holds the renderer draw mutex. The window's queue never becomes
+/// owned here, and an initialization failure leaves no cached queue.
+fn snapshotQueue(self: *Metal) error{MetalFailed}!objc.Object {
+    if (self.queue) |queue| return queue;
+    const value = self.device.msgSend(?*anyopaque, "newMTL4CommandQueue", .{}) orelse
+        return error.MetalFailed;
+    const queue = objc.Object.fromId(value);
+    self.queue = queue;
+    return queue;
 }
 
 /// Warm up the Metal device machinery. The first Metal device query in

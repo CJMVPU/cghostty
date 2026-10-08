@@ -834,7 +834,7 @@ pub const RendererResources = extern struct {
     gpu_texel_bytes: u64 = 0,
     gpu_allocated_bytes: u64 = 0,
     gpu_texture_count: u64 = 0,
-    gpu_queue_count: u64 = 1,
+    gpu_queue_count: u64 = 0,
 };
 
 /// Keep the surface alive and query from a background task: the draw mutex
@@ -847,6 +847,7 @@ pub fn rendererResources(self: *Self) RendererResources {
     const grid = self.font_grid;
     var result: RendererResources = .{
         .grid_id = grid.resource_id,
+        .gpu_queue_count = @intFromBool(self.api.queue != null),
         .cpu_grayscale_bytes = grid.atlas_grayscale.data.len,
         .cpu_color_bytes = grid.atlas_color.data.len,
         .cpu_node_bytes = grid.atlas_grayscale.nodeCapacityBytes() + grid.atlas_color.nodeCapacityBytes(),
