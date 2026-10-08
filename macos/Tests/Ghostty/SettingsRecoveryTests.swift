@@ -15,8 +15,10 @@ import Testing
             let bytes = try JSONEncoder().encode(record)
             try bytes.write(to: store.url)
             let expected: Ghostty.ConfigHandle.SettingsRecoverySource = previousIsDamaged ? .defaults : .previous
-            #expect(try Ghostty.ConfigHandle.settingsRecoverySource(record, source: store.validationSource) == expected)
+            #expect(store.evaluateRecovery(record).source == expected)
+            Ghostty.ConfigHandle.settingsLoadCallsForTesting = 0
             let result = try #require(store.load(cli: false))
+            #expect(Ghostty.ConfigHandle.settingsLoadCallsForTesting == (previousIsDamaged ? 5 : 4))
             #expect(result.formattedEntry("title") == (previousIsDamaged ? "title = \n" : "title = Previous\n"))
             #expect(!result.errors.isEmpty)
             #expect(store.startupErrors.contains { $0.contains("theme") || $0.contains("background") })
@@ -30,8 +32,10 @@ import Testing
             let current = SettingsStore.Input(values: ["title": "Current", "theme": themes.valid])
             let record = SettingsStore.Record(current: current, previous: .init(values: ["theme": themes.brokenDark]))
             try JSONEncoder().encode(record).write(to: store.url)
-            #expect(try Ghostty.ConfigHandle.settingsRecoverySource(record, source: store.validationSource) == .current)
+            #expect(store.evaluateRecovery(record).source == .current)
+            Ghostty.ConfigHandle.settingsLoadCallsForTesting = 0
             let result = try #require(store.load(cli: false))
+            #expect(Ghostty.ConfigHandle.settingsLoadCallsForTesting == 2)
             #expect(result.formattedEntry("title") == "title = Current\n")
             #expect(result.errors.isEmpty)
             #expect(store.startupErrors.isEmpty)
@@ -45,7 +49,7 @@ import Testing
             let captured = SettingsStore.Record(current: .init(values: ["theme": themes.brokenDark]), previous: .init(values: ["theme": themes.valid]))
             let replacement = SettingsStore.Record(current: .init(values: ["title": "Replacement", "theme": themes.valid]))
             try JSONEncoder().encode(replacement).write(to: store.url)
-            #expect(try Ghostty.ConfigHandle.settingsRecoverySource(captured, source: store.validationSource) == .previous)
+            #expect(store.evaluateRecovery(captured).source == .previous)
             #expect(store.load(cli: false)?.formattedEntry("title") == "title = Replacement\n")
         }
     }

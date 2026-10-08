@@ -1126,7 +1126,7 @@ typedef enum {
   GHOSTTY_SETTINGS_RECOVERY_PREVIOUS = 1,
   GHOSTTY_SETTINGS_RECOVERY_DEFAULTS = 2,
 } ghostty_settings_recovery_source_e;
-GHOSTTY_API ghostty_settings_recovery_source_e ghostty_settings_recovery_source(const uint8_t*, size_t, const char*);
+GHOSTTY_API ghostty_settings_recovery_source_e ghostty_settings_select_recovery(bool, bool);
 GHOSTTY_API bool ghostty_settings_equal(ghostty_config_t, ghostty_config_t);
 GHOSTTY_API ghostty_string_s ghostty_config_format_entry(ghostty_config_t, const char*, size_t);
 // Borrowed bytes; do not free. Valid for the lifetime of the process.

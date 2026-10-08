@@ -86,9 +86,9 @@ import Darwin
         startupValues = [:]
         do {
             let record = try FileManager.default.fileExists(atPath: url.path) ? read() : migrate()
-            let source = try Ghostty.ConfigHandle.settingsRecoverySource(record, source: validationSource)
-            let evaluation = evaluate(record.current)
-            switch source {
+            let recovery = evaluateRecovery(record)
+            let evaluation = recovery.current
+            switch recovery.source {
             case .current:
                 guard let result = evaluation.config, evaluation.diagnostics.isEmpty else { throw Failure.invalid(evaluation.diagnostics) }
                 startupValues = evaluation.values
@@ -96,8 +96,8 @@ import Darwin
                 return applyCLI(record.current, checked: result, cli: cli)
             case .previous:
                 guard let previous = record.previous else { throw Failure.unreadable }
-                let recovered = evaluate(previous)
-                guard let config = recovered.config, recovered.diagnostics.isEmpty else { throw Failure.invalid(recovered.diagnostics) }
+                guard let recovered = recovery.previous, let config = recovered.config,
+                      recovered.diagnostics.isEmpty else { throw Failure.unreadable }
                 startupErrors = evaluation.diagnostics.map(\.rawMessage)
                 startupErrors.insert("Invalid settings. The last valid settings were restored. Open Settings to correct the errors.", at: 0)
                 startupValues = recovered.values
@@ -138,6 +138,22 @@ import Darwin
         let values: [String: String]
         let darkValues: [String: String]
         let diagnostics: [SettingsDiagnostic]
+    }
+
+    struct RecoveryEvaluation {
+        let source: Ghostty.ConfigHandle.SettingsRecoverySource
+        let current: Evaluation
+        let previous: Evaluation?
+    }
+
+    /// Evaluate each appearance once, using only this immutable record snapshot.
+    func evaluateRecovery(_ record: Record) -> RecoveryEvaluation {
+        let current = evaluate(record.current)
+        let previous = current.diagnostics.isEmpty ? nil : record.previous.map(evaluate)
+        let source = Ghostty.ConfigHandle.settingsRecoverySource(
+            currentValid: current.diagnostics.isEmpty,
+            previousValid: previous?.diagnostics.isEmpty == true)
+        return RecoveryEvaluation(source: source, current: current, previous: previous)
     }
 
     func diagnostics(_ input: Input) -> [SettingsDiagnostic] { evaluate(input).diagnostics }

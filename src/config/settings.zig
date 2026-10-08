@@ -261,6 +261,12 @@ pub const RecoverySource = enum(c_int) {
     defaults = 2,
 };
 
+/// Shared policy for already-validated light/dark evaluations. Native startup
+/// reuses its decoded values and handles; CLI loading validates its own inputs.
+pub fn selectRecovery(current_valid: bool, previous_valid: bool) RecoverySource {
+    return if (current_valid) .current else if (previous_valid) .previous else .defaults;
+}
+
 const Selection = struct { source: RecoverySource, config: ?Config = null };
 
 fn selectRecord(alloc: std.mem.Allocator, data: []const u8, source: []const u8) !Selection {
@@ -269,14 +275,14 @@ fn selectRecord(alloc: std.mem.Allocator, data: []const u8, source: []const u8) 
     defer parsed.deinit();
     if (parsed.value.schema != 1) return error.UnsupportedSettingsVersion;
     if (try checkedInput(alloc, parsed.value.current, source)) |candidate| {
-        return .{ .source = .current, .config = candidate };
+        return .{ .source = selectRecovery(true, false), .config = candidate };
     }
     if (parsed.value.previous) |previous| {
         if (try checkedInput(alloc, previous, source)) |candidate| {
-            return .{ .source = .previous, .config = candidate };
+            return .{ .source = selectRecovery(false, true), .config = candidate };
         }
     }
-    return .{ .source = .defaults };
+    return .{ .source = selectRecovery(false, false) };
 }
 
 /// Inspect the supplied immutable record; never reopen its storage path.

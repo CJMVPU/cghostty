@@ -11,6 +11,7 @@ extension Ghostty {
         #if CGHOSTTY_TESTING
         static var formattedEntryCallsForTesting = 0
         static var cloneCallsForTesting = 0
+        static var settingsLoadCallsForTesting = 0
         #endif
 
         private init(adopting value: ghostty_config_t) {
@@ -76,23 +77,21 @@ extension Ghostty {
 
         nonisolated enum SettingsRecoverySource: Sendable { case current, previous, defaults }
 
-        /// Use exactly the caller's decoded snapshot, without another disk read.
-        static func settingsRecoverySource(_ record: SettingsStore.Record, source: URL) throws -> SettingsRecoverySource {
-            let data = try JSONEncoder().encode(record)
-            let selected = data.withUnsafeBytes { bytes in
-                source.path.withCString { path in
-                    ghostty_settings_recovery_source(bytes.bindMemory(to: UInt8.self).baseAddress!, bytes.count, path)
-                }
-            }
+        /// Selection consumes existing evaluations instead of reparsing a record.
+        static func settingsRecoverySource(currentValid: Bool, previousValid: Bool) -> SettingsRecoverySource {
+            let selected = ghostty_settings_select_recovery(currentValid, previousValid)
             switch selected {
             case GHOSTTY_SETTINGS_RECOVERY_CURRENT: return .current
             case GHOSTTY_SETTINGS_RECOVERY_PREVIOUS: return .previous
             case GHOSTTY_SETTINGS_RECOVERY_DEFAULTS: return .defaults
-            default: throw SettingsStore.Failure.unreadable
+            default: return .defaults
             }
         }
 
         static func load(settings: SettingsStore.Input, source: URL, cli: Bool = false, dark: Bool = false) -> ConfigHandle? {
+            #if CGHOSTTY_TESTING
+            settingsLoadCallsForTesting += 1
+            #endif
             guard let data = try? JSONEncoder().encode(settings), let cfg = ghostty_config_new() else { return nil }
             ghostty_config_set_initial_theme(cfg, dark)
             let loaded = data.withUnsafeBytes { bytes in
