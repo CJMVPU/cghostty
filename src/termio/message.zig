@@ -112,6 +112,14 @@ pub const Message = union(enum) {
         };
     }
 
+    /// Own the complete derived config before publishing to the IO thread.
+    pub fn initChangeConfig(alloc: Allocator, config: *const @import("../config.zig").Config) !Message {
+        const ptr = try alloc.create(termio.Termio.DerivedConfig);
+        errdefer alloc.destroy(ptr);
+        ptr.* = try termio.Termio.DerivedConfig.init(alloc, config);
+        return .{ .change_config = .{ .alloc = alloc, .ptr = ptr } };
+    }
+
     /// Free resources owned by a message that will not be processed.
     /// The message is invalid after this call.
     pub fn deinit(self: *const Message) void {

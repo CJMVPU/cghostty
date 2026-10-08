@@ -284,7 +284,7 @@ const DerivedConfig = struct {
     window_padding_balance: configpkg.Config.WindowPaddingBalance,
     window_height: u32,
     window_width: u32,
-    title: ?[:0]const u8,
+    has_title: bool,
     title_report: bool,
     links: []DerivedConfig.Link,
     link_osc8: bool,
@@ -361,7 +361,8 @@ const DerivedConfig = struct {
             .window_padding_balance = config.@"window-padding-balance",
             .window_height = config.@"window-height",
             .window_width = config.@"window-width",
-            .title = config.title,
+            // Surface uses only the override's presence after derivation.
+            .has_title = config.title != null,
             .title_report = config.@"title-report",
             .links = links,
             .link_osc8 = config.@"link-osc8",
@@ -407,6 +408,37 @@ const DerivedConfig = struct {
             .left = padding_left,
             .right = padding_right,
         };
+    }
+};
+
+/// Own all three config projections until each is adopted or handed to its
+/// consumer. Allocation failure during preparation has no surface side effects.
+/// Font-grid/native application still follows the existing asynchronous path.
+const PreparedConfig = struct {
+    surface: ?DerivedConfig,
+    renderer: ?rendererpkg.Message,
+    io: ?termio.Message,
+
+    fn init(alloc: Allocator, config: *const configpkg.Config) !PreparedConfig {
+        var surface = try DerivedConfig.init(alloc, config);
+        errdefer surface.deinit();
+        const render = try rendererpkg.Message.initChangeConfig(alloc, config);
+        errdefer render.deinit();
+        const io = try termio.Message.initChangeConfig(alloc, config);
+        return .{ .surface = surface, .renderer = render, .io = io };
+    }
+
+    fn takeSurface(self: *PreparedConfig) DerivedConfig {
+        const result = self.surface.?;
+        self.surface = null;
+        return result;
+    }
+
+    fn deinit(self: *PreparedConfig) void {
+        if (self.surface) |*config| config.deinit();
+        if (self.renderer) |message| message.deinit();
+        if (self.io) |message| message.deinit();
+        self.* = .{ .surface = null, .renderer = null, .io = null };
     }
 };
 
@@ -744,7 +776,7 @@ pub fn handleMessage(self: *Surface, msg: Message) !void {
 
         .set_title => |*v| {
             // We ignore the message in case the title was set via config.
-            if (self.config.title != null) {
+            if (self.config.has_title) {
                 log.debug("ignoring title change request since static title is set via config", .{});
                 return;
             }
@@ -1484,16 +1516,18 @@ pub fn updateConfig(
     // based on our conditional state or the original config.
     const config: *const configpkg.Config = if (config_) |*c| c else original;
 
-    // Update our new derived config immediately
-    const derived = DerivedConfig.init(self.alloc, config) catch |err| {
-        // If the derivation fails then we just log and return. We don't
-        // hard fail in this case because we don't want to error the surface
-        // when config fails we just want to keep using the old config.
+    // Prepare all thread-specific projections before changing current state,
+    // key sequences or caches. A rejected preparation keeps the old config.
+    var prepared = PreparedConfig.init(self.alloc, config) catch |err| {
         log.err("error updating configuration err={}", .{err});
-        return;
+        return err;
     };
-    self.config.deinit();
-    self.config = derived;
+    defer prepared.deinit();
+    // Key-table pointers still refer to this generation until cleanup below;
+    // synchronous native callbacks must not observe freed configuration data.
+    var previous = self.config;
+    defer previous.deinit();
+    self.config = prepared.takeSurface();
     self.link_hit_cache.invalidate();
     self.mouse.hover_key = null;
 
@@ -1531,27 +1565,13 @@ pub fn updateConfig(
         break :font_size size;
     });
 
-    // End rollback ownership at the handoff. Later native action failures
-    // must not free messages already owned (or discarded) by their queues.
-    {
-        // We need to store our configs in a heap-allocated pointer so that
-        // our messages aren't huge.
-        var renderer_message = try rendererpkg.Message.initChangeConfig(self.alloc, config);
-        errdefer renderer_message.deinit();
-        var termio_config_ptr = try self.alloc.create(termio.Termio.DerivedConfig);
-        errdefer self.alloc.destroy(termio_config_ptr);
-        termio_config_ptr.* = try termio.Termio.DerivedConfig.init(self.alloc, config);
-        errdefer termio_config_ptr.deinit();
-
-        if (self.render.thread.mailbox.push(global.io(), renderer_message, .{ .forever = {} }) == 0)
-            return error.RendererStopped;
-        self.queueIo(.{
-            .change_config = .{
-                .alloc = self.alloc,
-                .ptr = termio_config_ptr,
-            },
-        }, .unlocked);
-    }
+    // Clear ownership only after acceptance. Later native callback failures
+    // cannot release messages already consumed or disposed by either queue.
+    if (self.render.thread.mailbox.push(global.io(), prepared.renderer.?, .{ .forever = {} }) == 0)
+        return error.RendererStopped;
+    prepared.renderer = null;
+    self.queueIo(prepared.io.?, .unlocked);
+    prepared.io = null;
 
     // With mailbox messages sent, we have to wake them up so they process it.
     self.queueRender() catch |err| {
@@ -5420,6 +5440,46 @@ fn presentSurface(self: *Surface) !void {
 /// not available on a particular platform.
 pub fn getProcessInfo(self: *Surface, comptime info: ProcessInfo) ?ProcessInfo.Type(info) {
     return self.io.termio.getProcessInfo(info);
+}
+
+test "surface config preparation unwinds every allocation failure" {
+    const t = std.testing;
+    var config = try configpkg.Config.default(t.allocator);
+    defer config.deinit();
+    const Check = struct {
+        fn run(alloc: Allocator, source: *const configpkg.Config) !void {
+            var prepared = try PreparedConfig.init(alloc, source);
+            defer prepared.deinit();
+            var surface = prepared.takeSurface();
+            defer surface.deinit();
+            // Queue consumers can independently take or discard each message.
+            const io = prepared.io.?;
+            prepared.io = null;
+            io.deinit();
+        }
+    };
+    try t.checkAllAllocationFailures(t.allocator, Check.run, .{&config});
+}
+
+test "surface config preparation survives source release and renderer rejection" {
+    const t = std.testing;
+    var prepared: PreparedConfig = prepared: {
+        var config = try configpkg.Config.default(t.allocator);
+        defer config.deinit();
+        config.title = try config._arena.?.allocator().dupeZ(u8, "explicit title");
+        break :prepared try PreparedConfig.init(t.allocator, &config);
+    };
+    defer prepared.deinit();
+    try t.expect(prepared.surface.?.has_title);
+    var queue: rendererpkg.Thread.Mailbox = .{};
+    queue.close(t.io);
+    try t.expectEqual(@as(usize, 0), queue.push(t.io, prepared.renderer.?, .{ .instant = {} }));
+    // A rejected handoff owns all pending projections until cleanup. The
+    // other consumers may still independently adopt their owned arena.
+    var surface = prepared.takeSurface();
+    defer surface.deinit();
+    try t.expect(surface.has_title);
+    prepared.deinit();
 }
 
 test "queueIo frees allocated writes in readonly mode" {
