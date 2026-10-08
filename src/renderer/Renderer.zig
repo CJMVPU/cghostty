@@ -3206,3 +3206,34 @@ test "window frame slot backpressure returns without advancing or releasing owne
     chain.releaseFrame();
     try t.expect(chain.tryNextFrame() != null);
 }
+
+test "renderer thread exit releases shader owners while the display was realized" {
+    const t = std.testing;
+    const objc = @import("objc");
+    // NSObject stand-ins exercise the production release methods without
+    // creating a device/compiler. One independent reference keeps each owner
+    // inspectable after threadExit relinquishes its library and pipelines.
+    const object = objc.getClass("NSObject").?.msgSend(objc.Object, "new", .{});
+    defer object.release();
+    var instance: Self = undefined;
+    instance.alloc = t.allocator;
+    instance.draw_mutex = .init;
+    instance.display_realized = true;
+    instance.swap_chain = null;
+    instance.scroll = .{};
+    instance.scroll_shared = null;
+    instance.images = .empty;
+    instance.bg_image = null;
+    instance.shaders = .{ .library = object.retain(), .pipelines = undefined };
+    inline for (@typeInfo(@TypeOf(instance.shaders.pipelines)).@"struct".fields) |field| {
+        @field(instance.shaders.pipelines, field.name) = .{ .state = object.retain() };
+    }
+    try t.expect(object.msgSend(usize, "retainCount", .{}) > 1);
+    instance.threadExit();
+    try t.expect(!instance.display_realized);
+    try t.expect(instance.shaders.defunct);
+    try t.expectEqual(@as(usize, 1), object.msgSend(usize, "retainCount", .{}));
+    // Repeated cleanup cannot release the independently retained object.
+    instance.threadExit();
+    try t.expectEqual(@as(usize, 1), object.msgSend(usize, "retainCount", .{}));
+}
