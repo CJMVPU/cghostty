@@ -22,6 +22,9 @@ const CURSOR_BLINK_INTERVAL = 600;
 /// the future if we want it configurable.
 pub const Mailbox = BlockingQueue(rendererpkg.Message, 64);
 
+/// Yield the update lock and event loop between control-message batches.
+const mailbox_message_budget = 32;
+
 /// Allocator used for some state
 alloc: std.mem.Allocator,
 
@@ -282,91 +285,110 @@ fn drainMailbox(self: *Thread) !void {
     const pool = @import("objc").AutoreleasePool.init();
     defer pool.deinit();
 
-    while (self.mailbox.pop(global.io())) |message| {
-        log.debug("mailbox message={}", .{message});
-        switch (message) {
-            .crash => @panic("crash request, crashing intentionally"),
+    try drainMailboxBatch(self, handleMessage);
+}
 
-            .visible => |v| visible: {
-                // If our state didn't change we do nothing.
-                if (self.flags.visible == v) break :visible;
+/// Keep batching independent of GPU setup so tests exercise the real queue
+/// and Mach wakeup continuation with controlled consumers and failures.
+fn drainMailboxBatch(self: anytype, comptime consume: anytype) !void {
+    // Rearming a Mach async handler does not recreate a coalesced notification.
+    // Leftovers need their own wake, including when a consumed message fails.
+    defer if (self.mailbox.pendingCount(global.io()) > 0) {
+        self.wakeup.notify() catch |err| log.warn("error rescheduling renderer mailbox err={}", .{err});
+    };
+    // Capture entry membership so messages added by a producer during this
+    // batch cannot prolong it, even when the initial queue is nearly empty.
+    const budget = @min(mailbox_message_budget, self.mailbox.pendingCount(global.io()));
+    for (0..budget) |_| {
+        const message = self.mailbox.pop(global.io()) orelse break;
+        try consume(self, message);
+    }
+}
 
-                // Set our visible state
-                self.flags.visible = v;
+fn handleMessage(self: *Thread, message: rendererpkg.Message) !void {
+    log.debug("mailbox message={}", .{message});
+    switch (message) {
+        .crash => @panic("crash request, crashing intentionally"),
 
-                // Visibility affects our QoS class
-                self.setQosClass();
+        .visible => |v| visible: {
+            // If our state didn't change we do nothing.
+            if (self.flags.visible == v) break :visible;
 
-                // If we became visible then we immediately rebuild cells
-                // (renderCallback skips updateFrame while invisible) and
-                // draw. Going through renderCallback also reschedules
-                // any Kitty graphics animation wakeup that lapsed
-                // while we were invisible.
-                // Publish visibility before drawing so returning to a window
-                // samples/reset motion with the new state and re-arms wakes.
-                self.renderer.setVisible(v);
-                if (v) {
-                    _ = renderCallback(self, undefined, undefined, {});
-                } else {
-                    self.armCursorBlinkTimer();
-                    self.armAnimationTimer();
-                }
+            // Set our visible state
+            self.flags.visible = v;
 
-                // Animation wakes stop while hidden. The independent cursor
-                // blink timer retains its existing visibility checks.
-            },
+            // Visibility affects our QoS class
+            self.setQosClass();
 
-            .focus => |v| focus: {
-                // If our state didn't change we do nothing.
-                if (self.flags.focused == v) break :focus;
-
-                // Set our state
-                self.flags.focused = v;
-
-                // Focus affects our QoS class
-                self.setQosClass();
-
-                // Set it on the renderer
-                try self.renderer.setFocus(v);
-
-                // Focus gates smooth cursor animation, so re-arm
-                // the animation timer for the new state.
-                self.armAnimationTimer();
-
-                if (v) self.flags.cursor_blink_visible = true;
+            // If we became visible then we immediately rebuild cells
+            // (renderCallback skips updateFrame while invisible) and
+            // draw. Going through renderCallback also reschedules
+            // any Kitty graphics animation wakeup that lapsed
+            // while we were invisible.
+            // Publish visibility before drawing so returning to a window
+            // samples/reset motion with the new state and re-arms wakes.
+            self.renderer.setVisible(v);
+            if (v) {
+                _ = renderCallback(self, undefined, undefined, {});
+            } else {
                 self.armCursorBlinkTimer();
-            },
-
-            .reset_cursor_blink => {
-                self.flags.cursor_blink_visible = true;
-                if (self.cursor_c.state() == .active) {
-                    self.cursor_h.reset(
-                        &self.loop,
-                        &self.cursor_c,
-                        &self.cursor_c_cancel,
-                        cursorBlinkInterval(),
-                        Thread,
-                        self,
-                        cursorTimerCallback,
-                    );
-                }
-            },
-
-            .font_grid => |grid| {
-                self.renderer.setFontGrid(grid.grid);
-                grid.set.deref(grid.old_key);
-            },
-
-            .resize => |v| self.renderer.setScreenSize(v),
-
-            .change_config => |config| {
-                try applyConfig(self, config);
-
-                // The config affects what animation wakes the
-                // renderer needs (smooth cursor, animation mode).
                 self.armAnimationTimer();
-            },
-        }
+            }
+
+            // Animation wakes stop while hidden. The independent cursor
+            // blink timer retains its existing visibility checks.
+        },
+
+        .focus => |v| focus: {
+            // If our state didn't change we do nothing.
+            if (self.flags.focused == v) break :focus;
+
+            // Set our state
+            self.flags.focused = v;
+
+            // Focus affects our QoS class
+            self.setQosClass();
+
+            // Set it on the renderer
+            try self.renderer.setFocus(v);
+
+            // Focus gates smooth cursor animation, so re-arm
+            // the animation timer for the new state.
+            self.armAnimationTimer();
+
+            if (v) self.flags.cursor_blink_visible = true;
+            self.armCursorBlinkTimer();
+        },
+
+        .reset_cursor_blink => {
+            self.flags.cursor_blink_visible = true;
+            if (self.cursor_c.state() == .active) {
+                self.cursor_h.reset(
+                    &self.loop,
+                    &self.cursor_c,
+                    &self.cursor_c_cancel,
+                    cursorBlinkInterval(),
+                    Thread,
+                    self,
+                    cursorTimerCallback,
+                );
+            }
+        },
+
+        .font_grid => |grid| {
+            self.renderer.setFontGrid(grid.grid);
+            grid.set.deref(grid.old_key);
+        },
+
+        .resize => |v| self.renderer.setScreenSize(v),
+
+        .change_config => |config| {
+            try applyConfig(self, config);
+
+            // The config affects what animation wakes the
+            // renderer needs (smooth cursor, animation mode).
+            self.armAnimationTimer();
+        },
     }
 }
 
@@ -873,6 +895,108 @@ const ConfigFailureTest = struct {
         }
     };
 };
+
+const MailboxBatchTest = struct {
+    mailbox: *Mailbox,
+    wakeup: xev.Async,
+    loop: xev.Loop,
+    completion: xev.Completion = .{},
+    seen: [128]bool = undefined,
+    count: usize = 0,
+    refill: usize = 0,
+    fail_next: bool = false,
+
+    fn init() !MailboxBatchTest {
+        const mailbox = try Mailbox.create(std.testing.allocator);
+        errdefer mailbox.destroy(std.testing.allocator);
+        var wakeup = try xev.Async.init();
+        errdefer wakeup.deinit();
+        return .{ .mailbox = mailbox, .wakeup = wakeup, .loop = try xev.Loop.init(.{}) };
+    }
+
+    fn deinit(self: *MailboxBatchTest) void {
+        while (self.mailbox.pop(global.io())) |message| message.deinit();
+        self.wakeup.deinit();
+        self.loop.deinit();
+        self.mailbox.destroy(std.testing.allocator);
+    }
+
+    fn consume(self: *MailboxBatchTest, message: rendererpkg.Message) !void {
+        defer message.deinit();
+        if (self.fail_next) {
+            self.fail_next = false;
+            return error.OutOfMemory;
+        }
+        self.seen[self.count] = message.focus;
+        self.count += 1;
+        if (self.refill > 0) {
+            self.refill -= 1;
+            try std.testing.expect(self.mailbox.push(global.io(), .{ .focus = true }, .instant) > 0);
+        }
+    }
+
+    fn callback(self_: ?*MailboxBatchTest, _: *xev.Loop, _: *xev.Completion, result: xev.Async.WaitError!void) xev.CallbackAction {
+        result catch return .rearm;
+        drainMailboxBatch(self_.?, consume) catch unreachable;
+        return .rearm;
+    }
+
+    fn continuePending(self: *MailboxBatchTest) !void {
+        self.wakeup.wait(&self.loop, &self.completion, MailboxBatchTest, self, callback);
+        // No producer notification: the previous drain must supply this wake.
+        for (0..8) |_| {
+            try self.loop.run(.no_wait);
+            if (self.mailbox.pendingCount(global.io()) == 0) break;
+        }
+        try std.testing.expectEqual(@as(Mailbox.Size, 0), self.mailbox.pendingCount(global.io()));
+    }
+};
+
+test "renderer mailbox bounds batches and renotifies ordered controls without another producer" {
+    const t = std.testing;
+    var fixture = try MailboxBatchTest.init();
+    defer fixture.deinit();
+    for (0..64) |i| try t.expect(fixture.mailbox.push(t.io, .{ .focus = i % 3 == 0 }, .instant) > 0);
+    try drainMailboxBatch(&fixture, MailboxBatchTest.consume);
+    try t.expectEqual(@as(usize, 32), fixture.count);
+    try t.expectEqual(@as(Mailbox.Size, 32), fixture.mailbox.pendingCount(t.io));
+    try fixture.continuePending();
+    try t.expectEqual(@as(usize, 64), fixture.count);
+    for (fixture.seen[0..64], 0..) |value, i| try t.expectEqual(i % 3 == 0, value);
+}
+
+test "renderer mailbox defers controls arriving during a batch" {
+    const t = std.testing;
+    var fixture = try MailboxBatchTest.init();
+    defer fixture.deinit();
+    fixture.refill = 64;
+    try t.expect(fixture.mailbox.push(t.io, .{ .focus = false }, .instant) > 0);
+    try drainMailboxBatch(&fixture, MailboxBatchTest.consume);
+    try t.expectEqual(@as(usize, 1), fixture.count);
+    try t.expectEqual(@as(Mailbox.Size, 1), fixture.mailbox.pendingCount(t.io));
+    fixture.refill = 0;
+    try fixture.continuePending();
+    try t.expectEqual(@as(usize, 2), fixture.count);
+    try t.expect(!fixture.seen[0] and fixture.seen[1]);
+}
+
+test "renderer mailbox renotifies successors after an owning message fails" {
+    const t = std.testing;
+    var fixture = try MailboxBatchTest.init();
+    defer fixture.deinit();
+    var source = try configpkg.Config.default(t.allocator);
+    defer source.deinit();
+    var counter = t.FailingAllocator.init(t.allocator, .{});
+    const message = try rendererpkg.Message.initChangeConfig(counter.allocator(), &source);
+    try t.expect(fixture.mailbox.push(t.io, message, .instant) > 0);
+    try t.expect(fixture.mailbox.push(t.io, .{ .focus = false }, .instant) > 0);
+    fixture.fail_next = true;
+    try t.expectError(error.OutOfMemory, drainMailboxBatch(&fixture, MailboxBatchTest.consume));
+    try t.expectEqual(counter.allocated_bytes, counter.freed_bytes);
+    try fixture.continuePending();
+    try t.expectEqual(@as(usize, 1), fixture.count);
+    try t.expect(!fixture.seen[0]);
+}
 
 test "renderer config failure before shaper adoption frees message and preserves active config" {
     const t = std.testing;
