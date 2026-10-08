@@ -2,6 +2,8 @@ import Cocoa
 import GhosttyKit
 import Metal
 import Synchronization
+import ImageIO
+import UniformTypeIdentifiers
 
 extension Ghostty {
     /// Owns one core terminal handle and exposes native terminal operations.
@@ -323,7 +325,7 @@ extension Ghostty {
         @MainActor var renderRevision: UInt64 { ghostty_surface_render_revision(surface) }
 
         /// Explicit readback from an independent Metal texture; no window drawable is retained.
-        @MainActor func copySnapshot(maxDimension: Int = 0) -> CGImage? {
+        nonisolated func copySnapshot(maxDimension: Int = 0) -> CGImage? {
             guard let limit = UInt32(exactly: maxDimension),
                   let value = ghostty_surface_copy_snapshot(surface, limit),
                   let texture = Unmanaged<AnyObject>.fromOpaque(value).takeRetainedValue() as? any MTLTexture,
@@ -340,6 +342,26 @@ extension Ghostty {
                 bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue)
                     .union(.byteOrder32Little), provider: provider, decode: nil,
                 shouldInterpolate: true, intent: .relativeColorimetric)
+        }
+
+        /// GPU waits and PNG conversion run on the serial thumbnail executor.
+        /// Core snapshot state is protected by draw_mutex and this owner retains it.
+        nonisolated func snapshotPNG(maxDimension: Int = 256) -> Data? {
+            autoreleasepool {
+                guard let image = copySnapshot(maxDimension: maxDimension),
+                      let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+                      let context = CGContext(data: nil, width: image.width, height: image.height,
+                        bitsPerComponent: 8, bytesPerRow: image.width * 4, space: colorSpace,
+                        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+                context.setRenderingIntent(.relativeColorimetric)
+                context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+                guard let converted = context.makeImage() else { return nil }
+                let data = NSMutableData()
+                guard let destination = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil) else { return nil }
+                CGImageDestinationAddImage(destination, converted, nil)
+                guard CGImageDestinationFinalize(destination) else { return nil }
+                return data as Data
+            }
         }
 
         @MainActor var selection: TextSnapshot? {

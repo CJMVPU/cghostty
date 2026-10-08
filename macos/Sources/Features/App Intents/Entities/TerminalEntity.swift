@@ -49,13 +49,13 @@ struct TerminalEntity: AppEntity {
     static let defaultQuery = TerminalQuery()
 
     @MainActor
-    init(_ view: Ghostty.SurfaceView, includeThumbnail: Bool = false) {
+    init(_ view: Ghostty.SurfaceView) {
         self.id = view.id
         self.title = view.title
         self.workingDirectory = view.pwd
         self.pid = view.surfaceModel?.foregroundPID
         self.tty = view.surfaceModel?.ttyName
-        self.screenshotData = includeThumbnail ? view.cachedThumbnailPNG() : nil
+        self.screenshotData = nil
 
         // Determine the kind based on the window controller type
         if view.window?.windowController is QuickTerminalController {
@@ -63,6 +63,12 @@ struct TerminalEntity: AppEntity {
         } else {
             self.kind = .normal
         }
+    }
+
+    @MainActor static func withThumbnail(_ view: Ghostty.SurfaceView) async -> TerminalEntity {
+        var entity = TerminalEntity(view)
+        entity.screenshotData = await view.cachedThumbnailPNG()
+        return entity
     }
 
     /// Wait for initial terminal metadata, bounded by a one-second deadline.
@@ -141,22 +147,30 @@ struct TerminalQuery: EntityStringQuery, EnumerableEntityQuery {
     @MainActor
     func entities(matching string: String) async throws -> [TerminalEntity] {
         guard await permission() else { return [] }
-        return all.filter {
-            $0.title.localizedCaseInsensitiveContains(string)
-        }.map {
-            TerminalEntity($0, includeThumbnail: true)
-        }
+        return try await thumbnailEntities(all.filter { $0.title.localizedCaseInsensitiveContains(string) })
     }
 
     @MainActor
     func allEntities() async throws -> [TerminalEntity] {
         guard await permission() else { return [] }
-        return all.map { TerminalEntity($0, includeThumbnail: true) }
+        return try await thumbnailEntities(all)
     }
 
     @MainActor
     func suggestedEntities() async throws -> [TerminalEntity] {
         return try await allEntities()
+    }
+
+    @MainActor private func thumbnailEntities(_ views: [Ghostty.SurfaceView]) async throws -> [TerminalEntity] {
+        var entities: [TerminalEntity] = []
+        for view in views {
+            try Task.checkCancellation()
+            let entity = await TerminalEntity.withThumbnail(view)
+            try Task.checkCancellation()
+            // Closing during readback must not return a retired terminal entity.
+            if application()?.windowRegistry.surface(id: view.id) === view { entities.append(entity) }
+        }
+        return entities
     }
 
     @MainActor

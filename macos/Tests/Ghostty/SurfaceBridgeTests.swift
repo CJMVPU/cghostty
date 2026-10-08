@@ -262,7 +262,8 @@ import Testing
 
     @Test(.enabled(if: try MetalTestSupport.metal4Available(), "Requires a Metal 4 GPU"))
     func completedFramesAdvanceThumbnailRevisionAndMetadataSkipsImages() async throws {
-        let view = makeView()
+        let config = try TemporaryConfig("cursor-effect = false\ncursor-style-blink = false\nshell-integration = none")
+        let view = makeView(configPath: config.temporaryFile.path)
         let surface = try #require(view.surfaceModel)
         let window = try show(view)
         defer { window.close() }
@@ -270,9 +271,11 @@ import Testing
         #expect(surface.sendKeyEvent(.init(keyCode: 0, action: .press, text: "first frame")))
         try await waitForText("first frame", in: surface)
         try await waitForFrame(after: initialRevision, in: view)
+        try await NativeTestWait.until("thumbnail completed frame is stable", timeout: .seconds(2), polling: .milliseconds(5),
+                                      diagnostics: { NativeTestWait.surfaceState(surface, view: view) }, { view.windowCompositor?.worker.isIdle == true })
         let revision = surface.renderRevision
         #expect(TerminalEntity(view).displayRepresentation.image == nil)
-        #expect(TerminalEntity(view, includeThumbnail: true).displayRepresentation.image != nil)
+        #expect((await TerminalEntity.withThumbnail(view)).displayRepresentation.image != nil)
         #expect(surface.sendKeyEvent(.init(keyCode: 0, action: .press, text: "new frame")))
         try await waitForText("new frame", in: surface)
         try await waitForFrame(after: revision, in: view)

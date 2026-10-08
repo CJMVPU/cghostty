@@ -128,3 +128,49 @@ import Testing
         print("Thumbnail benchmark (\(count) reads, 1600x800 → 256x128): fresh=\(baseline), reused=\(reused)")
     }
 }
+
+@MainActor struct ThumbnailRequestTests {
+    private nonisolated final class Gate: @unchecked Sendable {
+        let lock = NSLock()
+        private var entered = false
+        private var renders = 0
+        let release = DispatchSemaphore(value: 0)
+        var hasEntered: Bool { lock.withLock { entered } }
+        var renderCount: Int { lock.withLock { renders } }
+        func render() -> Data? {
+            lock.withLock { entered = true; renders += 1 }
+            guard release.wait(timeout: .now() + 3) == .success else { return nil }
+            return Data([1, 2, 3])
+        }
+    }
+
+    @Test func coalescedReadbackKeepsMainResponsiveAndDiscardsStaleFrames() async throws {
+        let requests = SurfaceThumbnailRequests()
+        let gate = Gate()
+        let key = SurfaceThumbnailCache.Key(revision: 1, size: CGSize(width: 800, height: 600), scale: 2)
+        var current = key
+        let first = Task { await requests.value(for: key, render: { gate.render() }, currentKey: { current }) }
+        defer { gate.release.signal() }
+        try await NativeTestWait.until("background thumbnail renderer entered", timeout: .seconds(2), polling: .milliseconds(5),
+                                      diagnostics: { "renders=\(gate.renderCount)" }, { gate.hasEntered })
+        // This code runs on MainActor while the renderer is blocked off-main.
+        let second = Task { await requests.value(for: key, render: { gate.render() }, currentKey: { current }) }
+        try await NativeTestWait.until("second thumbnail request coalesced", timeout: .seconds(2), polling: .milliseconds(5),
+                                      diagnostics: { "requests=\(requests.activeRequestsForTesting)" }, { requests.activeRequestsForTesting == 2 })
+        current = .init(revision: 2, size: key.size, scale: key.scale)
+        gate.release.signal()
+        #expect(await first.value == nil)
+        #expect(await second.value == nil)
+        #expect(gate.renderCount == 1)
+        let fresh = current
+        #expect(await requests.value(for: fresh, render: { Data([4]) }, currentKey: { current }) == Data([4]))
+        #expect(await requests.value(for: fresh, render: { nil }, currentKey: { current }) == Data([4]))
+    }
+
+    @Test func failedReadbackIsRetriedWithoutCaching() async {
+        let requests = SurfaceThumbnailRequests()
+        let key = SurfaceThumbnailCache.Key(revision: 1, size: CGSize(width: 400, height: 200), scale: 1)
+        #expect(await requests.value(for: key, render: { nil }, currentKey: { key }) == nil)
+        #expect(await requests.value(for: key, render: { Data([2]) }, currentKey: { key }) == Data([2]))
+    }
+}

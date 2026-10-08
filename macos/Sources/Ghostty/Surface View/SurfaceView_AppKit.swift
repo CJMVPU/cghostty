@@ -367,7 +367,7 @@ extension Ghostty {
         // The cached contents of the screen.
         private(set) var cachedScreenContents: CachedValue<AccessibilityText>
         private(set) var cachedVisibleContents: CachedValue<String>
-        var thumbnailCache = SurfaceThumbnailCache()
+        let thumbnailRequests = SurfaceThumbnailRequests()
 
         // We need to support being a first responder so that we can get input events
         override var acceptsFirstResponder: Bool { return true }
