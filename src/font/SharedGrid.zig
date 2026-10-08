@@ -384,7 +384,8 @@ pub fn renderGlyphTraced(
         // If the atlas is full, we resize it
         error.AtlasFull => blk: {
             const start = if (trace) |t| if (t.file != null) @import("../renderer/Trace.zig").clock() else 0 else 0;
-            try atlas.grow(alloc, atlas.size * 2);
+            const next_size = std.math.mul(u32, atlas.size, 2) catch return error.OutOfMemory;
+            try atlas.grow(alloc, next_size);
             if (start != 0) trace.?.emit("atlas_grow", @import("../renderer/Trace.zig").clock() - start, atlas.size, @intFromEnum(p));
             break :blk try self.resolver.renderGlyph(
                 alloc,

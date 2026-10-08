@@ -177,12 +177,20 @@ pub const init_tw = tripwire.module(enum {
     alloc_nodes,
 }, init);
 
+/// Use native-width checked arithmetic for bytes, rather than multiplying
+/// u32 dimensions before widening. Impossible buffers are allocation errors.
+fn dataSize(size: u32, format: Format) Allocator.Error!usize {
+    const pixels = std.math.mul(usize, size, size) catch return error.OutOfMemory;
+    return std.math.mul(usize, pixels, format.depth()) catch return error.OutOfMemory;
+}
+
 pub fn init(alloc: Allocator, size: u32, format: Format) Allocator.Error!Atlas {
     const tw = init_tw;
+    const data_size = try dataSize(size, format);
 
     try tw.check(.alloc_data);
     var result = Atlas{
-        .data = try alloc.alloc(u8, size * size * format.depth()),
+        .data = try alloc.alloc(u8, data_size),
         .size = size,
         .nodes = .empty,
         .format = format,
@@ -396,6 +404,7 @@ pub fn grow(self: *Atlas, alloc: Allocator, size_new: u32) Allocator.Error!void 
 
     assert(size_new >= self.size);
     if (size_new == self.size) return;
+    const data_size = try dataSize(size_new, self.format);
 
     // We reserve space ahead of time for the new node, so that we
     // won't have to handle any errors after allocating our new data.
@@ -403,10 +412,7 @@ pub fn grow(self: *Atlas, alloc: Allocator, size_new: u32) Allocator.Error!void 
     try self.nodes.ensureUnusedCapacity(alloc, 1);
 
     try tw.check(.alloc_data);
-    const data_new = try alloc.alloc(
-        u8,
-        size_new * size_new * self.format.depth(),
-    );
+    const data_new = try alloc.alloc(u8, data_size);
 
     // Function is infallible from this point.
     errdefer comptime unreachable;
@@ -791,4 +797,38 @@ test "grow error" {
         try testing.expectEqual(@as(u8, 3), atlas.data[9]);
         try testing.expectEqual(@as(u8, 4), atlas.data[10]);
     }
+}
+
+test "atlas byte sizing uses native width and rejects impossible growth" {
+    const Probe = struct {
+        requested: usize = 0,
+        fn allocator(self: *@This()) Allocator {
+            return .{ .ptr = self, .vtable = &.{ .alloc = allocate, .resize = Allocator.noResize, .remap = Allocator.noRemap, .free = free } };
+        }
+        fn allocate(ctx: *anyopaque, len: usize, _: std.mem.Alignment, _: usize) ?[*]u8 {
+            const self: *@This() = @ptrCast(@alignCast(ctx));
+            self.requested = len;
+            return null; // Inspect large requests without allocating gigabytes.
+        }
+        fn free(_: *anyopaque, _: []u8, _: std.mem.Alignment, _: usize) void {
+            unreachable; // allocate never succeeds.
+        }
+    };
+    var probe: Probe = .{};
+    try testing.expectError(error.OutOfMemory, init(probe.allocator(), 32768, .bgra));
+    try testing.expectEqual(@as(usize, 4) * 1024 * 1024 * 1024, probe.requested);
+    probe.requested = 0;
+    try testing.expectError(error.OutOfMemory, init(probe.allocator(), std.math.maxInt(u32), .bgra));
+    try testing.expectEqual(@as(usize, 0), probe.requested);
+    var atlas = try init(testing.allocator, 4, .bgra);
+    defer atlas.deinit(testing.allocator);
+    const data = atlas.data.ptr;
+    const version = atlas.modified.load(.monotonic);
+    const nodes = atlas.nodes.items.len;
+    try testing.expectError(error.OutOfMemory, atlas.grow(probe.allocator(), std.math.maxInt(u32)));
+    try testing.expectEqual(@as(usize, 0), probe.requested);
+    try testing.expectEqual(@as(u32, 4), atlas.size);
+    try testing.expectEqual(data, atlas.data.ptr);
+    try testing.expectEqual(version, atlas.modified.load(.monotonic));
+    try testing.expectEqual(nodes, atlas.nodes.items.len);
 }
