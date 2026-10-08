@@ -29,6 +29,8 @@ const log = std.log.scoped(.search_thread);
 /// One-shot deadline for batching output bursts. An unchanged terminal has
 /// no armed timer. Queries and navigation still run immediately.
 const REFRESH_INTERVAL = 24;
+/// A queued navigation burst must yield to stop/refresh and search progress.
+const mailbox_message_budget = 32;
 
 /// Allocator used for some state
 alloc: std.mem.Allocator,
@@ -234,7 +236,12 @@ fn feedLocked(self: *Thread, s: *TerminalSearch) void {
 fn drainMailbox(self: *Thread) !void {
     var pending: ?Message.WriteReq = null;
     defer if (pending) |v| v.deinit();
-    const budget = self.mailbox.pendingCount(global.io());
+    // Mach wakeups coalesce. Rearming the handler does not notify it again;
+    // publish another wake for leftovers, including after a failed request.
+    defer if (self.mailbox.pendingCount(global.io()) > 0) {
+        self.wakeup.notify() catch |err| log.warn("error rescheduling search mailbox err={}", .{err});
+    };
+    const budget = @min(mailbox_message_budget, self.mailbox.pendingCount(global.io()));
     for (0..budget) |_| {
         const message = self.mailbox.pop(global.io()) orelse break;
         switch (message) {
@@ -670,6 +677,58 @@ test "search mailbox coalesces queries but navigation remains an ordering barrie
     }
     try thread.drainMailbox();
     try testing.expect(thread.search == null);
+}
+
+test "search mailbox yields between navigation batches and keeps the remainder ordered" {
+    const alloc = testing.allocator;
+    var mutex: std.Io.Mutex = .init;
+    var term = try Terminal.init(testing.io, alloc, .{ .cols = 30, .rows = 3 });
+    defer term.deinit(alloc);
+    try term.printString("alpha beta alpha beta");
+    var thread = try Thread.init(alloc, .{ .mutex = &mutex, .terminal = &term });
+    defer thread.deinit();
+    for (0..40) |i| {
+        try thread.mailbox.push(testing.io, .{ .change_needle = .{ .stable = if (i % 2 == 0) "alpha" else "beta" } });
+        try thread.mailbox.push(testing.io, .{ .select = .next });
+    }
+    try thread.drainMailbox();
+    try testing.expectEqual(@as(usize, 48), thread.mailbox.pendingCount(testing.io));
+    try testing.expectEqual(@as(usize, 16), thread.query_restarts);
+    try testing.expectEqualStrings("beta", thread.search.?.needle());
+    try thread.drainMailbox();
+    try testing.expectEqual(@as(usize, 16), thread.mailbox.pendingCount(testing.io));
+    try thread.drainMailbox();
+    try testing.expectEqual(@as(usize, 0), thread.mailbox.pendingCount(testing.io));
+    try testing.expectEqual(@as(usize, 40), thread.query_restarts);
+    try testing.expectEqualStrings("beta", thread.search.?.needle());
+}
+
+test "search mailbox reschedules remaining work after a query allocation failure" {
+    const alloc = testing.allocator;
+    var mutex: std.Io.Mutex = .init;
+    var term = try Terminal.init(testing.io, alloc, .{ .cols = 30, .rows = 3 });
+    defer term.deinit(alloc);
+    try term.printString("alpha beta");
+    var failing = testing.FailingAllocator.init(alloc, .{});
+    var thread = try Thread.init(failing.allocator(), .{ .mutex = &mutex, .terminal = &term });
+    defer thread.deinit();
+    for ([_]Message{
+        .{ .change_needle = .{ .stable = "alpha" } },
+        .{ .select = .next },
+        .{ .change_needle = .{ .stable = "beta" } },
+    }) |message| try thread.mailbox.push(testing.io, message);
+    thread.wakeup.wait(&thread.loop, &thread.wakeup_c, Thread, &thread, wakeupCallback);
+    failing.fail_index = failing.alloc_index;
+    try testing.expectError(error.OutOfMemory, thread.drainMailbox());
+    try testing.expectEqual(@as(usize, 1), thread.mailbox.pendingCount(testing.io));
+    failing.fail_index = std.math.maxInt(usize);
+    // No producer notification here: the failed drain owns rescheduling.
+    for (0..4) |_| {
+        try thread.loop.run(.no_wait);
+        if (thread.mailbox.pendingCount(testing.io) == 0) break;
+    }
+    try testing.expectEqual(@as(usize, 0), thread.mailbox.pendingCount(testing.io));
+    try testing.expectEqualStrings("beta", thread.search.?.needle());
 }
 
 test "search change refresh is one shot and observes output without renderer dirty bits" {
