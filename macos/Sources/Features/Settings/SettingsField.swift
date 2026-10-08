@@ -1,9 +1,9 @@
 import Foundation
 
-struct SettingsField: Decodable {
+nonisolated struct SettingsField: Decodable, Sendable {
     /// Bounds come from the core catalog. Compound syntax still receives final
     /// validation by the core parser; this provides immediate editor feedback.
-    struct NumericConstraint: Decodable {
+    struct NumericConstraint: Decodable, Sendable {
         let minimum: Double?
         let maximum: Double?
         let exclusiveMinimum: Bool

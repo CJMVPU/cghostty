@@ -56,6 +56,10 @@ import Darwin
     private var disk: Disk { Disk(directory: directory) }
     private(set) var startupValues: [String: String] = [:]
 
+    #if CGHOSTTY_TESTING
+    var beforeEvaluationForTesting: (@Sendable () -> Void)?
+    #endif
+
     init(legacySource: URL, directory: URL? = nil) {
         self.legacySource = legacySource
         self.directory = directory ?? legacySource.deletingLastPathComponent().appendingPathComponent("Settings", isDirectory: true)
@@ -132,6 +136,28 @@ import Darwin
 
     func validate(_ input: Input) -> [String] { diagnostics(input).map(\.rawMessage) }
 
+    private var evaluator: SettingsEvaluator {
+        SettingsEvaluator(source: validationSource, fields: SettingsField.catalog, catalogError: SettingsField.catalogError)
+    }
+
+    func evaluateAsync(_ input: Input) async throws -> SettingsEvaluator.Projection {
+        let evaluator = evaluator
+        #if CGHOSTTY_TESTING
+        let beforeEvaluation = beforeEvaluationForTesting
+        #endif
+        let task = Task.detached(priority: .userInitiated) {
+            #if CGHOSTTY_TESTING
+            beforeEvaluation?()
+            #endif
+            return try evaluator.evaluate(input)
+        }
+        return try await withTaskCancellationHandler {
+            let result = try await task.value
+            try Task.checkCancellation()
+            return result
+        } onCancel: { task.cancel() }
+    }
+
     struct Evaluation {
         let config: Ghostty.ConfigHandle?
         let darkConfig: Ghostty.ConfigHandle?
@@ -159,16 +185,7 @@ import Darwin
     func diagnostics(_ input: Input) -> [SettingsDiagnostic] { evaluate(input).diagnostics }
 
     func fieldDiagnostics(_ input: Input) -> [SettingsDiagnostic] {
-        var errors: [SettingsDiagnostic] = SettingsField.catalogError.map { [$0] } ?? []
-        errors += input.values.keys.sorted().filter { SettingsField.byKey[$0] == nil }.map {
-            SettingsDiagnostic(kind: .field, message: "Unknown setting: \($0)")
-        }
-        for field in SettingsField.catalog {
-            if let value = input.values[field.key], let error = field.validate(value) {
-                errors.append(SettingsDiagnostic(key: field.key, kind: .field, message: error))
-            }
-        }
-        return errors
+        evaluator.fieldDiagnostics(input)
     }
 
     func evaluate(_ input: Input) -> Evaluation {
@@ -193,9 +210,10 @@ import Darwin
         try saveEvaluated(input, revision: revision).record
     }
 
-    struct Saved {
+    nonisolated struct Saved: Sendable {
         let record: Record
-        let evaluation: Evaluation
+        let evaluation: SettingsEvaluator.Projection
+        let replacingRevision: UUID
     }
 
     func saveEvaluated(_ input: Input, revision: UUID) throws -> Saved {
@@ -209,7 +227,9 @@ import Darwin
         guard evaluation.diagnostics.isEmpty else { throw Failure.invalid(evaluation.diagnostics) }
         guard old.revision == revision else { throw Failure.changed }
         let previous = validate(old.current).isEmpty ? old.current : old.previous
-        return Saved(record: Record(current: input, previous: previous), evaluation: evaluation)
+        return Saved(record: Record(current: input, previous: previous),
+                     evaluation: .init(values: evaluation.values, darkValues: evaluation.darkValues, diagnostics: evaluation.diagnostics),
+                     replacingRevision: revision)
     }
 
     @discardableResult
@@ -224,16 +244,38 @@ import Darwin
     }
 
     func saveEvaluatedAsync(_ input: Input, revision: UUID) async throws -> Saved {
-        let old = try await readAsync()
-        try Task.checkCancellation()
-        let saved = try prepareSave(input, replacing: old, revision: revision)
+        let saved = try await prepareSaveAsync(input, revision: revision)
+        try await commitPreparedAsync(saved)
+        return saved
+    }
+
+    func prepareSaveAsync(_ input: Input, revision: UUID) async throws -> Saved {
+        let evaluator = evaluator
+        let disk = disk
+        #if CGHOSTTY_TESTING
+        let beforeEvaluation = beforeEvaluationForTesting
+        #endif
+        let task = Task.detached(priority: .userInitiated) {
+            #if CGHOSTTY_TESTING
+            beforeEvaluation?()
+            #endif
+            return try evaluator.prepareSave(input, replacing: disk.read(), revision: revision)
+        }
+        return try await withTaskCancellationHandler {
+            let result = try await task.value
+            try Task.checkCancellation()
+            return result
+        } onCancel: { task.cancel() }
+    }
+
+    func commitPreparedAsync(_ saved: Saved) async throws {
         let disk = disk
         let record = saved.record
+        let revision = saved.replacingRevision
         let task = Task.detached(priority: .userInitiated) {
             try await disk.withLockAsync { try disk.commit(record, replacing: revision) }
         }
         try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
-        return saved
     }
 
     private func migrate() throws -> Record {
@@ -282,7 +324,7 @@ import Darwin
         return record
     }
 
-    /// Only immutable records cross executors; core handles stay on MainActor.
+    /// Disk and parser workers exchange immutable records/projections only.
     nonisolated struct Disk: Sendable {
         let directory: URL
         var url: URL { directory.appendingPathComponent("settings.json") }

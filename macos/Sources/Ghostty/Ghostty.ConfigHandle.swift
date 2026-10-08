@@ -92,14 +92,8 @@ extension Ghostty {
             #if CGHOSTTY_TESTING
             settingsLoadCallsForTesting += 1
             #endif
-            guard let data = try? JSONEncoder().encode(settings), let cfg = ghostty_config_new() else { return nil }
-            ghostty_config_set_initial_theme(cfg, dark)
-            let loaded = data.withUnsafeBytes { bytes in
-                source.path.withCString { path in
-                    ghostty_settings_load(cfg, bytes.bindMemory(to: UInt8.self).baseAddress!, bytes.count, path)
-                }
-            }
-            guard loaded else { ghostty_config_free(cfg); return nil }
+            guard let data = try? JSONEncoder().encode(settings),
+                  let cfg = SettingsEvaluator.makeConfig(data: data, source: source, dark: dark) else { return nil }
             if cli && hasCLIOverrides {
                 ghostty_config_load_cli_args(cfg)
                 ghostty_config_load_recursive_files(cfg)
@@ -169,7 +163,7 @@ extension Ghostty {
     }
 }
 
-private extension SettingsDiagnostic {
+nonisolated extension SettingsDiagnostic {
     init(core: ghostty_diagnostic_s) {
         let field = String(cString: core.key)
         key = field.isEmpty ? nil : field
