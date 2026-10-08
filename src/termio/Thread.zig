@@ -12,7 +12,6 @@
 pub const Thread = @This();
 
 const std = @import("std");
-const SurfaceFault = @import("../SurfaceFault.zig");
 const global = @import("../global.zig");
 const xev = global.xev;
 const internal_os = @import("../os/main.zig");
@@ -134,11 +133,7 @@ pub fn threadMain(self: *Thread, io: *termio.Termio) void {
     self.threadMain_(io) catch |err| {
         log.warn("error in io thread err={}", .{err});
 
-        // Presentation belongs to Surface/native UI. This payload owns no
-        // resources and is safe to discard if the surface closes before delivery.
-        _ = io.surface_mailbox.push(.{
-            .surface_fault = SurfaceFault.init(err),
-        }, .{ .forever = {} });
+        io.reportFault(err);
     };
 
     // threadMain_ owns stack-backed backend completions. After it returns,

@@ -156,6 +156,7 @@ pub fn tick(self: *App, rt_app: *apprt.App) !void {
     errdefer rt_app.wakeup();
     try self.drainMailbox(rt_app);
     for (self.surfaces.items) |surface| {
+        surface.core().flushIOFault();
         surface.core().flushRendererHealth();
         surface.core().flushSearchResults();
     }

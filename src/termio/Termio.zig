@@ -54,6 +54,9 @@ renderer_mailbox: *renderer.Thread.Mailbox,
 /// The mailbox for communicating with the surface.
 surface_mailbox: apprt.surface.Mailbox,
 
+/// Reader and writer failures never wait for the native mailbox to drain.
+fault: @import("FaultSignal.zig") = .{},
+
 /// The cached size info
 size: renderer.Size,
 
@@ -687,6 +690,11 @@ pub fn focusGained(self: *Termio, td: *ThreadData, focused: bool) !void {
 
     // We always notify our backend of focus changes.
     try self.backend.focusGained(td, focused);
+}
+
+/// Publish a sticky failure without holding terminal or mailbox locks.
+pub fn reportFault(self: *Termio, err: anyerror) void {
+    if (self.fault.publish(err)) self.surface_mailbox.app.rt_app.wakeup();
 }
 
 /// Process output from the pty. This is the manual API that users can

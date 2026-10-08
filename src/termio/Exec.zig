@@ -1174,12 +1174,22 @@ pub const ReadThread = struct {
         /// signal, EOF, or pty error). The parse stage drains any
         /// remaining batches and then exits.
         done: bool = false,
+        /// Gather writes this before publishing done under the mutex.
+        failure: ?anyerror = null,
 
         /// The buffer storage itself.
         bufs: [buffer_count][buffer_capacity]u8 = undefined,
     };
 
+    fn spawnGather(fd: posix.fd_t, quit: posix.fd_t, pipeline: *Pipeline) std.Thread.SpawnError!std.Thread {
+        return std.Thread.spawn(.{}, gatherMainPosix, .{ fd, quit, pipeline });
+    }
+
     fn threadMainPosix(fd: posix.fd_t, io: *termio.Termio, quit: posix.fd_t) void {
+        threadMainPosixWith(fd, io, quit, spawnGather);
+    }
+
+    fn threadMainPosixWith(fd: posix.fd_t, io: *termio.Termio, quit: posix.fd_t, comptime spawn: anytype) void {
         // Always close our end of the pipe when we exit.
         defer _ = posix.system.close(quit);
 
@@ -1195,7 +1205,8 @@ pub const ReadThread = struct {
         // would hang the gather stage on a quiet pty), but this also
         // can't realistically fail on a valid pty master.
         if (!setNonblock(fd)) {
-            log.err("read thread exiting, pty fd must be non-blocking", .{});
+            log.warn("read thread exiting, pty fd must be non-blocking", .{});
+            io.reportFault(error.PtyNonblockingFailed);
             return;
         }
 
@@ -1220,15 +1231,12 @@ pub const ReadThread = struct {
             compat_fd.close(pipeline.idle_write_fd);
         };
 
-        const gather_thread = std.Thread.spawn(
-            .{},
-            gatherMainPosix,
-            .{ fd, quit, &pipeline },
-        ) catch |err| {
+        const gather_thread = spawn(fd, quit, &pipeline) catch |err| {
             // If we can't spawn a thread the process is already
             // doomed (every surface spawns several), so don't try
             // to limp along.
-            log.err("read thread exiting, failed to spawn gather thread err={}", .{err});
+            log.warn("read thread exiting, failed to spawn gather thread err={}", .{err});
+            io.reportFault(err);
             return;
         };
         defer gather_thread.join();
@@ -1241,7 +1249,10 @@ pub const ReadThread = struct {
                 pipeline.mutex.lockUncancelable(global.io());
                 defer pipeline.mutex.unlock(global.io());
                 while (pipeline.count == 0) {
-                    if (pipeline.done) return;
+                    if (pipeline.done) {
+                        if (pipeline.failure) |err| io.reportFault(err);
+                        return;
+                    }
                     pipeline.batch_ready.waitUncancelable(global.io(), &pipeline.mutex);
                 }
                 const slot = pipeline.tail;
@@ -1380,6 +1391,8 @@ pub const ReadThread = struct {
                         ) catch |poll_err| {
                             clearBridging(pipeline);
                             log.warn("bridge poll failed err={}", .{poll_err});
+                            pipeline.failure = poll_err;
+                            fatal = true;
                             break :gather;
                         };
                         clearBridging(pipeline);
@@ -1433,8 +1446,10 @@ pub const ReadThread = struct {
                     },
 
                     else => {
-                        log.err("io gather error err={}", .{err});
-                        unreachable;
+                        log.warn("io gather error err={}", .{err});
+                        pipeline.failure = err;
+                        fatal = true;
+                        break :gather;
                     },
                 };
 
@@ -1470,6 +1485,7 @@ pub const ReadThread = struct {
             // stage only writes to it while we're bridging.
             _ = posix.poll(pollfds[0..2], -1) catch |err| {
                 log.warn("poll failed on read thread, exiting early err={}", .{err});
+                pipeline.failure = err;
                 return;
             };
 
@@ -1955,4 +1971,62 @@ test "exec initialization owns environment on every allocation failure" {
         try t.expect(failing.has_induced_failure);
         try t.expectEqual(failing.allocated_bytes, failing.freed_bytes);
     }
+}
+
+test "IO reader startup faults remain deliverable with a full app mailbox" {
+    const t = std.testing;
+    const queue = try @import("../App.zig").Mailbox.Queue.create(t.allocator);
+    defer queue.destroy(t.allocator);
+    for (0..64) |_| _ = queue.push(t.io, .quit, .forever);
+    var app: apprt.App = .{};
+    var io: termio.Termio = undefined;
+    io.fault = .{};
+    io.surface_mailbox = .{ .surface = undefined, .app = .{ .rt_app = &app, .mailbox = queue } };
+    const Worker = struct {
+        io: *termio.Termio,
+        fd: posix.fd_t,
+        quit: posix.fd_t,
+        done: std.Io.Event = .unset,
+        fn failSpawn(_: posix.fd_t, _: posix.fd_t, _: *ReadThread.Pipeline) std.Thread.SpawnError!std.Thread {
+            return error.ThreadQuotaExceeded;
+        }
+        fn run(self: *@This()) void {
+            ReadThread.threadMainPosixWith(self.fd, self.io, self.quit, failSpawn);
+            self.done.set(std.testing.io);
+        }
+    };
+    for ([_]bool{ false, true }) |valid_fd| {
+        io.fault = .{};
+        const data = try internal_os.pipe();
+        defer compat_fd.close(data[0]);
+        defer compat_fd.close(data[1]);
+        const quit = try internal_os.pipe();
+        defer compat_fd.close(quit[1]); // Reader owns quit[0].
+        var worker: Worker = .{ .io = &io, .fd = if (valid_fd) data[0] else -1, .quit = quit[0] };
+        const thread = try std.Thread.spawn(.{}, Worker.run, .{&worker});
+        var finished = false;
+        defer {
+            // A regression must report Timeout rather than hang in join.
+            if (!finished) queue.close(t.io);
+            thread.join();
+        }
+        try worker.done.waitTimeout(t.io, .{ .duration = .{ .raw = .fromMilliseconds(1000), .clock = .awake } });
+        finished = true;
+        try t.expectEqual(if (valid_fd) error.ThreadQuotaExceeded else error.PtyNonblockingFailed, io.fault.take().?);
+        try t.expect(io.fault.take() == null);
+    }
+    for (0..64) |_| try t.expect(queue.pop(t.io).? == .quit);
+}
+
+test "IO reader normal EOF does not publish a fault" {
+    const t = std.testing;
+    var io: termio.Termio = undefined;
+    io.fault = .{};
+    const data = try internal_os.pipe();
+    defer compat_fd.close(data[0]);
+    compat_fd.close(data[1]);
+    const quit = try internal_os.pipe();
+    defer compat_fd.close(quit[1]);
+    ReadThread.threadMainPosix(data[0], &io, quit[0]);
+    try t.expect(io.fault.take() == null);
 }

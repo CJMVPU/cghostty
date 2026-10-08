@@ -1036,6 +1036,7 @@ fn showSurfaceFault(self: *Surface, fault: @import("SurfaceFault.zig")) void {
 fn childExited(self: *Surface, info: apprt.surface.Message.ChildExited) void {
     // Mark our flag that we exited immediately
     self.child_exited = true;
+    self.flushIOFault();
     if (self.surface_fault != null) return;
 
     // If our runtime was below some threshold then we assume that this
@@ -1394,6 +1395,12 @@ fn stopSearch(self: *Surface) !void {
 fn wakeSearchApp(userdata: ?*anyopaque) void {
     const app: *apprt.App = @ptrCast(@alignCast(userdata.?));
     app.wakeup();
+}
+
+/// Worker errors remain deliverable when the app mailbox is full.
+pub fn flushIOFault(self: *Surface) void {
+    const err = self.io.termio.fault.take() orelse return;
+    self.showSurfaceFault(@import("SurfaceFault.zig").init(err));
 }
 
 /// App-thread delivery of coalesced GPU feedback, independent of queue capacity.
