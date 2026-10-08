@@ -1,0 +1,47 @@
+{
+  "date": "2026-10-08",
+  "baseline": "1f6ae3860",
+  "sourceCommit": "25a767647",
+  "version": "0.5.7",
+  "buildNumber": 47,
+  "changes": [
+    {"commit": "063e3f4d9", "module": "renderer", "messageBudget": 32, "entrySnapshot": true},
+    {"commit": "25a767647", "module": "App", "messageBudget": 32, "entrySnapshot": true}
+  ],
+  "core": {
+    "rendererRelatedDebug": {"passed": 224, "failed": 0},
+    "schedulerContractsDebug": {"passed": 89, "failed": 0},
+    "schedulerContractsReleaseFast": {"passed": 89, "failed": 0, "testOptimize": "ReleaseFast"}
+  },
+  "negative": {
+    "renderer": {
+      "failures": 3,
+      "initialBatch": {"expected": 32, "actual": 64},
+      "refilledBatch": {"expected": 1, "actual": 65},
+      "pendingAfterFailureContinuation": {"expected": 0, "actual": 1}
+    },
+    "App": {
+      "failures": 2,
+      "initialBatch": {"expected": 32, "actual": 64},
+      "refilledBatch": {"expected": 1, "actual": 65}
+    }
+  },
+  "native": {
+    "first": {"total": 514, "passed": 511, "failed": 1, "skipped": 2, "issues": 109},
+    "isolatedAccessibility": {"passed": 1, "failed": 0},
+    "lockedRetry": {"total": 514, "passed": 504, "failed": 8, "skipped": 2},
+    "finalUnlocked": {"total": 514, "passed": 512, "failed": 0, "skipped": 2, "suites": 80},
+    "assertionsChangedBetweenRuns": false,
+    "accessibilityFailureRootCauseConfirmed": false,
+    "independentUITestsRun": false
+  },
+  "checks": {
+    "zigFormat": "passed",
+    "swiftLintStrict": "passed",
+    "swiftFiles": 286,
+    "scope": "passed",
+    "typedBridge": "passed",
+    "versionConsistency": "passed"
+  },
+  "delivery": {"pushed": false, "tagged": false, "packaged": false}
+}

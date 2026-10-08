@@ -1,5 +1,8 @@
 # 验证记录
 
+最新 App/renderer 批次预算、消费者重新唤醒及整套原生验证见
+[2026-10-08 App 与 renderer 消息调度](docs/validation/2026-10-08-mailbox-scheduling.md)。
+
 最新全项目主链路检查、搜索调度和配置交接重构见
 [2026-10-08 项目主链路与重构顺序](docs/architecture/2026-10-08-project-review.md)。
 
