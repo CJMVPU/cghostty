@@ -579,7 +579,11 @@ test "PTY source read and request allocation errors publish a sticky fault" {
     for ([_]bool{ false, true }) |allocation_error| {
         var counter = t.FailingAllocator.init(t.allocator, .{});
         const alloc = counter.allocator();
-        const file = try tmp.dir.openFile(t.io, "source", .{});
+        // A write-only descriptor causes read EBADF without violating
+        // ownership: teardown must still close a valid descriptor exactly once.
+        const file = try tmp.dir.openFile(t.io, "source", .{
+            .mode = if (allocation_error) .read_only else .write_only,
+        });
         var transferred = false;
         defer if (!transferred) file.close(t.io);
         var source: SourceFixture = .{};
@@ -591,9 +595,6 @@ test "PTY source read and request allocation errors publish a sticky fault" {
         if (allocation_error) {
             // Reading succeeds; allocating the borrowed PTY request fails.
             counter.fail_index = counter.alloc_index;
-        } else {
-            file.close(t.io);
-            @constCast(input.inputs)[0].file.handle = -1;
         }
         try source.start();
         try t.expectEqual(error.InputFailed, source.io.fault.take().?);
