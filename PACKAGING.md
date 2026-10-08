@@ -20,7 +20,7 @@ bash macos/package.sh
 
 脚本签署应用、校验签名、提交公证、等待结果、装订票据并重新打包。证书、Team ID 和公证凭据不写入源码。
 
-`.github/workflows/macos.yml` 在 PR 和手动运行时执行测试与打包；推送 `v*` 标签时以标签版本构建，并在**当前仓库**创建草稿 Release。CI 默认没有 Developer ID / 公证凭据，草稿读取当前提交的 `RELEASE_NOTES.md`，并追加 ad-hoc 签名说明；发布前校验标签、源码版本和更新说明标题一致。核验后由仓库所有者发布草稿；工作流不会自动公开 Release。
+`.github/workflows/macos.yml` 仅在推送 `v*` 版本标签时自动运行；普通分支推送和 PR 不自动触发。保留手动运行入口，执行测试与打包。推送版本标签时以标签版本构建，并在**当前仓库**创建草稿 Release。CI 默认没有 Developer ID / 公证凭据，草稿读取当前提交的 `RELEASE_NOTES.md`，并追加 ad-hoc 签名说明；发布前校验标签、源码版本和更新说明标题一致。核验后由仓库所有者发布草稿；工作流不会自动公开 Release。
 
 应用内“检查更新”打开本仓库 Releases 页面。已删除上游 Sparkle feed、公钥、自动下载更新逻辑及 Sentry 崩溃上传。不会向 Ghostty 上游发布仓库推送产物。
 
