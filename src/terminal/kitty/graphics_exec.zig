@@ -172,7 +172,7 @@ fn query(
     };
     defer loading.deinit(alloc);
 
-    var img = loading.complete(alloc) catch |err| {
+    var img = storage.completeImage(alloc, &loading) catch |err| {
         encodeError(&result, err);
         return result;
     };
@@ -582,7 +582,7 @@ fn completeAnimationFrame(
 
     // Finish decoding the frame data: decompression, PNG decoding,
     // and length validation all match image loading.
-    var frame_img = loading.complete(alloc) catch |err| {
+    var frame_img = storage.completeImage(alloc, loading) catch |err| {
         encodeError(&result, err);
         return result;
     };
@@ -1104,7 +1104,7 @@ fn loadAndAddImage(
     // loading.debugDump() catch unreachable;
 
     // Validate and store our image
-    var img = try loading.complete(alloc);
+    var img = try storage.completeImage(alloc, &loading);
     errdefer img.deinit(alloc);
     try storage.addImage(io, alloc, terminal.screens.active, img);
 

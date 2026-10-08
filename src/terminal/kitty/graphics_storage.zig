@@ -132,6 +132,45 @@ pub const ImageStorage = struct {
     /// space. Unused images take priority.
     total_bytes: usize = 0,
     total_limit: usize = 320 * 1000 * 1000, // 320MB
+    /// Maximum completion-phase footprint across successful and failed loads
+    /// in this storage lifetime. This is not a budget or cumulative allocation.
+    completion_peak_bytes: usize = 0,
+
+    pub const Resources = struct {
+        reserved_bytes: usize = 0,
+        pixel_bytes: usize = 0,
+        pending_reserved_bytes: usize = 0,
+        loading_bytes: usize = 0,
+        loading_capacity: usize = 0,
+        completion_peak_bytes: usize = 0,
+    };
+
+    /// Caller holds the terminal mutex. Reservations include pending payloads;
+    /// actual pixels include roots and animation frames, not map/placement data.
+    pub fn resources(self: *const ImageStorage) Resources {
+        var result: Resources = .{
+            .reserved_bytes = self.total_bytes,
+            .completion_peak_bytes = self.completion_peak_bytes,
+        };
+        var it = self.images.valueIterator();
+        while (it.next()) |img| {
+            switch (img.data) {
+                .complete => |data| result.pixel_bytes += data.len,
+                .pending => |bytes| result.pending_reserved_bytes += bytes,
+            }
+            if (img.animation) |anim| result.pixel_bytes += anim.frameBytes();
+        }
+        if (self.loading) |loading| {
+            result.loading_bytes = loading.data.items.len;
+            result.loading_capacity = loading.data.capacity;
+        }
+        return result;
+    }
+
+    pub fn completeImage(self: *ImageStorage, alloc: Allocator, loading: *LoadingImage) !Image {
+        defer self.completion_peak_bytes = @max(self.completion_peak_bytes, loading.completion_peak_bytes);
+        return loading.complete(alloc);
+    }
 
     /// Identifies one exact pending image transmission. The generation is
     /// assigned by this storage when the pending image is inserted, so a
@@ -3790,6 +3829,41 @@ test "storage: rgba conversion budget includes existing frames" {
     try testing.expectEqualSlices(u8, &.{ 0, 0, 255, 255 }, img.frameData(2).?);
     try testing.expectEqual(generation, s.generation);
     try testing.expect(!s.dirty);
+}
+
+test "storage: resource snapshot separates pending reservations and complete pixels" {
+    const t = std.testing;
+    const alloc = t.allocator;
+    var term = try terminal.Terminal.init(t.io, alloc, .{ .cols = 4, .rows = 4 });
+    defer term.deinit(alloc);
+    const storage = &term.screens.active.kitty_images;
+    const token = try storage.addPendingImage(t.io, alloc, term.screens.active, .{
+        .id = 1,
+        .width = 1,
+        .height = 1,
+        .format = .rgba,
+        .data = .{ .pending = 4 },
+    });
+    try t.expectEqual(@as(usize, 4), storage.resources().reserved_bytes);
+    try t.expectEqual(@as(usize, 0), storage.resources().pixel_bytes);
+    try t.expectEqual(@as(usize, 4), storage.resources().pending_reserved_bytes);
+    const pixels = try alloc.dupe(u8, "rgba");
+    try t.expect(token.complete(storage, t.io, pixels));
+    try t.expectEqual(@as(usize, 4), storage.resources().reserved_bytes);
+    try t.expectEqual(@as(usize, 4), storage.resources().pixel_bytes);
+    try t.expectEqual(@as(usize, 0), storage.resources().pending_reserved_bytes);
+
+    var loading: LoadingImage = .{
+        .image = .{ .width = 1, .height = 1, .format = .rgba },
+        .quiet = .no,
+        .temporary_directory = null,
+    };
+    defer loading.deinit(alloc);
+    try loading.data.appendSlice(alloc, "invalid-length");
+    const capacity = loading.data.capacity;
+    try t.expectError(error.InvalidData, storage.completeImage(alloc, &loading));
+    try t.expectEqual(capacity, storage.resources().completion_peak_bytes);
+    try t.expectEqual(@as(usize, 4), storage.resources().pixel_bytes);
 }
 
 test "storage: pending image completes once and preserves age" {

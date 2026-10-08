@@ -370,6 +370,32 @@ extension Ghostty {
                 gpuScrollTextureCount: value.gpu_scroll_texture_count)
         }
 
+        /// Terminal image storage across primary and alternate screens. Capture
+        /// bytes count references and may share pixels; do not add them to RSS.
+        nonisolated struct ImageResources: Sendable, Codable {
+            let screenCount: UInt64
+            let storageReservedBytes: UInt64
+            let storagePixelBytes: UInt64
+            let pendingReservedBytes: UInt64
+            let loadingBytes: UInt64
+            let loadingCapacity: UInt64
+            let completionPeakBytes: UInt64
+            let capturePendingReferenceBytes: UInt64
+            let captureCacheReferenceBytes: UInt64
+        }
+
+        /// Retain this surface and call off the main thread; the terminal mutex
+        /// serializes this allocation-free scan with PTY parsing and capture.
+        nonisolated func imageResources() -> ImageResources {
+            let value = ghostty_surface_image_resources(surface)
+            return ImageResources(screenCount: value.screen_count,
+                storageReservedBytes: value.storage_reserved_bytes, storagePixelBytes: value.storage_pixel_bytes,
+                pendingReservedBytes: value.pending_reserved_bytes, loadingBytes: value.loading_bytes,
+                loadingCapacity: value.loading_capacity, completionPeakBytes: value.completion_peak_bytes,
+                capturePendingReferenceBytes: value.capture_pending_reference_bytes,
+                captureCacheReferenceBytes: value.capture_cache_reference_bytes)
+        }
+
         /// Explicit readback from an independent Metal texture; no window drawable is retained.
         nonisolated func copySnapshot(maxDimension: Int = 0) -> CGImage? {
             guard let limit = UInt32(exactly: maxDimension),

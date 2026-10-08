@@ -1265,6 +1265,16 @@ typedef struct {
   uint64_t gpu_scroll_allocated_bytes, gpu_scroll_texture_count;
 } ghostty_renderer_resources_s;
 GHOSTTY_API ghostty_renderer_resources_s ghostty_surface_renderer_resources(ghostty_surface_t);
+// Aggregate all initialized terminal screens under the terminal mutex. Pixel
+// bytes exclude reservations; completion peak is a maximum, not a sum. Capture
+// reference bytes can share allocations with each other and the renderer.
+typedef struct {
+  uint64_t screen_count;
+  uint64_t storage_reserved_bytes, storage_pixel_bytes, pending_reserved_bytes;
+  uint64_t loading_bytes, loading_capacity, completion_peak_bytes;
+  uint64_t capture_pending_reference_bytes, capture_cache_reference_bytes;
+} ghostty_image_resources_s;
+GHOSTTY_API ghostty_image_resources_s ghostty_surface_image_resources(ghostty_surface_t);
 // Main-thread snapshot; returns an owned id<MTLTexture> in shared storage.
 // Returns NULL when unavailable. The caller releases the Objective-C object.
 GHOSTTY_API void* ghostty_surface_copy_snapshot(ghostty_surface_t, uint32_t max_dimension);

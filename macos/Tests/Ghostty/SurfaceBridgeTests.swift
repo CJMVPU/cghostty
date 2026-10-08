@@ -88,6 +88,56 @@ import Testing
         await Task.detached(priority: .utility) { surface.rendererResources() }.value
     }
 
+    @Test func imageResourcesTrackChunkCapacityDecodePeakAndBothScreens() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let view = makeView(command: #"/bin/sh -c 'stty -echo; printf resource-ready; while IFS= read -r path; do /bin/cat "$path"; done'"#)
+        let surface = try #require(view.surfaceModel)
+        surface.setVisible(false)
+        try await waitForText("resource-ready", in: surface)
+        // sendText deliberately sanitizes pasted ESC bytes. The child reads
+        // owned files to produce protocol output; input is only a path trigger.
+        func emit(_ output: String, marker: String) async throws {
+            let file = directory.appendingPathComponent(UUID().uuidString)
+            try output.write(to: file, atomically: true, encoding: .utf8)
+            surface.sendText(file.path + "\n")
+            try await waitForText(marker, in: surface)
+        }
+        let pixels = Data(repeating: 255, count: 16 * 16 * 4)
+        let first = pixels.prefix(512).base64EncodedString()
+        let last = pixels.suffix(512).base64EncodedString()
+        try await emit("\u{1b}_Ga=t,f=32,s=16,v=16,i=1,m=1,q=2;\(first)\u{1b}\\chunk-ready", marker: "chunk-ready")
+        let chunk = await Task.detached { surface.imageResources() }.value
+        #expect(chunk.storagePixelBytes == 0 && chunk.storageReservedBytes == 0)
+        #expect(chunk.loadingBytes == 512 && chunk.loadingCapacity >= chunk.loadingBytes)
+        try await emit("\u{1b}_Gm=0;\(last)\u{1b}\\raw-ready", marker: "raw-ready")
+        let raw = await Task.detached { surface.imageResources() }.value
+        #expect(raw.storagePixelBytes == 1024 && raw.storageReservedBytes == 1024)
+        #expect(raw.pendingReservedBytes == 0 && raw.loadingCapacity == 0)
+        #expect(raw.completionPeakBytes >= 1024)
+
+        let bitmap = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 1, pixelsHigh: 1,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 4, bitsPerPixel: 32))
+        bitmap.setColor(NSColor(deviceRed: 1, green: 0, blue: 0, alpha: 1), atX: 0, y: 0)
+        let png = try #require(bitmap.representation(using: .png, properties: [:])).base64EncodedString()
+        try await emit("\u{1b}_Ga=t,f=100,i=2,q=2;\(png)\u{1b}\\png-ready", marker: "png-ready")
+        let decoded = await Task.detached { surface.imageResources() }.value
+        #expect(decoded.storagePixelBytes == 1028 && decoded.storageReservedBytes == 1028)
+        #expect(decoded.completionPeakBytes > raw.completionPeakBytes, "PNG heap scratch is included")
+        try await emit("\u{1b}[?1049h\u{1b}_Ga=t,f=32,s=1,v=1,i=1,q=2;/wAA/w==\u{1b}\\alternate-ready",
+            marker: "alternate-ready")
+        let alternate = await Task.detached { surface.imageResources() }.value
+        #expect(alternate.screenCount == 2)
+        #expect(alternate.storagePixelBytes == 1032 && alternate.storageReservedBytes == 1032)
+        #expect(alternate.completionPeakBytes == decoded.completionPeakBytes)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        let json = try #require(String(data: encoder.encode([chunk, raw, decoded, alternate]), encoding: .utf8))
+        print("IMAGE_RESOURCE_JSON " + json)
+    }
+
     @Test func atlasSnapshotsSeparateSharedCPUFromOwnedFrameTextures() async throws {
         let config = try TemporaryConfig("cursor-effect = false\ncursor-style-blink = false\nshell-integration = none")
         let app = Ghostty.App(configPath: config.temporaryFile.path)

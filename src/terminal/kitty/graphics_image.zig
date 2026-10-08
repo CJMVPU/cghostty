@@ -32,6 +32,11 @@ pub const LoadingImage = struct {
     /// The data that is being built up.
     data: std.ArrayListUnmanaged(u8) = .empty,
 
+    /// Maximum requested live bytes during complete(), including the existing
+    /// encoded buffer capacity, output and heap scratch. Excludes stack/child
+    /// allocator overhead and earlier chunk/file ingestion allocations.
+    completion_peak_bytes: usize = 0,
+
     /// This is non-null when a transmit and display command is given
     /// so that we display the image after it is fully loaded.
     display: ?command.Display = null,
@@ -535,7 +540,10 @@ pub const LoadingImage = struct {
     }
 
     /// Complete the chunked image, returning a completed image.
-    pub fn complete(self: *LoadingImage, alloc: Allocator) !Image {
+    pub fn complete(self: *LoadingImage, child: Allocator) !Image {
+        var peak = @import("../../datastruct/main.zig").PeakAllocator.init(child, self.data.capacity);
+        defer self.completion_peak_bytes = @max(self.completion_peak_bytes, peak.peak_bytes);
+        const alloc = peak.allocator();
         const img = &self.image;
 
         // Decompress the data if it is compressed.
@@ -1575,6 +1583,29 @@ test "image load: png, not compressed, regular file" {
     try tmp_dir.dir.access(testing.io, path, .{});
 }
 
+test "image load: png completion peak includes encoded input and freed scratch" {
+    const t = std.testing;
+    const Decoder = struct {
+        fn decode(alloc: Allocator, _: []const u8) sys.DecodeError!sys.Image {
+            const scratch = try alloc.alloc(u8, 20);
+            defer alloc.free(scratch);
+            const data = try alloc.dupe(u8, "rgba");
+            return .{ .width = 1, .height = 1, .data = data };
+        }
+    };
+    const original = sys.decode_png;
+    defer sys.decode_png = original;
+    sys.decode_png = &Decoder.decode;
+    var loading: LoadingImage = .{ .image = .{ .format = .png }, .quiet = .no, .temporary_directory = null };
+    defer loading.deinit(t.allocator);
+    try loading.data.appendSlice(t.allocator, "encoded png");
+    const encoded_capacity = loading.data.capacity;
+    var image = try loading.complete(t.allocator);
+    defer image.deinit(t.allocator);
+    try t.expectEqual(encoded_capacity + 24, loading.completion_peak_bytes);
+    try t.expectEqualStrings("rgba", image.data.complete);
+}
+
 test "image load: png adopts decoded ownership without another allocation" {
     const t = std.testing;
     const Decoder = struct {
@@ -1607,6 +1638,7 @@ test "image load: png adopts decoded ownership without another allocation" {
     try t.expectEqual(@as(u8, 0x5A), data[0]);
     try t.expectEqual(@as(u8, 0x5A), data[data.len - 1]);
     try t.expect(!counter.has_induced_failure);
+    try t.expect(loading.completion_peak_bytes >= data.len);
     try t.expectEqual(@as(usize, 0), loading.data.items.len);
 }
 

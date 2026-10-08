@@ -12,6 +12,7 @@ pub const CircBuf = circ_buf.CircBuf;
 pub const ComptimeIntSet = @import("comptime_int_set.zig").ComptimeIntSet;
 pub const IntrusiveDoublyLinkedList = intrusive_linked_list.DoublyLinkedList;
 pub const LimitedAllocator = @import("limited_allocator.zig").LimitedAllocator;
+pub const PeakAllocator = @import("peak_allocator.zig").PeakAllocator;
 pub const MessageData = @import("message_data.zig").MessageData;
 pub const UntouchedPool = @import("untouched_pool.zig").UntouchedPool;
 

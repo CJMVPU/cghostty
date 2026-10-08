@@ -1460,6 +1460,40 @@ pub const CAPI = struct {
         return surface.core_surface.render.renderer.rendererResources();
     }
 
+    const ImageResources = extern struct {
+        screen_count: u64 = 0,
+        storage_reserved_bytes: u64 = 0,
+        storage_pixel_bytes: u64 = 0,
+        pending_reserved_bytes: u64 = 0,
+        loading_bytes: u64 = 0,
+        loading_capacity: u64 = 0,
+        completion_peak_bytes: u64 = 0,
+        capture_pending_reference_bytes: u64 = 0,
+        capture_cache_reference_bytes: u64 = 0,
+    };
+
+    export fn ghostty_surface_image_resources(surface: *Surface) ImageResources {
+        const state = &surface.core_surface.render.state;
+        state.lockDemand(global.io());
+        defer state.unlockDemand(global.io());
+        var result: ImageResources = .{};
+        var it = state.terminal.screens.all.iterator();
+        while (it.next()) |entry| {
+            const resources = entry.value.*.kitty_images.resources();
+            result.screen_count += 1;
+            result.storage_reserved_bytes += resources.reserved_bytes;
+            result.storage_pixel_bytes += resources.pixel_bytes;
+            result.pending_reserved_bytes += resources.pending_reserved_bytes;
+            result.loading_bytes += resources.loading_bytes;
+            result.loading_capacity += resources.loading_capacity;
+            result.completion_peak_bytes = @max(result.completion_peak_bytes, resources.completion_peak_bytes);
+        }
+        if (state.render_hold.pending) |*frame|
+            result.capture_pending_reference_bytes = frame.images.resources().pending_bytes;
+        result.capture_cache_reference_bytes = state.render_hold.image_cache.resources().pending_bytes;
+        return result;
+    }
+
     export fn ghostty_surface_copy_snapshot(surface: *Surface, max_dimension: u32) ?*anyopaque {
         const texture = surface.core_surface.render.renderer.copySnapshot(max_dimension) catch |err| {
             log.warn("snapshot render failed err={}", .{err});
