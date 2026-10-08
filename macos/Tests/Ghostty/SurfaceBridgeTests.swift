@@ -54,6 +54,36 @@ import Testing
         try await waitForText("compat=\(enabled ? "1" : "off");terminal=cghostty", in: surface)
     }
 
+    @Test func configuredFileInputPrecedesNativeTextThroughTheWriterLoop() async throws {
+        let manager = FileManager.default
+        let directory = manager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try manager.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? manager.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("source")
+        let contents = String(repeating: "file-input-line\n", count: 16_384)
+        try Data(contents.utf8).write(to: file)
+        let expected = "prefix\n" + contents + "suffix\nkey\n"
+        let config = try TemporaryConfig("""
+        shell-integration = none
+        input = raw:prefix\\n
+        input = path:\(file.path)
+        input = raw:suffix\\n
+        """)
+        let app = Ghostty.App(configPath: config.temporaryFile.path)
+        var base = Ghostty.SurfaceConfiguration()
+        base.workingDirectory = directory.path
+        base.command = "/bin/sh -c 'stty -echo; head -c \(expected.utf8.count) > captured; " +
+            "printf source-done; exec /bin/cat'"
+        let view = Ghostty.SurfaceView(app, baseConfig: base)
+        let surface = try #require(view.surfaceModel)
+        // Submit through the native bridge while configured input is pending.
+        // The subprocess must see every file chunk before this ordinary input.
+        surface.sendText("key\n")
+        try await waitForText("source-done", in: surface)
+        let captured = try Data(contentsOf: directory.appendingPathComponent("captured"))
+        #expect(captured == Data(expected.utf8))
+    }
+
     @Test func unknownHardwareCodesAndCommittedTextSurviveMarshalling() {
         let event = Ghostty.Input.KeyEvent(
             keyCode: 65535, action: .repeat, text: "中文🙂", composing: true,
