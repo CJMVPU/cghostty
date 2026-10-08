@@ -138,7 +138,8 @@ import Testing
         print("IMAGE_RESOURCE_JSON " + json)
     }
 
-    @Test func atlasSnapshotsSeparateSharedCPUFromOwnedFrameTextures() async throws {
+    @Test(.enabled(if: try MetalTestSupport.metal4Available(), "Requires a Metal 4 GPU"))
+    func atlasSnapshotsSeparateSharedCPUFromOwnedFrameTextures() async throws {
         let config = try TemporaryConfig("cursor-effect = false\ncursor-style-blink = false\nshell-integration = none")
         let app = Ghostty.App(configPath: config.temporaryFile.path)
         var base = Ghostty.SurfaceConfiguration()
