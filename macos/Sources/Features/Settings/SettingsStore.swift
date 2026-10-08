@@ -141,6 +141,10 @@ import Darwin
     }
 
     func evaluateAsync(_ input: Input) async throws -> SettingsEvaluator.Projection {
+        try await evaluateDraftAsync(input).evaluation
+    }
+
+    func evaluateDraftAsync(_ input: Input, restoring inheritance: SettingsEvaluator.Inheritance? = nil) async throws -> SettingsEvaluator.Draft {
         let evaluator = evaluator
         #if CGHOSTTY_TESTING
         let beforeEvaluation = beforeEvaluationForTesting
@@ -149,7 +153,7 @@ import Darwin
             #if CGHOSTTY_TESTING
             beforeEvaluation?()
             #endif
-            return try evaluator.evaluate(input)
+            return try evaluator.evaluateDraft(input, restoring: inheritance)
         }
         return try await withTaskCancellationHandler {
             let result = try await task.value
@@ -249,7 +253,8 @@ import Darwin
         return saved
     }
 
-    func prepareSaveAsync(_ input: Input, revision: UUID) async throws -> Saved {
+    func prepareSaveAsync(_ input: Input, revision: UUID,
+                          restoring inheritance: SettingsEvaluator.Inheritance? = nil) async throws -> Saved {
         let evaluator = evaluator
         let disk = disk
         #if CGHOSTTY_TESTING
@@ -259,7 +264,7 @@ import Darwin
             #if CGHOSTTY_TESTING
             beforeEvaluation?()
             #endif
-            return try evaluator.prepareSave(input, replacing: disk.read(), revision: revision)
+            return try evaluator.prepareSave(input, replacing: disk.read(), revision: revision, restoring: inheritance)
         }
         return try await withTaskCancellationHandler {
             let result = try await task.value

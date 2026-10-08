@@ -46,6 +46,7 @@ private final class SettingsList: NSStackView {
     private var renderedErrors: [String: String] = [:]
     private var renderedEnabled: Bool?
     private var renderedPreset: Bool?
+    private var closeValidationTask: Task<Void, Never>?
     private var loadTask: Task<Void, Never>?
     private var categoryOffsets: [Int: NSPoint] = [:]
 
@@ -97,12 +98,25 @@ private final class SettingsList: NSStackView {
     }
 
     func confirmClose(
-        runModal: (NSAlert) -> NSApplication.ModalResponse = { $0.runModal() },
+        runModal: @escaping (NSAlert) -> NSApplication.ModalResponse = { $0.runModal() },
         afterSave: @escaping () -> Void
     ) -> Bool {
-        guard !model.isBusy else { return false }
+        guard !model.isBusy, closeValidationTask == nil else { return false }
         guard model.dirty else { return true }
-        if model.validationPending { model.flushValidation() }
+        if model.validationPending {
+            closeValidationTask = Task { [weak self] in
+                guard let self else { return }
+                defer { closeValidationTask = nil }
+                guard await model.flushValidationAsync() else { return }
+                if !model.dirty { afterSave() } else { presentCloseConfirmation(runModal: runModal, afterSave: afterSave) }
+            }
+            return false
+        }
+        presentCloseConfirmation(runModal: runModal, afterSave: afterSave)
+        return false
+    }
+
+    private func presentCloseConfirmation(runModal: (NSAlert) -> NSApplication.ModalResponse, afterSave: @escaping () -> Void) {
         let alert = NSAlert()
         alert.messageText = "Save changes?"
         alert.informativeText = model.canSave ? "Restart the app to apply saved changes." : "Fix the invalid settings or discard your changes."
@@ -113,15 +127,13 @@ private final class SettingsList: NSStackView {
         switch runModal(alert) {
         case .alertFirstButtonReturn:
             Task { if await model.saveAsync() { afterSave() } }
-            return false
         case .alertSecondButtonReturn:
             Task {
                 guard await model.discardDraft() else { return }
                 refreshLoadedRows()
                 afterSave()
             }
-            return false
-        default: return false
+        default: break
         }
     }
 
@@ -285,7 +297,7 @@ private final class SettingsList: NSStackView {
                 let row = cachedRows[field.key] ?? SettingsRow(field: field, value: model.displayed[field.key] ?? field.defaultValue,
                                       usesFontPreset: model.usesBundledFontPreset, context: model.displayed, listState: listState,
                                       presetSelected: { [weak self] families in
-                    self?.model.applyBundledFontPreset(families: families)
+                    self?.model.applyBundledFontPreset(families: families, deferred: true)
                     self?.updateState()
                 }, changed: { [weak self] value in
                     self?.model.edit(field, value: value, deferred: true)

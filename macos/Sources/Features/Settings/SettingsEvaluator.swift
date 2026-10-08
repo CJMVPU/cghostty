@@ -14,6 +14,35 @@ nonisolated struct SettingsEvaluator: Sendable {
         let diagnostics: [SettingsDiagnostic]
     }
 
+    struct Inheritance: Sendable {
+        let original: SettingsStore.Input
+        let displayed: [String: String]
+        let keys: Set<String>
+    }
+
+    struct Draft: Sendable {
+        let input: SettingsStore.Input
+        let evaluation: Projection
+    }
+
+    func evaluateDraft(_ input: SettingsStore.Input, restoring inheritance: Inheritance?) throws -> Draft {
+        var input = input
+        var resolved: Projection?
+        if let inheritance {
+            for key in inheritance.keys.sorted() {
+                guard input.values[key] == inheritance.displayed[key] else { continue }
+                var candidate = input
+                candidate.values[key] = inheritance.original.values[key]
+                let evaluation = try evaluate(candidate)
+                if evaluation.diagnostics.isEmpty, evaluation.values[key] == input.values[key] {
+                    input = candidate
+                    resolved = evaluation
+                }
+            }
+        }
+        return try Draft(input: input, evaluation: resolved ?? evaluate(input))
+    }
+
     static func makeConfig(data: Data, source: URL, dark: Bool) -> ghostty_config_t? {
         guard let config = ghostty_config_new() else { return nil }
         ghostty_config_set_initial_theme(config, dark)
@@ -77,12 +106,14 @@ nonisolated struct SettingsEvaluator: Sendable {
         return (values, errors)
     }
 
-    func prepareSave(_ input: SettingsStore.Input, replacing old: SettingsStore.Record, revision: UUID) throws -> SettingsStore.Saved {
-        let evaluation = try evaluate(input)
+    func prepareSave(_ input: SettingsStore.Input, replacing old: SettingsStore.Record, revision: UUID,
+                     restoring inheritance: Inheritance? = nil) throws -> SettingsStore.Saved {
+        let draft = try evaluateDraft(input, restoring: inheritance)
+        let evaluation = draft.evaluation
         guard evaluation.diagnostics.isEmpty else { throw SettingsStore.Failure.invalid(evaluation.diagnostics) }
         guard old.revision == revision else { throw SettingsStore.Failure.changed }
         let previous = try evaluate(old.current).diagnostics.isEmpty ? old.current : old.previous
         try Task.checkCancellation()
-        return SettingsStore.Saved(record: .init(current: input, previous: previous), evaluation: evaluation, replacingRevision: revision)
+        return SettingsStore.Saved(record: .init(current: draft.input, previous: previous), evaluation: evaluation, replacingRevision: revision)
     }
 }

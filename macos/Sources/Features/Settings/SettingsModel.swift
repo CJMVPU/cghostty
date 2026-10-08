@@ -19,6 +19,11 @@ import Foundation
     private var failure: Failure?
     private var inputIsValid: Bool { validation == .valid }
     private var validationTask: Task<Void, Never>?
+    private var draftRevision = UUID()
+    private var inheritanceKeys: Set<String> = []
+    private var inheritance: SettingsEvaluator.Inheritance? {
+        record.map { .init(original: $0.current, displayed: originalDisplayed, keys: inheritanceKeys) }
+    }
     var validationPending: Bool { validation == .pending }
     var stateChanged: (() -> Void)?
     private var originalDisplayed: [String: String] = [:]
@@ -41,6 +46,7 @@ import Foundation
     }
 
     private func cancelValidation() {
+        draftRevision = UUID()
         validationTask?.cancel()
         validationTask = nil
         if validation == .pending { validation = .invalid }
@@ -63,7 +69,8 @@ import Foundation
         do {
             if reset { _ = try await store.restoreDefaultsAsync() }
             let loaded = try await store.readAsync()
-            apply(loaded)
+            let evaluation = try await store.evaluateAsync(loaded.current)
+            apply(loaded, evaluation: evaluation)
             return true
         } catch {
             // A failed reset has not replaced the draft or the saved record.
@@ -79,9 +86,14 @@ import Foundation
     }
 
     private func apply(_ loaded: SettingsStore.Record) {
+        let evaluation = store.evaluate(loaded.current)
+        apply(loaded, evaluation: .init(values: evaluation.values, darkValues: evaluation.darkValues, diagnostics: evaluation.diagnostics))
+    }
+
+    private func apply(_ loaded: SettingsStore.Record, evaluation: SettingsEvaluator.Projection) {
+        inheritanceKeys.removeAll()
         record = loaded
         input = loaded.current
-        let evaluation = store.evaluate(input)
         effectiveValues = evaluation.values
         savedValues = effectiveValues
         refreshDisplayed()
@@ -110,49 +122,79 @@ import Foundation
             && displayed["font-thicken"] == "true" && displayed["font-thicken-strength"] == "255"
     }
 
-    func applyBundledFontPreset(families: String) {
+    func applyBundledFontPreset(families: String, deferred: Bool = false) {
         // The bundled family's automatic face is Medium. Leave style discovery
         // automatic so later choices and fallback families use their own face.
-        edit(["font-family": families, "font-style": "default", "font-thicken": "true", "font-thicken-strength": "255"])
+        edit(["font-family": families, "font-style": "default", "font-thicken": "true", "font-thicken-strength": "255"], deferred: deferred)
     }
 
     private func edit(_ changes: [String: String], deferred: Bool = false) {
         guard !isBusy else { return }
         failure = nil
-        let original = record?.current
+        cancelValidation()
         for (key, value) in changes {
             displayed[key] = value
             input.values[key] = value
+            if value == originalDisplayed[key] { inheritanceKeys.insert(key) } else { inheritanceKeys.remove(key) }
         }
-        // Restore saved inheritance only when it still resolves to the value
-        // selected now. Another field may have changed its effective default.
-        for (key, value) in changes {
-            guard let original, value == originalDisplayed[key] else { continue }
-            var inherited = input
-            inherited.values[key] = original.values[key]
-            let evaluation = store.evaluate(inherited)
-            if evaluation.diagnostics.isEmpty, evaluation.values[key] == value {
-                input = inherited
-            }
-        }
-        validationTask?.cancel()
         if deferred {
             diagnostics = store.fieldDiagnostics(input)
             validation = .pending
-            // Coalesce typing; saving and closing always flush the current draft.
+            let revision = draftRevision
+            // Coalesce typing. Each worker receives an immutable draft snapshot.
             validationTask = Task { [weak self] in
                 do { try await Task.sleep(for: .milliseconds(150)) } catch { return }
                 guard !Task.isCancelled, let self else { return }
-                self.flushValidation()
-                self.stateChanged?()
+                if await self.validateDraft(revision: revision) { self.stateChanged?() }
             }
         } else { flushValidation() }
     }
 
+    /// Returns false when cancelled or superseded, so close requests cannot use
+    /// a result that belongs to an older draft.
+    @discardableResult
+    func flushValidationAsync() async -> Bool {
+        guard !isBusy else { return false }
+        cancelValidation()
+        validation = .pending
+        let applied = await validateDraft(revision: draftRevision)
+        if applied { stateChanged?() }
+        return applied
+    }
+
+    private func validateDraft(revision: UUID) async -> Bool {
+        do {
+            let draft = try await store.evaluateDraftAsync(input, restoring: inheritance)
+            guard !Task.isCancelled, revision == draftRevision else { return false }
+            input = draft.input
+            inheritanceKeys.removeAll()
+            diagnostics = draft.evaluation.diagnostics
+            if diagnostics.isEmpty { effectiveValues = draft.evaluation.values }
+            refreshDisplayed()
+            validation = diagnostics.isEmpty ? .valid : .invalid
+            failure = nil
+            return true
+        } catch {
+            guard revision == draftRevision else { return false }
+            validation = .invalid
+            if !(error is CancellationError) {
+                diagnostics = [SettingsDiagnostic(kind: .core, message: error.localizedDescription)]
+            }
+            return false
+        }
+    }
+
     func flushValidation() {
-        validationTask?.cancel()
-        validationTask = nil
-        if validation == .pending { validation = .invalid }
+        cancelValidation()
+        if let original = record?.current {
+            for key in inheritanceKeys.sorted() {
+                var candidate = input
+                candidate.values[key] = original.values[key]
+                let evaluation = store.evaluate(candidate)
+                if evaluation.diagnostics.isEmpty, evaluation.values[key] == input.values[key] { input = candidate }
+            }
+        }
+        inheritanceKeys.removeAll()
         let evaluation = store.evaluate(input)
         diagnostics = evaluation.diagnostics
         // Keep the last coherent resolution while invalid raw edits stay visible.
@@ -196,13 +238,26 @@ import Foundation
         stateChanged?()
         defer { operation = .idle; stateChanged?() }
         do {
-            didSave(try await store.saveEvaluatedAsync(input, revision: record.revision))
+            let saved = try await store.prepareSaveAsync(input, revision: record.revision, restoring: inheritance)
+            validation = .valid
+            try await store.commitPreparedAsync(saved)
+            didSave(saved)
             return true
-        } catch { saveFailed(error); return false }
+        } catch {
+            // Storage failures preserve draft validity without parsing on MainActor.
+            if !(error is CancellationError), case .invalid = validation,
+               let evaluation = try? await store.evaluateAsync(input) {
+                validation = evaluation.diagnostics.isEmpty ? .valid : .invalid
+            }
+            saveFailed(error)
+            return false
+        }
     }
 
     private func didSave(_ saved: SettingsStore.Saved) {
         record = saved.record
+        input = saved.record.current
+        inheritanceKeys.removeAll()
         effectiveValues = saved.evaluation.values
         savedValues = effectiveValues
         refreshDisplayed()
@@ -220,7 +275,6 @@ import Foundation
         } else {
             diagnostics = [SettingsDiagnostic(kind: .storage, message: error.localizedDescription)]
             failure = .saving
-            validation = store.evaluate(input).diagnostics.isEmpty ? .valid : .invalid
         }
     }
 

@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Synchronization
 import Testing
@@ -88,6 +89,103 @@ import Testing
             parsing.cancel()
             release.signal()
             do { _ = try await parsing.value; Issue.record("Cancelled projection was published") } catch is CancellationError {}
+        }
+    }
+
+    @Test func olderDraftCannotPublishAfterNewEditOrReload() async throws {
+        try await withStore { store, _ in
+            let model = SettingsModel(store: store)
+            let title = try #require(SettingsField.byKey["title"])
+            for reload in [false, true] {
+                let entered = Mutex(false)
+                let release = DispatchSemaphore(value: 0)
+                store.beforeEvaluationForTesting = {
+                    entered.withLock { $0 = true }
+                    #expect(release.wait(timeout: .now() + 5) == .success)
+                }
+                defer { release.signal() }
+                model.edit(title, value: "Old draft", deferred: true)
+                let old = Task { await model.flushValidationAsync() }
+                try await NativeTestWait.until("old draft parser entered", timeout: .seconds(3), polling: .milliseconds(1),
+                                              diagnostics: { model.status }, { entered.withLock { $0 } })
+                store.beforeEvaluationForTesting = nil
+                if reload {
+                    #expect(await model.reloadAsync())
+                } else {
+                    model.edit(title, value: "New draft", deferred: true)
+                    #expect(await model.flushValidationAsync())
+                }
+                let expected = model.displayed
+                let expectedInput = model.input
+                release.signal()
+                // This task was superseded but never cancelled: the revision
+                // check itself must prevent it from replacing the newer state.
+                #expect(await old.value == false)
+                #expect(model.input == expectedInput)
+                #expect(model.displayed == expected)
+                #expect(model.validation == .valid)
+            }
+        }
+    }
+
+    @Test func asyncEditsRestoreInheritanceAndKeepExplicitDependentValues() async throws {
+        try await withStore { store, root in
+            let model = SettingsModel(store: store)
+            let size = try #require(SettingsField.byKey["font-size"])
+            let originalSize = try #require(model.displayed[size.key])
+            Ghostty.ConfigHandle.settingsLoadCallsForTesting = 0
+            model.edit(size, value: "19", deferred: true)
+            model.edit(size, value: originalSize, deferred: true)
+            #expect(await model.flushValidationAsync())
+            #expect(!model.dirty && model.input.values[size.key] == nil)
+            model.edit(size, value: "19", deferred: true)
+            model.edit(size, value: originalSize, deferred: true)
+            // Saving directly during debounce must normalize inheritance too.
+            #expect(await model.saveAsync())
+            #expect(try store.read().current.values[size.key] == nil)
+            let foreground = try #require(SettingsField.byKey["foreground"])
+            let originalForeground = try #require(model.displayed[foreground.key])
+            let theme = root.appendingPathComponent("theme")
+            try "foreground = #123456\n".write(to: theme, atomically: true, encoding: .utf8)
+            model.edit(try #require(SettingsField.byKey["theme"]), value: theme.path, deferred: true)
+            model.edit(foreground, value: originalForeground, deferred: true)
+            #expect(await model.flushValidationAsync())
+            #expect(model.input.values[foreground.key] == originalForeground)
+            #expect(model.effectiveValues[foreground.key] == originalForeground)
+            #expect(Ghostty.ConfigHandle.settingsLoadCallsForTesting == 0)
+        }
+    }
+
+    @Test func pendingCloseCoalescesAndWaitsForCurrentValidation() async throws {
+        try await withStore { store, _ in
+            let controller = SettingsController(store: store)
+            defer { controller.window?.close() }
+            let model = controller.model
+            try await NativeTestWait.until("settings loaded", timeout: .seconds(3), polling: .milliseconds(1),
+                                          diagnostics: { model.status }, { model.record != nil && !model.isBusy })
+            let entered = Mutex(false)
+            let release = DispatchSemaphore(value: 0)
+            store.beforeEvaluationForTesting = {
+                entered.withLock { $0 = true }
+                #expect(release.wait(timeout: .now() + 5) == .success)
+            }
+            defer { release.signal() }
+            model.edit(try #require(SettingsField.byKey["title"]), value: "Pending close", deferred: true)
+            var prompts = 0
+            let respond: (NSAlert) -> NSApplication.ModalResponse = { alert in
+                #expect(alert.buttons[0].isEnabled)
+                prompts += 1
+                return .alertThirdButtonReturn
+            }
+            #expect(!controller.confirmClose(runModal: respond, afterSave: { Issue.record("Keep Editing closed the window") }))
+            try await NativeTestWait.until("close parser entered", timeout: .seconds(3), polling: .milliseconds(1),
+                                          diagnostics: { model.status }, { entered.withLock { $0 } })
+            #expect(prompts == 0)
+            #expect(!controller.confirmClose(runModal: respond, afterSave: { Issue.record("Duplicate close continued") }))
+            release.signal()
+            try await NativeTestWait.until("close prompt", timeout: .seconds(3), polling: .milliseconds(1),
+                                          diagnostics: { model.status }, { prompts == 1 })
+            #expect(model.dirty && model.canSave)
         }
     }
 
