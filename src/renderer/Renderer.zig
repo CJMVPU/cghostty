@@ -668,6 +668,7 @@ pub fn threadExit(self: *Self) void {
         defer self.draw_mutex.unlock(global.io());
 
         // Release swap chain and shaders.
+        self.display_realized = false;
         self.releaseGpuResources();
 
         // We don't release images in `releaseGpuResources`
