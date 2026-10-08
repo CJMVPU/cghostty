@@ -1,0 +1,88 @@
+{
+  "date": "2026-10-08",
+  "baseline": "1c038c5aa",
+  "sourceCommit": "9d3d26c59",
+  "version": "0.5.7",
+  "buildNumber": 47,
+  "changes": [
+    {
+      "commit": "b50c3ad42",
+      "area": "background settings projection and save preparation"
+    },
+    {
+      "commit": "0d5f31814",
+      "area": "async editor draft revisions and inheritance"
+    },
+    {
+      "commit": "9d3d26c59",
+      "area": "temporary parser ownership inside existing config bridge"
+    }
+  ],
+  "measurement": {
+    "configuration": "Debug",
+    "entries": 1000,
+    "samples": 10,
+    "fieldsPerBranch": 173,
+    "branches": 2,
+    "baselineSynchronousMs": {
+      "median": 19.216125,
+      "max": 19.53375
+    },
+    "firstFullRunSynchronousMs": {
+      "median": 19.773458,
+      "max": 20.446208
+    },
+    "firstFullRunBackgroundEndToEndMs": {
+      "median": 20.354125,
+      "max": 23.176584
+    },
+    "claim": "Moves core parsing off MainActor; not evidence of faster overall parsing or universal performance gains."
+  },
+  "native": {
+    "focused": {
+      "passed": 56,
+      "failed": 0,
+      "skipped": 0
+    },
+    "firstFull": {
+      "total": 522,
+      "passed": 520,
+      "failed": 0,
+      "skipped": 2,
+      "suites": 81
+    },
+    "finalFull": {
+      "total": 522,
+      "passed": 520,
+      "failed": 0,
+      "skipped": 2,
+      "suites": 81
+    },
+    "newTests": 8,
+    "independentUITestsRun": false
+  },
+  "checks": {
+    "swiftLintStrict": "passed",
+    "changedSwiftFiles": 7,
+    "swift6Configurations": 9,
+    "scope": "passed",
+    "typedBridgeFeatureFiles": 154,
+    "configBridge": "passed",
+    "versionConsistency": "passed",
+    "diff": "passed"
+  },
+  "initialScopeFailure": "Temporary parser C calls were in Features/Settings. Moved to Ghostty.ConfigHandle.swift without changing the checker.",
+  "boundaries": {
+    "startupStillSynchronous": true,
+    "configHandleInstancesRemainMainActor": true,
+    "workerResultsContainRawHandles": false,
+    "ordinaryPastePolicyChanged": false,
+    "coreArchiveProvenanceChecked": true,
+    "fullZigTestsRerun": false
+  },
+  "delivery": {
+    "pushed": false,
+    "tagged": false,
+    "packaged": false
+  }
+}

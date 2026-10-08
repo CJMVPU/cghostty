@@ -1,5 +1,8 @@
 # 验证记录
 
+最新设置后台解析、草稿版本保护及保存冲突验证见
+[2026-10-08 设置后台解析与草稿发布](docs/validation/2026-10-08-settings-async.md)。
+
 最新 App/renderer 批次预算、消费者重新唤醒及整套原生验证见
 [2026-10-08 App 与 renderer 消息调度](docs/validation/2026-10-08-mailbox-scheduling.md)。
 
