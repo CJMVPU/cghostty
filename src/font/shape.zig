@@ -44,6 +44,7 @@ pub const Options = struct {
     /// want to support per-face feature configuration. For now, we only
     /// support applying features globally.
     features: []const []const u8 = &.{},
+    release_service: ?*@import("../os/main.zig").CFReleaseService = null,
 };
 
 /// Options for runIterator.

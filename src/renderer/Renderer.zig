@@ -552,6 +552,7 @@ pub fn init(alloc: Allocator, options: renderer.Options) !Self {
     // Create the font shaper.
     var font_shaper = try font.Shaper.init(alloc, .{
         .features = options.config.font_features.items,
+        .release_service = options.font_grid.release_service,
     });
     errdefer font_shaper.deinit();
 
@@ -1900,6 +1901,7 @@ pub fn changeConfig(self: *Self, config: *DerivedConfig) !void {
     if (!fontFeaturesEqual(self.config.font_features.items, config.font_features.items)) {
         var font_shaper = try font.Shaper.init(self.alloc, .{
             .features = config.font_features.items,
+            .release_service = self.font_grid.release_service,
         });
         errdefer font_shaper.deinit();
         self.font_shaper.deinit();

@@ -23,7 +23,7 @@ pub const stderr = @import("stderr.zig");
 pub const uri = @import("uri.zig");
 
 // Functions and types
-pub const CFReleaseThread = @import("cf_release_thread.zig");
+pub const CFReleaseService = @import("cf_release_service.zig");
 pub const TempDir = @import("TempDir.zig");
 pub const launchedFromDesktop = desktop.launchedFromDesktop;
 pub const rlimit = file.rlimit;

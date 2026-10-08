@@ -40,6 +40,7 @@ font_discover: ?Discover = null,
 
 /// Lock to protect multi-threaded access to the map.
 lock: std.Io.Mutex = .init,
+release_service: @import("../os/main.zig").CFReleaseService = .init(),
 
 /// Initialize a new SharedGridSet.
 pub fn init(alloc: Allocator) SharedGridSet {
@@ -58,6 +59,7 @@ pub fn deinit(self: *SharedGridSet) void {
         self.alloc.destroy(v.grid);
     }
     self.map.deinit(self.alloc);
+    self.release_service.deinit();
 
     if (self.font_discover) |*v| v.deinit();
 }
@@ -133,6 +135,7 @@ pub fn ref(
         };
     });
     errdefer grid.deinit(self.alloc);
+    grid.release_service = &self.release_service;
 
     return .{ gop.key_ptr.*, gop.value_ptr.grid };
 }

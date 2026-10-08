@@ -40,6 +40,8 @@ var resource_serial: std.atomic.Value(u64) = .init(1);
 
 /// Stable identity for resource snapshots; pointer reuse cannot merge grids.
 resource_id: u64 = 0,
+/// Borrowed from the app font set; standalone test grids leave this null.
+release_service: ?*@import("../os/main.zig").CFReleaseService = null,
 
 /// Cache for codepoints to font indexes in a group.
 codepoints: std.HashMapUnmanaged(CodepointKey, ?Collection.Index, CodepointKey.Context, 80) = .{},

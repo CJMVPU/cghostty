@@ -18,7 +18,7 @@ const GroupCache = font.GroupCache;
 const SharedGrid = font.SharedGrid;
 const Style = font.Style;
 const Presentation = font.Presentation;
-const CFReleaseThread = os.CFReleaseThread;
+const CFReleaseService = os.CFReleaseService;
 const global = @import("../../global.zig");
 
 const log = std.log.scoped(.font_shaper);
@@ -75,8 +75,8 @@ pub const Shaper = struct {
     /// Dedicated thread for releasing CoreFoundation objects. Some objects,
     /// such as those produced by CoreText, have excessively slow release
     /// callback logic.
-    cf_release_thread: *CFReleaseThread,
-    cf_release_thr: std.Thread,
+    release_client: *CFReleaseService.Client,
+    owned_release_service: ?*CFReleaseService,
 
     const CellBuf = std.ArrayListUnmanaged(font.shape.Cell);
     const CodepointList = std.ArrayListUnmanaged(Codepoint);
@@ -201,19 +201,17 @@ pub const Shaper = struct {
         };
         errdefer typesetter_attr_dict.release();
 
-        // Create the CF release thread.
-        var cf_release_thread = try alloc.create(CFReleaseThread);
-        errdefer alloc.destroy(cf_release_thread);
-        cf_release_thread.* = try .init(alloc);
-        errdefer cf_release_thread.deinit();
-
-        // Start the CF release thread.
-        var cf_release_thr = try std.Thread.spawn(
-            .{},
-            CFReleaseThread.threadMain,
-            .{cf_release_thread},
-        );
-        cf_release_thr.setName(global.io(), "cf_release") catch {};
+        const owned_service: ?*CFReleaseService = if (opts.release_service == null) service: {
+            const ptr = try alloc.create(CFReleaseService);
+            ptr.* = .init();
+            break :service ptr;
+        } else null;
+        errdefer if (owned_service) |service| {
+            service.deinit();
+            alloc.destroy(service);
+        };
+        const service = opts.release_service orelse owned_service.?;
+        const release_client = try service.client(alloc);
 
         return .{
             .alloc = alloc,
@@ -225,12 +223,19 @@ pub const Shaper = struct {
             .cached_fonts = .empty,
             .cached_font_grid = 0,
             .cf_release_pool = .empty,
-            .cf_release_thread = cf_release_thread,
-            .cf_release_thr = cf_release_thr,
+            .release_client = release_client,
+            .owned_release_service = owned_service,
         };
     }
 
     pub fn deinit(self: *Shaper) void {
+        self.endFrame();
+        self.release_client.destroy();
+        if (self.owned_release_service) |service| {
+            service.deinit();
+            self.alloc.destroy(service);
+        }
+        self.cf_release_pool.deinit(self.alloc);
         self.cell_buf.deinit(self.alloc);
         self.run_state.deinit(self.alloc);
         self.features.release();
@@ -243,28 +248,6 @@ pub const Shaper = struct {
             }
             self.cached_fonts.deinit(self.alloc);
         }
-
-        if (self.cf_release_pool.items.len > 0) {
-            for (self.cf_release_pool.items) |ref| macos.foundation.CFRelease(ref);
-
-            // For tests this logic is normal because we don't want to
-            // wait for a release thread. But in production this is a bug
-            // and we should warn.
-            if (comptime !builtin.is_test) log.warn(
-                "BUG: CFRelease pool was not empty, releasing remaining objects",
-                .{},
-            );
-        }
-        self.cf_release_pool.deinit(self.alloc);
-
-        // Stop the CF release thread
-        {
-            self.cf_release_thread.stop.notify() catch |err|
-                log.err("error notifying cf release thread to stop, may stall err={}", .{err});
-            self.cf_release_thr.join();
-        }
-        self.cf_release_thread.deinit();
-        self.alloc.destroy(self.cf_release_thread);
     }
 
     pub fn endFrame(self: *Shaper) void {
@@ -279,24 +262,7 @@ pub const Shaper = struct {
             return;
         };
 
-        // Send the items. If the send succeeds then we wake up the
-        // thread to process the items. If the send fails then do a manual
-        // cleanup.
-        if (self.cf_release_thread.mailbox.push(global.io(), .{ .release = .{
-            .refs = items,
-            .alloc = self.alloc,
-        } }, .{ .forever = {} }) != 0) {
-            self.cf_release_thread.wakeup.notify() catch |err| {
-                log.warn(
-                    "error notifying cf release thread to wake up, may stall err={}",
-                    .{err},
-                );
-            };
-            return;
-        }
-
-        for (items) |ref| macos.foundation.CFRelease(ref);
-        self.alloc.free(items);
+        self.release_client.submit(items, self.alloc);
     }
 
     pub fn runIterator(
