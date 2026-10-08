@@ -22,6 +22,9 @@ const log = std.log.scoped(.app);
 
 const SurfaceList = std.ArrayListUnmanaged(*apprt.Surface);
 
+/// Leave room for native UI work and per-surface health/search publication.
+const mailbox_message_budget = 32;
+
 /// General purpose allocator
 alloc: Allocator,
 
@@ -152,8 +155,6 @@ pub fn destroy(self: *App) void {
 /// tick.
 pub fn tick(self: *App, rt_app: *apprt.App) !void {
     // Drain our mailbox
-    // A failed action consumed its message, but later messages still need a tick.
-    errdefer rt_app.wakeup();
     try self.drainMailbox(rt_app);
     for (self.surfaces.items) |surface| {
         surface.core().flushIOFault();
@@ -269,9 +270,16 @@ pub fn needsConfirmQuit(self: *const App) bool {
     return false;
 }
 
-/// Drain the mailbox.
-fn drainMailbox(self: *App, rt_app: *apprt.App) !void {
-    while (self.mailbox.pop(global.io())) |message| {
+/// Drain one entry snapshot. Runtime actions may synchronously publish more
+/// messages; those belong to a later native tick. Generic runtime dispatch lets
+/// tests exercise this exact loop without opening native windows.
+fn drainMailbox(self: anytype, rt_app: anytype) !void {
+    // Native wakeups coalesce. Both a batch boundary and a failed action must
+    // schedule leftovers even when producers have already stopped notifying.
+    defer if (self.mailbox.pendingCount(global.io()) > 0) rt_app.wakeup();
+    const budget = @min(mailbox_message_budget, self.mailbox.pendingCount(global.io()));
+    for (0..budget) |_| {
+        const message = self.mailbox.pop(global.io()) orelse break;
         if (comptime std.log.logEnabled(.debug, .app)) {
             switch (message) {
                 // these tend to be way too verbose for normal debugging
@@ -299,8 +307,6 @@ fn drainMailbox(self: *App, rt_app: *apprt.App) !void {
             .quit => {
                 log.info("quit message received, short circuiting mailbox drain", .{});
                 try self.performAction(rt_app, .quit);
-                // Native wakeups are coalesced; resume after this ordering barrier.
-                rt_app.wakeup();
                 return;
             },
         }
@@ -643,4 +649,107 @@ pub const Mailbox = struct {
 
 test {
     _ = SurfaceBroadcast;
+}
+
+const MailboxDrainTest = struct {
+    const Runtime = struct {
+        wakes: usize = 0,
+
+        fn wakeup(self: *Runtime) void {
+            self.wakes += 1;
+        }
+    };
+
+    mailbox: Mailbox.Queue = .{},
+    runtime: Runtime = .{},
+    events: [128]enum { window, quit } = undefined,
+    count: usize = 0,
+    refill: usize = 0,
+    fail_next: bool = false,
+
+    fn enqueue(self: *MailboxDrainTest, message: Message) !void {
+        try std.testing.expect(self.mailbox.push(global.io(), message, .instant) > 0);
+    }
+
+    fn newWindow(self: *MailboxDrainTest, _: *Runtime, _: Message.NewWindow) !void {
+        self.events[self.count] = .window;
+        self.count += 1;
+        try self.failIfRequested();
+        if (self.refill > 0) {
+            self.refill -= 1;
+            try self.enqueue(.{ .new_window = .{} });
+        }
+    }
+
+    fn performAction(self: *MailboxDrainTest, _: *Runtime, action: input.Binding.Action.Scoped(.app)) !void {
+        std.debug.assert(action == .quit);
+        self.events[self.count] = .quit;
+        self.count += 1;
+        try self.failIfRequested();
+    }
+
+    fn failIfRequested(self: *MailboxDrainTest) !void {
+        if (!self.fail_next) return;
+        self.fail_next = false;
+        return error.TestActionFailed;
+    }
+
+    fn closeSurface(_: *MailboxDrainTest, _: *Surface) void {
+        unreachable;
+    }
+
+    fn surfaceMessage(_: *MailboxDrainTest, _: *Surface, _: u64, _: apprt.surface.Message) !void {
+        unreachable;
+    }
+};
+
+test "App mailbox yields after a bounded batch and schedules the next native tick" {
+    const t = std.testing;
+    var fixture: MailboxDrainTest = .{};
+    for (0..64) |_| try fixture.enqueue(.{ .new_window = .{} });
+    try drainMailbox(&fixture, &fixture.runtime);
+    try t.expectEqual(@as(usize, 32), fixture.count);
+    try t.expectEqual(@as(Mailbox.Queue.Size, 32), fixture.mailbox.pendingCount(t.io));
+    try t.expectEqual(@as(usize, 1), fixture.runtime.wakes);
+    try drainMailbox(&fixture, &fixture.runtime);
+    try t.expectEqual(@as(usize, 64), fixture.count);
+    // A drained mailbox must not keep waking an otherwise idle native loop.
+    try t.expectEqual(@as(usize, 1), fixture.runtime.wakes);
+}
+
+test "App mailbox defers messages published by synchronous runtime actions" {
+    const t = std.testing;
+    var fixture: MailboxDrainTest = .{ .refill = 64 };
+    try fixture.enqueue(.{ .new_window = .{} });
+    try drainMailbox(&fixture, &fixture.runtime);
+    try t.expectEqual(@as(usize, 1), fixture.count);
+    try t.expectEqual(@as(Mailbox.Queue.Size, 1), fixture.mailbox.pendingCount(t.io));
+    try t.expectEqual(@as(usize, 1), fixture.runtime.wakes);
+}
+
+test "App mailbox preserves the quit barrier and schedules successors after action failures" {
+    const t = std.testing;
+    for ([_]bool{ false, true }) |fail_quit| {
+        var fixture: MailboxDrainTest = .{};
+        try fixture.enqueue(.quit);
+        try fixture.enqueue(.{ .new_window = .{} });
+        fixture.fail_next = fail_quit;
+        if (fail_quit) {
+            try t.expectError(error.TestActionFailed, drainMailbox(&fixture, &fixture.runtime));
+        } else try drainMailbox(&fixture, &fixture.runtime);
+        try t.expectEqual(@as(usize, 1), fixture.count);
+        try t.expect(fixture.events[0] == .quit);
+        try t.expectEqual(@as(Mailbox.Queue.Size, 1), fixture.mailbox.pendingCount(t.io));
+        try t.expectEqual(@as(usize, 1), fixture.runtime.wakes);
+        try drainMailbox(&fixture, &fixture.runtime);
+        try t.expect(fixture.events[1] == .window);
+        try t.expectEqual(@as(usize, 1), fixture.runtime.wakes);
+    }
+    var fixture: MailboxDrainTest = .{ .fail_next = true };
+    try fixture.enqueue(.{ .new_window = .{} });
+    try fixture.enqueue(.quit);
+    try t.expectError(error.TestActionFailed, drainMailbox(&fixture, &fixture.runtime));
+    try t.expectEqual(@as(usize, 1), fixture.runtime.wakes);
+    try drainMailbox(&fixture, &fixture.runtime);
+    try t.expect(fixture.events[0] == .window and fixture.events[1] == .quit);
 }
