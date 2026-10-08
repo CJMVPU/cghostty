@@ -31,6 +31,10 @@ height: usize,
 /// Bytes per pixel for this texture.
 bpp: usize,
 
+/// Metal's occupied bytes, including resource padding. Borrowed views of a
+/// texture leave this zero; they do not own an additional allocation.
+allocated_bytes: usize = 0,
+
 pub const Error = error{
     /// A Metal API call failed.
     MetalFailed,
@@ -71,6 +75,7 @@ pub fn init(
         .width = width,
         .height = height,
         .bpp = bppOf(opts.pixel_format),
+        .allocated_bytes = objc.Object.fromId(id).getProperty(usize, "allocatedSize"),
     };
 
     // If we have data, we set it here.

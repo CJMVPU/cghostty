@@ -36,6 +36,10 @@ const RenderOptions = font.Glyph.RenderOptions;
 const global = @import("../global.zig");
 
 const log = std.log.scoped(.font_shared_grid);
+var resource_serial: std.atomic.Value(u64) = .init(1);
+
+/// Stable identity for resource snapshots; pointer reuse cannot merge grids.
+resource_id: u64 = 0,
 
 /// Cache for codepoints to font indexes in a group.
 codepoints: std.HashMapUnmanaged(CodepointKey, ?Collection.Index, CodepointKey.Context, 80) = .{},
@@ -94,6 +98,7 @@ pub fn init(
     errdefer atlas_color.deinit(alloc);
 
     var result: SharedGrid = .{
+        .resource_id = resource_serial.fetchAdd(1, .monotonic),
         .resolver = resolver,
         .atlas_grayscale = atlas_grayscale,
         .atlas_color = atlas_color,

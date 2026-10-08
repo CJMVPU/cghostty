@@ -1250,6 +1250,15 @@ GHOSTTY_API void ghostty_surface_free_text(ghostty_surface_t, ghostty_text_s*);
 GHOSTTY_API int ghostty_surface_read_accessibility(ghostty_surface_t, uint64_t previous_revision, ghostty_accessibility_s*);
 GHOSTTY_API void ghostty_surface_free_accessibility(ghostty_accessibility_s*);
 GHOSTTY_API uint64_t ghostty_surface_render_revision(ghostty_surface_t);
+// Selected renderer diagnostics, not total process or device memory. Deduplicate
+// CPU buffers by grid_id. Query off the main thread while retaining the surface.
+typedef struct {
+  uint64_t grid_id;
+  uint64_t cpu_grayscale_bytes, cpu_color_bytes, cpu_node_bytes;
+  uint64_t codepoint_entries, codepoint_capacity, glyph_entries, glyph_capacity;
+  uint64_t gpu_texel_bytes, gpu_allocated_bytes, gpu_texture_count, gpu_queue_count;
+} ghostty_renderer_resources_s;
+GHOSTTY_API ghostty_renderer_resources_s ghostty_surface_renderer_resources(ghostty_surface_t);
 // Main-thread snapshot; returns an owned id<MTLTexture> in shared storage.
 // Returns NULL when unavailable. The caller releases the Objective-C object.
 GHOSTTY_API void* ghostty_surface_copy_snapshot(ghostty_surface_t, uint32_t max_dimension);

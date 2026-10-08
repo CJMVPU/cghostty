@@ -1456,6 +1456,10 @@ pub const CAPI = struct {
         return surface.core_surface.render.renderer.presented_revision.load(.acquire);
     }
 
+    export fn ghostty_surface_renderer_resources(surface: *Surface) renderer.Renderer.RendererResources {
+        return surface.core_surface.render.renderer.rendererResources();
+    }
+
     export fn ghostty_surface_copy_snapshot(surface: *Surface, max_dimension: u32) ?*anyopaque {
         const texture = surface.core_surface.render.renderer.copySnapshot(max_dimension) catch |err| {
             log.warn("snapshot render failed err={}", .{err});

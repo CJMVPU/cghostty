@@ -84,6 +84,81 @@ import Testing
         #expect(captured == Data(expected.utf8))
     }
 
+    private func rendererResources(_ surface: Ghostty.Surface) async -> Ghostty.Surface.RendererResources {
+        await Task.detached(priority: .utility) { surface.rendererResources() }.value
+    }
+
+    @Test func atlasSnapshotsSeparateSharedCPUFromOwnedFrameTextures() async throws {
+        let config = try TemporaryConfig("cursor-effect = false\ncursor-style-blink = false\nshell-integration = none")
+        let app = Ghostty.App(configPath: config.temporaryFile.path)
+        var base = Ghostty.SurfaceConfiguration()
+        base.command = "/bin/cat"
+        base.workingDirectory = FileManager.default.temporaryDirectory.path
+        let first = Ghostty.SurfaceView(app, baseConfig: base)
+        let second = Ghostty.SurfaceView(app, baseConfig: base)
+        let one = try #require(first.surfaceModel)
+        let two = try #require(second.surfaceModel)
+        let hidden = await rendererResources(one)
+        #expect(hidden.gridID != 0)
+        #expect(hidden.gpuTextureCount == 0)
+        #expect(hidden.gpuQueueCount == 1)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 640, height: 240),
+            styleMask: .borderless, backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        let root = try #require(window.contentView)
+        first.frame = NSRect(x: 0, y: 0, width: 320, height: 240)
+        second.frame = NSRect(x: 320, y: 0, width: 320, height: 240)
+        root.addSubview(first)
+        root.addSubview(second)
+        window.orderFront(nil)
+        first.sizeDidChange(first.bounds.size)
+        second.sizeDidChange(second.bounds.size)
+        one.setVisible(true)
+        two.setVisible(true)
+        let owner = try #require(first.windowCompositor)
+        #expect(second.windowCompositor === owner)
+        owner.updateGeometry()
+        for (view, surface) in [(first, one), (second, two)] {
+            let revision = surface.renderRevision
+            surface.sendText("atlas-ready🙂\n")
+            try await waitForText("atlas-ready🙂", in: surface)
+            try await waitForFrame(after: revision, in: view)
+        }
+        let a = await rendererResources(one)
+        let b = await rendererResources(two)
+        #expect(a.gridID == b.gridID)
+        #expect(a.cpuGrayscaleBytes == b.cpuGrayscaleBytes)
+        #expect(a.cpuColorBytes == b.cpuColorBytes)
+        #expect(a.cpuNodeBytes == b.cpuNodeBytes)
+        #expect(a.codepointEntries == b.codepointEntries)
+        #expect(a.glyphEntries == b.glyphEntries)
+        #expect(a.cpuGrayscaleBytes > 0 && a.cpuColorBytes > 0)
+        #expect(a.codepointCapacity >= a.codepointEntries && a.glyphCapacity >= a.glyphEntries)
+        for usage in [a, b] {
+            #expect(usage.gpuTextureCount == 6)
+            #expect(usage.gpuQueueCount == 1)
+            #expect(usage.gpuAllocatedBytes >= usage.gpuTexelBytes)
+            #expect(usage.gpuAllocatedBytes > 0)
+        }
+        #expect(one.changeFontSize(by: 2))
+        let deadline = ContinuousClock.now + .seconds(5)
+        var changed = await rendererResources(one)
+        while changed.gridID == a.gridID && ContinuousClock.now < deadline {
+            await Task.yield()
+            changed = await rendererResources(one)
+        }
+        #expect(changed.gridID != a.gridID)
+        #expect(await rendererResources(two).gridID == a.gridID)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        let encoded = try encoder.encode([a, b])
+        let json = try #require(String(data: encoded, encoding: .utf8))
+        print("RENDERER_RESOURCE_JSON " + json)
+        print("ATLAS_RESOURCE_METRIC sharedCPUBytes=\(a.cpuGrayscaleBytes + a.cpuColorBytes + a.cpuNodeBytes) " +
+            "gpuOwnedBytes=\(a.gpuAllocatedBytes + b.gpuAllocatedBytes) textures=\(a.gpuTextureCount + b.gpuTextureCount)")
+    }
+
     @Test func unknownHardwareCodesAndCommittedTextSurviveMarshalling() {
         let event = Ghostty.Input.KeyEvent(
             keyCode: 65535, action: .repeat, text: "中文🙂", composing: true,

@@ -324,6 +324,36 @@ extension Ghostty {
 
         @MainActor var renderRevision: UInt64 { ghostty_surface_render_revision(surface) }
 
+        /// Selected resources owned by the renderer, not total process memory.
+        /// Multiple surfaces can share gridID and the CPU buffers it identifies.
+        nonisolated struct RendererResources: Sendable, Codable {
+            let gridID: UInt64
+            let cpuGrayscaleBytes: UInt64
+            let cpuColorBytes: UInt64
+            let cpuNodeBytes: UInt64
+            let codepointEntries: UInt64
+            let codepointCapacity: UInt64
+            let glyphEntries: UInt64
+            let glyphCapacity: UInt64
+            let gpuTexelBytes: UInt64
+            let gpuAllocatedBytes: UInt64
+            let gpuTextureCount: UInt64
+            let gpuQueueCount: UInt64
+        }
+
+        /// Retain this surface and call from a background task; the core
+        /// serializes with drawing and font-grid replacement without allocating.
+        nonisolated func rendererResources() -> RendererResources {
+            let value = ghostty_surface_renderer_resources(surface)
+            return RendererResources(gridID: value.grid_id,
+                cpuGrayscaleBytes: value.cpu_grayscale_bytes, cpuColorBytes: value.cpu_color_bytes,
+                cpuNodeBytes: value.cpu_node_bytes, codepointEntries: value.codepoint_entries,
+                codepointCapacity: value.codepoint_capacity, glyphEntries: value.glyph_entries,
+                glyphCapacity: value.glyph_capacity, gpuTexelBytes: value.gpu_texel_bytes,
+                gpuAllocatedBytes: value.gpu_allocated_bytes, gpuTextureCount: value.gpu_texture_count,
+                gpuQueueCount: value.gpu_queue_count)
+        }
+
         /// Explicit readback from an independent Metal texture; no window drawable is retained.
         nonisolated func copySnapshot(maxDimension: Int = 0) -> CGImage? {
             guard let limit = UInt32(exactly: maxDimension),

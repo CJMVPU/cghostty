@@ -819,6 +819,52 @@ pub fn requestFrame(self: *Self) void {
     if (self.api.pane.compositor_sink) |sink| sink.msgSend(void, "requestFrame", .{});
 }
 
+/// Selected renderer resources. Shared CPU atlas data must be deduplicated by grid_id;
+/// GPU textures belong to this renderer's current swap-chain slots. Cache
+/// counts/capacities are not allocator bytes, and this is not process RSS.
+pub const RendererResources = extern struct {
+    grid_id: u64,
+    cpu_grayscale_bytes: u64,
+    cpu_color_bytes: u64,
+    cpu_node_bytes: u64,
+    codepoint_entries: u64,
+    codepoint_capacity: u64,
+    glyph_entries: u64,
+    glyph_capacity: u64,
+    gpu_texel_bytes: u64 = 0,
+    gpu_allocated_bytes: u64 = 0,
+    gpu_texture_count: u64 = 0,
+    gpu_queue_count: u64 = 1,
+};
+
+/// Keep the surface alive and query from a background task: the draw mutex
+/// can wait for an explicit GPU snapshot. No resource is created here.
+pub fn rendererResources(self: *Self) RendererResources {
+    self.draw_mutex.lockUncancelable(global.io());
+    defer self.draw_mutex.unlock(global.io());
+    self.font_grid.lock.lockSharedUncancelable(global.io());
+    defer self.font_grid.lock.unlockShared(global.io());
+    const grid = self.font_grid;
+    var result: RendererResources = .{
+        .grid_id = grid.resource_id,
+        .cpu_grayscale_bytes = grid.atlas_grayscale.data.len,
+        .cpu_color_bytes = grid.atlas_color.data.len,
+        .cpu_node_bytes = grid.atlas_grayscale.nodeCapacityBytes() + grid.atlas_color.nodeCapacityBytes(),
+        .codepoint_entries = grid.codepoints.count(),
+        .codepoint_capacity = grid.codepoints.capacity(),
+        .glyph_entries = grid.glyphs.count(),
+        .glyph_capacity = grid.glyphs.capacity(),
+    };
+    if (self.swap_chain) |*sc| for (&sc.frames) |*frame| {
+        for ([_]Texture{ frame.grayscale, frame.color }) |texture| {
+            result.gpu_texel_bytes += texture.width * texture.height * texture.bpp;
+            result.gpu_allocated_bytes += texture.allocated_bytes;
+            result.gpu_texture_count += 1;
+        }
+    };
+    return result;
+}
+
 /// Update the font grid. Serialized with frame updates by renderer.Thread.
 pub fn setFontGrid(self: *Self, grid: *font.SharedGrid) void {
     self.draw_mutex.lockUncancelable(global.io());

@@ -207,6 +207,12 @@ pub fn init(alloc: Allocator, size: u32, format: Format) Allocator.Error!Atlas {
     return result;
 }
 
+/// Capacity owned by the skyline list, excluding allocator bookkeeping.
+/// Caller holds the containing font grid's lock.
+pub fn nodeCapacityBytes(self: *const Atlas) usize {
+    return self.nodes.capacity * @sizeOf(Node);
+}
+
 pub fn deinit(self: *Atlas, alloc: Allocator) void {
     self.nodes.deinit(alloc);
     alloc.free(self.data);
