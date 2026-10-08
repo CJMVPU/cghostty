@@ -65,7 +65,7 @@ pub const Shaper = struct {
 
     /// The grid that our cached fonts correspond to.
     /// If the grid changes then we need to reset our cache.
-    cached_font_grid: usize,
+    cached_font_grid: u64,
 
     /// The list of CoreFoundation objects to release on the dedicated
     /// release thread. This is built up over the course of shaping and
@@ -517,9 +517,9 @@ pub const Shaper = struct {
     ) !*macos.foundation.Dictionary {
         // If this grid doesn't match the one we've cached fonts for,
         // then we reset the cache list since it's no longer valid.
-        // We use an intFromPtr rather than direct pointer comparison
-        // because we don't want anyone to inadvertently use the pointer.
-        const grid_id: usize = @intFromPtr(grid);
+        // A new grid can reuse the old address. Cache by lifetime identity,
+        // matching resource snapshots, rather than treating an address as identity.
+        const grid_id = grid.resource_id;
         if (grid_id != self.cached_font_grid) {
             if (self.cached_font_grid > 0) {
                 // Put all the currently cached fonts in to
@@ -2705,4 +2705,23 @@ fn testShaperWithDiscoveredFont(alloc: Allocator, font_req: [:0]const u8) !TestS
         .shaper = shaper,
         .grid = grid_ptr,
     };
+}
+
+test "coretext font cache invalidates a grid replaced at the same address" {
+    const t = std.testing;
+    var first = try testShaper(t.allocator);
+    defer first.deinit();
+    var second = try testShaper(t.allocator);
+    defer second.deinit();
+    const index = (try first.grid.getIndex(t.allocator, 'A', .regular, .text)).?;
+    const old = try first.shaper.getFont(first.grid, index);
+    const address = first.grid;
+    // Model the allocator reusing the old grid address for a new lifetime.
+    // Both grids remain valid and all font resources retain their owners.
+    std.mem.swap(SharedGrid, first.grid, second.grid);
+    try t.expectEqual(address, first.grid);
+    const new_index = (try first.grid.getIndex(t.allocator, 'A', .regular, .text)).?;
+    const fresh = try first.shaper.getFont(first.grid, new_index);
+    try t.expect(old != fresh);
+    try t.expectEqual(first.grid.resource_id, first.shaper.cached_font_grid);
 }
