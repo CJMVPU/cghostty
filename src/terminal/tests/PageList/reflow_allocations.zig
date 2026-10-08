@@ -138,8 +138,9 @@ test "PageList reflow allocation probe grapheme baseline" {
     });
 }
 
-test "PageList reflow allocation probe hyperlink baseline" {
+test "PageList reflow allocation probe reuses hyperlink mappings" {
     const metrics = try hyperlinkProbe();
+    try std.testing.expectEqual(@as(usize, 1), metrics.hyperlink_dupe_attempts);
     std.debug.print("reflow-allocation-probe hyperlink cells={d} dupe_attempts={d}\n", .{
         text.len, metrics.hyperlink_dupe_attempts,
     });

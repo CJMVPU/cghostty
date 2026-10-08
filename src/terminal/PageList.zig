@@ -1581,6 +1581,10 @@ const ReflowCursor = struct {
     /// page change goes through init() which resets this.
     style_cache: StyleCache,
 
+    /// Bounded source-link mappings for this destination page. init() clears
+    /// them on page replacement/capacity growth; written cells own every ID.
+    hyperlink_cache: [8]?struct { src_page: *const Page, src_id: hyperlink.Id, dst_id: hyperlink.Id } = @splat(null),
+
     /// Memoizes the capacity adjustment for new destination pages
     /// (see reflowRow). It only depends on the source page so this is
     /// keyed by the source page pointer, which reflow visits
@@ -2283,65 +2287,30 @@ const ReflowCursor = struct {
                 try self.increaseCapacity(list, .hyperlink_bytes);
             }
 
-            // Ensure that the string alloc has sufficient capacity
-            // to dupe the link (and the ID if it's not implicit).
-            // Grow our capacity until the hyperlink fits.
-            while (!self.hyperlinkStringsFit(src_link)) {
-                try self.increaseCapacity(list, .string_bytes);
-            }
-
-            if (comptime builtin.is_test) list.reflow_metrics.hyperlink_dupe_attempts += 1;
-            const dst_link = src_link.dupe(
-                src_page,
-                self.page,
-            ) catch |err| {
-                // This shouldn't fail since we did a capacity
-                // check above.
-                log.err("link dupe failed with capacity check err={}", .{err});
-                if (comptime std.debug.runtime_safety) {
-                    // Force a crash with safe builds.
-                    unreachable;
+            const cache_index = @as(usize, src_id) % self.hyperlink_cache.len;
+            const dst_id = mapped: {
+                if (self.hyperlink_cache[cache_index]) |cached| {
+                    if (cached.src_page == src_page and cached.src_id == src_id) {
+                        self.page.hyperlink_set.use(self.page.memory, cached.dst_id);
+                        break :mapped cached.dst_id;
+                    }
                 }
 
-                break :hyperlink;
-            };
-
-            const dst_id = self.page.hyperlink_set.addWithIdContext(
-                self.page.memory,
-                dst_link,
-                src_id,
-                .{ .page = self.page },
-            ) catch |err| id: {
-                // Always free our original link in case the increaseCap
-                // call fails so we aren't leaking memory.
-                dst_link.free(self.page);
-
-                // If the add failed then either the set needs to grow
-                // or it needs to be rehashed. Either one of those can
-                // be accomplished by increasing capacity, either with
-                // no actual change or with an increased hyperlink cap.
-                try self.increaseCapacity(list, switch (err) {
-                    error.OutOfMemory => .hyperlink_bytes,
-                    error.NeedsRehash => null,
-                });
-
-                // The increaseCapacity call above swapped self.page
-                // for a new page, so the string capacity check done
-                // before the first dupe no longer applies. Re-establish
-                // it against the current page before duping again.
+                // Ensure that the string alloc has sufficient capacity
+                // to dupe the link (and the ID if it's not implicit).
+                // Grow our capacity until the hyperlink fits.
                 while (!self.hyperlinkStringsFit(src_link)) {
                     try self.increaseCapacity(list, .string_bytes);
                 }
 
-                // We need to recreate the link into the new page.
                 if (comptime builtin.is_test) list.reflow_metrics.hyperlink_dupe_attempts += 1;
-                const dst_link2 = src_link.dupe(
+                const dst_link = src_link.dupe(
                     src_page,
                     self.page,
-                ) catch |err2| {
+                ) catch |err| {
                     // This shouldn't fail since we did a capacity
                     // check above.
-                    log.err("link dupe failed with capacity check err={}", .{err2});
+                    log.err("link dupe failed with capacity check err={}", .{err});
                     if (comptime std.debug.runtime_safety) {
                         // Force a crash with safe builds.
                         unreachable;
@@ -2350,33 +2319,81 @@ const ReflowCursor = struct {
                     break :hyperlink;
                 };
 
-                // We assume this one will succeed. We dupe the link
-                // again, and don't have to worry about the other one
-                // because increasing the capacity naturally clears up
-                // any managed memory not associated with a cell yet.
-                break :id self.page.hyperlink_set.addWithIdContext(
+                const mapped_id = self.page.hyperlink_set.addWithIdContext(
                     self.page.memory,
-                    dst_link2,
+                    dst_link,
                     src_id,
                     .{ .page = self.page },
-                ) catch |err2| {
-                    // This shouldn't happen since we increased capacity
-                    // above so we handle it like the other similar
-                    // cases and log it, crash in safe builds, and
-                    // remove the hyperlink in unsafe builds.
-                    log.err(
-                        "addWithIdContext failed after capacity increase err={}",
-                        .{err2},
-                    );
-                    if (comptime std.debug.runtime_safety) {
-                        // Force a crash with safe builds.
-                        unreachable;
+                ) catch |err| id: {
+                    // Always free our original link in case the increaseCap
+                    // call fails so we aren't leaking memory.
+                    dst_link.free(self.page);
+
+                    // If the add failed then either the set needs to grow
+                    // or it needs to be rehashed. Either one of those can
+                    // be accomplished by increasing capacity, either with
+                    // no actual change or with an increased hyperlink cap.
+                    try self.increaseCapacity(list, switch (err) {
+                        error.OutOfMemory => .hyperlink_bytes,
+                        error.NeedsRehash => null,
+                    });
+
+                    // The increaseCapacity call above swapped self.page
+                    // for a new page, so the string capacity check done
+                    // before the first dupe no longer applies. Re-establish
+                    // it against the current page before duping again.
+                    while (!self.hyperlinkStringsFit(src_link)) {
+                        try self.increaseCapacity(list, .string_bytes);
                     }
 
-                    dst_link2.free(self.page);
-                    break :hyperlink;
-                };
-            } orelse src_id;
+                    // We need to recreate the link into the new page.
+                    if (comptime builtin.is_test) list.reflow_metrics.hyperlink_dupe_attempts += 1;
+                    const dst_link2 = src_link.dupe(
+                        src_page,
+                        self.page,
+                    ) catch |err2| {
+                        // This shouldn't fail since we did a capacity
+                        // check above.
+                        log.err("link dupe failed with capacity check err={}", .{err2});
+                        if (comptime std.debug.runtime_safety) {
+                            // Force a crash with safe builds.
+                            unreachable;
+                        }
+
+                        break :hyperlink;
+                    };
+
+                    // We assume this one will succeed. We dupe the link
+                    // again, and don't have to worry about the other one
+                    // because increasing the capacity naturally clears up
+                    // any managed memory not associated with a cell yet.
+                    break :id self.page.hyperlink_set.addWithIdContext(
+                        self.page.memory,
+                        dst_link2,
+                        src_id,
+                        .{ .page = self.page },
+                    ) catch |err2| {
+                        // This shouldn't happen since we increased capacity
+                        // above so we handle it like the other similar
+                        // cases and log it, crash in safe builds, and
+                        // remove the hyperlink in unsafe builds.
+                        log.err(
+                            "addWithIdContext failed after capacity increase err={}",
+                            .{err2},
+                        );
+                        if (comptime std.debug.runtime_safety) {
+                            // Force a crash with safe builds.
+                            unreachable;
+                        }
+
+                        dst_link2.free(self.page);
+                        break :hyperlink;
+                    };
+                } orelse src_id;
+
+                self.hyperlink_cache[cache_index] = .{ .src_page = src_page, .src_id = src_id, .dst_id = mapped_id };
+                break :mapped mapped_id;
+            };
 
             // We expect this to succeed due to the hyperlinkCapacity
             // check we did before. If it doesn't succeed let's
@@ -2396,6 +2413,7 @@ const ReflowCursor = struct {
                 }
 
                 // Unsafe builds we throw away hyperlink data!
+                self.hyperlink_cache[cache_index] = null;
                 self.page.hyperlink_set.release(self.page.memory, dst_id);
                 self.page_cell.hyperlink = false;
                 break :hyperlink;
