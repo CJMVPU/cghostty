@@ -38,6 +38,10 @@ const sync_reset_ms = 1000;
 /// The number of milliseconds between each movement during selection scrolling.
 const selection_scroll_ms = 15;
 
+/// Yield to stop, resize timers and write completions between mailbox batches.
+const mailbox_message_budget = 32;
+const mailbox_byte_budget = 256 * 1024;
+
 /// Allocator used for some state
 alloc: std.mem.Allocator,
 
@@ -229,7 +233,16 @@ fn drainMailbox(
     // message must not leave the rest waiting for an already-coalesced wakeup.
     var redraw: bool = false;
     var first_error: ?anyerror = null;
-    while (mailbox.pop(global.io())) |message| {
+    var count: usize = 0;
+    var bytes: usize = 0;
+    while (count < mailbox_message_budget and bytes < mailbox_byte_budget) : (count += 1) {
+        const message = mailbox.pop(global.io()) orelse break;
+        bytes +|= switch (message) {
+            .write_small => |v| v.len,
+            .write_stable => |v| v.len,
+            .write_alloc => |v| v.data.len,
+            else => 0,
+        };
         redraw = true;
         log.debug("mailbox message={s}", .{@tagName(message)});
         self.handleMailboxMessage(cb, message) catch |err| {
@@ -239,6 +252,11 @@ fn drainMailbox(
 
     // Notify once for the batch, including changes processed after a failure.
     if (redraw) io.renderer_wakeup.notify() catch |err| {
+        if (first_error == null) first_error = err;
+    };
+    // Mach notifications are consumed before this callback. Rearming alone
+    // cannot deliver the rest of an already-published batch.
+    if (mailbox.pendingCount(global.io()) > 0) io.mailbox.spsc.wakeup.notify() catch |err| {
         if (first_error == null) first_error = err;
     };
     if (first_error) |err| return err;
@@ -600,6 +618,7 @@ test "IO owned write adopts large mailbox buffer without a second allocation" {
         fixture.io.mailbox.send(.{ .write_alloc = .{ .alloc = owners.allocator(), .data = bytes } }, null);
         fixture.io.mailbox.send(.{ .write_stable = "\x1b[A" }, null);
         try fixture.worker.drainMailbox(&fixture.cb);
+        try fixture.worker.drainMailbox(&fixture.cb);
 
         std.debug.print("\nOWNED_WRITE_METRIC source_bytes={d} linefeed={} io_extra_allocated_bytes={d}\n", .{
             bytes.len, linefeed, writes.allocated_bytes - before,
@@ -695,4 +714,40 @@ test "IO owned write allocation failures release source and replacement buffers"
             }
         }
     }.run, .{});
+}
+
+test "IO mailbox bounded drain renotifies pending controls without another producer" {
+    const t = std.testing;
+    var fixture: DrainTest = .{};
+    try fixture.init(t.allocator);
+    defer fixture.deinit();
+    for (0..64) |i| fixture.io.mailbox.send(.{ .linefeed_mode = i >= mailbox_message_budget }, null);
+    fixture.io.mailbox.spsc.wakeup.wait(&fixture.worker.loop, &fixture.worker.wakeup_c, CallbackData, &fixture.cb, wakeupCallback);
+    try fixture.worker.drainMailbox(&fixture.cb);
+    try t.expectEqual(@as(usize, 32), fixture.io.mailbox.spsc.queue.pendingCount(t.io));
+    try t.expect(!fixture.worker.flags.linefeed_mode);
+    // Only drainMailbox's continuation can wake this loop; no producer notify.
+    try fixture.worker.loop.run(.no_wait);
+    try t.expectEqual(@as(usize, 0), fixture.io.mailbox.spsc.queue.pendingCount(t.io));
+    try t.expect(fixture.worker.flags.linefeed_mode);
+}
+
+test "IO mailbox byte budget preserves a large frame and following input" {
+    const t = std.testing;
+    var fixture: DrainTest = .{};
+    try fixture.init(t.allocator);
+    defer fixture.deinit();
+    const frame = try t.allocator.alloc(u8, mailbox_byte_budget + 1);
+    @memset(frame, 'a');
+    fixture.io.mailbox.send(.{ .write_alloc = .{ .alloc = t.allocator, .data = frame } }, null);
+    fixture.io.mailbox.send(.{ .linefeed_mode = true }, null);
+    fixture.io.mailbox.send(.{ .write_stable = "last\r" }, null);
+    try fixture.worker.drainMailbox(&fixture.cb);
+    try t.expectEqual(@as(usize, 2), fixture.io.mailbox.spsc.queue.pendingCount(t.io));
+    try t.expect(!fixture.worker.flags.linefeed_mode);
+    try t.expectEqual(frame.ptr, fixture.cb.data.backend.write_queue.head.?.full_write_buffer.slice.ptr);
+    try fixture.worker.drainMailbox(&fixture.cb);
+    const first = fixture.cb.data.backend.write_queue.head.?;
+    try t.expectEqualStrings("last\r\n", first.next.?.full_write_buffer.slice);
+    try t.expect(first.next.?.next == null);
 }

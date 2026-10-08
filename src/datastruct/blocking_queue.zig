@@ -219,6 +219,13 @@ pub fn BlockingQueue(
             }
         };
 
+        /// A snapshot only; producers can publish again after the lock is released.
+        pub fn pendingCount(self: *Self, io: std.Io) Size {
+            self.mutex.lockUncancelable(io);
+            defer self.mutex.unlock(io);
+            return self.len;
+        }
+
         /// Returns true if the queue is full. This is not public because
         /// it requires the lock to be held.
         inline fn full(self: *Self) bool {
