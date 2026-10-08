@@ -1257,6 +1257,12 @@ typedef struct {
   uint64_t cpu_grayscale_bytes, cpu_color_bytes, cpu_node_bytes;
   uint64_t codepoint_entries, codepoint_capacity, glyph_entries, glyph_capacity;
   uint64_t gpu_texel_bytes, gpu_allocated_bytes, gpu_texture_count, gpu_queue_count;
+  // Current renderer ownership, excluding retired command references and
+  // external snapshots. Pending CPU bytes may share storage with RenderHold.
+  uint64_t cpu_image_pending_bytes, cpu_background_pending_bytes;
+  uint64_t gpu_image_texel_bytes, gpu_image_allocated_bytes, gpu_image_texture_count;
+  uint64_t gpu_background_allocated_bytes;
+  uint64_t gpu_scroll_allocated_bytes, gpu_scroll_texture_count;
 } ghostty_renderer_resources_s;
 GHOSTTY_API ghostty_renderer_resources_s ghostty_surface_renderer_resources(ghostty_surface_t);
 // Main-thread snapshot; returns an owned id<MTLTexture> in shared storage.

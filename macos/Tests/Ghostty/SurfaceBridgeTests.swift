@@ -140,6 +140,10 @@ import Testing
             #expect(usage.gpuQueueCount == 0)
             #expect(usage.gpuAllocatedBytes >= usage.gpuTexelBytes)
             #expect(usage.gpuAllocatedBytes > 0)
+            #expect(usage.gpuImageTextureCount == 0)
+            #expect(usage.gpuBackgroundAllocatedBytes == 0)
+            #expect(usage.gpuScrollTextureCount > 0)
+            #expect(usage.gpuScrollAllocatedBytes > 0)
         }
         #expect(await Task.detached { one.copySnapshot(maxDimension: 64) != nil }.value)
         #expect(await rendererResources(one).gpuQueueCount == 1)
@@ -452,6 +456,12 @@ import Testing
             let bands = redColumns.filter { !redColumns.contains($0 - 1) }.count
             #expect(bands == 2, "Both red image placements must survive distinct buffer offsets")
         }
+        let resources = await rendererResources(surface)
+        #expect(resources.gpuImageTextureCount == 1, "Two placements share one image texture")
+        #expect(resources.gpuImageTexelBytes == 4)
+        #expect(resources.gpuImageAllocatedBytes >= resources.gpuImageTexelBytes)
+        #expect(resources.cpuImagePendingBytes == 0, "Upload releases this state's CPU pixels")
+        #expect(resources.gpuScrollAllocatedBytes > 0)
         let afterSnapshots = surface.renderRevision
         #expect(surface.sendKeyEvent(.init(keyCode: 0, action: .press, text: "after-snapshots")))
         try await waitForText("after-snapshots", in: surface)

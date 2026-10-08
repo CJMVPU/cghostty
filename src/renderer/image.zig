@@ -58,6 +58,17 @@ pub const State = struct {
         self.kitty_placements.deinit(alloc);
     }
 
+    /// Current references held by this state, including deferred unloads.
+    /// Shared CPU pixels can also be retained by RenderHold captures, so these
+    /// bytes must not be summed across states as distinct allocations. GPU
+    /// command references that outlive an entry are outside this snapshot.
+    pub fn resources(self: *const State) Resources {
+        var result: Resources = .{};
+        var it = self.images.valueIterator();
+        while (it.next()) |entry| result.add(entry.image);
+        return result;
+    }
+
     /// Adopt an IO-thread CPU snapshot on the renderer thread. Reuse an
     /// existing texture when the image generation matches; never move GPU
     /// objects back to the IO thread. `snapshot` is empty on return.
@@ -847,6 +858,22 @@ pub const ImageMap = std.AutoHashMapUnmanaged(Id, struct {
     generation: u64,
 });
 
+pub const Resources = struct {
+    pending_bytes: usize = 0,
+    texel_bytes: usize = 0,
+    allocated_bytes: usize = 0,
+    texture_count: usize = 0,
+
+    pub fn add(self: *Resources, image: Image) void {
+        if (image.getPending()) |pending| self.pending_bytes += pending.len();
+        if (image.getTexture()) |texture| {
+            self.texel_bytes += texture.width * texture.height * texture.bpp;
+            self.allocated_bytes += texture.allocated_bytes;
+            self.texture_count += 1;
+        }
+    }
+};
+
 /// The state for a single image that is to be rendered.
 pub const Image = union(enum) {
     /// The image data is pending upload to the GPU.
@@ -1164,6 +1191,46 @@ pub const Image = union(enum) {
         };
     }
 };
+
+test "kitty renderer resource snapshot includes replacement and deferred unload owners" {
+    const t = std.testing;
+    const texture: Texture = .{
+        .texture = @import("objc").Object.fromId(@as(*anyopaque, @ptrFromInt(1))),
+        .width = 3,
+        .height = 2,
+        .bpp = 4,
+        .allocated_bytes = 128,
+    };
+    const pending: Image.Pending = .{
+        .width = 2,
+        .height = 2,
+        .pixel_format = .rgba,
+        .data = @constCast("0123456789abcdef".ptr),
+    };
+    var state: State = .empty;
+    // Synthetic resources are only read, never retained or released.
+    defer state.images.deinit(t.allocator);
+    for ([_]Image{
+        .{ .pending = pending },
+        .{ .unload_pending = pending },
+        .{ .ready = texture },
+        .{ .unload_ready = texture },
+        .{ .replace = .{ .texture = texture, .pending = pending } },
+        .{ .unload_replace = .{ .texture = texture, .pending = pending } },
+    }, 1..) |image, id| try state.images.put(t.allocator, .{ .kitty = @intCast(id) }, .{
+        .generation = id,
+        .image = image,
+    });
+    try t.expectEqualDeep(Resources{
+        .pending_bytes = 64,
+        .texel_bytes = 96,
+        .allocated_bytes = 512,
+        .texture_count = 4,
+    }, state.resources());
+    _ = state.images.remove(.{ .kitty = 6 });
+    try t.expectEqual(@as(usize, 48), state.resources().pending_bytes);
+    try t.expectEqual(@as(usize, 384), state.resources().allocated_bytes);
+}
 
 test "kitty renderer ignores pending payloads and removes replaced placements" {
     const testing = std.testing;

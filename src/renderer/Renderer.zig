@@ -836,6 +836,15 @@ pub const RendererResources = extern struct {
     gpu_allocated_bytes: u64 = 0,
     gpu_texture_count: u64 = 0,
     gpu_queue_count: u64 = 0,
+    // CPU reference bytes, not unique allocation bytes across RenderHold states.
+    cpu_image_pending_bytes: u64 = 0,
+    cpu_background_pending_bytes: u64 = 0,
+    gpu_image_texel_bytes: u64 = 0,
+    gpu_image_allocated_bytes: u64 = 0,
+    gpu_image_texture_count: u64 = 0,
+    gpu_background_allocated_bytes: u64 = 0,
+    gpu_scroll_allocated_bytes: u64 = 0,
+    gpu_scroll_texture_count: u64 = 0,
 };
 
 /// Keep the surface alive and query from a background task: the draw mutex
@@ -863,6 +872,21 @@ pub fn rendererResources(self: *Self) RendererResources {
             result.gpu_allocated_bytes += texture.allocated_bytes;
             result.gpu_texture_count += 1;
         }
+    };
+    const images = self.images.resources();
+    result.cpu_image_pending_bytes = images.pending_bytes;
+    result.gpu_image_texel_bytes = images.texel_bytes;
+    result.gpu_image_allocated_bytes = images.allocated_bytes;
+    result.gpu_image_texture_count = images.texture_count;
+    if (self.bg_image) |image| {
+        var background: imagepkg.Resources = .{};
+        background.add(image);
+        result.cpu_background_pending_bytes = background.pending_bytes;
+        result.gpu_background_allocated_bytes = background.allocated_bytes;
+    }
+    for (self.scroll.textures) |texture| if (texture) |t| {
+        result.gpu_scroll_allocated_bytes += t.allocated_bytes;
+        result.gpu_scroll_texture_count += 1;
     };
     return result;
 }

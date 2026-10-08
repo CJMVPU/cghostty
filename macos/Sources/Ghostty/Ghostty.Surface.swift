@@ -339,6 +339,14 @@ extension Ghostty {
             let gpuAllocatedBytes: UInt64
             let gpuTextureCount: UInt64
             let gpuQueueCount: UInt64
+            let cpuImagePendingBytes: UInt64
+            let cpuBackgroundPendingBytes: UInt64
+            let gpuImageTexelBytes: UInt64
+            let gpuImageAllocatedBytes: UInt64
+            let gpuImageTextureCount: UInt64
+            let gpuBackgroundAllocatedBytes: UInt64
+            let gpuScrollAllocatedBytes: UInt64
+            let gpuScrollTextureCount: UInt64
         }
 
         /// Retain this surface and call from a background task; the core
@@ -351,7 +359,15 @@ extension Ghostty {
                 codepointCapacity: value.codepoint_capacity, glyphEntries: value.glyph_entries,
                 glyphCapacity: value.glyph_capacity, gpuTexelBytes: value.gpu_texel_bytes,
                 gpuAllocatedBytes: value.gpu_allocated_bytes, gpuTextureCount: value.gpu_texture_count,
-                gpuQueueCount: value.gpu_queue_count)
+                gpuQueueCount: value.gpu_queue_count,
+                cpuImagePendingBytes: value.cpu_image_pending_bytes,
+                cpuBackgroundPendingBytes: value.cpu_background_pending_bytes,
+                gpuImageTexelBytes: value.gpu_image_texel_bytes,
+                gpuImageAllocatedBytes: value.gpu_image_allocated_bytes,
+                gpuImageTextureCount: value.gpu_image_texture_count,
+                gpuBackgroundAllocatedBytes: value.gpu_background_allocated_bytes,
+                gpuScrollAllocatedBytes: value.gpu_scroll_allocated_bytes,
+                gpuScrollTextureCount: value.gpu_scroll_texture_count)
         }
 
         /// Explicit readback from an independent Metal texture; no window drawable is retained.
