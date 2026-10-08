@@ -22,6 +22,10 @@
       {
         "key" : "CGHOSTTY_MAC_LAUNCH_SOURCE",
         "value" : "app"
+      },
+      {
+        "key" : "CGHOSTTY_RESOURCE_SURFACES",
+        "value" : "$(CGHOSTTY_RESOURCE_SURFACES)"
       }
     ],
     "performanceAntipatternCheckerEnabled" : true,

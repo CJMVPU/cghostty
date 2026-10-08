@@ -34,6 +34,19 @@ class BuildEntryTests(unittest.TestCase):
                         self.assertEqual(run.call_args.args[0], expected)
                         self.assertEqual(run.call_args.kwargs['env']['CGHOSTTY_BUILD_LOCK_ROOT'], str(root))
 
+    def test_native_resource_probe_option_survives_managed_forwarding(self):
+        arguments = ['--action', 'test', '--resource-probe-surfaces', '8',
+                     '--only-testing', 'GhosttyTests/RendererResourceProbeTests']
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch.object(build, 'ROOT', root), patch.object(build.cache, 'maintain_locked'):
+                with patch.object(build.subprocess, 'run') as run, patch.object(
+                        build.results, 'prepare', return_value=(arguments, None)):
+                    run.return_value.returncode = 7
+                    self.assertEqual(build.run('native', arguments), 7)
+                    self.assertEqual(run.call_args.args[0],
+                                     ['nu', str(root / 'macos/build.nu'), *arguments])
+
     def test_native_clean_does_not_trim(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(build.cache, 'maintain_locked') as trim:
             with patch.object(build, 'ROOT', Path(directory)), patch.object(build.subprocess, 'run'):

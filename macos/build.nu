@@ -11,6 +11,7 @@ def main [
     --skip-core
     --ui-tests
     --only-testing: string = "" # Comma-separated suites or test identifiers
+    --resource-probe-surfaces: int = 0 # Explicit opt-in, 1...32 hidden surfaces
     --clock-experiment: string = ""
 ] {
     if (^uname -s | str trim) != "Darwin" or (^uname -m | str trim) != "arm64" {
@@ -31,6 +32,9 @@ def main [
     if ($ui_tests or $only_testing != "") and $action != "test" {
         error make {msg: "--ui-tests and --only-testing require --action test."}
     }
+    if $resource_probe_surfaces < 0 or $resource_probe_surfaces > 32 or ($resource_probe_surfaces > 0 and $action != "test") {
+        error make {msg: "--resource-probe-surfaces requires --action test and a count from 1 to 32 (0 disables)."}
+    }
     if $clock_experiment not-in ["" metal] {
         error make {msg: "Unknown clock experiment variant."}
     }
@@ -43,7 +47,8 @@ def main [
     if ($env.CGHOSTTY_BUILD_LOCK_ROOT? | default "") != $root {
         let forwarded = [--configuration $configuration --action $action
             --version $version --result-bundle $result_bundle --build-dir $build_dir
-            --only-testing $only_testing --clock-experiment $clock_experiment]
+            --only-testing $only_testing --clock-experiment $clock_experiment
+            --resource-probe-surfaces $resource_probe_surfaces]
         let flags = ([
             (if $skip_core { "--skip-core" } else { null })
             (if $ui_tests { "--ui-tests" } else { null })
@@ -95,6 +100,7 @@ def main [
     ] | compact | str join " ")
     let test_settings = ([
         (if $action == "test" { "ENABLE_TESTABILITY=YES" } else { null })
+        (if $action == "test" { $"CGHOSTTY_RESOURCE_SURFACES=($resource_probe_surfaces)" } else { null })
         (if $conditions != "" { ("SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) " + $conditions) } else { null })
     ] | compact)
     let result_args = if $result_bundle == "" { [] } else {
