@@ -1380,6 +1380,10 @@ fn mouseRefreshLinksUncached(self: *Surface, pos: apprt.CursorPos, pos_vp: termi
 pub fn flushSearchResults(self: *Surface) void {
     const session = self.search orelse return;
     const ui = session.takeUI() orelse return;
+    if (ui.worker_exited) {
+        self.stopSearch() catch |err| log.warn("search shutdown delivery failed err={}", .{err});
+        return;
+    }
     self.handleMessage(.{ .search_total = ui.total }) catch |err| log.warn("search total delivery failed err={}", .{err});
     self.handleMessage(.{ .search_selected = ui.selected }) catch |err| log.warn("search selection delivery failed err={}", .{err});
 }

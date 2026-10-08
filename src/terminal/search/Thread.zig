@@ -123,6 +123,8 @@ pub fn deinit(self: *Thread) void {
 
 /// The main entrypoint for the thread.
 pub fn threadMain(self: *Thread) void {
+    // Notify the owner even if startup fails before the loop is registered.
+    defer if (self.opts.event_cb) |cb| cb(.quit, self.opts.event_userdata);
     // Call child function so we can use errors...
     self.threadMain_() catch |err| {
         // In the future, we should expose this on the thread struct.
@@ -155,14 +157,7 @@ fn threadMain_(self: *Thread) !void {
 
     // Run
     log.debug("starting search thread", .{});
-    defer {
-        log.debug("starting search thread shutdown", .{});
-
-        // Send the quit message
-        if (self.opts.event_cb) |cb| {
-            cb(.quit, self.opts.event_userdata);
-        }
-    }
+    defer log.debug("starting search thread shutdown", .{});
 
     // Unlike some of our other threads, we interleave search work
     // with our xev loop so that we can try to make forward search progress

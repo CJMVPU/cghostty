@@ -17,8 +17,9 @@ output: Output,
 ui_mutex: std.Io.Mutex = .init,
 ui: UI = .{},
 ui_pending: bool = false,
+worker_exited: std.atomic.Value(bool) = .init(false),
 
-pub const UI = struct { total: ?usize = null, selected: ?usize = null };
+pub const UI = struct { total: ?usize = null, selected: ?usize = null, worker_exited: bool = false };
 
 pub fn takeUI(self: *Self) ?UI {
     self.ui_mutex.lockUncancelable(global.io());
@@ -104,6 +105,7 @@ pub fn navigate(self: *Self, direction: enum { next, previous }) !void {
 }
 
 fn send(self: *Self, message: Worker.Message) !void {
+    if (self.worker_exited.load(.acquire)) return error.SearchWorkerStopped;
     try self.state.mailbox.push(global.io(), message);
     self.state.wakeup.notify() catch {};
 }
@@ -198,6 +200,12 @@ fn forward(self: *Self, event: terminal.search.Thread.Event) !void {
             // The main thread may be joining us. No shutdown callback waits
             // for it or for the renderer to consume a bounded mailbox.
             self.output.renderer_results.clear();
+            self.worker_exited.store(true, .release);
+            self.ui_mutex.lockUncancelable(global.io());
+            self.ui = .{ .worker_exited = true };
+            self.ui_pending = true;
+            self.ui_mutex.unlock(global.io());
+            self.output.app_wakeup(self.output.app_userdata);
             try self.output.renderer_wakeup.notify();
         },
         .complete => {},
@@ -234,6 +242,10 @@ test "SearchSession shutdown completes with full app and renderer queues" {
     try ui_session.forward(.{ .selected_match = null });
     try t.expectEqual(UI{ .total = 5, .selected = null }, ui_session.takeUI().?);
     try t.expect(ui_session.takeUI() == null);
+    try ui_session.forward(.quit);
+    try t.expectEqual(UI{ .worker_exited = true }, ui_session.takeUI().?);
+    try t.expectError(error.SearchWorkerStopped, ui_session.setQuery("owned" ** 128));
+    try t.expectError(error.SearchWorkerStopped, ui_session.navigate(.next));
     ui_session.destroy();
     for (0..3) |_| {
         const session = try create(t.allocator, opts, "needle");
