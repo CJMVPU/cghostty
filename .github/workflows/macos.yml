@@ -81,7 +81,7 @@ jobs:
           python3 scripts/build.py test -Doptimize=ReleaseFast -Dtest-optimize=ReleaseFast \
             -Dtest-filter='optimization probe' -Dtest-filter='IO resize' \
             -Dtest-filter='IO mailbox' -Dtest-filter='window frame slot' \
-            -Dtest-filter='reuses hyperlink mappings' \
+            -Dtest-filter='reuses hyperlink mappings' -Dtest-filter='PTY source' \
             2>&1 | tee macos/build/ci-logs/optimized-core-tests.log
       - name: Build and test native app
         id: native-tests

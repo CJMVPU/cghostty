@@ -326,3 +326,278 @@ test "PTY write pressure probe" {
         .{ payload.len, mode, initial_requests, paused_requests, allocated_bytes, counter.allocated_bytes - counter.freed_bytes, enqueue_ns, drain_ns, paused_loop_tick_max_ns },
     );
 }
+
+const InitialInput = @import("InitialInput.zig");
+
+/// Real source descriptor, PTY and event loop. Only the source continuation
+/// mailbox is registered; it advances under the same callback boundaries as
+/// the production writer. A paused consumer still leaves loop controls usable.
+const SourceFixture = struct {
+    fixture: Fixture = undefined,
+    io: termio.Termio = undefined,
+    app: @import("../apprt.zig").App = .{},
+    app_queue: *@import("../App.zig").Mailbox.Queue = undefined,
+    wakeup_c: xev.Completion = .{},
+
+    fn init(self: *SourceFixture, alloc: std.mem.Allocator, inputs: []const InitialInput.Input) !void {
+        self.fixture = try Fixture.init(alloc);
+        errdefer self.fixture.deinit(alloc);
+        self.io.mailbox = try termio.Mailbox.initSPSC(alloc);
+        errdefer self.io.mailbox.deinit(alloc);
+        self.app_queue = try @import("../App.zig").Mailbox.Queue.create(alloc);
+        errdefer self.app_queue.destroy(alloc);
+        self.io.fault = .{};
+        self.io.surface_mailbox = .{ .surface = undefined, .app = .{ .rt_app = &self.app, .mailbox = self.app_queue } };
+        self.fixture.td.loop = &self.fixture.loop;
+        var arena = std.heap.ArenaAllocator.init(alloc);
+        errdefer arena.deinit();
+        const a = arena.allocator();
+        const input = try a.create(InitialInput);
+        // Ownership of descriptors transfers only after the final allocation.
+        const copied = try a.dupe(InitialInput.Input, inputs);
+        for (inputs) |item| switch (item) {
+            .string => {},
+            .file => |file| {
+                const flags = posix.system.fcntl(file.handle, posix.F.GETFL);
+                if (flags == -1 or posix.system.fcntl(file.handle, posix.F.SETFL, flags | @as(u32, @bitCast(posix.O{ .NONBLOCK = true }))) == -1)
+                    return error.SetNonblockingFailed;
+            },
+        };
+        input.* = .{
+            .arena = arena,
+            .input = .{},
+            .inputs = copied,
+            .io = &self.io,
+            .td = &self.fixture.td,
+        };
+        self.fixture.td.backend.initial_input = input;
+        self.io.mailbox.spsc.wakeup.wait(&self.fixture.loop, &self.wakeup_c, SourceFixture, self, continuation);
+    }
+
+    fn continuation(self_: ?*SourceFixture, _: *xev.Loop, _: *xev.Completion, result: xev.Async.WaitError!void) xev.CallbackAction {
+        _ = result catch return .disarm;
+        const self = self_.?;
+        if (self.fixture.td.backend.initial_input) |input| input.drive() catch |err| self.io.reportFault(err);
+        return .rearm;
+    }
+
+    fn start(self: *SourceFixture) !void {
+        try self.fixture.td.backend.initial_input.?.drive();
+    }
+
+    fn deinit(self: *SourceFixture, alloc: std.mem.Allocator) void {
+        self.fixture.deinit(alloc);
+        self.io.mailbox.deinit(alloc);
+        self.app_queue.destroy(alloc);
+    }
+};
+
+test "PTY source bounds read ahead and preserves subsequent paste ordering" {
+    const t = std.testing;
+    var tmp = t.tmpDir(.{});
+    defer tmp.cleanup();
+    const bytes = try t.allocator.alloc(u8, 1024 * 1024);
+    defer t.allocator.free(bytes);
+    for (bytes, 0..) |*b, i| b.* = @intCast(i % 251);
+    try tmp.dir.writeFile(t.io, .{ .sub_path = "source", .data = bytes });
+    const file = try tmp.dir.openFile(t.io, "source", .{});
+    var transferred = false;
+    defer if (!transferred) file.close(t.io);
+    var source: SourceFixture = .{};
+    try source.init(t.allocator, &.{ .{ .string = "before" }, .{ .file = file }, .{ .string = "after" } });
+    transferred = true;
+    defer source.deinit(t.allocator);
+    try source.start();
+    // The ordinary paste is prepared and owned just as before; it cannot
+    // enter the PTY queue ahead of any configured source.
+    const paste = try t.allocator.dupe(u8, "\rkey\x1b[A");
+    var exec: termio.Exec = undefined;
+    try exec.queueWriteOwned(t.allocator, &source.fixture.td, .{ .alloc = t.allocator, .data = paste }, true);
+    const start: std.Io.Timestamp = .now(t.io, .awake);
+    while (source.fixture.td.backend.initial_input.?.file_bytes == 0) {
+        try source.fixture.loop.run(.no_wait);
+        if (start.untilNow(t.io, .awake).toMilliseconds() > 1000) return error.SourceTimedOut;
+    }
+    const input = source.fixture.td.backend.initial_input.?;
+    try t.expectEqual(InitialInput.chunk_size, input.buffer.?.len);
+    try t.expectEqual(InitialInput.chunk_size, input.file_bytes);
+    // With the slave unread, PTY backpressure leaves exactly one source
+    // request and no read of the next chunk, even as the loop keeps ticking.
+    for (0..100) |_| try source.fixture.loop.run(.no_wait);
+    try t.expectEqual(InitialInput.chunk_size, input.file_bytes);
+    try t.expectEqual(@as(usize, 1), source.fixture.pending());
+    try t.expect(source.fixture.td.backend.deferred_head != null);
+    // A real ioctl remains usable while the input writer is blocked.
+    try source.fixture.pty.setSize(.{ .ws_col = 120, .ws_row = 40 });
+    try t.expectEqual(@as(u16, 120), (try source.fixture.pty.getSize()).ws_col);
+    var expected: std.Io.Writer.Allocating = .init(t.allocator);
+    defer expected.deinit();
+    try expected.writer.writeAll("before");
+    try expected.writer.writeAll(bytes);
+    try expected.writer.writeAll("after\r\nkey\x1b[A");
+    try source.fixture.drain(expected.written(), true);
+    try t.expect(source.fixture.td.backend.initial_input == null);
+    try t.expect(!source.io.fault.failed());
+}
+
+test "PTY source accepts opened streams and leaves stop responsive" {
+    const t = std.testing;
+    const pipe = try @import("../os/main.zig").pipe();
+    defer _ = posix.system.close(pipe[1]);
+    var transferred = false;
+    defer if (!transferred) {
+        _ = posix.system.close(pipe[0]);
+    };
+    var source: SourceFixture = .{};
+    try source.init(t.allocator, &.{.{ .file = .{ .handle = pipe[0], .flags = .{ .nonblocking = true } } }});
+    transferred = true;
+    defer source.deinit(t.allocator);
+    try source.start();
+    // There are no source bytes yet, and ordinary input waits behind it.
+    try source.fixture.write(t.allocator, "pending", false);
+    try source.fixture.loop.run(.no_wait);
+    try t.expectEqual(@as(usize, 0), source.fixture.pending());
+    var stop = try xev.Async.init();
+    defer stop.deinit();
+    var completion: xev.Completion = .{};
+    var stopped = false;
+    stop.wait(&source.fixture.loop, &completion, bool, &stopped, struct {
+        fn callback(value: ?*bool, loop: *xev.Loop, _: *xev.Completion, result: xev.Async.WaitError!void) xev.CallbackAction {
+            _ = result catch unreachable;
+            value.?.* = true;
+            loop.stop();
+            return .disarm;
+        }
+    }.callback);
+    try stop.notify();
+    const start: std.Io.Timestamp = .now(t.io, .awake);
+    while (!stopped) {
+        try source.fixture.loop.run(.no_wait);
+        if (start.untilNow(t.io, .awake).toMilliseconds() > 1000) return error.StopTimedOut;
+    }
+    // Teardown cancels a pending read and frees the deferred ordinary input.
+    try t.expect(source.fixture.td.backend.initial_input != null);
+}
+
+test "PTY source stream EOF completes before queued ordinary input" {
+    const t = std.testing;
+    const pipe = try @import("../os/main.zig").pipe();
+    var transferred = false;
+    defer if (!transferred) {
+        _ = posix.system.close(pipe[0]);
+    };
+    // Close the producer after a small stream payload; exercise real EOF.
+    try t.expectEqual(@as(isize, 6), posix.system.write(pipe[1], "stream", 6));
+    _ = posix.system.close(pipe[1]);
+    var source: SourceFixture = .{};
+    try source.init(t.allocator, &.{.{ .file = .{ .handle = pipe[0], .flags = .{ .nonblocking = true } } }});
+    transferred = true;
+    defer source.deinit(t.allocator);
+    try source.start();
+    try source.fixture.write(t.allocator, "suffix", false);
+    try source.fixture.drain("streamsuffix", false);
+    try t.expect(source.fixture.td.backend.initial_input == null);
+}
+
+test "PTY source allocation failures release source and deferred storage" {
+    const t = std.testing;
+    var tmp = t.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(t.io, .{ .sub_path = "source", .data = "contents" });
+    try t.checkAllAllocationFailures(t.allocator, struct {
+        fn run(alloc: std.mem.Allocator, dir: std.Io.Dir) !void {
+            const file = try dir.openFile(std.testing.io, "source", .{});
+            var transferred = false;
+            defer if (!transferred) file.close(std.testing.io);
+            var source: SourceFixture = .{};
+            try source.init(alloc, &.{.{ .file = file }});
+            transferred = true;
+            defer source.deinit(alloc);
+            try source.start();
+            try source.fixture.write(alloc, &([_]u8{'p'} ** 1024), false);
+        }
+    }.run, .{tmp.dir});
+}
+
+test "PTY source deferred flush yields without reordering later input" {
+    const t = std.testing;
+    var source: SourceFixture = .{};
+    try source.init(t.allocator, &.{.{ .string = "" }});
+    defer source.deinit(t.allocator);
+    var expected: [101]u8 = undefined;
+    for (expected[0..100], 0..) |*byte, i| {
+        byte.* = @intCast(i);
+        try source.fixture.write(t.allocator, byte[0..1], false);
+    }
+    try source.start();
+    try t.expectEqual(@as(usize, 32), source.fixture.pending());
+    try t.expect(source.fixture.td.backend.initial_input != null);
+    expected[100] = 200;
+    try source.fixture.write(t.allocator, expected[100..], false);
+    try source.fixture.drain(&expected, false);
+    try t.expect(source.fixture.td.backend.initial_input == null);
+}
+
+test "PTY source rejects growth beyond limit with a visible fault" {
+    const t = std.testing;
+    var tmp = t.tmpDir(.{});
+    defer tmp.cleanup();
+    const payload = try t.allocator.alloc(u8, InitialInput.file_limit);
+    defer t.allocator.free(payload);
+    @memset(payload, 'x');
+    try tmp.dir.writeFile(t.io, .{ .sub_path = "source", .data = payload });
+    const writer = try tmp.dir.openFile(t.io, "source", .{ .mode = .read_write });
+    defer writer.close(t.io);
+    const file = try tmp.dir.openFile(t.io, "source", .{});
+    var transferred = false;
+    defer if (!transferred) file.close(t.io);
+    var source: SourceFixture = .{};
+    try source.init(t.allocator, &.{.{ .file = file }});
+    transferred = true;
+    defer source.deinit(t.allocator);
+    // The descriptor's original size was within the limit. Grow it after
+    // opening, representing a changing file or a streaming source.
+    try writer.setLength(t.io, InitialInput.file_limit + 1);
+    try source.start();
+    try source.fixture.drain(payload, false);
+    const start: std.Io.Timestamp = .now(t.io, .awake);
+    while (!source.io.fault.failed()) {
+        try source.fixture.loop.run(.no_wait);
+        if (start.untilNow(t.io, .awake).toMilliseconds() > 1000) return error.FaultTimedOut;
+    }
+    try t.expectEqual(error.InputFailed, source.io.fault.take().?);
+    var byte: [1]u8 = undefined;
+    const result = posix.system.read(source.fixture.pty.slave, &byte, 1);
+    try t.expectEqual(posix.E.AGAIN, posix.errno(result));
+}
+
+test "PTY source read and request allocation errors publish a sticky fault" {
+    const t = std.testing;
+    var tmp = t.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(t.io, .{ .sub_path = "source", .data = "contents" });
+    for ([_]bool{ false, true }) |allocation_error| {
+        var counter = t.FailingAllocator.init(t.allocator, .{});
+        const alloc = counter.allocator();
+        const file = try tmp.dir.openFile(t.io, "source", .{});
+        var transferred = false;
+        defer if (!transferred) file.close(t.io);
+        var source: SourceFixture = .{};
+        try source.init(alloc, &.{.{ .file = file }});
+        transferred = true;
+        defer source.deinit(alloc);
+        const input = source.fixture.td.backend.initial_input.?;
+        input.buffer = try input.arena.allocator().alloc(u8, InitialInput.chunk_size);
+        if (allocation_error) {
+            // Reading succeeds; allocating the borrowed PTY request fails.
+            counter.fail_index = counter.alloc_index;
+        } else {
+            file.close(t.io);
+            @constCast(input.inputs)[0].file.handle = -1;
+        }
+        try source.start();
+        try t.expectEqual(error.InputFailed, source.io.fault.take().?);
+        try t.expect(source.io.fault.failed());
+        try t.expectEqual(@as(usize, 0), source.fixture.pending());
+    }
+}

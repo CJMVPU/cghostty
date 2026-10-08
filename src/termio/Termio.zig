@@ -20,7 +20,7 @@ const apprt = @import("../apprt.zig");
 const internal_os = @import("../os/main.zig");
 const configpkg = @import("../config.zig");
 const ProcessInfo = @import("../pty.zig").ProcessInfo;
-const compat_file = @import("../lib/compat/file.zig");
+const InitialInput = @import("InitialInput.zig");
 
 const log = std.log.scoped(.io_exec);
 
@@ -71,98 +71,9 @@ terminal_stream: StreamHandler.Stream,
 /// flooding with cursor resets.
 last_cursor_reset: ?std.Io.Timestamp = null,
 
-/// State we have for thread enter. This may be null if we don't need
-/// to keep track of any state or if its already been freed.
-thread_enter_state: ?*ThreadEnterState = null,
-
-/// The state we need to keep around only until we enter the IO
-/// thread. Then we can throw it all away.
-const ThreadEnterState = struct {
-    arena: ArenaAllocator,
-
-    /// Initial input to send to the subprocess after starting. This
-    /// memory is freed once the subprocess start is attempted, even
-    /// if it fails, because Exec only starts once.
-    input: configpkg.io.RepeatableReadableIO,
-
-    pub fn create(
-        alloc: Allocator,
-        config: *const configpkg.Config,
-    ) !?*ThreadEnterState {
-        // If we have no input then we have no thread enter state
-        if (config.input.list.items.len == 0) return null;
-
-        // Create our arena allocator
-        var arena = ArenaAllocator.init(alloc);
-        errdefer arena.deinit();
-        const arena_alloc = arena.allocator();
-
-        // Allocate our ThreadEnterState
-        const ptr = try arena_alloc.create(ThreadEnterState);
-
-        // Copy the input from the config
-        const input = try config.input.cloneParsed(arena_alloc);
-
-        // Return the initialized state
-        ptr.* = .{
-            .arena = arena,
-            .input = input,
-        };
-        return ptr;
-    }
-
-    pub fn destroy(self: *ThreadEnterState) void {
-        self.arena.deinit();
-    }
-
-    /// Prepare the inputs for use. Allocations happen on the arena.
-    pub fn prepareInput(
-        self: *ThreadEnterState,
-    ) (Allocator.Error || error{InputNotFound})![]const Input {
-        const alloc = self.arena.allocator();
-
-        var inputs: std.ArrayList(Input) = try .initCapacity(
-            alloc,
-            self.input.list.items.len,
-        );
-        errdefer for (inputs.items) |item| item.deinit();
-
-        for (self.input.list.items) |item| {
-            inputs.appendAssumeCapacity(switch (item) {
-                .raw => |v| .{ .string = v },
-                .path => |path| file: {
-                    const f = std.Io.Dir.cwd().openFile(
-                        global.io(),
-                        path,
-                        .{},
-                    ) catch |err| {
-                        log.warn("failed to open input file={s} err={}", .{
-                            path,
-                            err,
-                        });
-                        return error.InputNotFound;
-                    };
-
-                    break :file .{ .file = f };
-                },
-            });
-        }
-
-        return inputs.items;
-    }
-
-    const Input = union(enum) {
-        string: []const u8,
-        file: std.Io.File,
-
-        fn deinit(self: Input) void {
-            switch (self) {
-                .string => {},
-                .file => |f| f.close(global.io()),
-            }
-        }
-    };
-};
+/// Configured sources are prepared before the subprocess starts, then
+/// transferred to the writer loop until the final source has completed.
+thread_enter_state: ?*InitialInput = null,
 
 /// The configuration for this IO that is derived from the main
 /// configuration. This must be exported so that we don't need to
@@ -312,7 +223,7 @@ pub fn init(self: *Termio, alloc: Allocator, opts: termio.Options) !void {
         .enquiry_response = opts.config.enquiry_response,
     };
 
-    const thread_enter_state = try ThreadEnterState.create(
+    const thread_enter_state = try InitialInput.create(
         alloc,
         opts.full_config,
     );
@@ -355,7 +266,7 @@ pub fn threadEnter(
     thread: *termio.Thread,
     data: *ThreadData,
 ) !void {
-    // Always free our thread enter state when we're done.
+    // Release untransferred input on a startup failure.
     defer if (self.thread_enter_state) |v| {
         v.destroy();
         self.thread_enter_state = null;
@@ -364,13 +275,7 @@ pub fn threadEnter(
     // If we have thread enter state then we're going to validate
     // and set that all up now so that we can error before we actually
     // start the command and pty.
-    const inputs: ?[]const ThreadEnterState.Input = if (self.thread_enter_state) |v|
-        try v.prepareInput()
-    else
-        null;
-    defer if (inputs) |items| {
-        for (items) |input| input.deinit();
-    };
+    if (self.thread_enter_state) |v| try v.prepare();
 
     data.* = .{
         .alloc = self.alloc,
@@ -388,29 +293,15 @@ pub fn threadEnter(
         data.deinit();
     }
 
-    // If we have inputs, then queue them all up.
-    for (inputs orelse &.{}) |input| switch (input) {
-        .string => |v| self.queueWrite(data, v, false) catch |err| {
-            log.warn("failed to queue input string err={}", .{err});
-            return error.InputFailed;
-        },
-        .file => |f| {
-            const contents = compat_file.readToEndAlloc(
-                f,
-                self.alloc,
-                10 * 1024 * 1024, // 10 MiB max
-            ) catch |err| {
-                log.warn("failed to read input file err={}", .{err});
-                return error.InputFailed;
-            };
-            defer self.alloc.free(contents);
-
-            self.queueWrite(data, contents, false) catch |err| {
-                log.warn("failed to queue input file err={}", .{err});
-                return error.InputFailed;
-            };
-        },
-    };
+    // Transfer input ownership to the event loop. A file keeps only one
+    // chunk alive until the PTY has completed every partial write of it.
+    if (self.thread_enter_state) |v| {
+        data.backend.initial_input = v;
+        self.thread_enter_state = null;
+        v.io = self;
+        v.td = data;
+        try v.drive();
+    }
 }
 
 pub fn threadExit(self: *Termio, data: *ThreadData) void {

@@ -26,6 +26,7 @@ const Pty = ptypkg.Pty;
 const EnvMap = std.process.Environ.Map;
 const PasswdEntry = internal_os.passwd.Entry;
 const ProcessInfo = @import("../pty.zig").ProcessInfo;
+const InitialInput = @import("InitialInput.zig");
 const compat_fd = @import("../lib/compat/fd.zig");
 
 const log = std.log.scoped(.io_exec);
@@ -418,15 +419,60 @@ fn queueWriteWithOwner(
         assert(i == slice.len);
     }
 
-    exec.write_stream.queueWrite(
+    w.data = slice;
+    if (exec.initial_input != null) {
+        if (exec.deferred_tail) |tail| tail.next = w else exec.deferred_head = w;
+        exec.deferred_tail = w;
+        return;
+    }
+    submitWrite(td, w);
+}
+
+/// Borrow stable configuration bytes until libxev finishes all partial writes.
+pub fn queueInitialChunk(td: *termio.Termio.ThreadData, data: []const u8) !void {
+    const w = try td.backend.write_pool.create(td.alloc);
+    w.* = .{
+        .td = &td.backend,
+        .req = undefined,
+        .buf = undefined,
+        .owner_allocator = td.alloc,
+        .owned = null,
+        .data = data,
+        .initial_input = td.backend.initial_input,
+    };
+    submitWrite(td, w);
+}
+
+fn submitWrite(td: *termio.Termio.ThreadData, w: *ThreadData.Write) void {
+    td.backend.write_stream.queueWrite(
         td.loop,
-        &exec.write_queue,
+        &td.backend.write_queue,
         &w.req,
-        .{ .slice = slice },
+        .{ .slice = w.data },
         ThreadData.Write,
         w,
         ttyWrite,
     );
+}
+
+/// Finish initial sources before handing ordinary writes to libxev. Limit
+/// each flush so a large deferred paste queue still yields to loop controls.
+pub fn flushDeferredWrites(td: *termio.Termio.ThreadData) bool {
+    const exec = &td.backend;
+    for (0..32) |_| {
+        const w = exec.deferred_head orelse {
+            exec.deferred_tail = null;
+            return true;
+        };
+        exec.deferred_head = w.next;
+        w.next = null;
+        submitWrite(td, w);
+    }
+    if (exec.deferred_head == null) {
+        exec.deferred_tail = null;
+        return true;
+    }
+    return false;
 }
 
 fn ttyWrite(
@@ -437,6 +483,10 @@ fn ttyWrite(
     _: xev.WriteBuffer,
     r: xev.WriteError!usize,
 ) xev.CallbackAction {
+    const initial = w_.?.initial_input;
+    // Advance from a separate mailbox callback. Enqueuing the successor in
+    // libxev's write callback would add its completion twice.
+    if (initial) |input| input.writeCompleted(r);
     const d = w_.?.complete(r) catch |err| {
         log.err("write error: {}", .{err});
         return .disarm;
@@ -461,6 +511,9 @@ pub const ThreadData = struct {
 
         /// The libxev write request.
         req: xev.WriteRequest,
+        data: []const u8 = &.{},
+        next: ?*Write = null,
+        initial_input: ?*InitialInput = null,
 
         /// Short writes use this buffer without a separate allocation.
         buf: [inline_buffer_size]u8,
@@ -500,6 +553,12 @@ pub const ThreadData = struct {
     /// The write queue for the data stream.
     write_queue: xev.WriteQueue = .{},
 
+    /// Ordinary input waits behind the configured source without changing
+    /// its ownership or acceptance semantics. Only file chunks are bounded.
+    initial_input: ?*InitialInput = null,
+    deferred_head: ?*Write = null,
+    deferred_tail: ?*Write = null,
+
     /// This is used for both waiting for the process to exit and then
     /// subsequently to wait for the data_stream to close.
     process_wait_c: xev.Completion = .{},
@@ -528,7 +587,14 @@ pub const ThreadData = struct {
             const w: *Write = @ptrCast(@alignCast(req.userdata.?));
             w.deinit();
         }
+        while (self.deferred_head) |w| {
+            self.deferred_head = w.next;
+            w.deinit();
+        }
+        self.deferred_tail = null;
         self.write_pool.deinit(alloc);
+        if (self.initial_input) |input| input.destroy();
+        self.initial_input = null;
     }
 
     pub fn deinit(self: *ThreadData, alloc: Allocator) void {

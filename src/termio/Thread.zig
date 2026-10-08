@@ -259,6 +259,10 @@ fn drainMailbox(
     if (mailbox.pendingCount(global.io()) > 0) io.mailbox.spsc.wakeup.notify() catch |err| {
         if (first_error == null) first_error = err;
     };
+    if (cb.data.backend.initial_input) |input| input.drive() catch |err| {
+        io.reportFault(err);
+        if (first_error == null) first_error = err;
+    };
     if (first_error) |err| return err;
 }
 
