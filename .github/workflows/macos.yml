@@ -1,6 +1,7 @@
 name: cghostty macOS arm64
 on:
   push:
+    branches: ['main', 'codex/**']
     tags: ['v*']
   pull_request:
   workflow_dispatch:
@@ -75,6 +76,13 @@ jobs:
       - name: PCRE2 binding tests
         working-directory: pkg/pcre2
         run: zig build test 2>&1 | tee ../../macos/build/ci-logs/pcre2-tests.log
+      - name: Optimized core contracts
+        run: |
+          python3 scripts/build.py test -Doptimize=ReleaseFast -Dtest-optimize=ReleaseFast \
+            -Dtest-filter='optimization probe' -Dtest-filter='IO resize' \
+            -Dtest-filter='IO mailbox' -Dtest-filter='window frame slot' \
+            -Dtest-filter='reuses hyperlink mappings' \
+            2>&1 | tee macos/build/ci-logs/optimized-core-tests.log
       - name: Build and test native app
         id: native-tests
         run: |
