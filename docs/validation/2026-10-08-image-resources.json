@@ -1,0 +1,298 @@
+{
+  "schema": 1,
+  "base_commit": "1b4cb4fac",
+  "source_commit": "0e799a8ec",
+  "scope": {
+    "ordinary_paste_semantics_preserved": true,
+    "new_global_budget": false,
+    "unique_process_or_device_memory": false,
+    "submission_footprints_additive_to_owner_bytes": false,
+    "completion_peak_includes_early_ingestion": false
+  },
+  "image_stages": {
+    "source_commit": "0e799a8ec",
+    "labels": [
+      "chunk",
+      "raw-complete",
+      "png-complete",
+      "alternate-screen"
+    ],
+    "samples": [
+      {
+        "captureCacheReferenceBytes": 0,
+        "capturePendingReferenceBytes": 0,
+        "completionPeakBytes": 0,
+        "loadingBytes": 512,
+        "loadingCapacity": 896,
+        "pendingReservedBytes": 0,
+        "screenCount": 1,
+        "storagePixelBytes": 0,
+        "storageReservedBytes": 0
+      },
+      {
+        "captureCacheReferenceBytes": 0,
+        "capturePendingReferenceBytes": 0,
+        "completionPeakBytes": 2688,
+        "loadingBytes": 0,
+        "loadingCapacity": 0,
+        "pendingReservedBytes": 0,
+        "screenCount": 1,
+        "storagePixelBytes": 1024,
+        "storageReservedBytes": 1024
+      },
+      {
+        "captureCacheReferenceBytes": 0,
+        "capturePendingReferenceBytes": 0,
+        "completionPeakBytes": 44995,
+        "loadingBytes": 0,
+        "loadingCapacity": 0,
+        "pendingReservedBytes": 0,
+        "screenCount": 1,
+        "storagePixelBytes": 1028,
+        "storageReservedBytes": 1028
+      },
+      {
+        "captureCacheReferenceBytes": 0,
+        "capturePendingReferenceBytes": 0,
+        "completionPeakBytes": 44995,
+        "loadingBytes": 0,
+        "loadingCapacity": 0,
+        "pendingReservedBytes": 0,
+        "screenCount": 2,
+        "storagePixelBytes": 1032,
+        "storageReservedBytes": 1032
+      }
+    ]
+  },
+  "pane_resources": {
+    "source_commit": "0e799a8ec",
+    "samples": [
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 28,
+        "cpuBackgroundLoadPeakBytes": 0,
+        "cpuBackgroundPendingBytes": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuImagePendingBytes": 0,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 31,
+        "gpuAllocatedBytes": 2687232,
+        "gpuBackgroundAllocatedBytes": 0,
+        "gpuImageAllocatedBytes": 0,
+        "gpuImageTexelBytes": 0,
+        "gpuImageTextureCount": 0,
+        "gpuQueueCount": 0,
+        "gpuScrollAllocatedBytes": 1327104,
+        "gpuScrollTextureCount": 1,
+        "gpuSubmittedResidencyBytes": 5259264,
+        "gpuSubmittedResidencyPeakBytes": 5259264,
+        "gpuTexelBytes": 2621445,
+        "gpuTextureCount": 6,
+        "gridID": 100
+      },
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 28,
+        "cpuBackgroundLoadPeakBytes": 0,
+        "cpuBackgroundPendingBytes": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuImagePendingBytes": 0,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 31,
+        "gpuAllocatedBytes": 2687232,
+        "gpuBackgroundAllocatedBytes": 0,
+        "gpuImageAllocatedBytes": 0,
+        "gpuImageTexelBytes": 0,
+        "gpuImageTextureCount": 0,
+        "gpuQueueCount": 0,
+        "gpuScrollAllocatedBytes": 1327104,
+        "gpuScrollTextureCount": 1,
+        "gpuSubmittedResidencyBytes": 0,
+        "gpuSubmittedResidencyPeakBytes": 5259264,
+        "gpuTexelBytes": 2621445,
+        "gpuTextureCount": 6,
+        "gridID": 100
+      }
+    ]
+  },
+  "background_stages": {
+    "source_commit": "0e799a8ec",
+    "labels": [
+      "loaded",
+      "failed-replacement",
+      "repaired-replacement",
+      "removed"
+    ],
+    "samples": [
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 30,
+        "cpuBackgroundLoadPeakBytes": 44823,
+        "cpuBackgroundPendingBytes": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuImagePendingBytes": 0,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 32,
+        "gpuAllocatedBytes": 4030464,
+        "gpuBackgroundAllocatedBytes": 128,
+        "gpuImageAllocatedBytes": 0,
+        "gpuImageTexelBytes": 0,
+        "gpuImageTextureCount": 0,
+        "gpuQueueCount": 1,
+        "gpuScrollAllocatedBytes": 1982464,
+        "gpuScrollTextureCount": 1,
+        "gpuSubmittedResidencyBytes": 0,
+        "gpuSubmittedResidencyPeakBytes": 5570560,
+        "gpuTexelBytes": 3932160,
+        "gpuTextureCount": 6,
+        "gridID": 187
+      },
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 30,
+        "cpuBackgroundLoadPeakBytes": 44823,
+        "cpuBackgroundPendingBytes": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuImagePendingBytes": 0,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 32,
+        "gpuAllocatedBytes": 4030464,
+        "gpuBackgroundAllocatedBytes": 128,
+        "gpuImageAllocatedBytes": 0,
+        "gpuImageTexelBytes": 0,
+        "gpuImageTextureCount": 0,
+        "gpuQueueCount": 1,
+        "gpuScrollAllocatedBytes": 1982464,
+        "gpuScrollTextureCount": 1,
+        "gpuSubmittedResidencyBytes": 0,
+        "gpuSubmittedResidencyPeakBytes": 5570560,
+        "gpuTexelBytes": 3932160,
+        "gpuTextureCount": 6,
+        "gridID": 187
+      },
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 30,
+        "cpuBackgroundLoadPeakBytes": 44823,
+        "cpuBackgroundPendingBytes": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuImagePendingBytes": 0,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 32,
+        "gpuAllocatedBytes": 4030464,
+        "gpuBackgroundAllocatedBytes": 128,
+        "gpuImageAllocatedBytes": 0,
+        "gpuImageTexelBytes": 0,
+        "gpuImageTextureCount": 0,
+        "gpuQueueCount": 1,
+        "gpuScrollAllocatedBytes": 1982464,
+        "gpuScrollTextureCount": 1,
+        "gpuSubmittedResidencyBytes": 0,
+        "gpuSubmittedResidencyPeakBytes": 5570560,
+        "gpuTexelBytes": 3932160,
+        "gpuTextureCount": 6,
+        "gridID": 187
+      },
+      {
+        "codepointCapacity": 256,
+        "codepointEntries": 30,
+        "cpuBackgroundLoadPeakBytes": 44823,
+        "cpuBackgroundPendingBytes": 0,
+        "cpuColorBytes": 1048576,
+        "cpuGrayscaleBytes": 262144,
+        "cpuImagePendingBytes": 0,
+        "cpuNodeBytes": 1536,
+        "glyphCapacity": 256,
+        "glyphEntries": 32,
+        "gpuAllocatedBytes": 4030464,
+        "gpuBackgroundAllocatedBytes": 0,
+        "gpuImageAllocatedBytes": 0,
+        "gpuImageTexelBytes": 0,
+        "gpuImageTextureCount": 0,
+        "gpuQueueCount": 1,
+        "gpuScrollAllocatedBytes": 1982464,
+        "gpuScrollTextureCount": 1,
+        "gpuSubmittedResidencyBytes": 0,
+        "gpuSubmittedResidencyPeakBytes": 5570560,
+        "gpuTexelBytes": 3932160,
+        "gpuTextureCount": 6,
+        "gridID": 187
+      }
+    ]
+  },
+  "validation": {
+    "core_targets": {
+      "image": 83,
+      "completion_and_storage": 169,
+      "submission_and_exit": 87,
+      "background_and_allocator": 93,
+      "failed": 0,
+      "overlap": true
+    },
+    "native_targets": {
+      "image": 35,
+      "completion_and_screens": 20,
+      "submission_and_lifecycle": 43,
+      "background": 16,
+      "failed": 0,
+      "overlap": true
+    },
+    "core_releasefast": {
+      "passed": 185,
+      "total": 185,
+      "failed": 0,
+      "test_optimize": "ReleaseFast"
+    },
+    "core_debug": {
+      "passed": 3779,
+      "total": 3784,
+      "skipped": 5,
+      "failed": 0,
+      "build_steps": 72
+    },
+    "native_full": {
+      "passed": 509,
+      "total": 511,
+      "skipped": 2,
+      "failed": 0,
+      "suites": 80
+    },
+    "ui_lifecycle": {
+      "passed": 2,
+      "total": 2,
+      "failed": 0,
+      "suite": "GhosttySurfaceLifecycleUITests",
+      "all_ui_suites_run": false
+    }
+  },
+  "native_full_with_ui": {
+    "result": "Passed",
+    "totalTestCount": 513,
+    "passedTests": 511,
+    "failedTests": 0,
+    "skippedTests": 2,
+    "startTime": 1791447002.032,
+    "finishTime": 1791447091.964,
+    "command": "python3 scripts/build.py native --action test --skip-core --ui-tests --only-testing GhosttyTests,GhosttyUITests/GhosttySurfaceLifecycleUITests",
+    "source_commit": "0e799a8ec",
+    "managed_validation": "Passed",
+    "executed_by_selection": {
+      "GhosttyTests": 509,
+      "GhosttyUITests/GhosttySurfaceLifecycleUITests": 2
+    },
+    "skipped_identifiers": [
+      "BenchmarkTests/example()",
+      "RendererResourceProbeTests/hiddenSurfaceResources()"
+    ]
+  }
+}

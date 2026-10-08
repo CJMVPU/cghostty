@@ -1,5 +1,8 @@
 # 验证记录
 
+最新图片存储、解码/背景加载峰值和 GPU 提交足迹计量见
+[2026-10-08 图片与提交资源](docs/validation/2026-10-08-image-resources.md)。
+
 最新资源所有权、共享 CF 释放服务及隐藏终端测量见
 [2026-10-08 资源与共享释放服务](docs/validation/2026-10-08-resource-services.md)。
 
