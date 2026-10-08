@@ -9,6 +9,10 @@ pub fn publish(self: *Self, err: anyerror) bool {
     return self.code.cmpxchgStrong(0, @intFromError(err), .release, .monotonic) == null;
 }
 
+pub fn failed(self: *const Self) bool {
+    return self.code.load(.acquire) != 0;
+}
+
 /// Only the app thread consumes this signal. The first error remains sticky.
 pub fn take(self: *Self) ?anyerror {
     if (self.delivered) return null;

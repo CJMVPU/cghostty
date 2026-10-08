@@ -1006,9 +1006,6 @@ const Subprocess = struct {
         grid_size: renderer.GridSize,
         screen_size: renderer.ScreenSize,
     ) !void {
-        self.grid_size = grid_size;
-        self.screen_size = screen_size;
-
         if (self.pty) |*pty| {
             // It is theoretically possible for the grid or screen size to
             // exceed u16, although the terminal in that case isn't very
@@ -1021,6 +1018,8 @@ const Subprocess = struct {
                 .ws_ypixel = std.math.cast(u16, screen_size.height) orelse std.math.maxInt(u16),
             });
         }
+        self.grid_size = grid_size;
+        self.screen_size = screen_size;
     }
 
     fn killCommand(command: *Command) void {
@@ -1981,6 +1980,8 @@ test "IO reader startup faults remain deliverable with a full app mailbox" {
     var app: apprt.App = .{};
     var io: termio.Termio = undefined;
     io.fault = .{};
+    io.mailbox = try termio.Mailbox.initSPSC(t.allocator);
+    defer io.mailbox.deinit(t.allocator);
     io.surface_mailbox = .{ .surface = undefined, .app = .{ .rt_app = &app, .mailbox = queue } };
     const Worker = struct {
         io: *termio.Termio,

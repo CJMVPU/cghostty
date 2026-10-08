@@ -28,6 +28,7 @@ const Coalesce = struct {
     const min_ms = 25;
 
     resize: ?renderer.Size = null,
+    resize_retries: u2 = 0,
 };
 
 /// The number of milliseconds before we reset the synchronized output flag
@@ -216,6 +217,8 @@ fn drainMailbox(
     const mailbox = cb.io.mailbox.spsc.queue;
     const io = cb.io;
 
+    if (io.fault.failed()) self.flags.drain = true;
+
     // If we're draining, we just drain the mailbox and return.
     if (self.flags.drain) {
         while (mailbox.pop(global.io())) |msg| msg.deinit();
@@ -315,6 +318,7 @@ fn startSynchronizedOutput(self: *Thread, cb: *CallbackData) void {
 
 fn handleResize(self: *Thread, cb: *CallbackData, resize: renderer.Size) void {
     self.coalesce_data.resize = resize;
+    self.coalesce_data.resize_retries = 2;
 
     // If the timer is already active we just return. In the future we want
     // to reset the timer up to a maximum wait time but for now this ensures
@@ -371,6 +375,11 @@ fn coalesceCallback(
         cb.self.coalesce_data.resize = null;
         cb.io.resize(&cb.data, v) catch |err| {
             log.warn("error during resize err={}", .{err});
+            if (err == error.OutOfMemory and !cb.io.fault.failed() and cb.self.coalesce_data.resize_retries > 0) {
+                cb.self.coalesce_data.resize_retries -= 1;
+                cb.self.coalesce_data.resize = v;
+                cb.self.coalesce.run(&cb.self.loop, &cb.self.coalesce_c, Coalesce.min_ms, CallbackData, cb, coalesceCallback);
+            } else cb.io.reportFault(err);
         };
     }
 
@@ -485,6 +494,7 @@ const DrainTest = struct {
         self.io.mailbox = try termio.Mailbox.initSPSC(alloc);
         errdefer self.io.mailbox.deinit(alloc);
         self.io.renderer_wakeup = try xev.Async.init();
+        self.io.fault = .{};
         self.io.alloc = write_alloc;
         self.cb = .{
             .self = &self.worker,

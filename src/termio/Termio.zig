@@ -516,11 +516,15 @@ pub fn resize(
     td: *ThreadData,
     size: renderer.Size,
 ) !void {
-    self.size = size;
+    const previous = self.size;
     const grid_size = size.grid();
 
     // Update the size of our pty.
     try self.backend.resize(grid_size, size.terminal());
+    errdefer self.backend.resize(previous.grid(), previous.terminal()) catch |err| {
+        log.warn("failed to restore PTY size err={}", .{err});
+        self.reportFault(err);
+    };
 
     // Enter the critical area that we want to keep small
     {
@@ -528,21 +532,34 @@ pub fn resize(
         defer self.renderer_state.mutex.unlock(global.io());
 
         // Update the size of our terminal state
-        try self.terminal.resize(
+        self.terminal.resize(
             self.alloc,
             .{
                 .cols = grid_size.columns,
                 .rows = grid_size.rows,
                 .cell_size_px = .{
-                    .width = self.size.cell.width,
-                    .height = self.size.cell.height,
+                    .width = size.cell.width,
+                    .height = size.cell.height,
                 },
             },
-        );
+        ) catch |err| {
+            // Reflow may have completed a row resize before failing a column
+            // allocation. Never keep parsing a partially changed primary grid.
+            const pages = &self.terminal.screens.get(.primary).?.pages;
+            if (pages.cols != self.terminal.cols or pages.rows != self.terminal.rows) {
+                self.reportFault(error.ResizeStateInconsistent);
+            }
+            return err;
+        };
+        self.size = size;
 
         // If we have size reporting enabled we need to send a report.
         if (self.terminal.modes.get(.in_band_size_reports)) {
-            try self.sizeReportLocked(td, .mode_2048);
+            self.sizeReportLocked(td, .mode_2048) catch |err| {
+                // Grid/PTY commit succeeded. Optional report failure must not
+                // suppress the renderer notification or retry the grid change.
+                log.warn("failed to report committed terminal size err={}", .{err});
+            };
         }
     }
 
@@ -694,17 +711,22 @@ pub fn focusGained(self: *Termio, td: *ThreadData, focused: bool) !void {
 
 /// Publish a sticky failure without holding terminal or mailbox locks.
 pub fn reportFault(self: *Termio, err: anyerror) void {
-    if (self.fault.publish(err)) self.surface_mailbox.app.rt_app.wakeup();
+    if (self.fault.publish(err)) {
+        self.mailbox.close();
+        self.surface_mailbox.app.rt_app.wakeup();
+    }
 }
 
 /// Process output from the pty. This is the manual API that users can
 /// call with pty data but it is also called by the read thread when using
 /// an exec subprocess.
 pub fn processOutput(self: *Termio, buf: []const u8) void {
+    if (self.fault.failed()) return;
     // We are modifying terminal state from here on out and we need
     // the lock to grab our read data.
     self.renderer_state.mutex.lockUncancelable(global.io());
     defer self.renderer_state.mutex.unlock(global.io());
+    if (self.fault.failed()) return;
     self.processOutputLocked(buf);
 }
 
@@ -945,4 +967,68 @@ test "Termio output completion republishes after parser releases mutex" {
         try t.expect(!shared.search_changes.consume());
         try t.expect(!io.terminal_stream.handler.termio_messaged);
     }
+}
+
+test "IO resize restores real PTY geometry after core allocation failure" {
+    const t = std.testing;
+    const Pty = @import("../pty.zig").Pty;
+    var io: Termio = undefined;
+    const previous: renderer.Size = .{
+        .screen = .{ .width = 100, .height = 40 },
+        .cell = .{ .width = 10, .height = 20 },
+        .padding = .{},
+    };
+    const requested: renderer.Size = .{
+        .screen = .{ .width = 10000, .height = 60 },
+        .cell = previous.cell,
+        .padding = .{},
+    };
+    io.size = previous;
+    io.fault = .{};
+    io.terminal = try terminalpkg.Terminal.init(t.io, t.allocator, .{ .cols = 10, .rows = 2 });
+    defer io.terminal.deinit(t.allocator);
+    try io.terminal.printString("keep");
+    io.backend.subprocess.pty = try Pty.open(.{ .ws_col = 10, .ws_row = 2, .ws_xpixel = 100, .ws_ypixel = 40 });
+    defer io.backend.subprocess.pty.?.deinit();
+    io.backend.subprocess.grid_size = previous.grid();
+    io.backend.subprocess.screen_size = previous.terminal();
+    var mutex: std.Io.Mutex = .init;
+    var state: renderer.State = .{ .mutex = &mutex, .terminal = &io.terminal };
+    io.renderer_state = &state;
+    io.renderer_mailbox = try renderer.Thread.Mailbox.create(t.allocator);
+    defer io.renderer_mailbox.destroy(t.allocator);
+    io.renderer_wakeup = try xev.Async.init();
+    defer io.renderer_wakeup.deinit();
+    var data: ThreadData = undefined;
+    var failing = t.FailingAllocator.init(t.allocator, .{ .fail_index = 0 });
+    io.alloc = failing.allocator();
+    try t.expectError(error.OutOfMemory, io.resize(&data, requested));
+    try t.expectEqualDeep(previous, io.size);
+    const restored = try io.backend.subprocess.pty.?.getSize();
+    try t.expectEqual(@as(u16, 10), restored.ws_col);
+    try t.expectEqual(@as(u16, 2), restored.ws_row);
+    try t.expectEqualDeep(previous.grid(), io.backend.subprocess.grid_size);
+    try t.expect(io.renderer_mailbox.pop(t.io) == null);
+    try t.expect(!io.fault.failed());
+    const text = try io.terminal.plainString(t.allocator);
+    defer t.allocator.free(text);
+    try t.expectEqualStrings("keep", text);
+
+    // A later retry must commit and notify the renderer exactly once.
+    io.alloc = t.allocator;
+    try io.resize(&data, requested);
+    try t.expectEqualDeep(requested, io.size);
+    try t.expectEqual(@as(u16, 1000), (try io.backend.subprocess.pty.?.getSize()).ws_col);
+    try t.expectEqual(@as(u16, 1000), io.terminal.cols);
+    try t.expectEqualDeep(requested, io.renderer_mailbox.pop(t.io).?.resize);
+    try t.expect(io.renderer_mailbox.pop(t.io) == null);
+
+    // A failed ioctl must not publish subprocess/IO geometry.
+    const master = io.backend.subprocess.pty.?.master;
+    io.backend.subprocess.pty.?.master = -1;
+    defer io.backend.subprocess.pty.?.master = master;
+    try t.expectError(error.IoctlFailed, io.resize(&data, previous));
+    try t.expectEqualDeep(requested, io.size);
+    try t.expectEqualDeep(requested.grid(), io.backend.subprocess.grid_size);
+    try t.expect(io.renderer_mailbox.pop(t.io) == null);
 }
