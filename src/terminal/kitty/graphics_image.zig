@@ -654,18 +654,18 @@ pub const LoadingImage = struct {
             else
                 return error.OutOfMemory,
         };
-        defer decode_alloc.free(result.data);
+        errdefer decode_alloc.free(result.data);
 
         if (result.data.len > max_size) {
             log.warn("png image too large size={} max_size={}", .{ result.data.len, max_size });
             return error.InvalidData;
         }
 
-        // Replace our data
+        // LimitedAllocator forwards the child's allocation layout unchanged.
+        // Transfer those owned pixels to the same child allocator instead of
+        // keeping a second full RGBA buffer alive during a memcpy.
         self.data.deinit(alloc);
-        self.data = .empty;
-        try self.data.ensureUnusedCapacity(alloc, result.data.len);
-        try self.data.appendSlice(alloc, result.data[0..result.data.len]);
+        self.data = .fromOwnedSlice(result.data);
 
         // Store updated image dimensions
         self.image.width = result.width;
@@ -1573,6 +1573,55 @@ test "image load: png, not compressed, regular file" {
     try testing.expect(img.compression == .none);
     try testing.expect(img.format == .rgba);
     try tmp_dir.dir.access(testing.io, path, .{});
+}
+
+test "image load: png adopts decoded ownership without another allocation" {
+    const t = std.testing;
+    const Decoder = struct {
+        var counter: *t.FailingAllocator = undefined;
+        var decoded: [*]u8 = undefined;
+        fn decode(alloc: Allocator, _: []const u8) sys.DecodeError!sys.Image {
+            const data = try alloc.alloc(u8, 512 * 512 * 4);
+            @memset(data, 0x5A);
+            decoded = data.ptr;
+            // All subsequent allocations fail. Ownership transfer must not
+            // allocate/copy the RGBA payload, including complete().
+            counter.fail_index = counter.alloc_index;
+            return .{ .width = 512, .height = 512, .data = data };
+        }
+    };
+    const original = sys.decode_png;
+    defer sys.decode_png = original;
+    sys.decode_png = &Decoder.decode;
+    var counter = t.FailingAllocator.init(t.allocator, .{});
+    Decoder.counter = &counter;
+    const alloc = counter.allocator();
+    var loading: LoadingImage = .{ .image = .{ .format = .png }, .quiet = .no, .temporary_directory = null };
+    defer loading.deinit(alloc);
+    try loading.data.appendSlice(alloc, "encoded png");
+    var image = try loading.complete(alloc);
+    defer image.deinit(alloc);
+    const data = image.data.complete;
+    try t.expectEqual(Decoder.decoded, data.ptr);
+    try t.expectEqual(@as(usize, 1024 * 1024), data.len);
+    try t.expectEqual(@as(u8, 0x5A), data[0]);
+    try t.expectEqual(@as(u8, 0x5A), data[data.len - 1]);
+    try t.expect(!counter.has_induced_failure);
+    try t.expectEqual(@as(usize, 0), loading.data.items.len);
+}
+
+test "image load: png allocation failures clean up adopted decoder buffers" {
+    if (sys.decode_png == null) return error.SkipZigTest;
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, struct {
+        fn run(alloc: Allocator) !void {
+            var loading: LoadingImage = .{ .image = .{ .format = .png }, .quiet = .no, .temporary_directory = null };
+            defer loading.deinit(alloc);
+            try loading.data.appendSlice(alloc, @embedFile("testdata/image-png-none-50x76-2147483647-raw.data"));
+            var image = try loading.complete(alloc);
+            defer image.deinit(alloc);
+            try std.testing.expectEqual(@as(usize, 50 * 76 * 4), image.data.complete.len);
+        }
+    }.run, .{});
 }
 
 test "image load: png rejects oversized decoder allocation" {
