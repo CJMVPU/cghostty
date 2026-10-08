@@ -341,6 +341,7 @@ extension Ghostty {
             let gpuQueueCount: UInt64
             let cpuImagePendingBytes: UInt64
             let cpuBackgroundPendingBytes: UInt64
+            let cpuBackgroundLoadPeakBytes: UInt64
             let gpuImageTexelBytes: UInt64
             let gpuImageAllocatedBytes: UInt64
             let gpuImageTextureCount: UInt64
@@ -364,6 +365,7 @@ extension Ghostty {
                 gpuQueueCount: value.gpu_queue_count,
                 cpuImagePendingBytes: value.cpu_image_pending_bytes,
                 cpuBackgroundPendingBytes: value.cpu_background_pending_bytes,
+                cpuBackgroundLoadPeakBytes: value.cpu_background_load_peak_bytes,
                 gpuImageTexelBytes: value.gpu_image_texel_bytes,
                 gpuImageAllocatedBytes: value.gpu_image_allocated_bytes,
                 gpuImageTextureCount: value.gpu_image_texture_count,

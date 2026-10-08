@@ -152,6 +152,8 @@ submission_resources: @import("SubmissionResources.zig") = .{},
 
 /// Background image, if we have one.
 bg_image: ?imagepkg.Image = null,
+/// Loading runs outside draw_mutex; only publish its cumulative diagnostic peak.
+bg_load_peak_bytes: std.atomic.Value(u64) = .init(0),
 /// Retry a failed preparation on the next explicit configuration update,
 /// never from the frame loop. The last successfully loaded image stays visible.
 bg_image_load_failed: bool = false,
@@ -840,6 +842,7 @@ pub const RendererResources = extern struct {
     // CPU reference bytes, not unique allocation bytes across RenderHold states.
     cpu_image_pending_bytes: u64 = 0,
     cpu_background_pending_bytes: u64 = 0,
+    cpu_background_load_peak_bytes: u64 = 0,
     gpu_image_texel_bytes: u64 = 0,
     gpu_image_allocated_bytes: u64 = 0,
     gpu_image_texture_count: u64 = 0,
@@ -872,6 +875,7 @@ pub fn rendererResources(self: *Self) RendererResources {
         .glyph_capacity = grid.glyphs.capacity(),
         .gpu_submitted_residency_bytes = self.submission_resources.current.load(.monotonic),
         .gpu_submitted_residency_peak_bytes = self.submission_resources.peak.load(.monotonic),
+        .cpu_background_load_peak_bytes = self.bg_load_peak_bytes.load(.monotonic),
     };
     if (self.swap_chain) |*sc| for (&sc.frames) |*frame| {
         for ([_]Texture{ frame.grayscale, frame.color }) |texture| {
@@ -1817,6 +1821,9 @@ pub fn frameCompleted(
 /// Read and decode on the renderer's serial update thread, outside draw_mutex.
 /// No GPU state is touched until the prepared image is committed under the lock.
 fn loadBackgroundImage(self: *Self, p: configpkg.Path) !?imagepkg.Image {
+    var peak = @import("../datastruct/main.zig").PeakAllocator.init(self.alloc, 0);
+    defer _ = self.bg_load_peak_bytes.fetchMax(peak.peak_bytes, .monotonic);
+    const alloc = peak.allocator();
     const path = switch (p) {
         .required, .optional => |slice| slice,
     };
@@ -1838,7 +1845,7 @@ fn loadBackgroundImage(self: *Self, p: configpkg.Path) !?imagepkg.Image {
     // Read it
     const contents = compat_file.readToEndAlloc(
         file,
-        self.alloc,
+        alloc,
         64 * 1024 * 1024, // Encoded background file budget.
     ) catch |err| {
         log.warn(
@@ -1847,7 +1854,7 @@ fn loadBackgroundImage(self: *Self, p: configpkg.Path) !?imagepkg.Image {
         );
         return null;
     };
-    defer self.alloc.free(contents);
+    defer alloc.free(contents);
 
     // Figure out what type it probably is.
     const file_type = switch (FileType.detect(contents)) {
@@ -1859,8 +1866,8 @@ fn loadBackgroundImage(self: *Self, p: configpkg.Path) !?imagepkg.Image {
 
     // Decode it if we know how.
     const image_data = switch (file_type) {
-        .png => try wuffs.png.decodeLimited(self.alloc, contents, 256 * 1024 * 1024),
-        .jpeg => try wuffs.jpeg.decodeLimited(self.alloc, contents, 256 * 1024 * 1024),
+        .png => try wuffs.png.decodeLimited(alloc, contents, 256 * 1024 * 1024),
+        .jpeg => try wuffs.jpeg.decodeLimited(alloc, contents, 256 * 1024 * 1024),
         .unknown => {
             log.warn(
                 "Cannot determine file type for background image file \"{s}\"!",

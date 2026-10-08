@@ -485,6 +485,13 @@ import Synchronization
             return color
         }
         #expect(try center().redComponent > 0.9)
+        func resources() async -> Ghostty.Surface.RendererResources {
+            await Task.detached { surface.rendererResources() }.value
+        }
+        var samples = [await resources()]
+        #expect(samples[0].gpuBackgroundAllocatedBytes > 0)
+        #expect(samples[0].cpuBackgroundPendingBytes == 0)
+        #expect(samples[0].cpuBackgroundLoadPeakBytes > 16, "File and decoder scratch outlive a 2x2 pixel count")
         for repaired in [false, true] {
             if repaired { try writeImage(.green, to: second) }
             let revision = surface.renderRevision
@@ -495,6 +502,11 @@ import Synchronization
             })
             let color = try center()
             #expect(repaired ? color.greenComponent > 0.9 : color.redComponent > 0.9)
+            let usage = await resources()
+            #expect(usage.gpuBackgroundAllocatedBytes == samples[0].gpuBackgroundAllocatedBytes)
+            #expect(usage.cpuBackgroundPendingBytes == 0)
+            #expect(usage.cpuBackgroundLoadPeakBytes >= samples.last!.cpuBackgroundLoadPeakBytes)
+            samples.append(usage)
         }
         let revision = surface.renderRevision
         try config.reload(settings)
@@ -503,6 +515,14 @@ import Synchronization
             surface.renderRevision > revision && owner.worker.isIdle
         })
         #expect(try center().greenComponent < 0.5)
+        let removed = await resources()
+        #expect(removed.gpuBackgroundAllocatedBytes == 0 && removed.cpuBackgroundPendingBytes == 0)
+        #expect(removed.cpuBackgroundLoadPeakBytes == samples.last!.cpuBackgroundLoadPeakBytes)
+        samples.append(removed)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        let json = try #require(String(data: encoder.encode(samples), encoding: .utf8))
+        print("BACKGROUND_RESOURCE_JSON " + json)
         #expect(owner.worker.statistics.failed == 0)
     }
 

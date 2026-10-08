@@ -1260,6 +1260,7 @@ typedef struct {
   // Current renderer ownership, excluding retired command references and
   // external snapshots. Pending CPU bytes may share storage with RenderHold.
   uint64_t cpu_image_pending_bytes, cpu_background_pending_bytes;
+  uint64_t cpu_background_load_peak_bytes;
   uint64_t gpu_image_texel_bytes, gpu_image_allocated_bytes, gpu_image_texture_count;
   uint64_t gpu_background_allocated_bytes;
   uint64_t gpu_scroll_allocated_bytes, gpu_scroll_texture_count;
