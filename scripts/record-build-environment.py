@@ -26,6 +26,7 @@ def main():
         ("Nushell", ["nu", "--version"]),
         ("SwiftLint", ["swiftlint", "version"]),
         ("actionlint", ["actionlint", "--version"]),
+        ("Actions lockfile tool", ["gh-actions-lock", "--version"]),
         ("Python", ["python3", "--version"]),
     )
     for label, command in commands:

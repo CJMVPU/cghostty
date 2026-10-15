@@ -20,6 +20,16 @@ jobs:
         id: checkout
         with:
           persist-credentials: false
+      - name: Verify workflow dependency lockfile
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p macos/build/ci-logs
+          exec > >(tee macos/build/ci-logs/actions-lock.log) 2>&1
+          actions_lock_bin="$(bash scripts/install-actions-lock.sh "$RUNNER_TEMP/cghostty-tools")"
+          echo "$(dirname "$actions_lock_bin")" >> "$GITHUB_PATH"
+          "$actions_lock_bin" --version
+          "$actions_lock_bin" --verify --no-interactive
       - name: Set up Apple Silicon tools
         run: |
           mkdir -p macos/build/ci-logs
