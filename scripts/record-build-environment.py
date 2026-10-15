@@ -26,6 +26,7 @@ def main():
         ("Nushell", ["nu", "--version"]),
         ("SwiftLint", ["swiftlint", "version"]),
         ("actionlint", ["actionlint", "--version"]),
+        ("ShellCheck", ["shellcheck", "--version"]),
         ("Actions lockfile tool", ["gh-actions-lock", "--version"]),
         ("Python", ["python3", "--version"]),
     )

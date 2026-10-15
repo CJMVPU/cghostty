@@ -29,7 +29,7 @@ python3 scripts/build.py native --action test --resource-probe-surfaces 8 \
 python3 scripts/build.py test -Doptimize=ReleaseFast -Dtest-optimize=ReleaseFast -Dtest-filter='optimization probe'
 python3 scripts/check-versions.py
 python3 scripts/check-swift6.py
-# 工作流校验（brew install actionlint）
+# 工作流校验（brew install actionlint shellcheck；actionlint 会调用 PATH 上的 ShellCheck）
 actionlint
 # 核心回归测试
 python3 scripts/build.py test -Dtest-filter=config

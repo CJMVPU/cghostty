@@ -27,7 +27,7 @@ jobs:
           mkdir -p macos/build/ci-logs
           exec > >(tee macos/build/ci-logs/actions-lock.log) 2>&1
           actions_lock_bin="$(bash scripts/install-actions-lock.sh "$RUNNER_TEMP/cghostty-tools")"
-          echo "$(dirname "$actions_lock_bin")" >> "$GITHUB_PATH"
+          dirname "$actions_lock_bin" >> "$GITHUB_PATH"
           "$actions_lock_bin" --version
           "$actions_lock_bin" --verify --no-interactive
       - name: Set up Apple Silicon tools
