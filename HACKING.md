@@ -285,11 +285,35 @@ CI 使用 GitHub `xcode-27` arm64 预览镜像，并在运行测试前验证系�
 其余原生测试照常执行。CI 摘要列出失败断言和跳过项；跳过 GPU 测试不代表渲染验证通过，
 发布前应在具备 Metal 4 的 Apple Silicon Mac 上完成原生回归。
 
-CI 在构建前检查 Zig 格式、严格 SwiftLint、版本记录和工作流语法。`.github/actionlint.yaml` 补充校验器尚未内置的 `xcode-27` 官方预览标签，不改变 runner 的选择方式。日志与指定的 `.xcresult` 结果包以 `cghostty-ci-diagnostics` 产物保存 14 天，失败时也尝试上传；打包 ZIP 和校验文件仍使用独立的 `cghostty-macos-arm64` 产物。Action 均锁定提交 SHA，缓存键包含 SDK 构建号和工具链记录。
+CI 在构建前检查 Zig 格式、严格 SwiftLint、版本记录和工作流语法。`.github/actionlint.yaml` 补充校验器尚未内置的 `xcode-27` 官方预览标签，不改变 runner 的选择方式。日志与指定的 `.xcresult` 结果包以 `cghostty-ci-diagnostics` 产物保存 14 天，失败时也尝试上传；打包 ZIP 和校验文件仍使用独立的 `cghostty-macos-arm64` 产物。Action 的实际提交由 `.github/workflows/actions.lock` 固定，缓存键包含 SDK 构建号和工具链记录。
 
 工具安装后，`scripts/record-build-environment.py` 记录 macOS、架构、Xcode、SDK、Swift、Metal、Zig、Nushell、SwiftLint、actionlint 和 Python 的实际版本。报告写入 `macos/build/ci-logs/environment.md`，同时显示在 Actions 运行摘要中，并随诊断产物上传。工具安装失败时也尝试记录，缺失或失败的命令标记为 `Unavailable`；报告本身不替代构建检查。Homebrew 工具随安装时可用版本变化，环境记录用于定位差异，不代表整个构建环境已完全固定。仅记录选定的公开 runner 元数据，不导出完整环境变量。
 
 本地可运行 `python3 scripts/record-build-environment.py` 查看相同格式的报告。
+
+### Actions 依赖锁文件
+
+`.github/workflows/actions.lock` 由 GitHub 官方 `github/gh-actions-lock` 生成，记录工作流依赖的提交及来源仓库身份。修改 `uses`、新增或删除工作流时，在同一批改动中更新锁文件并审查完整 diff。首次迁移以现有 SHA 为基线，不顺便升级 Action；工具可能重写引用，因此同时核对工作流及锁文件里的实际提交。不要手工填写或修补锁文件。
+
+工具固定版本和 Apple Silicon 二进制 SHA-256 保存在 `scripts/actions-lock-toolchain.json`。安装器在将下载文件安装到目标路径前验证摘要，缓存文件也重新检查；直接运行官方扩展的同一个二进制，无需修改全局 gh 扩展目录。更新工具时，核验官方发行资产及摘要，再修改这份记录并执行安装器测试。该工具目前处于 Public Preview，升级时须核对命令和锁文件格式兼容性。
+
+联网生成和验证需要 GitHub 认证。安装 GitHub CLI 并通过 `gh auth login --hostname github.com` 登录；确保 `gh` 在 PATH 上，以便工具读取系统凭据存储中的登录。然后在仓库根目录运行：
+
+```bash
+actions_lock_bin="$(bash scripts/install-actions-lock.sh)"
+"$actions_lock_bin" --version
+"$actions_lock_bin" --no-interactive
+"$actions_lock_bin" --verify --no-interactive
+git diff -- .github/workflows
+```
+
+`--verify` 是只读在线检查；`--verify-local` 是无需登录的离线覆盖检查，不验证锁定提交和仓库身份，不能替代 CI 的在线检查。`--relock` 仅用于有意更新上游引用；遇到提交不可达、身份变化或标签移动时先调查原因，不把 `--accept-moved` 作为常规修复命令。
+
+CI 在 checkout 后、安装编译工具和运行测试前执行在线检查，使用当前 job 的只读 `GITHUB_TOKEN`；校验失败即停止该 job。工具版本写入日志与环境报告，校验日志保存在 `macos/build/ci-logs/actions-lock.log` 并随诊断产物上传。checkout 不持久化 Git 凭据；release job 仍通过其步骤环境里的令牌创建草稿 Release。
+
+验收依次包括：安装器正常下载/缓存与失败回归、`--verify-local`、`--verify`、actionlint，以及推送获准后使用现有 `workflow_dispatch` 手动运行。仅 `v*` 标签推送自动构建，普通分支与 PR 不新增触发。锁文件由开发阶段生成并提交，CI 不自动写回；成功接入并验证后，再按仓库实际可用能力评估 Require lockfile 策略。后续修改策略或启用依赖更新机器人单独处理。
+
+锁文件范围是 Actions 依赖；Homebrew 工具、Xcode/SDK/Metal 和其他 `run` 命令下载的程序各自维护版本与完整性。参考 [GitHub 锁文件文档](https://docs.github.com/en/actions/concepts/security/workflow-dependency-lockfiles)、[官方生成器](https://github.com/github/gh-actions-lock) 和 [强制策略指南](https://docs.github.com/en/actions/how-tos/administer/enforce-workflow-lockfiles)。
 
 ## UI 状态与原生交互
 
