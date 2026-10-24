@@ -8,6 +8,92 @@ const init = support.init;
 const isDirty = support.isDirty;
 const clearDirty = support.clearDirty;
 
+test "Terminal: CJK editing stream preserves wide cells across chunk boundaries" {
+    const Case = struct { initial: []const u8, edit: []const u8, expected: []const u8 };
+    const cases = [_]Case{
+        .{ .initial = "你好", .edit = "\x08\x08\x1b[K\x08\x08\x1b[K", .expected = "" },
+        .{ .initial = "你好", .edit = "\x1b[4G ", .expected = "你  " },
+        .{ .initial = "你好", .edit = "\x1b[3G ", .expected = "你 " },
+        .{ .initial = "你好世界", .edit = "\x1b[4G\x1b[K", .expected = "你" },
+        .{ .initial = "你好世界", .edit = "\x1b[4G\x1b[X", .expected = "你  世界" },
+        .{ .initial = "你好世界", .edit = "\x1b[3G\x1b[2P", .expected = "你世界" },
+        .{ .initial = "你好世界", .edit = "\rabc\x1b[K", .expected = "abc" },
+        .{ .initial = "abcdefgh", .edit = "\r中文\x1b[K", .expected = "中文" },
+    };
+    for (cases) |case| {
+        // Exercise both batched PTY reads and splits inside UTF-8/CSI sequences.
+        for ([_]usize{ 1, 2, 4096 }) |chunk_size| {
+            var t = try init(testing.io, testing.allocator, .{ .rows = 5, .cols = 20 });
+            defer t.deinit(testing.allocator);
+            var stream = t.vtStream();
+            defer stream.deinit();
+            for ([_][]const u8{ case.initial, case.edit }, 0..) |bytes, phase| {
+                if (phase == 1) clearDirty(&t);
+                var offset: usize = 0;
+                while (offset < bytes.len) {
+                    const end = @min(offset + chunk_size, bytes.len);
+                    stream.nextSlice(bytes[offset..end]);
+                    offset = end;
+                }
+            }
+            try testing.expect(!stream.handler.semantic_failure);
+            try testing.expect(isDirty(&t, .{ .active = .{ .x = 0, .y = 0 } }));
+            const actual = try t.plainString(testing.allocator);
+            defer testing.allocator.free(actual);
+            try testing.expectEqualStrings(case.expected, actual);
+            try t.screens.active.cursor.page_pin.node.page().verifyIntegrity(testing.allocator);
+        }
+    }
+}
+
+test "Terminal: CJK editing clears wrapped rows and accepts replacement text" {
+    var t = try init(testing.io, testing.allocator, .{ .rows = 5, .cols = 10 });
+    defer t.deinit(testing.allocator);
+    var stream = t.vtStream();
+    defer stream.deinit();
+    stream.nextSlice("> 你好世界中");
+    try testing.expectEqual(@as(usize, 1), t.screens.active.cursor.y);
+    clearDirty(&t);
+
+    // A line editor erases the second row, then returns to the preceding row
+    // and clears each two-column character without erasing the prompt.
+    stream.nextSlice("\x08\x08\x1b[K\x1b[A\r\x1b[8C\x1b[K" ++
+        "\x1b[2D\x1b[K\x1b[2D\x1b[K\x1b[2D\x1b[K");
+    try testing.expect(isDirty(&t, .{ .active = .{ .x = 0, .y = 0 } }));
+    try testing.expect(isDirty(&t, .{ .active = .{ .x = 0, .y = 1 } }));
+    try testing.expectEqual(@as(usize, 2), t.screens.active.cursor.x);
+    try testing.expectEqual(@as(usize, 0), t.screens.active.cursor.y);
+    {
+        const actual = try t.plainString(testing.allocator);
+        defer testing.allocator.free(actual);
+        try testing.expectEqualStrings("> ", actual);
+    }
+    stream.nextSlice("好");
+    const actual = try t.plainString(testing.allocator);
+    defer testing.allocator.free(actual);
+    try testing.expectEqualStrings("> 好", actual);
+    try testing.expect(!stream.handler.semantic_failure);
+    try t.screens.active.cursor.page_pin.node.page().verifyIntegrity(testing.allocator);
+}
+
+test "Terminal: CJK editing does not reinterpret canonical one-column erase" {
+    var t = try init(testing.io, testing.allocator, .{ .rows = 5, .cols = 20 });
+    defer t.deinit(testing.allocator);
+    var stream = t.vtStream();
+    defer stream.deinit();
+    stream.nextSlice("> 你好");
+    // Darwin canonical echo sends one BS-space-BS per erased UTF-8 character.
+    // The input buffer can be empty even though these instructions leave 你.
+    // Do not make BS skip wide cells: line editors already account for width.
+    stream.nextSlice("\x08 \x08\x08 \x08");
+    const actual = try t.plainString(testing.allocator);
+    defer testing.allocator.free(actual);
+    try testing.expectEqualStrings("> 你  ", actual);
+    try testing.expectEqual(@as(usize, 4), t.screens.active.cursor.x);
+    try testing.expect(!stream.handler.semantic_failure);
+    try t.screens.active.cursor.page_pin.node.page().verifyIntegrity(testing.allocator);
+}
+
 test "Terminal: eraseChars simple operation" {
     const alloc = testing.allocator;
     const io_impl = testing.io;
