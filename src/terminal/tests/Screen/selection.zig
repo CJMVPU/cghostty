@@ -2,6 +2,7 @@
 const support = @import("support.zig");
 const Screen = support.Screen;
 const std = support.std;
+const style = support.style;
 const Selection = support.Selection;
 const point = support.point;
 const size = support.size;
@@ -2881,6 +2882,101 @@ test "Screen: selectLine does not join lines across a recycled row" {
     }
 }
 
+test "Screen: scrollClear cursor page pruned keeps per-page style id" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    const io = testing.io;
+
+    // A scrollback limit of 0 lines still keeps one page of rows, which
+    // is the smallest amount allowed. This means the oldest page is
+    // deleted as soon as all of its rows have scrolled into history.
+    var s = try init(io, alloc, .{
+        .cols = 10,
+        .rows = 3,
+        .max_scrollback_bytes = null,
+        .max_scrollback_lines = 0,
+    });
+    defer s.deinit();
+
+    // Fill the first page and put two more rows on a second page. Every
+    // row has text so that scrollClear scrolls the whole active area.
+    const page_rows = s.pages.pages.first.?.capacity().rows;
+    for (0..page_rows + 1) |_| try s.testWriteString("x\n");
+    try s.testWriteString("x");
+    try testing.expect(s.pages.pages.first.? != s.pages.pages.last.?);
+
+    // Move the cursor to the top of the active area, which is the last
+    // row of the first page. Making it bold gives the cursor a style ID
+    // that only exists on the first page.
+    s.cursorAbsolute(0, 0);
+    try testing.expect(s.cursor.page_pin.node == s.pages.pages.first.?);
+    try s.setAttribute(.{ .bold = {} });
+    try testing.expect(s.cursor.style_id != style.default_id);
+    const first_node = s.pages.pages.first.?;
+
+    // Clearing scrolls all 3 active rows into history. The first page is
+    // now entirely history, so the scrollback limit deletes it and the
+    // cursor pin is moved to another page.
+    try s.scrollClear();
+    try testing.expect(s.cursor.page_pin.node != first_node);
+
+    // The cursor's style must be registered on the page it moved to.
+    const page = s.cursor.page_pin.node.page();
+    try testing.expect(s.cursor.style_id != style.default_id);
+    try testing.expect(page.styles.refCount(page.memory, s.cursor.style_id) > 0);
+    try testing.expect(!s.cursor.page_pin.garbage);
+
+    // Printing must work and produce a bold cell.
+    try s.testWriteString("y");
+    {
+        const list_cell = s.pages.getCell(.{ .active = .{ .x = 0, .y = 0 } }).?;
+        const cell_style = list_cell.style();
+        try testing.expect(cell_style.flags.bold);
+    }
+}
+
+test "Screen: scrollClear cursor page pruned keeps per-page hyperlink id" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    const io = testing.io;
+
+    // Same setup as the style test above, but with a hyperlink instead
+    // of a style. Hyperlink IDs are also only valid on one page.
+    var s = try init(io, alloc, .{
+        .cols = 10,
+        .rows = 3,
+        .max_scrollback_bytes = null,
+        .max_scrollback_lines = 0,
+    });
+    defer s.deinit();
+
+    const page_rows = s.pages.pages.first.?.capacity().rows;
+    for (0..page_rows + 1) |_| try s.testWriteString("x\n");
+    try s.testWriteString("x");
+    try testing.expect(s.pages.pages.first.? != s.pages.pages.last.?);
+
+    s.cursorAbsolute(0, 0);
+    try testing.expect(s.cursor.page_pin.node == s.pages.pages.first.?);
+    try s.startHyperlink("http://example.com", null);
+    try testing.expect(s.cursor.hyperlink_id != 0);
+    const first_node = s.pages.pages.first.?;
+
+    try s.scrollClear();
+    try testing.expect(s.cursor.page_pin.node != first_node);
+
+    // The cursor's hyperlink must be registered on the page it moved to.
+    const page = s.cursor.page_pin.node.page();
+    try testing.expect(s.cursor.hyperlink_id != 0);
+    try testing.expect(page.hyperlink_set.refCount(page.memory, s.cursor.hyperlink_id) > 0);
+    try testing.expect(!s.cursor.page_pin.garbage);
+
+    // Printing must work and produce a cell with a hyperlink.
+    try s.testWriteString("y");
+    {
+        const list_cell = s.pages.getCell(.{ .active = .{ .x = 0, .y = 0 } }).?;
+        try testing.expect(list_cell.cell.hyperlink);
+    }
+}
 test "Screen: selectWord at hard line breaks" {
     const testing = std.testing;
     const alloc = testing.allocator;

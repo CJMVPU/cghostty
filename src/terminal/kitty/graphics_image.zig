@@ -726,6 +726,9 @@ pub const Image = struct {
     /// current frame), since consumers key texture caches off it.
     generation: u64 = 0,
 
+    /// Stable transmission order; animation content changes do not alter it.
+    transmission: u64 = 0,
+
     /// Animation state, non-null once any animation command (a=f,
     /// a=a) has attached animation state to this image. Owned by the
     /// image; replaced/retransmitted images drop it, which implements

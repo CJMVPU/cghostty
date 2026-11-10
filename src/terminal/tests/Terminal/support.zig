@@ -92,7 +92,7 @@ pub fn testPrintSliceDifferential(
     var last_n: usize = 0;
 
     for (0..ops) |_| {
-        switch (rand.intRangeAtMost(u8, 0, 20)) {
+        switch (rand.intRangeAtMost(u8, 0, 21)) {
             // Print a run of codepoints (most common op).
             0...9 => {
                 const n = rand.intRangeAtMost(usize, 1, cps_buf.len);
@@ -159,7 +159,12 @@ pub fn testPrintSliceDifferential(
                 t1.modes.set(.enable_left_and_right_margin, true);
                 t2.modes.set(.enable_left_and_right_margin, true);
                 const left = rand.intRangeAtMost(usize, 1, cols / 2);
-                const right = rand.intRangeAtMost(usize, cols / 2, cols);
+                // Sometimes make the margins exactly two columns wide
+                // so a wide char after a wrap fills them.
+                const right = if (rand.boolean())
+                    left + 1
+                else
+                    rand.intRangeAtMost(usize, cols / 2, cols);
                 t1.setLeftAndRightMargin(left, right);
                 t2.setLeftAndRightMargin(left, right);
             },
@@ -179,6 +184,23 @@ pub fn testPrintSliceDifferential(
                 const set = rand.enumValue(charsets.Charset);
                 t1.configureCharset(.G0, set);
                 t2.configureCharset(.G0, set);
+            },
+            21 => {
+                // Place the cursor outside the left/right margins, which
+                // CUP allows with origin mode off. Printing then runs to
+                // the screen edge (or the right margin) and wraps to the
+                // left margin. Columns are 1-based.
+                const left = t1.scrolling_region.left + 1;
+                const right = t1.scrolling_region.right + 1;
+                const row = rand.intRangeAtMost(usize, 1, rows);
+                const col = if (right < cols and (left == 1 or rand.boolean()))
+                    rand.intRangeAtMost(usize, right + 1, cols)
+                else if (left > 1)
+                    rand.intRangeAtMost(usize, 1, left - 1)
+                else
+                    rand.intRangeAtMost(usize, 1, cols);
+                t1.setCursorPos(row, col);
+                t2.setCursorPos(row, col);
             },
             else => unreachable,
         }

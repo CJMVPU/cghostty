@@ -630,7 +630,14 @@ pub fn increaseCapacity(
     // capacity below it will be short the ref count on our
     // current style and hyperlink, so we need to init those.
     const new_node = try self.pages.increaseCapacity(node, adjustment);
-    const new_page: *Page = new_node.page();
+    self.cursorPageReplaced();
+
+    return new_node;
+}
+
+/// Restore cursor-owned references after its old page was replaced or pruned.
+fn cursorPageReplaced(self: *Screen) void {
+    const new_page: *Page = self.cursor.page_pin.node.page();
 
     // Re-add the style, if the page somehow doesn't have enough
     // memory to add it, we emit a warning and gracefully degrade
@@ -677,8 +684,6 @@ pub fn increaseCapacity(
     // Reload the cursor information because the pin changed.
     // So our page row/cell and so on are all off.
     self.cursorReload();
-
-    return new_node;
 }
 
 /// Clone the cells in columns [x_start, x_end) of a source row into
@@ -1650,8 +1655,14 @@ pub inline fn scrollClear(self: *Screen) !void {
     self.accessibility_revision +%= 1;
     defer self.assertIntegrity();
 
+    const old_node = self.cursor.page_pin.node;
     try self.pages.scrollClear();
-    self.cursorReload();
+    if (self.cursor.page_pin.node != old_node) {
+        self.cursor.page_pin.garbage = false;
+        self.cursorPageReplaced();
+    } else {
+        self.cursorReload();
+    }
 
     {
         // No matter what, scrolling marks our image state as dirty since
@@ -1675,8 +1686,11 @@ pub inline fn eraseHistory(
 ) void {
     self.accessibility_revision +%= 1;
     defer self.assertIntegrity();
+    // Remove placements before their pins are moved and marked garbage.
+    self.kitty_images.eraseHistory(self.io, self, bl);
     self.pages.eraseHistory(bl);
     self.cursorReload();
+    self.kitty_images.dirty = true;
 }
 
 pub inline fn eraseActive(
@@ -2149,6 +2163,7 @@ pub inline fn resize(
     // If our cursor was updated, we do a full reload so all our cursor
     // state is correct.
     self.cursorReload();
+    self.cursor.page_pin.garbage = false;
 
     // Clear any redrawable prompt after the fallible resize but before
     // restoring the cursor style and hyperlink, so cleared cells retain the

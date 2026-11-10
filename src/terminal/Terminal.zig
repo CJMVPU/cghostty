@@ -258,6 +258,8 @@ pub const Cursor = struct {
 };
 
 pub const Options = struct {
+    /// The size of the terminal grid in cells. Both must be at least 1,
+    /// otherwise `init` returns `error.InvalidValue`.
     cols: size.CellCountInt,
     rows: size.CellCountInt,
 
@@ -299,6 +301,10 @@ pub fn init(
 ) !Terminal {
     const cols = opts.cols;
     const rows = opts.rows;
+
+    // The screens and scrolling region need at least one row and column.
+    // Check this before allocating so there is nothing to clean up.
+    if (cols == 0 or rows == 0) return error.InvalidValue;
 
     var screen_set: ScreenSet = try .init(io_impl, alloc, .{
         .cols = cols,
@@ -1219,7 +1225,7 @@ pub fn print(self: *Terminal, c: u21) !void {
     defer self.screens.active.assertIntegrity();
 
     // Our right margin depends where our cursor is now.
-    const right_limit = if (self.screens.active.cursor.x > self.scrolling_region.right)
+    var right_limit: usize = if (self.screens.active.cursor.x > self.scrolling_region.right)
         self.cols
     else
         self.scrolling_region.right + 1;
@@ -1328,7 +1334,9 @@ pub fn print(self: *Terminal, c: u21) !void {
                             prev.cell.wide = if (row_wrap) .spacer_head else .narrow;
                             prev.cell.content.codepoint.data = 0;
 
+                            const old_right_limit = right_limit;
                             try self.printWrap();
+                            right_limit = self.scrolling_region.right + 1;
                             self.printCell(prev_cp, .wide);
 
                             const new_pin = self.screens.active.cursor.page_pin.*;
@@ -1336,7 +1344,7 @@ pub fn print(self: *Terminal, c: u21) !void {
 
                             transfer_graphemes: {
                                 var old_pin = self.screens.active.cursor.page_pin.up(1) orelse break :transfer_graphemes;
-                                old_pin.x = right_limit - 1;
+                                old_pin.x = @intCast(old_right_limit - 1);
                                 const old_rac = old_pin.rowAndCell();
 
                                 if (new_pin.node == old_pin.node) {
@@ -1371,6 +1379,7 @@ pub fn print(self: *Terminal, c: u21) !void {
                                 if (row_wrap) .spacer_head else .narrow,
                             );
                             try self.printWrap();
+                            right_limit = self.scrolling_region.right + 1;
                             self.printCell(prev_cp, .wide);
 
                             // Point prev.cell to our new previous cell that
@@ -1519,6 +1528,7 @@ pub fn print(self: *Terminal, c: u21) !void {
     // If we're soft-wrapping, then handle that first.
     if (self.screens.active.cursor.pending_wrap and self.modes.get(.wraparound)) {
         try self.printWrap();
+        right_limit = self.scrolling_region.right + 1;
     }
 
     // If we have insert mode enabled then we need to handle that. We
@@ -1565,6 +1575,7 @@ pub fn print(self: *Terminal, c: u21) !void {
                     self.printCell(0, .narrow);
                 }
                 try self.printWrap();
+                right_limit = self.scrolling_region.right + 1;
             }
 
             self.screens.active.cursorMarkDirty();

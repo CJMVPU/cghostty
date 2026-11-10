@@ -374,6 +374,7 @@ pub const ImageStorage = struct {
         // (e.g. renderer texture caches) can detect content changes.
         self.markMutated(io);
         gop.value_ptr.generation = self.generation;
+        gop.value_ptr.transmission = self.generation;
     }
 
     /// Add an image whose decoded payload bytes have not arrived yet.
@@ -660,6 +661,47 @@ pub const ImageStorage = struct {
         self.markMutated(io);
     }
 
+    /// Remove pin-backed placements anchored in the history rows that
+    /// `Screen.eraseHistory` is about to erase, from the top of history
+    /// through `bl` (or all of history if null), along with any relative
+    /// placements orphaned by that. This must be called before the rows
+    /// are erased: afterward, the tracked pins have been moved to the
+    /// top-left of the retained rows and are indistinguishable from
+    /// placements that were already there.
+    pub fn eraseHistory(
+        self: *ImageStorage,
+        io: std.Io,
+        s: *terminal.Screen,
+        bl: ?point.Point,
+    ) void {
+        const history_rows = s.pages.total_rows - s.pages.rows;
+        if (history_rows == 0) return;
+        const limit: usize = limit: {
+            const pt = bl orelse break :limit history_rows - 1;
+            const bl_pin = s.pages.pin(pt) orelse return;
+            const bl_pt = s.pages.pointFromPin(.history, bl_pin) orelse return;
+            break :limit bl_pt.coord().y;
+        };
+
+        var removed = false;
+        var it = self.placements.iterator();
+        while (it.next()) |entry| {
+            const pin = switch (entry.value_ptr.location) {
+                .pin => |pin| pin,
+                .virtual, .relative => continue,
+            };
+            const pt = s.pages.pointFromPin(.history, pin.*) orelse continue;
+            if (pt.coord().y > limit) continue;
+
+            self.removePlacement(s, entry);
+            removed = true;
+        }
+        if (!removed) return;
+
+        _ = self.removeOrphans(s, null);
+        self.markMutated(io);
+    }
+
     fn clearPlacements(self: *ImageStorage, s: *terminal.Screen) void {
         var it = self.placements.iterator();
         while (it.next()) |entry| entry.value_ptr.deinit(s);
@@ -911,7 +953,7 @@ pub const ImageStorage = struct {
         }
     }
 
-    /// Returns the placement that a unicode placeholder cell referencing
+    /// Returns the virtual placement a unicode placeholder cell referencing
     /// this image/placement ID pair targets, or null if there is none. A
     /// zero placement ID targets one of the image's virtual placements,
     /// chosen by PlacementId.preferredOver so the choice is stable (an
@@ -929,6 +971,7 @@ pub const ImageStorage = struct {
                 .placement_id = .{ .tag = .external, .id = placement_id },
             };
             const p = self.placements.get(key) orelse return null;
+            if (p.location != .virtual) return null;
             return .{ .key = key, .placement = p };
         }
 
@@ -963,7 +1006,7 @@ pub const ImageStorage = struct {
         while (it.next()) |kv| {
             if (kv.value_ptr.number == image_number) {
                 if (newest == null or
-                    kv.value_ptr.generation > newest.?.generation)
+                    kv.value_ptr.transmission > newest.?.transmission)
                 {
                     newest = kv.value_ptr.*;
                 }
@@ -990,7 +1033,7 @@ pub const ImageStorage = struct {
         while (it.next()) |kv| {
             if (kv.value_ptr.number != image_number) continue;
             if (newest == null or
-                kv.value_ptr.generation > newest.?.generation)
+                kv.value_ptr.transmission > newest.?.transmission)
             {
                 newest = kv.value_ptr;
             }
@@ -1693,7 +1736,7 @@ pub const ImageStorage = struct {
 
         const Candidate = struct {
             id: u32,
-            generation: u64,
+            transmission: u64,
 
             // Lower values are evicted first:
             // 0: transient, unused
@@ -1705,7 +1748,7 @@ pub const ImageStorage = struct {
             fn init(img: *const Image) @This() {
                 return .{
                     .id = img.id,
-                    .generation = img.generation,
+                    .transmission = img.transmission,
                     .priority = (if (img.metadata.transient) @as(u2, 0) else @as(u2, 1)) +
                         (if (img.metadata.placement_count > 0) @as(u2, 2) else @as(u2, 0)),
                 };
@@ -1714,8 +1757,8 @@ pub const ImageStorage = struct {
             fn lessThan(lhs: @This(), rhs: @This()) bool {
                 if (lhs.priority != rhs.priority)
                     return lhs.priority < rhs.priority;
-                if (lhs.generation != rhs.generation)
-                    return lhs.generation < rhs.generation;
+                if (lhs.transmission != rhs.transmission)
+                    return lhs.transmission < rhs.transmission;
                 return lhs.id < rhs.id;
             }
         };
@@ -3138,6 +3181,79 @@ test "storage: erase display preserves scrollback and reclaims unplaced images" 
     try testing.expect(!s.images.contains(3));
 }
 
+test "storage: erase scrollback removes placements in history" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    const io = testing.io;
+    var t = try terminal.Terminal.init(io, alloc, .{
+        .rows = 2,
+        .cols = 2,
+        .max_scrollback_bytes = 4096,
+    });
+    defer t.deinit(alloc);
+    t.width_px = 2;
+    t.height_px = 2;
+
+    const s = &t.screens.active.kitty_images;
+    try s.addImage(io, alloc, t.screens.active, .{ .id = 1, .width = 1, .height = 1 });
+    try s.addPlacement(io, alloc, t.screens.active, 1, 1, .{
+        .location = .{ .pin = try trackPin(&t, .{ .y = 0 }) },
+    });
+    try t.scrollUp(1);
+    try s.addImage(io, alloc, t.screens.active, .{ .id = 2, .width = 1, .height = 1 });
+    try s.addPlacement(io, alloc, t.screens.active, 2, 1, .{
+        .location = .{ .pin = try trackPin(&t, .{ .y = 0 }) },
+    });
+
+    // Erasing history must not move the history placement onto the
+    // top of the active area, where it would be visible again.
+    t.eraseDisplay(.scrollback, false);
+    try testing.expectEqual(@as(usize, 1), s.placements.count());
+    try testing.expect(s.placements.contains(.{
+        .image_id = 2,
+        .placement_id = .{ .tag = .external, .id = 1 },
+    }));
+}
+
+test "storage: partial history erase keeps later history placements" {
+    const testing = std.testing;
+    const alloc = testing.allocator;
+    const io = testing.io;
+    var t = try terminal.Terminal.init(io, alloc, .{
+        .rows = 2,
+        .cols = 2,
+        .max_scrollback_bytes = 4096,
+    });
+    defer t.deinit(alloc);
+    t.width_px = 2;
+    t.height_px = 2;
+
+    const s = &t.screens.active.kitty_images;
+    try s.addImage(io, alloc, t.screens.active, .{ .id = 1, .width = 1, .height = 1 });
+    try s.addPlacement(io, alloc, t.screens.active, 1, 1, .{
+        .location = .{ .pin = try trackPin(&t, .{ .y = 0 }) },
+    });
+    try s.addImage(io, alloc, t.screens.active, .{ .id = 2, .width = 1, .height = 1 });
+    try s.addPlacement(io, alloc, t.screens.active, 2, 1, .{
+        .location = .{ .pin = try trackPin(&t, .{ .y = 1 }) },
+    });
+    try t.scrollUp(2);
+
+    t.screens.active.eraseHistory(.{ .history = .{ .y = 0 } });
+    try testing.expectEqual(@as(usize, 1), s.placements.count());
+    const key: ImageStorage.PlacementKey = .{
+        .image_id = 2,
+        .placement_id = .{ .tag = .external, .id = 1 },
+    };
+    try testing.expectEqual(
+        point.Point{ .history = .{ .x = 0, .y = 0 } },
+        t.screens.active.pages.pointFromPin(
+            .history,
+            s.placements.get(key).?.location.pin.*,
+        ).?,
+    );
+}
+
 test "storage: cell offsets stay within explicit destination rectangle" {
     const testing = std.testing;
     const alloc = testing.allocator;
@@ -3505,6 +3621,11 @@ test "storage: imageByNumber returns most recently transmitted" {
     // Retransmit the first: it becomes the newest.
     try s.addImage(io, alloc, t.screens.active, .{ .id = 1, .number = 7 });
     try testing.expectEqual(@as(u32, 1), s.imageByNumber(7).?.id);
+
+    // Showing another frame of the second doesn't make it the newest.
+    s.markImageContentChanged(io, s.images.getPtr(2).?);
+    try testing.expectEqual(@as(u32, 1), s.imageByNumber(7).?.id);
+    try testing.expectEqual(@as(u32, 1), s.imagePtrByIdOrNumber(0, 7).?.id);
 }
 
 test "storage: nextGeneration is unique and monotonic" {
@@ -3617,6 +3738,9 @@ test "storage: eviction releases placement pins" {
         .location = .{ .pin = try trackPin(&t, .{ .x = 1, .y = 1 }) },
     });
     try testing.expectEqual(tracked + 2, t.screens.active.pages.countTrackedPins());
+
+    // Showing another frame of the first doesn't make it newer.
+    s.markImageContentChanged(io, s.images.getPtr(1).?);
 
     // Adding a third image evicts the oldest equally-ranked image and its
     // placement. The newer image's placement and tracked pin remain intact.
@@ -4705,6 +4829,12 @@ test "storage: placeholderTarget lookup" {
 
     try testing.expect(s.placeholderTarget(1, 9) == null);
     try testing.expect(s.placeholderTarget(2, 0) == null);
+
+    // A non-virtual placement can't be targeted, even by its exact ID.
+    try s.addPlacement(io, alloc, t.screens.active, 1, 7, .{
+        .location = .{ .pin = try trackPin(&t, .{ .x = 0, .y = 0 }) },
+    });
+    try testing.expect(s.placeholderTarget(1, 7) == null);
 
     // With multiple virtual placements, the zero-ID fallback picks
     // deterministically by PlacementId.preferredOver: lowest external.

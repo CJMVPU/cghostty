@@ -59,6 +59,7 @@ pub const PageAllocation = struct {
             &self.destination.pool,
             node,
             null,
+            .reclaim,
         );
         self.node = null;
     }
@@ -183,6 +184,7 @@ pub const Builder = struct {
             &self.pool,
             node,
             &self.page_size,
+            .reclaim,
         );
         // Free memory pool
         self.pool.deinit();

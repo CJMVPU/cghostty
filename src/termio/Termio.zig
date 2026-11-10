@@ -353,7 +353,7 @@ pub inline fn queueWriteOwned(
 }
 
 /// Update the configuration.
-pub fn changeConfig(self: *Termio, config: *DerivedConfig) !void {
+pub fn changeConfig(self: *Termio, td: *ThreadData, config: *DerivedConfig) !void {
     // The remainder of this function is modifying terminal state or
     // the read thread data, all of which requires holding the renderer
     // state lock.
@@ -399,6 +399,14 @@ pub fn changeConfig(self: *Termio, config: *DerivedConfig) !void {
     // Set the image limits
     self.terminal.setKittyGraphicsSizeLimit(self.alloc, config.image_storage_limit);
     self.terminal.setKittyGraphicsLoadingLimits(.allWithTempDir(global.tmpDirPath()));
+
+    // The config could have changed any of our colors so update mode 2031.
+    // This is written directly rather than queued as a color_scheme_report
+    // message because we're on the io thread, the only reader of our
+    // mailbox: if the mailbox were full, queueing would wait forever.
+    self.colorSchemeReportLocked(td, false) catch |err| {
+        log.warn("error sending color scheme report err={}", .{err});
+    };
 }
 
 /// Resize the terminal.

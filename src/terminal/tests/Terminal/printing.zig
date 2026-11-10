@@ -2,6 +2,7 @@
 const support = @import("support.zig");
 const Terminal = support.Terminal;
 const std = support.std;
+const size = support.size;
 const testing = support.testing;
 const charsets = support.charsets;
 const hyperlink = support.hyperlink;
@@ -2047,6 +2048,111 @@ test "Terminal: print right margin outside wrap" {
         const str = try t.plainString(testing.allocator);
         defer testing.allocator.free(str);
         try testing.expectEqualStrings("123456789X\n  Y", str);
+    }
+}
+
+test "Terminal: print wide after pending wrap from outside right margin" {
+    // A cursor right of the right margin prints up to the screen edge,
+    // but once it wraps to the left margin the right margin applies
+    // again, so a wide char that fills the margin sets a pending wrap.
+    var t = try init(testing.io, testing.allocator, .{ .cols = 5, .rows = 3 });
+    defer t.deinit(testing.allocator);
+
+    t.modes.set(.enable_left_and_right_margin, true);
+    t.setLeftAndRightMargin(1, 2);
+    t.setCursorPos(1, 4);
+    try t.print(' ');
+    try t.print(' ');
+    try testing.expectEqual(@as(size.CellCountInt, 4), t.screens.active.cursor.x);
+    try testing.expect(t.screens.active.cursor.pending_wrap);
+
+    try t.print(0x1F1E6);
+    try testing.expectEqual(@as(size.CellCountInt, 1), t.screens.active.cursor.y);
+    try testing.expectEqual(@as(size.CellCountInt, 1), t.screens.active.cursor.x);
+    try testing.expect(t.screens.active.cursor.pending_wrap);
+
+    // The next char wraps within the margins.
+    try t.print('X');
+    try testing.expectEqual(@as(size.CellCountInt, 2), t.screens.active.cursor.y);
+    try testing.expectEqual(@as(size.CellCountInt, 1), t.screens.active.cursor.x);
+    {
+        const str = try t.plainString(testing.allocator);
+        defer testing.allocator.free(str);
+        try testing.expectEqualStrings("     \n\u{1F1E6}\nX", str);
+    }
+}
+
+test "Terminal: print narrow after pending wrap from outside right margin" {
+    var t = try init(testing.io, testing.allocator, .{ .cols = 5, .rows = 3 });
+    defer t.deinit(testing.allocator);
+
+    t.modes.set(.enable_left_and_right_margin, true);
+    t.setLeftAndRightMargin(1, 2);
+    t.setCursorPos(1, 5);
+    try t.print('A');
+    try testing.expect(t.screens.active.cursor.pending_wrap);
+
+    try t.print('B');
+    try testing.expectEqual(@as(size.CellCountInt, 1), t.screens.active.cursor.y);
+    try testing.expectEqual(@as(size.CellCountInt, 1), t.screens.active.cursor.x);
+    try testing.expect(!t.screens.active.cursor.pending_wrap);
+
+    try t.print('C');
+    try testing.expectEqual(@as(size.CellCountInt, 1), t.screens.active.cursor.x);
+    try testing.expect(t.screens.active.cursor.pending_wrap);
+
+    try t.print('D');
+    try testing.expectEqual(@as(size.CellCountInt, 2), t.screens.active.cursor.y);
+    try testing.expectEqual(@as(size.CellCountInt, 1), t.screens.active.cursor.x);
+    {
+        const str = try t.plainString(testing.allocator);
+        defer testing.allocator.free(str);
+        try testing.expectEqualStrings("    A\nBC\nD", str);
+    }
+}
+
+test "Terminal: print wide wrapping from outside right margin lands on margin" {
+    // No pending wrap: the wide char doesn't fit in the last screen
+    // column, so it wraps itself and fills the two-column margin.
+    var t = try init(testing.io, testing.allocator, .{ .cols = 5, .rows = 3 });
+    defer t.deinit(testing.allocator);
+
+    t.modes.set(.enable_left_and_right_margin, true);
+    t.setLeftAndRightMargin(1, 2);
+    t.setCursorPos(1, 5);
+    try t.print(0x1F1E6);
+    try testing.expectEqual(@as(size.CellCountInt, 1), t.screens.active.cursor.y);
+    try testing.expectEqual(@as(size.CellCountInt, 1), t.screens.active.cursor.x);
+    try testing.expect(t.screens.active.cursor.pending_wrap);
+
+    {
+        const list_cell = t.screens.active.pages.getCell(.{ .screen = .{ .x = 4, .y = 0 } }).?;
+        try testing.expectEqual(Cell.Wide.spacer_head, list_cell.cell.wide);
+        try testing.expect(list_cell.row.wrap);
+    }
+}
+
+test "Terminal: print grapheme widened at outside right margin wraps onto margin" {
+    // Mode 2027: VS16 widens a narrow emoji in the last screen column,
+    // which must move to the next row and then fill the margin.
+    var t = try init(testing.io, testing.allocator, .{ .cols = 5, .rows = 3 });
+    defer t.deinit(testing.allocator);
+
+    t.modes.set(.grapheme_cluster, true);
+    t.modes.set(.enable_left_and_right_margin, true);
+    t.setLeftAndRightMargin(1, 2);
+    t.setCursorPos(1, 5);
+    try t.print(0x261D);
+    try testing.expect(t.screens.active.cursor.pending_wrap);
+    try t.print(0xFE0F);
+    try testing.expectEqual(@as(size.CellCountInt, 1), t.screens.active.cursor.y);
+    try testing.expectEqual(@as(size.CellCountInt, 1), t.screens.active.cursor.x);
+    try testing.expect(t.screens.active.cursor.pending_wrap);
+
+    {
+        const list_cell = t.screens.active.pages.getCell(.{ .screen = .{ .x = 0, .y = 1 } }).?;
+        try testing.expectEqual(@as(u21, 0x261D), list_cell.cell.content.codepoint.data);
+        try testing.expectEqual(Cell.Wide.wide, list_cell.cell.wide);
     }
 }
 

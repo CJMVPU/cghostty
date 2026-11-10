@@ -48,6 +48,20 @@ test "Terminal: resize rejects zero dimensions before mutation" {
     try testing.expect(!t.flags.dirty.clear);
 }
 
+test "Terminal: init rejects zero dimensions" {
+    const alloc = testing.allocator;
+    const io_impl = testing.io;
+
+    try testing.expectError(error.InvalidValue, init(io_impl, alloc, .{
+        .cols = 0,
+        .rows = 5,
+    }));
+    try testing.expectError(error.InvalidValue, init(io_impl, alloc, .{
+        .cols = 10,
+        .rows = 0,
+    }));
+}
+
 test "Terminal: resize preserves pixel dimensions when omitted" {
     const alloc = testing.allocator;
     const io_impl = testing.io;
